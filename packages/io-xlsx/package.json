@@ -1,0 +1,22 @@
+{
+  "name": "@cyber-sheet/io-xlsx",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "fflate": "^0.8.1"
+  },
+  "peerDependencies": {
+    "@cyber-sheet/core": "^0.1.0"
+  }
+}
