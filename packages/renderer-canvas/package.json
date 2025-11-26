@@ -1,0 +1,19 @@
+{
+  "name": "@cyber-sheet/renderer-canvas",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "dist/src/index.js",
+  "module": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "sideEffects": false,
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@cyber-sheet/core": "^0.1.0"
+  }
+}
