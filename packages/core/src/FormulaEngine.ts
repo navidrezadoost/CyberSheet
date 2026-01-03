@@ -1401,6 +1401,233 @@ export class FormulaEngine {
     });
 
     /**
+     * SORT - Sort array in ascending or descending order (Excel 365)
+     * Syntax: SORT(array, [sort_index], [sort_order], [by_col])
+     * 
+     * Sorts the contents of an array or range by specified column(s) or row(s).
+     * This is a dynamic array function that spills results.
+     * Uses stable sort algorithm to preserve relative order of equal items.
+     * 
+     * Parameters:
+     * - array: The array or range to sort (required)
+     * - sort_index: Number indicating which row or column to sort by (default: 1)
+     * - sort_order: Sort order - 1 for ascending (default), -1 for descending
+     * - by_col: Logical - FALSE/0 to sort by row (default), TRUE/1 to sort by column
+     * 
+     * Returns:
+     * - Sorted array with same dimensions as input
+     * - #VALUE! if parameters are invalid
+     * - #CALC! if array is empty
+     * 
+     * Examples:
+     * SORT([3,1,4,1,5,9,2,6]) → [1,1,2,3,4,5,6,9]
+     * SORT([[3,"C"],[1,"A"],[2,"B"]], 1, 1) → [[1,"A"],[2,"B"],[3,"C"]]
+     * SORT([[3,"C"],[1,"A"],[2,"B"]], 2, 1) → [[1,"A"],[2,"B"],[3,"C"]]
+     * SORT([3,1,4,1,5,9,2,6], 1, -1) → [9,6,5,4,3,2,1,1]
+     */
+    this.functions.set('SORT', (...args) => {
+      const [array, sortIndex = 1, sortOrder = 1, byCol = false] = args;
+
+      // Validate required parameter
+      if (array === undefined) {
+        return new Error('#VALUE!');
+      }
+
+      // Validate array input
+      if (!Array.isArray(array)) {
+        return new Error('#VALUE!');
+      }
+
+      if (array.length === 0) {
+        return new Error('#CALC!');
+      }
+
+      // Parse parameters
+      const index = typeof sortIndex === 'number' ? sortIndex : 1;
+      const order = sortOrder === -1 ? -1 : 1; // 1 = ascending, -1 = descending
+      const byColumn = byCol === true || byCol === 1;
+
+      // Check if array is 2D
+      const is2D = Array.isArray(array[0]);
+
+      // Handle 1D arrays
+      if (!is2D) {
+        // Validate sort index
+        if (index !== 1) {
+          return new Error('#VALUE!');
+        }
+
+        // Create array of [value, originalIndex] for stable sort
+        const indexed = array.map((value, idx) => ({ value, idx }));
+
+        // Sort with stable algorithm
+        indexed.sort((a, b) => {
+          const valA = a.value;
+          const valB = b.value;
+
+          // Compare values
+          let comparison = 0;
+          
+          if (valA === null && valB === null) {
+            comparison = 0;
+          } else if (valA === null) {
+            comparison = 1; // null sorts to end
+          } else if (valB === null) {
+            comparison = -1; // null sorts to end
+          } else if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB);
+          } else if (typeof valA === 'number' && typeof valB === 'number') {
+            comparison = valA - valB;
+          } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+            comparison = (valA ? 1 : 0) - (valB ? 1 : 0);
+          } else {
+            // Mixed types: convert to string for comparison
+            comparison = String(valA).localeCompare(String(valB));
+          }
+
+          // Apply sort order
+          comparison *= order;
+
+          // If equal, use original index for stable sort
+          if (comparison === 0) {
+            comparison = a.idx - b.idx;
+          }
+
+          return comparison;
+        });
+
+        // Extract sorted values
+        return indexed.map(item => item.value);
+      }
+
+      // Handle 2D arrays
+      const firstRow = array[0];
+      if (!Array.isArray(firstRow)) {
+        return new Error('#VALUE!');
+      }
+
+      if (byColumn) {
+        // Sort by row (transpose, sort, transpose back)
+        const numRows = array.length;
+        const numCols = firstRow.length;
+
+        // Validate sort index
+        if (index < 1 || index > numRows) {
+          return new Error('#VALUE!');
+        }
+
+        // Extract columns
+        const columns: Array<{ values: FormulaValue[]; idx: number }> = [];
+        for (let c = 0; c < numCols; c++) {
+          const column: FormulaValue[] = [];
+          for (let r = 0; r < numRows; r++) {
+            column.push((array[r] as FormulaValue[])[c]);
+          }
+          columns.push({ values: column, idx: c });
+        }
+
+        // Sort columns by specified row index (1-based)
+        const sortRowIndex = index - 1;
+        columns.sort((a, b) => {
+          const valA = a.values[sortRowIndex];
+          const valB = b.values[sortRowIndex];
+
+          let comparison = 0;
+          
+          if (valA === null && valB === null) {
+            comparison = 0;
+          } else if (valA === null) {
+            comparison = 1;
+          } else if (valB === null) {
+            comparison = -1;
+          } else if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB);
+          } else if (typeof valA === 'number' && typeof valB === 'number') {
+            comparison = valA - valB;
+          } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+            comparison = (valA ? 1 : 0) - (valB ? 1 : 0);
+          } else {
+            comparison = String(valA).localeCompare(String(valB));
+          }
+
+          comparison *= order;
+
+          // Stable sort by original index
+          if (comparison === 0) {
+            comparison = a.idx - b.idx;
+          }
+
+          return comparison;
+        });
+
+        // Reconstruct result as rows
+        const result: FormulaValue[][] = [];
+        for (let r = 0; r < numRows; r++) {
+          const row: FormulaValue[] = [];
+          for (let c = 0; c < columns.length; c++) {
+            row.push(columns[c].values[r]);
+          }
+          result.push(row);
+        }
+
+        return result;
+      } else {
+        // Sort by column (default)
+        const numCols = firstRow.length;
+
+        // Validate sort index
+        if (index < 1 || index > numCols) {
+          return new Error('#VALUE!');
+        }
+
+        // Create array of [row, originalIndex] for stable sort
+        const indexed = array.map((row, idx) => ({ 
+          row: row as FormulaValue[], 
+          idx 
+        }));
+
+        // Sort rows by specified column index (1-based)
+        const sortColIndex = index - 1;
+        indexed.sort((a, b) => {
+          const valA = a.row[sortColIndex];
+          const valB = b.row[sortColIndex];
+
+          let comparison = 0;
+          
+          if (valA === null && valB === null) {
+            comparison = 0;
+          } else if (valA === null) {
+            comparison = 1; // null sorts to end
+          } else if (valB === null) {
+            comparison = -1; // null sorts to end
+          } else if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB);
+          } else if (typeof valA === 'number' && typeof valB === 'number') {
+            comparison = valA - valB;
+          } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+            comparison = (valA ? 1 : 0) - (valB ? 1 : 0);
+          } else {
+            // Mixed types: convert to string
+            comparison = String(valA).localeCompare(String(valB));
+          }
+
+          // Apply sort order
+          comparison *= order;
+
+          // Stable sort: if equal, preserve original order
+          if (comparison === 0) {
+            comparison = a.idx - b.idx;
+          }
+
+          return comparison;
+        });
+
+        // Extract sorted rows
+        return indexed.map(item => item.row);
+      }
+    });
+
+    /**
      * HLOOKUP - Horizontal Lookup
      * Syntax: HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])
      * 
