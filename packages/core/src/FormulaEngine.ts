@@ -935,6 +935,207 @@ export class FormulaEngine {
     });
 
     /**
+     * XMATCH - Advanced position finder (Excel 365)
+     * Syntax: XMATCH(lookup_value, lookup_array, [match_mode], [search_mode])
+     * 
+     * Modern replacement for MATCH with enhanced features:
+     * - Reverse search capability
+     * - Explicit binary search modes
+     * - Multiple match modes
+     * 
+     * match_mode:
+     *   0 = Exact match (default), returns #N/A if not found
+     *  -1 = Exact match or next smallest item
+     *   1 = Exact match or next largest item
+     *   2 = Wildcard match (*, ?, ~)
+     * 
+     * search_mode:
+     *   1 = Search first-to-last (default)
+     *  -1 = Search last-to-first (reverse search)
+     *   2 = Binary search, ascending sort
+     *  -2 = Binary search, descending sort
+     * 
+     * Returns 1-based position in array
+     */
+    this.functions.set('XMATCH', (...args) => {
+      const [lookupValue, lookupArray, matchMode = 0, searchMode = 1] = args;
+
+      // Validate inputs
+      if (lookupValue === undefined) return new Error('#VALUE!');
+      if (!Array.isArray(lookupArray)) return new Error('#VALUE!');
+      if (lookupArray.length === 0) return new Error('#N/A');
+
+      const matchModeNum = typeof matchMode === 'number' ? matchMode : 0;
+      const searchModeNum = typeof searchMode === 'number' ? searchMode : 1;
+
+      // Validate modes
+      if (![0, -1, 1, 2].includes(matchModeNum)) return new Error('#VALUE!');
+      if (![1, -1, 2, -2].includes(searchModeNum)) return new Error('#VALUE!');
+
+      // Helper: Compare values (numeric aware, case-insensitive for strings)
+      const compare = (a: FormulaValue, b: FormulaValue): number => {
+        if (a === b) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        
+        if (typeof a === 'number' && typeof b === 'number') {
+          return a - b;
+        }
+        
+        const aStr = String(a).toLowerCase();
+        const bStr = String(b).toLowerCase();
+        return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+      };
+
+      // Helper: Wildcard match (for match_mode=2)
+      const wildcardMatch = (text: string, pattern: string): boolean => {
+        // Escape special regex chars except * and ?
+        let regexPattern = pattern
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*')
+          .replace(/\?/g, '.');
+        
+        const regex = new RegExp(`^${regexPattern}$`, 'i');
+        return regex.test(text);
+      };
+
+      // BINARY SEARCH modes (2 or -2)
+      if (Math.abs(searchModeNum) === 2) {
+        const isAscending = searchModeNum === 2;
+        let left = 0;
+        let right = lookupArray.length - 1;
+        let foundIndex = -1;
+
+        while (left <= right) {
+          const mid = Math.floor((left + right) / 2);
+          const cmp = compare(lookupArray[mid], lookupValue);
+
+          if (cmp === 0) {
+            foundIndex = mid;
+            break;
+          }
+
+          if (isAscending) {
+            if (cmp < 0) left = mid + 1;
+            else right = mid - 1;
+          } else {
+            if (cmp > 0) left = mid + 1;
+            else right = mid - 1;
+          }
+        }
+
+        // For binary search, only exact match supported
+        if (foundIndex >= 0) {
+          return foundIndex + 1;  // 1-based
+        }
+
+        // Handle approximate match modes with binary search
+        if (matchModeNum === -1) {
+          // Exact or next smallest
+          if (isAscending) {
+            // In ascending array, right pointer is at the largest value < lookupValue
+            if (right >= 0) return right + 1;
+          } else {
+            // In descending array, left pointer is at the smallest value that's still >= lookupValue
+            // We need to find the largest value < lookupValue
+            if (left < lookupArray.length && compare(lookupArray[left], lookupValue) < 0) {
+              return left + 1;
+            }
+            if (left > 0) return left;  // Previous position
+          }
+        } else if (matchModeNum === 1) {
+          // Exact or next largest
+          if (isAscending) {
+            // In ascending array, left pointer is at the smallest value > lookupValue
+            if (left < lookupArray.length) return left + 1;
+          } else {
+            // In descending array, right pointer is at the largest value that's still <= lookupValue
+            // We need the next larger, which is right+1
+            if (right >= 0 && compare(lookupArray[right], lookupValue) > 0) {
+              return right + 1;
+            }
+          }
+        }
+
+        return new Error('#N/A');
+      }
+
+      // LINEAR SEARCH modes (1 or -1)
+      const isReverse = searchModeNum === -1;
+      const startIdx = isReverse ? lookupArray.length - 1 : 0;
+      const endIdx = isReverse ? -1 : lookupArray.length;
+      const step = isReverse ? -1 : 1;
+
+      // Match mode 0: Exact match
+      if (matchModeNum === 0) {
+        for (let i = startIdx; i !== endIdx; i += step) {
+          if (compare(lookupArray[i], lookupValue) === 0) {
+            return i + 1;  // 1-based
+          }
+        }
+        return new Error('#N/A');
+      }
+
+      // Match mode 2: Wildcard match
+      if (matchModeNum === 2) {
+        const lookupStr = String(lookupValue);
+        for (let i = startIdx; i !== endIdx; i += step) {
+          const itemStr = String(lookupArray[i]);
+          if (wildcardMatch(itemStr, lookupStr)) {
+            return i + 1;  // 1-based
+          }
+        }
+        return new Error('#N/A');
+      }
+
+      // Match mode -1: Exact or next smallest
+      if (matchModeNum === -1) {
+        let bestIdx = -1;
+        let bestValue: FormulaValue = null;
+
+        for (let i = startIdx; i !== endIdx; i += step) {
+          const cmp = compare(lookupArray[i], lookupValue);
+          if (cmp === 0) {
+            return i + 1;  // Exact match found
+          } else if (cmp < 0) {
+            // Value is less than lookup - potential candidate
+            if (bestIdx === -1 || compare(lookupArray[i], bestValue) > 0) {
+              bestIdx = i;
+              bestValue = lookupArray[i];
+            }
+          }
+        }
+
+        if (bestIdx >= 0) return bestIdx + 1;
+        return new Error('#N/A');
+      }
+
+      // Match mode 1: Exact or next largest
+      if (matchModeNum === 1) {
+        let bestIdx = -1;
+        let bestValue: FormulaValue = null;
+
+        for (let i = startIdx; i !== endIdx; i += step) {
+          const cmp = compare(lookupArray[i], lookupValue);
+          if (cmp === 0) {
+            return i + 1;  // Exact match found
+          } else if (cmp > 0) {
+            // Value is greater than lookup - potential candidate
+            if (bestIdx === -1 || compare(lookupArray[i], bestValue) < 0) {
+              bestIdx = i;
+              bestValue = lookupArray[i];
+            }
+          }
+        }
+
+        if (bestIdx >= 0) return bestIdx + 1;
+        return new Error('#N/A');
+      }
+
+      return new Error('#N/A');
+    });
+
+    /**
      * HLOOKUP - Horizontal Lookup
      * Syntax: HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])
      * 
