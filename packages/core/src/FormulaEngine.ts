@@ -1750,6 +1750,127 @@ export class FormulaEngine {
     });
 
     /**
+     * FILTER - Filter array based on boolean conditions (Excel 365)
+     * Syntax: FILTER(array, include, [if_empty])
+     * 
+     * Filters an array based on a boolean array that defines which rows/columns to include.
+     * This is a dynamic array function that spills filtered results.
+     * 
+     * Parameters:
+     * - array: The array or range to filter (required)
+     * - include: A boolean array indicating which rows/columns to include (required)
+     *            Must be same length as array for 1D, or same row count for 2D
+     * - if_empty: Value to return if no rows match the filter (optional, default: #CALC!)
+     * 
+     * Returns:
+     * - Filtered array containing only rows/columns where include is TRUE
+     * - if_empty value if no rows match
+     * - #CALC! if no rows match and if_empty not specified
+     * - #VALUE! if parameters are invalid or array sizes don't match
+     * 
+     * Examples:
+     * FILTER([1,2,3,4,5], [TRUE,FALSE,TRUE,FALSE,TRUE]) → [1,3,5]
+     * FILTER([[A,1],[B,2],[C,3]], [TRUE,FALSE,TRUE]) → [[A,1],[C,3]]
+     * FILTER(data, scores>80) → Rows where score > 80
+     * FILTER(data, (region="West")*(sales>1000)) → Multi-condition AND
+     * FILTER(data, (region="West")+(region="East")) → Multi-condition OR
+     * FILTER(data, include, "No results") → Returns "No results" if empty
+     */
+    this.functions.set('FILTER', (...args) => {
+      const [array, include, ifEmpty] = args;
+
+      // Validate required parameters
+      if (array === undefined || include === undefined) {
+        return new Error('#VALUE!');
+      }
+
+      // Validate array parameter
+      if (!Array.isArray(array) || array.length === 0) {
+        return new Error('#VALUE!');
+      }
+
+      // Validate include parameter
+      if (!Array.isArray(include) || include.length === 0) {
+        return new Error('#VALUE!');
+      }
+
+      // Check array length compatibility
+      if (include.length !== array.length) {
+        return new Error('#VALUE!');
+      }
+
+      // Check if array is 2D
+      const is2D = Array.isArray(array[0]);
+
+      // Filter based on boolean include array
+      if (!is2D) {
+        // Filter 1D array
+        const result: FormulaValue[] = [];
+
+        for (let i = 0; i < array.length; i++) {
+          const includeValue = include[i];
+          
+          // Convert to boolean
+          let shouldInclude = false;
+          if (includeValue === true || includeValue === 1) {
+            shouldInclude = true;
+          } else if (includeValue === false || includeValue === 0) {
+            shouldInclude = false;
+          } else if (typeof includeValue === 'number' && includeValue !== 0) {
+            // Non-zero numbers are truthy
+            shouldInclude = true;
+          }
+
+          if (shouldInclude) {
+            result.push(array[i]);
+          }
+        }
+
+        // Check if result is empty
+        if (result.length === 0) {
+          if (ifEmpty !== undefined) {
+            return ifEmpty;
+          }
+          return new Error('#CALC!');
+        }
+
+        return result;
+      } else {
+        // Filter 2D array (by rows)
+        const result: FormulaValue[][] = [];
+
+        for (let i = 0; i < array.length; i++) {
+          const includeValue = include[i];
+          
+          // Convert to boolean
+          let shouldInclude = false;
+          if (includeValue === true || includeValue === 1) {
+            shouldInclude = true;
+          } else if (includeValue === false || includeValue === 0) {
+            shouldInclude = false;
+          } else if (typeof includeValue === 'number' && includeValue !== 0) {
+            shouldInclude = true;
+          }
+
+          if (shouldInclude) {
+            result.push(array[i] as FormulaValue[]);
+          }
+        }
+
+        // Check if result is empty
+        if (result.length === 0) {
+          if (ifEmpty !== undefined) {
+            // Return if_empty as single-cell result
+            return ifEmpty;
+          }
+          return new Error('#CALC!');
+        }
+
+        return result;
+      }
+    });
+
+    /**
      * HLOOKUP - Horizontal Lookup
      * Syntax: HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])
      * 
