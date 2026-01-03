@@ -604,6 +604,170 @@ export class FormulaEngine {
       
       return new Error('#N/A');
     });
+
+    /**
+     * XLOOKUP - Modern replacement for VLOOKUP/HLOOKUP
+     * Syntax: XLOOKUP(lookup_value, lookup_array, return_array, [if_not_found], [match_mode], [search_mode])
+     * 
+     * match_mode:
+     *   0 = Exact match (default). If not found, returns #N/A or if_not_found
+     *   -1 = Exact match or next smallest item
+     *   1 = Exact match or next largest item
+     *   2 = Wildcard match (* and ?)
+     * 
+     * search_mode:
+     *   1 = Search first-to-last (default)
+     *   -1 = Search last-to-first (reverse)
+     *   2 = Binary search (ascending order)
+     *   -2 = Binary search (descending order)
+     */
+    this.functions.set('XLOOKUP', (...args) => {
+      const [lookupValue, lookupArray, returnArray, ifNotFound = new Error('#N/A'), matchMode = 0, searchMode = 1] = args;
+
+      // Validate inputs
+      if (!Array.isArray(lookupArray)) return new Error('#VALUE!');
+      if (!Array.isArray(returnArray)) return new Error('#VALUE!');
+      if (lookupArray.length !== returnArray.length) return new Error('#VALUE!');
+      if (lookupArray.length === 0) return new Error('#N/A');
+
+      const matchModeNum = typeof matchMode === 'number' ? matchMode : 0;
+      const searchModeNum = typeof searchMode === 'number' ? searchMode : 1;
+
+      // Helper: Compare values
+      const compare = (a: FormulaValue, b: FormulaValue): number => {
+        if (a === b) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        if (typeof a === 'number' && typeof b === 'number') return a - b;
+        const aStr = String(a).toLowerCase();
+        const bStr = String(b).toLowerCase();
+        return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+      };
+
+      // Helper: Wildcard match
+      const wildcardMatch = (text: string, pattern: string): boolean => {
+        const regexPattern = pattern
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape regex special chars except * and ?
+          .replace(/\*/g, '.*')                    // * matches any characters
+          .replace(/\?/g, '.');                    // ? matches single character
+        const regex = new RegExp(`^${regexPattern}$`, 'i');
+        return regex.test(text);
+      };
+
+      // Binary search helper
+      const binarySearch = (ascending: boolean): number => {
+        let left = 0;
+        let right = lookupArray.length - 1;
+        let result = -1;
+
+        while (left <= right) {
+          const mid = Math.floor((left + right) / 2);
+          const cmp = compare(lookupArray[mid], lookupValue);
+
+          if (cmp === 0) {
+            return mid;  // Exact match
+          }
+
+          if (ascending) {
+            if (cmp < 0) {
+              result = mid;  // Potential next smallest
+              left = mid + 1;
+            } else {
+              right = mid - 1;
+            }
+          } else {
+            if (cmp > 0) {
+              result = mid;  // Potential next largest
+              left = mid + 1;
+            } else {
+              right = mid - 1;
+            }
+          }
+        }
+
+        return result;
+      };
+
+      // Search logic based on search_mode
+      let foundIndex = -1;
+
+      if (searchModeNum === 2) {
+        // Binary search (ascending)
+        foundIndex = binarySearch(true);
+      } else if (searchModeNum === -2) {
+        // Binary search (descending)
+        foundIndex = binarySearch(false);
+      } else {
+        // Linear search
+        const startIdx = searchModeNum === -1 ? lookupArray.length - 1 : 0;
+        const endIdx = searchModeNum === -1 ? -1 : lookupArray.length;
+        const step = searchModeNum === -1 ? -1 : 1;
+
+        if (matchModeNum === 2) {
+          // Wildcard match
+          const pattern = String(lookupValue);
+          for (let i = startIdx; i !== endIdx; i += step) {
+            if (wildcardMatch(String(lookupArray[i]), pattern)) {
+              foundIndex = i;
+              break;
+            }
+          }
+        } else if (matchModeNum === 0) {
+          // Exact match
+          for (let i = startIdx; i !== endIdx; i += step) {
+            if (compare(lookupArray[i], lookupValue) === 0) {
+              foundIndex = i;
+              break;
+            }
+          }
+        } else if (matchModeNum === -1) {
+          // Exact match or next smallest
+          let bestIdx = -1;
+          let bestValue: FormulaValue = null;
+
+          for (let i = startIdx; i !== endIdx; i += step) {
+            const cmp = compare(lookupArray[i], lookupValue);
+            if (cmp === 0) {
+              foundIndex = i;
+              break;
+            } else if (cmp < 0) {
+              if (bestIdx === -1 || compare(lookupArray[i], bestValue) > 0) {
+                bestIdx = i;
+                bestValue = lookupArray[i];
+              }
+            }
+          }
+
+          if (foundIndex === -1) foundIndex = bestIdx;
+        } else if (matchModeNum === 1) {
+          // Exact match or next largest
+          let bestIdx = -1;
+          let bestValue: FormulaValue = null;
+
+          for (let i = startIdx; i !== endIdx; i += step) {
+            const cmp = compare(lookupArray[i], lookupValue);
+            if (cmp === 0) {
+              foundIndex = i;
+              break;
+            } else if (cmp > 0) {
+              if (bestIdx === -1 || compare(lookupArray[i], bestValue) < 0) {
+                bestIdx = i;
+                bestValue = lookupArray[i];
+              }
+            }
+          }
+
+          if (foundIndex === -1) foundIndex = bestIdx;
+        }
+      }
+
+      // Return result or not-found value
+      if (foundIndex >= 0) {
+        return returnArray[foundIndex];
+      }
+
+      return ifNotFound;
+    });
   }
 
   /**
