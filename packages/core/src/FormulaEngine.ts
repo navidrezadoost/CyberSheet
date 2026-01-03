@@ -768,6 +768,171 @@ export class FormulaEngine {
 
       return ifNotFound;
     });
+
+    /**
+     * INDEX - Return value from array by row/column index
+     * Syntax: INDEX(array, row_num, [column_num])
+     * 
+     * For 1D arrays: INDEX(array, position)
+     * For 2D arrays: INDEX(array, row_num, column_num)
+     * 
+     * Returns #REF! if indices are out of bounds
+     */
+    this.functions.set('INDEX', (...args) => {
+      const [array, rowNum, colNum] = args;
+
+      // Validate array
+      if (!Array.isArray(array)) return new Error('#REF!');
+      if (array.length === 0) return new Error('#REF!');
+
+      // Check if it's a 2D array (array of arrays)
+      const is2D = Array.isArray(array[0]);
+
+      if (is2D) {
+        // 2D array handling
+        const row = typeof rowNum === 'number' ? rowNum : 0;
+        const col = typeof colNum === 'number' ? colNum : 0;
+
+        // Special case: row=0 means return entire column
+        if (row === 0 && col > 0) {
+          const result: FormulaValue[] = [];
+          for (let r = 0; r < array.length; r++) {
+            const rowArray = array[r] as FormulaValue[];
+            if (Array.isArray(rowArray) && col - 1 < rowArray.length) {
+              result.push(rowArray[col - 1]);
+            }
+          }
+          return result.length > 0 ? result : new Error('#REF!');
+        }
+
+        // Special case: col=0 means return entire row
+        if (col === 0 && row > 0) {
+          if (row - 1 < array.length && Array.isArray(array[row - 1])) {
+            return array[row - 1] as FormulaValue[];
+          }
+          return new Error('#REF!');
+        }
+
+        // Normal case: return specific cell
+        if (row < 1 || col < 1) return new Error('#REF!');
+        if (row - 1 >= array.length) return new Error('#REF!');
+        
+        const rowArray = array[row - 1];
+        if (!Array.isArray(rowArray)) return new Error('#REF!');
+        if (col - 1 >= rowArray.length) return new Error('#REF!');
+
+        return rowArray[col - 1];
+      } else {
+        // 1D array handling
+        const index = typeof rowNum === 'number' ? rowNum : 0;
+        
+        if (index < 1 || index > array.length) return new Error('#REF!');
+        
+        return array[index - 1];
+      }
+    });
+
+    /**
+     * MATCH - Find position of value in array
+     * Syntax: MATCH(lookup_value, lookup_array, [match_type])
+     * 
+     * match_type:
+     *   1 (default) = Find largest value less than or equal to lookup_value (array must be sorted ascending)
+     *   0 = Find first value exactly equal to lookup_value (array can be unsorted)
+     *   -1 = Find smallest value greater than or equal to lookup_value (array must be sorted descending)
+     * 
+     * Returns position (1-based index) or #N/A if not found
+     */
+    this.functions.set('MATCH', (...args) => {
+      const [lookupValue, lookupArray, matchType = 1] = args;
+
+      // Validate inputs
+      if (!Array.isArray(lookupArray)) return new Error('#N/A');
+      if (lookupArray.length === 0) return new Error('#N/A');
+
+      const matchTypeNum = typeof matchType === 'number' ? matchType : 1;
+
+      // Helper: Compare values
+      const compare = (a: FormulaValue, b: FormulaValue): number => {
+        if (a === b) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        
+        // Numeric comparison
+        if (typeof a === 'number' && typeof b === 'number') {
+          return a - b;
+        }
+        
+        // String comparison (case-insensitive)
+        const aStr = String(a).toLowerCase();
+        const bStr = String(b).toLowerCase();
+        return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+      };
+
+      // Match type 0: Exact match (unsorted array)
+      if (matchTypeNum === 0) {
+        for (let i = 0; i < lookupArray.length; i++) {
+          if (compare(lookupArray[i], lookupValue) === 0) {
+            return i + 1;  // Return 1-based index
+          }
+        }
+        return new Error('#N/A');
+      }
+
+      // Match type 1: Largest value <= lookup_value (ascending sorted)
+      if (matchTypeNum === 1) {
+        let bestIndex = -1;
+        
+        for (let i = 0; i < lookupArray.length; i++) {
+          const cmp = compare(lookupArray[i], lookupValue);
+          
+          if (cmp === 0) {
+            // Exact match - continue to find last occurrence
+            bestIndex = i;
+          } else if (cmp < 0) {
+            // Value is less than lookup - potential candidate
+            bestIndex = i;
+          } else {
+            // Value is greater than lookup - stop searching
+            break;
+          }
+        }
+        
+        if (bestIndex >= 0) {
+          return bestIndex + 1;  // Return 1-based index
+        }
+        return new Error('#N/A');
+      }
+
+      // Match type -1: Smallest value >= lookup_value (descending sorted)
+      if (matchTypeNum === -1) {
+        let bestIndex = -1;
+        
+        for (let i = 0; i < lookupArray.length; i++) {
+          const cmp = compare(lookupArray[i], lookupValue);
+          
+          if (cmp === 0) {
+            // Exact match - return immediately
+            return i + 1;
+          } else if (cmp >= 0) {
+            // Value is greater than or equal to lookup - potential candidate
+            // Keep searching for smallest value >= lookup
+            bestIndex = i;
+          } else {
+            // Value is less than lookup - we've gone too far in descending array
+            // Return the last good index
+            break;
+          }
+        }
+        
+        if (bestIndex >= 0) {
+          return bestIndex + 1;  // Return 1-based index
+        }
+        return new Error('#N/A');
+      }
+
+      return new Error('#N/A');
+    });
   }
 
   /**
