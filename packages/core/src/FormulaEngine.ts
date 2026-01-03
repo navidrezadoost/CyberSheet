@@ -1628,6 +1628,128 @@ export class FormulaEngine {
     });
 
     /**
+     * SORTBY - Sort array based on values in another array (Excel 365)
+     * Syntax: SORTBY(array, by_array1, [sort_order1], [by_array2], [sort_order2], ...)
+     * 
+     * Sorts the contents of an array based on the values in corresponding arrays.
+     * Supports multi-key sorting with different sort orders for each key.
+     * This is a dynamic array function that spills results.
+     * Uses stable sort algorithm to preserve relative order of equal items.
+     * 
+     * Parameters:
+     * - array: The array or range to sort (required)
+     * - by_array1: The array to sort by (required)
+     * - sort_order1: Sort order for by_array1 - 1 for ascending (default), -1 for descending
+     * - by_array2, sort_order2, ...: Additional arrays and sort orders (optional)
+     * 
+     * Returns:
+     * - Sorted array with same dimensions as input array
+     * - #VALUE! if parameters are invalid or array sizes don't match
+     * - #CALC! if array is empty
+     * 
+     * Examples:
+     * SORTBY([A,B,C], [3,1,2]) → [B,C,A] (sort by second array)
+     * SORTBY([[A,1],[B,3],[C,2]], [3,1,2]) → [[B,3],[C,2],[A,1]]
+     * SORTBY([A,B,C], [2,1,2], 1, [Y,X,Z], -1) → Multi-key sort
+     */
+    this.functions.set('SORTBY', (...args) => {
+      // Validate minimum arguments
+      if (args.length < 2) {
+        return new Error('#VALUE!');
+      }
+
+      const array = args[0];
+
+      // Validate array parameter
+      if (!Array.isArray(array) || array.length === 0) {
+        return new Error('#VALUE!');
+      }
+
+      // Parse by_array and sort_order pairs
+      const sortKeys: Array<{ byArray: FormulaValue[]; order: number }> = [];
+      
+      for (let i = 1; i < args.length; i += 2) {
+        const byArray = args[i];
+        const sortOrder = args[i + 1] !== undefined ? args[i + 1] : 1;
+
+        // Validate by_array
+        if (!Array.isArray(byArray)) {
+          return new Error('#VALUE!');
+        }
+
+        // Check array length compatibility
+        if (byArray.length !== array.length) {
+          return new Error('#VALUE!');
+        }
+
+        const order = sortOrder === -1 ? -1 : 1;
+        sortKeys.push({ byArray, order });
+      }
+
+      // If no sort keys, return error
+      if (sortKeys.length === 0) {
+        return new Error('#VALUE!');
+      }
+
+      // Check if array is 2D
+      const is2D = Array.isArray(array[0]);
+
+      // Create indexed array for stable sort
+      const indexed = array.map((item, idx) => ({
+        item,
+        idx,
+        // Store sort keys for this index
+        keys: sortKeys.map(sk => sk.byArray[idx])
+      }));
+
+      // Multi-key stable sort
+      indexed.sort((a, b) => {
+        // Compare by each sort key in order
+        for (let keyIdx = 0; keyIdx < sortKeys.length; keyIdx++) {
+          const valA = a.keys[keyIdx];
+          const valB = b.keys[keyIdx];
+          const order = sortKeys[keyIdx].order;
+
+          let comparison = 0;
+
+          // Compare values
+          if (valA === null && valB === null) {
+            comparison = 0;
+          } else if (valA === null) {
+            comparison = 1; // null sorts to end
+          } else if (valB === null) {
+            comparison = -1; // null sorts to end
+          } else if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB);
+          } else if (typeof valA === 'number' && typeof valB === 'number') {
+            comparison = valA - valB;
+          } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+            comparison = (valA ? 1 : 0) - (valB ? 1 : 0);
+          } else {
+            // Mixed types: convert to string
+            comparison = String(valA).localeCompare(String(valB));
+          }
+
+          // Apply sort order
+          comparison *= order;
+
+          // If not equal, return comparison
+          if (comparison !== 0) {
+            return comparison;
+          }
+
+          // If equal, continue to next key
+        }
+
+        // All keys equal: stable sort by original index
+        return a.idx - b.idx;
+      });
+
+      // Extract sorted items
+      return indexed.map(item => item.item);
+    });
+
+    /**
      * HLOOKUP - Horizontal Lookup
      * Syntax: HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])
      * 
