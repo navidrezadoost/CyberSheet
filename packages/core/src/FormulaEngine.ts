@@ -933,6 +933,144 @@ export class FormulaEngine {
 
       return new Error('#N/A');
     });
+
+    /**
+     * HLOOKUP - Horizontal Lookup
+     * Syntax: HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])
+     * 
+     * Searches for a value in the top row of a table and returns a value 
+     * in the same column from a row you specify.
+     * 
+     * lookup_value: The value to search for in the first row
+     * table_array: 2D array to search in
+     * row_index_num: The row number (1-based) from which to return a value
+     * range_lookup: TRUE/1 for approximate match (default), FALSE/0 for exact match
+     * 
+     * Approximate match requires the first row to be sorted in ascending order
+     */
+    this.functions.set('HLOOKUP', (...args) => {
+      const [lookupValue, tableArray, rowIndexNum, rangeLookup = true] = args;
+
+      // Validate inputs
+      if (!Array.isArray(tableArray) || tableArray.length === 0) {
+        return new Error('#REF!');
+      }
+      
+      // Ensure table is 2D array
+      if (!Array.isArray(tableArray[0])) {
+        return new Error('#REF!');
+      }
+
+      const rowIndex = typeof rowIndexNum === 'number' ? rowIndexNum : 0;
+      if (rowIndex < 1 || rowIndex > tableArray.length) {
+        return new Error('#REF!');
+      }
+
+      const firstRow = tableArray[0];
+      const isApproximate = rangeLookup === true || rangeLookup === 1;
+
+      // Helper: Compare values
+      const compare = (a: FormulaValue, b: FormulaValue): number => {
+        if (a === b) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        
+        // Numeric comparison (both must be numbers)
+        if (typeof a === 'number' && typeof b === 'number') {
+          return a - b;
+        }
+        
+        // If types differ, treat as string comparison
+        const aStr = String(a).toLowerCase();
+        const bStr = String(b).toLowerCase();
+        return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+      };
+
+      // Helper: Wildcard matching
+      const matchesWildcard = (value: FormulaValue, pattern: FormulaValue): boolean => {
+        if (typeof pattern !== 'string') return false;
+        
+        const hasWildcard = pattern.includes('*') || pattern.includes('?');
+        if (!hasWildcard) return false;
+
+        const regexPattern = pattern
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape regex special chars
+          .replace(/\*/g, '.*')  // * matches any sequence
+          .replace(/\?/g, '.');  // ? matches single char
+        
+        const regex = new RegExp('^' + regexPattern + '$', 'i');
+        return regex.test(String(value));
+      };
+
+      // Exact match mode (range_lookup = FALSE)
+      if (!isApproximate) {
+        for (let col = 0; col < firstRow.length; col++) {
+          const cellValue = firstRow[col];
+          
+          // Check exact match (case-insensitive for text)
+          if (compare(cellValue, lookupValue) === 0) {
+            const targetRow = tableArray[rowIndex - 1];
+            if (targetRow && col < targetRow.length) {
+              return targetRow[col];
+            }
+            return new Error('#REF!');
+          }
+          
+          // Check wildcard match if lookup value contains wildcards
+          if (typeof lookupValue === 'string' && matchesWildcard(cellValue, lookupValue)) {
+            const targetRow = tableArray[rowIndex - 1];
+            if (targetRow && col < targetRow.length) {
+              return targetRow[col];
+            }
+            return new Error('#REF!');
+          }
+        }
+        
+        return new Error('#N/A');
+      }
+
+      // Approximate match mode (range_lookup = TRUE)
+      // First row must be sorted in ascending order
+      let bestCol = -1;
+      
+      for (let col = 0; col < firstRow.length; col++) {
+        const cellValue = firstRow[col];
+        
+        // Skip cells with incompatible types (e.g., string header when looking for number)
+        const lookupIsNumber = typeof lookupValue === 'number';
+        const cellIsNumber = typeof cellValue === 'number';
+        
+        if (lookupIsNumber !== cellIsNumber) {
+          continue;  // Skip type mismatches in approximate mode
+        }
+        
+        const cmp = compare(cellValue, lookupValue);
+        
+        if (cmp === 0) {
+          // Exact match found
+          bestCol = col;
+          break;
+        } else if (cmp < 0) {
+          // Cell value is less than lookup value
+          // This is a potential match (largest value <= lookup)
+          bestCol = col;
+        } else {
+          // Cell value is greater than lookup value
+          // Stop searching (assumes sorted order)
+          break;
+        }
+      }
+      
+      if (bestCol >= 0) {
+        const targetRow = tableArray[rowIndex - 1];
+        if (targetRow && bestCol < targetRow.length) {
+          return targetRow[bestCol];
+        }
+        return new Error('#REF!');
+      }
+      
+      return new Error('#N/A');
+    });
   }
 
   /**
