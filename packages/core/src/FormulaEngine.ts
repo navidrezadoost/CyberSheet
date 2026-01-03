@@ -8,7 +8,9 @@
 import type { Address, Cell, CellValue } from './types';
 import type { Worksheet } from './worksheet';
 
-export type FormulaValue = number | string | boolean | null | Error;
+// FormulaValue now includes arrays for dynamic array functions (Excel 365)
+// Arrays can be 1D (FormulaValue[]) or 2D (FormulaValue[][]) for spill behavior
+export type FormulaValue = number | string | boolean | null | Error | FormulaValue[] | FormulaValue[][];
 export type FormulaFunction = (...args: FormulaValue[]) => FormulaValue;
 
 export interface FormulaContext {
@@ -1136,6 +1138,90 @@ export class FormulaEngine {
     });
 
     /**
+     * SEQUENCE - Generate array of sequential numbers (Excel 365)
+     * Syntax: SEQUENCE(rows, [columns], [start], [step])
+     * 
+     * Generates a sequential array of numbers. This is a dynamic array function
+     * that spills results into multiple cells.
+     * 
+     * Parameters:
+     * - rows: Number of rows to generate (required)
+     * - columns: Number of columns (default = 1)
+     * - start: Starting value (default = 1)
+     * - step: Increment between values (default = 1)
+     * 
+     * Returns:
+     * - 1D array if columns=1: [start, start+step, start+2*step, ...]
+     * - 2D array if columns>1: [[val1, val2, ...], [val3, val4, ...], ...]
+     * 
+     * Examples:
+     * SEQUENCE(5) → [1, 2, 3, 4, 5] (vertical)
+     * SEQUENCE(3, 3) → [[1,2,3], [4,5,6], [7,8,9]]
+     * SEQUENCE(5, 1, 10, 2) → [10, 12, 14, 16, 18]
+     * SEQUENCE(4, 2, 0, 0.5) → [[0,0.5], [1,1.5], [2,2.5], [3,3.5]]
+     */
+    this.functions.set('SEQUENCE', (...args) => {
+      const [rows, columns = 1, start = 1, step = 1] = args;
+
+      // Validate required parameter
+      if (rows === undefined) {
+        return new Error('#VALUE!');
+      }
+
+      // Convert and validate parameters
+      const rowsNum = typeof rows === 'number' ? rows : Number(rows);
+      const colsNum = typeof columns === 'number' ? columns : Number(columns);
+      const startNum = typeof start === 'number' ? start : Number(start);
+      const stepNum = typeof step === 'number' ? step : Number(step);
+
+      // Check for valid numbers
+      if (isNaN(rowsNum) || isNaN(colsNum) || isNaN(startNum) || isNaN(stepNum)) {
+        return new Error('#VALUE!');
+      }
+
+      // Rows and columns must be positive integers
+      if (rowsNum < 1 || colsNum < 1) {
+        return new Error('#VALUE!');
+      }
+
+      // Convert to integers (Excel rounds down)
+      const numRows = Math.floor(rowsNum);
+      const numCols = Math.floor(colsNum);
+
+      // Check for reasonable limits (prevent memory issues)
+      const totalCells = numRows * numCols;
+      if (totalCells > 1000000) {  // 1 million cell limit
+        return new Error('#NUM!');
+      }
+
+      // Generate sequence
+      let currentValue = startNum;
+      
+      // Single column (1D array) - return as column array
+      if (numCols === 1) {
+        const result: FormulaValue[] = [];
+        for (let r = 0; r < numRows; r++) {
+          result.push(currentValue);
+          currentValue += stepNum;
+        }
+        return result;
+      }
+
+      // Multiple columns (2D array)
+      const result: FormulaValue[][] = [];
+      for (let r = 0; r < numRows; r++) {
+        const row: FormulaValue[] = [];
+        for (let c = 0; c < numCols; c++) {
+          row.push(currentValue);
+          currentValue += stepNum;
+        }
+        result.push(row);
+      }
+
+      return result;
+    });
+
+    /**
      * HLOOKUP - Horizontal Lookup
      * Syntax: HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])
      * 
@@ -1211,7 +1297,7 @@ export class FormulaEngine {
           // Check exact match (case-insensitive for text)
           if (compare(cellValue, lookupValue) === 0) {
             const targetRow = tableArray[rowIndex - 1];
-            if (targetRow && col < targetRow.length) {
+            if (Array.isArray(targetRow) && col < targetRow.length) {
               return targetRow[col];
             }
             return new Error('#REF!');
@@ -1220,7 +1306,7 @@ export class FormulaEngine {
           // Check wildcard match if lookup value contains wildcards
           if (typeof lookupValue === 'string' && matchesWildcard(cellValue, lookupValue)) {
             const targetRow = tableArray[rowIndex - 1];
-            if (targetRow && col < targetRow.length) {
+            if (Array.isArray(targetRow) && col < targetRow.length) {
               return targetRow[col];
             }
             return new Error('#REF!');
@@ -1264,7 +1350,7 @@ export class FormulaEngine {
       
       if (bestCol >= 0) {
         const targetRow = tableArray[rowIndex - 1];
-        if (targetRow && bestCol < targetRow.length) {
+        if (Array.isArray(targetRow) && bestCol < targetRow.length) {
           return targetRow[bestCol];
         }
         return new Error('#REF!');
@@ -1645,7 +1731,13 @@ export class FormulaEngine {
         const value = this.evaluate(cell.formula, { worksheet, currentCell: addr });
         // Only set value if it's not an error (CellValue doesn't support Error type)
         if (!(value instanceof Error)) {
-          worksheet.setCellValue(addr, value);
+          // Handle arrays: for now, store as string representation
+          // TODO: Implement proper spill behavior in Phase 2
+          if (Array.isArray(value)) {
+            worksheet.setCellValue(addr, JSON.stringify(value));
+          } else {
+            worksheet.setCellValue(addr, value);
+          }
         }
       }
     }
