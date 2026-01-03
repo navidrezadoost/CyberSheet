@@ -1222,6 +1222,185 @@ export class FormulaEngine {
     });
 
     /**
+     * UNIQUE - Extract unique values from array (Excel 365)
+     * Syntax: UNIQUE(array, [by_col], [exactly_once])
+     * 
+     * Returns unique values from an array, removing duplicates.
+     * This is a dynamic array function that spills results.
+     * 
+     * Parameters:
+     * - array: The array to process (required)
+     * - by_col: Logical value - FALSE/0 to compare rows (default), TRUE/1 to compare columns
+     * - exactly_once: Logical value - FALSE/0 to return all unique values (default), 
+     *                 TRUE/1 to return only values that appear exactly once
+     * 
+     * Returns:
+     * - 1D array if input is 1D
+     * - 2D array if input is 2D (preserves structure)
+     * 
+     * Examples:
+     * UNIQUE([1,2,2,3,3,3]) → [1,2,3]
+     * UNIQUE([1,2,2,3,3,3], FALSE, TRUE) → [1] (only value appearing once)
+     * UNIQUE([[1,2],[1,2],[3,4]]) → [[1,2],[3,4]]
+     * UNIQUE(SEQUENCE(5)) → [1,2,3,4,5] (all unique)
+     */
+    this.functions.set('UNIQUE', (...args) => {
+      const [array, byCol = false, exactlyOnce = false] = args;
+
+      // Validate required parameter
+      if (array === undefined) {
+        return new Error('#VALUE!');
+      }
+
+      // Validate array input
+      if (!Array.isArray(array)) {
+        return new Error('#VALUE!');
+      }
+
+      if (array.length === 0) {
+        return new Error('#CALC!');
+      }
+
+      const byColumn = byCol === true || byCol === 1;
+      const onlyOnce = exactlyOnce === true || exactlyOnce === 1;
+
+      // Check if array is 2D
+      const is2D = Array.isArray(array[0]);
+
+      // Handle 1D arrays
+      if (!is2D) {
+        // Create a map to count occurrences
+        const countMap = new Map<string, { value: FormulaValue; count: number }>();
+
+        for (const item of array) {
+          // Use JSON.stringify for consistent key generation
+          const key = JSON.stringify(item);
+          
+          if (countMap.has(key)) {
+            countMap.get(key)!.count++;
+          } else {
+            countMap.set(key, { value: item, count: 1 });
+          }
+        }
+
+        // Filter based on exactly_once parameter
+        const result: FormulaValue[] = [];
+        
+        for (const { value, count } of countMap.values()) {
+          if (onlyOnce) {
+            // Only include values that appear exactly once
+            if (count === 1) {
+              result.push(value);
+            }
+          } else {
+            // Include all unique values (first occurrence)
+            result.push(value);
+          }
+        }
+
+        return result.length > 0 ? result : new Error('#CALC!');
+      }
+
+      // Handle 2D arrays
+      if (byColumn) {
+        // Compare columns for uniqueness
+        // Transpose logic: compare each column as a unit
+        const numRows = array.length;
+        const firstRow = array[0];
+        
+        // Type guard for 2D array
+        if (!Array.isArray(firstRow)) {
+          return new Error('#VALUE!');
+        }
+        
+        const numCols = firstRow.length;
+
+        // Extract columns
+        const columns: FormulaValue[][] = [];
+        for (let c = 0; c < numCols; c++) {
+          const column: FormulaValue[] = [];
+          for (let r = 0; r < numRows; r++) {
+            column.push((array[r] as FormulaValue[])[c]);
+          }
+          columns.push(column);
+        }
+
+        // Count occurrences of each column
+        const countMap = new Map<string, { column: FormulaValue[]; count: number }>();
+
+        for (const col of columns) {
+          const key = JSON.stringify(col);
+          
+          if (countMap.has(key)) {
+            countMap.get(key)!.count++;
+          } else {
+            countMap.set(key, { column: col, count: 1 });
+          }
+        }
+
+        // Filter based on exactly_once
+        const uniqueColumns: FormulaValue[][] = [];
+        
+        for (const { column, count } of countMap.values()) {
+          if (onlyOnce) {
+            if (count === 1) {
+              uniqueColumns.push(column);
+            }
+          } else {
+            uniqueColumns.push(column);
+          }
+        }
+
+        if (uniqueColumns.length === 0) {
+          return new Error('#CALC!');
+        }
+
+        // Reconstruct result as rows
+        const result: FormulaValue[][] = [];
+        for (let r = 0; r < numRows; r++) {
+          const row: FormulaValue[] = [];
+          for (let c = 0; c < uniqueColumns.length; c++) {
+            row.push(uniqueColumns[c][r]);
+          }
+          result.push(row);
+        }
+
+        return result;
+      } else {
+        // Compare rows for uniqueness (default)
+        const countMap = new Map<string, { row: FormulaValue[], count: number }>();
+
+        for (const row of array) {
+          // Use JSON.stringify for consistent key generation
+          const key = JSON.stringify(row);
+          
+          if (countMap.has(key)) {
+            countMap.get(key)!.count++;
+          } else {
+            countMap.set(key, { row: row as FormulaValue[], count: 1 });
+          }
+        }
+
+        // Filter based on exactly_once parameter
+        const result: FormulaValue[][] = [];
+        
+        for (const { row, count } of countMap.values()) {
+          if (onlyOnce) {
+            // Only include rows that appear exactly once
+            if (count === 1) {
+              result.push(row);
+            }
+          } else {
+            // Include all unique rows (first occurrence)
+            result.push(row);
+          }
+        }
+
+        return result.length > 0 ? result : new Error('#CALC!');
+      }
+    });
+
+    /**
      * HLOOKUP - Horizontal Lookup
      * Syntax: HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])
      * 
