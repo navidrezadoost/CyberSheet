@@ -1113,6 +1113,154 @@ export class FormulaEngine {
       // Return value at index (convert from 1-based to 0-based)
       return values[index - 1];
     });
+
+    /**
+     * OFFSET - Return a reference offset from a starting cell/range
+     * Syntax: OFFSET(reference, rows, cols, [height], [width])
+     * 
+     * Returns a reference to a range that is offset from a starting reference.
+     * 
+     * reference: Starting array/range (can be single cell or multi-cell)
+     * rows: Number of rows to offset (positive = down, negative = up)
+     * cols: Number of columns to offset (positive = right, negative = left)
+     * height: (Optional) Height of the returned range in rows (default: height of reference)
+     * width: (Optional) Width of the returned range in columns (default: width of reference)
+     * 
+     * Returns #REF! if the offset range is invalid or out of bounds
+     * Returns #VALUE! if rows/cols are not numeric
+     * 
+     * Note: In this implementation, reference should be a 2D array representing the data range.
+     *       The function returns the offset portion of that array.
+     * 
+     * Examples:
+     *   OFFSET([[1,2,3],[4,5,6]], 1, 0) → [[4,5,6]] (move down 1 row)
+     *   OFFSET([[1,2,3],[4,5,6]], 0, 1, 2, 1) → [[2],[5]] (move right 1 col, 2 rows × 1 col)
+     *   OFFSET([[1,2,3],[4,5,6]], 0, 0, 1, 2) → [[1,2]] (first row, 2 columns)
+     */
+    this.functions.set('OFFSET', (...args) => {
+      if (args.length < 3) {
+        return new Error('#VALUE!');
+      }
+
+      const [reference, rowsOffset, colsOffset, height, width] = args;
+
+      // Validate reference is an array
+      if (!Array.isArray(reference)) {
+        return new Error('#REF!');
+      }
+
+      // Validate offsets are numeric
+      if (typeof rowsOffset !== 'number' || typeof colsOffset !== 'number') {
+        return new Error('#VALUE!');
+      }
+
+      // Convert offsets to integers
+      const rows = Math.floor(rowsOffset);
+      const cols = Math.floor(colsOffset);
+
+      // Determine if reference is 1D or 2D
+      const is2D = Array.isArray(reference[0]);
+      
+      let refHeight: number;
+      let refWidth: number;
+      let sourceArray: any[][];
+
+      if (is2D) {
+        // 2D array
+        sourceArray = reference as any[][];
+        refHeight = sourceArray.length;
+        refWidth = refHeight > 0 ? sourceArray[0].length : 0;
+      } else {
+        // 1D array - treat as single row
+        sourceArray = [reference];
+        refHeight = 1;
+        refWidth = reference.length;
+      }
+
+      // Determine result dimensions
+      // If height/width not specified, use remaining portion after offset
+      let resultHeight: number;
+      let resultWidth: number;
+      
+      if (typeof height === 'number') {
+        resultHeight = Math.floor(height);
+        // Validate height is positive
+        if (resultHeight <= 0) {
+          return new Error('#REF!');
+        }
+      } else {
+        // Use remaining rows after offset
+        resultHeight = refHeight - rows;
+      }
+      
+      if (typeof width === 'number') {
+        resultWidth = Math.floor(width);
+        // Validate width is positive
+        if (resultWidth <= 0) {
+          return new Error('#REF!');
+        }
+      } else {
+        // Use remaining columns after offset
+        resultWidth = refWidth - cols;
+      }
+
+      // Validate final dimensions are positive
+      if (resultHeight <= 0 || resultWidth <= 0) {
+        return new Error('#REF!');
+      }
+
+      // Calculate starting position
+      const startRow = rows;
+      const startCol = cols;
+
+      // Validate bounds: start position must be within or allow negative offset
+      if (startRow < 0 || startCol < 0) {
+        return new Error('#REF!');
+      }
+
+      // Validate end position is within source array
+      const endRow = startRow + resultHeight;
+      const endCol = startCol + resultWidth;
+
+      if (endRow > refHeight || endCol > refWidth) {
+        return new Error('#REF!');
+      }
+
+      // Extract the offset range
+      const result: any[][] = [];
+      
+      for (let r = 0; r < resultHeight; r++) {
+        const sourceRow = sourceArray[startRow + r];
+        if (!sourceRow) {
+          return new Error('#REF!');
+        }
+
+        const resultRow: any[] = [];
+        for (let c = 0; c < resultWidth; c++) {
+          const sourceCol = startCol + c;
+          if (sourceCol >= sourceRow.length) {
+            return new Error('#REF!');
+          }
+          resultRow.push(sourceRow[sourceCol]);
+        }
+        result.push(resultRow);
+      }
+
+      // Return format based on result dimensions
+      if (resultHeight === 1 && resultWidth === 1) {
+        // Single cell - return the value directly
+        return result[0][0];
+      } else if (resultHeight === 1) {
+        // Single row - return 1D array
+        return result[0];
+      } else if (resultWidth === 1) {
+        // Single column - return 1D array of values
+        return result.map(row => row[0]);
+      } else {
+        // Multi-row, multi-column - return 2D array
+        return result;
+      }
+    });
   }
 
   /**
