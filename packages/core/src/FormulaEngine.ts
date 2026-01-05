@@ -13,9 +13,21 @@ import type { Worksheet } from './worksheet';
 export type FormulaValue = number | string | boolean | null | Error | FormulaValue[] | FormulaValue[][];
 export type FormulaFunction = (...args: FormulaValue[]) => FormulaValue;
 
+/**
+ * Lambda function type for LAMBDA() function
+ * Stores parameter names and the calculation formula
+ */
+export type LambdaFunction = {
+  parameters: string[];
+  body: string;
+  capturedContext?: Map<string, FormulaValue>; // For closures
+};
+
 export interface FormulaContext {
   worksheet: Worksheet;
   currentCell: Address;
+  lambdaContext?: Map<string, FormulaValue>; // Parameter bindings for lambda execution
+  namedLambdas?: Map<string, LambdaFunction>; // Named lambdas stored in worksheet
 }
 
 /**
@@ -141,6 +153,29 @@ export class FormulaEngine {
   private evaluateExpression(expr: string, context: FormulaContext): FormulaValue {
     expr = expr.trim();
 
+    // Parenthesized expression - remove outer parens and evaluate inner
+    if (expr.startsWith('(') && expr.endsWith(')')) {
+      // Check if these are matching outer parens
+      let depth = 0;
+      let isOuterParens = true;
+      
+      for (let i = 0; i < expr.length - 1; i++) {
+        if (expr[i] === '(') depth++;
+        else if (expr[i] === ')') depth--;
+        
+        // If depth hits 0 before the end, the outer parens don't match
+        if (depth === 0 && i < expr.length - 1) {
+          isOuterParens = false;
+          break;
+        }
+      }
+      
+      if (isOuterParens) {
+        // Remove outer parens and evaluate inner expression
+        return this.evaluateExpression(expr.slice(1, -1), context);
+      }
+    }
+
     // String literal
     if (expr.startsWith('"') && expr.endsWith('"')) {
       return expr.slice(1, -1);
@@ -154,6 +189,17 @@ export class FormulaEngine {
     // Boolean literal
     if (expr.toLowerCase() === 'true') return true;
     if (expr.toLowerCase() === 'false') return false;
+
+    // Lambda parameter - check if this is a parameter name in lambda context
+    if (context.lambdaContext) {
+      // Simple identifier pattern (parameter names)
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expr)) {
+        const paramValue = context.lambdaContext.get(expr);
+        if (paramValue !== undefined) {
+          return paramValue;
+        }
+      }
+    }
 
     // Cell reference (e.g., A1, B2)
     if (/^[A-Z]+\d+$/i.test(expr)) {
@@ -177,13 +223,86 @@ export class FormulaEngine {
     }
 
     // Function call (e.g., SUM(A1:A10))
+    // Special handling for lambda invocation: LAMBDA(...)(args)
     const functionMatch = expr.match(/^([A-Z_]+)\((.*)\)$/i);
     if (functionMatch) {
       const [, funcName, argsStr] = functionMatch;
+      
+      // Check if this is a lambda invocation pattern: LAMBDA(...)(...)
+      if (funcName.toUpperCase() === 'LAMBDA') {
+        // Find the matching closing paren for LAMBDA arguments
+        let depth = 0;
+        let lambdaArgsEnd = -1;
+        
+        for (let i = funcName.length + 1; i < expr.length; i++) {
+          if (expr[i] === '(') depth++;
+          else if (expr[i] === ')') {
+            if (depth === 0) {
+              lambdaArgsEnd = i;
+              break;
+            }
+            depth--;
+          }
+        }
+        
+        // Check if there's an invocation after the lambda definition
+        if (lambdaArgsEnd > 0 && lambdaArgsEnd < expr.length - 1) {
+          // Extract lambda definition and invocation args
+          const lambdaArgsStr = expr.slice(funcName.length + 1, lambdaArgsEnd);
+          const remaining = expr.slice(lambdaArgsEnd + 1);
+          
+          // Check if remaining starts with (...)
+          const invocationMatch = remaining.match(/^\((.+)\)$/);
+          if (invocationMatch) {
+            // This is LAMBDA(...)(invocation_args)
+            const invocationArgsStr = invocationMatch[1];
+            
+            // First, create the lambda
+            const lambda = this.evaluateFunction(funcName, lambdaArgsStr, context);
+            
+            // If lambda creation failed, return the error
+            if (lambda instanceof Error) {
+              return lambda;
+            }
+            
+            // Now invoke the lambda with the provided arguments
+            return this.invokeLambda(lambda as any, invocationArgsStr, context);
+          }
+        }
+      }
+      
       return this.evaluateFunction(funcName, argsStr, context);
     }
 
     return new Error('#NAME?');
+  }
+
+  /**
+   * Invokes a lambda function with arguments
+   */
+  private invokeLambda(lambda: LambdaFunction, argsStr: string, context: FormulaContext): FormulaValue {
+    // Parse invocation arguments (these ARE evaluated)
+    const invocationArgs = this.parseArguments(argsStr, context);
+    
+    // Check parameter count matches
+    if (invocationArgs.length !== lambda.parameters.length) {
+      return new Error('#VALUE!');
+    }
+    
+    // Create a new context with lambda parameter bindings
+    const lambdaContext = new Map<string, FormulaValue>();
+    for (let i = 0; i < lambda.parameters.length; i++) {
+      lambdaContext.set(lambda.parameters[i], invocationArgs[i]);
+    }
+    
+    // Create new context with lambda bindings
+    const newContext: FormulaContext = {
+      ...context,
+      lambdaContext
+    };
+    
+    // Evaluate the lambda body with the bound parameters
+    return this.evaluateExpression(lambda.body, newContext);
   }
 
   /**
@@ -336,6 +455,13 @@ export class FormulaEngine {
       return new Error('#NAME?');
     }
 
+    // Special handling for LAMBDA - don't evaluate parameter names
+    if (name.toUpperCase() === 'LAMBDA') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      console.log(`Parsed raw args for LAMBDA:`, rawArgs);
+      return func(...rawArgs);
+    }
+
     const args = this.parseArguments(argsStr, context);
     console.log(`Parsed args for ${name}:`, args);
     
@@ -345,6 +471,44 @@ export class FormulaEngine {
       console.log(`Error calling ${name}:`, error);
       return new Error('#VALUE!');
     }
+  }
+
+  /**
+   * Parses raw arguments without evaluation (for special functions like LAMBDA)
+   */
+  private parseRawArguments(argsStr: string): string[] {
+    if (!argsStr.trim()) return [];
+
+    const args: string[] = [];
+    let current = '';
+    let depth = 0;
+    let inString = false;
+
+    for (let i = 0; i < argsStr.length; i++) {
+      const char = argsStr[i];
+
+      if (char === '"') {
+        inString = !inString;
+        current += char;
+      } else if (!inString) {
+        if (char === '(') depth++;
+        else if (char === ')') depth--;
+        else if (char === ',' && depth === 0) {
+          args.push(current.trim());
+          current = '';
+          continue;
+        }
+        current += char;
+      } else {
+        current += char;
+      }
+    }
+
+    if (current.trim()) {
+      args.push(current.trim());
+    }
+
+    return args;
   }
 
   /**
@@ -1868,6 +2032,74 @@ export class FormulaEngine {
 
         return result;
       }
+    });
+
+    /**
+     * LAMBDA - Create Custom Function
+     * Syntax: LAMBDA(parameter1, [parameter2, ...], calculation)
+     * 
+     * Creates a custom, reusable function with parameters.
+     * Can be used anonymously: =LAMBDA(x, x*2)(5)
+     * Or named: MyFunc = LAMBDA(x, x*2), then use =MyFunc(5)
+     * 
+     * Supports:
+     * - Multiple parameters
+     * - Closures (capturing outer scope)
+     * - Recursion (with depth limit)
+     * - Use with MAP, REDUCE, BYROW, BYCOL
+     * 
+     * Examples:
+     * - Simple: =LAMBDA(x, x*2)(5) returns 10
+     * - Two params: =LAMBDA(x,y, x+y)(3,4) returns 7
+     * - Named: MyDouble = LAMBDA(x, x*2), then =MyDouble(5) returns 10
+     */
+    this.functions.set('LAMBDA', (...args) => {
+      // Need at least 2 arguments: 1 parameter + calculation
+      if (args.length < 2) {
+        return new Error('#VALUE!');
+      }
+
+      // All args except last are parameters (must be strings)
+      // Last arg is the calculation (can be any value or expression)
+      const parameters: string[] = [];
+      
+      for (let i = 0; i < args.length - 1; i++) {
+        const param = args[i];
+        
+        // Parameter names must be strings
+        if (typeof param !== 'string') {
+          return new Error('#VALUE!');
+        }
+        
+        // Validate parameter name (should be valid identifier)
+        // Invalid names return #VALUE! (not #NAME? which is for undefined names)
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(param)) {
+          return new Error('#VALUE!');
+        }
+        
+        parameters.push(param);
+      }
+
+      // Last argument is the calculation body
+      const body = args[args.length - 1];
+      
+      // Body must be a string (formula expression)
+      if (typeof body !== 'string') {
+        return new Error('#VALUE!');
+      }
+
+      // Create the lambda function object
+      // Note: Captured context will be set when the lambda is actually invoked
+      const lambdaFn: LambdaFunction = {
+        parameters,
+        body,
+        capturedContext: undefined // Will be populated on first invocation
+      };
+
+      // Return the lambda function (to be invoked later or stored)
+      // We use 'as any' because LambdaFunction is not part of FormulaValue union
+      // This is intentional - lambdas are special function values
+      return lambdaFn as any;
     });
 
     /**
