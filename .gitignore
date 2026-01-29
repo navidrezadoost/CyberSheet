@@ -31,6 +31,9 @@ pids
 coverage/
 *.lcov
 .nyc_output
+test-results/
+playwright-report/
+*.spec.ts-snapshots/
 
 # IDEs and editors
 .idea/

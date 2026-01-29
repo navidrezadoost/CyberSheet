@@ -128,20 +128,39 @@ describe('LAMBDA Function', () => {
 
   describe('Named Lambdas (Future Enhancement)', () => {
     // These tests are for future implementation of named lambdas
-    // Skip for now until we implement worksheet-level lambda storage
+    // Now implemented with worksheet-level lambda storage
     
-    test.skip('stores and retrieves named lambda', () => {
-      // Set a named lambda: MyDouble = LAMBDA(x, x*2)
-      // This will require modifying cell assignment to detect lambdas
-      // worksheet.setCellValue({ row: 0, col: 0 }, ...) 
-      // TODO: Implement named lambda storage
-      expect(true).toBe(true);
+    test('stores and retrieves named lambda', () => {
+      // Initialize named lambdas map in context
+      if (!context.namedLambdas) {
+        context.namedLambdas = new Map();
+      }
+      
+      // Create a lambda
+      const lambda = engine.evaluate('=LAMBDA(x, x*2)', context);
+      
+      // Store it with a name
+      context.namedLambdas.set('MyDouble', lambda as any);
+      
+      // Verify it was stored
+      expect(context.namedLambdas.has('MyDouble')).toBe(true);
+      expect(context.namedLambdas.get('MyDouble')).toHaveProperty('parameters');
+      expect((context.namedLambdas.get('MyDouble') as any).parameters).toEqual(['x']);
     });
 
-    test.skip('invokes named lambda', () => {
-      // After defining MyDouble, use it: =MyDouble(5)
-      // TODO: Implement named lambda invocation
-      expect(true).toBe(true);
+    test('invokes named lambda', () => {
+      // Initialize named lambdas map
+      if (!context.namedLambdas) {
+        context.namedLambdas = new Map();
+      }
+      
+      // Create and store a lambda
+      const lambda = engine.evaluate('=LAMBDA(x, x*2)', context);
+      context.namedLambdas.set('MyDouble', lambda as any);
+      
+      // Invoke the named lambda: =MyDouble(5)
+      const result = engine.evaluate('=MyDouble(5)', context);
+      expect(result).toBe(10);
     });
   });
 
@@ -163,42 +182,136 @@ describe('LAMBDA Function', () => {
   });
 
   describe('Closures (Future Enhancement)', () => {
-    // These tests are for closure support - capturing outer scope
-    test.skip('captures outer variable', () => {
-      // TODO: Implement closure capture
-      // Example: Define outer variable, then create lambda that uses it
+    // Closure support - capturing outer scope
+    test('captures outer variable', () => {
+      // Set up a cell with a value
+      // B1 means row=1, col=2 (B is the 2nd column, 1-based)
+      worksheet.setCellValue({ row: 1, col: 2 }, 3); // B1 = 3
+      
+      // Create a lambda that references the outer cell
+      // LAMBDA(x, x*B1) should capture B1's value
+      const lambda = engine.evaluate('=LAMBDA(x, x*B1)', context);
+      
+      // Store as named lambda
+      if (!context.namedLambdas) {
+        context.namedLambdas = new Map();
+      }
+      context.namedLambdas.set('Multiplier', lambda as any);
+      
+      // Invoke it - should use B1=3
+      const result = engine.evaluate('=Multiplier(5)', context);
+      expect(result).toBe(15); // 5 * 3 = 15
     });
   });
 
   describe('Recursion (Future Enhancement)', () => {
-    // These tests are for recursion support
-    test.skip('implements recursive factorial', () => {
-      // TODO: Implement recursion support
-      // Factorial = LAMBDA(n, IF(n<=1, 1, n*Factorial(n-1)))
+    // Recursion support with depth limits
+    test('implements recursive factorial', () => {
+      // Initialize named lambdas
+      if (!context.namedLambdas) {
+        context.namedLambdas = new Map();
+      }
+      
+      // Create recursive factorial: LAMBDA(n, IF(n<=1, 1, n*Factorial(n-1)))
+      const factorial = engine.evaluate('=LAMBDA(n, IF(n<=1, 1, n*Factorial(n-1)))', context);
+      context.namedLambdas.set('Factorial', factorial as any);
+      
+      // Test factorial(5) = 120
+      const result = engine.evaluate('=Factorial(5)', context);
+      expect(result).toBe(120); // 5! = 5*4*3*2*1 = 120
     });
 
-    test.skip('implements recursive fibonacci', () => {
-      // TODO: Implement recursion support
-      // Fib = LAMBDA(n, IF(n<=1, n, Fib(n-1)+Fib(n-2)))
+    test('implements recursive fibonacci', () => {
+      // Initialize named lambdas
+      if (!context.namedLambdas) {
+        context.namedLambdas = new Map();
+      }
+      
+      // Create recursive fibonacci: LAMBDA(n, IF(n<=1, n, Fib(n-1)+Fib(n-2)))
+      const fib = engine.evaluate('=LAMBDA(n, IF(n<=1, n, Fib(n-1)+Fib(n-2)))', context);
+      context.namedLambdas.set('Fib', fib as any);
+      
+      // Test Fib(7) = 13 (sequence: 0,1,1,2,3,5,8,13)
+      const result = engine.evaluate('=Fib(7)', context);
+      expect(result).toBe(13);
     });
 
-    test.skip('prevents infinite recursion with depth limit', () => {
-      // TODO: Implement recursion depth limit (e.g., 100 levels)
+    test('prevents infinite recursion with depth limit', () => {
+      // Initialize named lambdas
+      if (!context.namedLambdas) {
+        context.namedLambdas = new Map();
+      }
+      
+      // Create infinite recursion: LAMBDA(n, BadFunc(n+1))
+      const badFunc = engine.evaluate('=LAMBDA(n, BadFunc(n+1))', context);
+      context.namedLambdas.set('BadFunc', badFunc as any);
+      
+      // Should return error instead of crashing
+      const result = engine.evaluate('=BadFunc(1)', context);
+      expect(result).toBeInstanceOf(Error);
+      // Should be a recursion depth error
+      expect((result as Error).message).toMatch(/#N\/A|#VALUE|recursion|depth/i);
     });
   });
 
   describe('Integration with Other Functions (Future)', () => {
-    // These tests will work once we implement MAP, REDUCE, etc.
-    test.skip('works with MAP function', () => {
-      // =MAP(A1:A5, LAMBDA(x, x*2))
+    test('works with MAP function', () => {
+      // Set up worksheet with values
+      const engine = new FormulaEngine();
+      const worksheet = new Worksheet('Sheet1', 100, 26);
+      worksheet.setCellValue({ row: 1, col: 1 }, 1);
+      worksheet.setCellValue({ row: 2, col: 1 }, 2);
+      worksheet.setCellValue({ row: 3, col: 1 }, 3);
+      
+      const context: FormulaContext = {
+        worksheet,
+        currentCell: { row: 1, col: 2 }
+      };
+      
+      // =MAP(A1:A3, LAMBDA(x, x*2))
+      const result = engine.evaluate('=MAP(A1:A3, LAMBDA(x, x*2))', context);
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual([2, 4, 6]);
     });
 
-    test.skip('works with REDUCE function', () => {
+    test('works with REDUCE function', () => {
+      const engine = new FormulaEngine();
+      const worksheet = new Worksheet('Sheet1', 100, 26);
+      worksheet.setCellValue({ row: 1, col: 1 }, 1);
+      worksheet.setCellValue({ row: 2, col: 1 }, 2);
+      worksheet.setCellValue({ row: 3, col: 1 }, 3);
+      worksheet.setCellValue({ row: 4, col: 1 }, 4);
+      worksheet.setCellValue({ row: 5, col: 1 }, 5);
+      
+      const context: FormulaContext = {
+        worksheet,
+        currentCell: { row: 1, col: 2 }
+      };
+      
       // =REDUCE(0, A1:A5, LAMBDA(acc, x, acc+x))
+      const result = engine.evaluate('=REDUCE(0, A1:A5, LAMBDA(acc, x, acc+x))', context);
+      expect(result).toBe(15); // 1+2+3+4+5 = 15
     });
 
-    test.skip('works with BYROW function', () => {
-      // =BYROW(A1:C3, LAMBDA(row, SUM(row)))
+    test('works with BYROW function', () => {
+      const engine = new FormulaEngine();
+      const worksheet = new Worksheet('Sheet1', 100, 26);
+      // Set up a row of values
+      worksheet.setCellValue({ row: 1, col: 1 }, 1);
+      worksheet.setCellValue({ row: 1, col: 2 }, 2);
+      worksheet.setCellValue({ row: 1, col: 3 }, 3);
+      
+      const context: FormulaContext = {
+        worksheet,
+        currentCell: { row: 2, col: 1 }
+      };
+      
+      // =BYROW(A1:C1, LAMBDA(row, SUM(row)))
+      const result = engine.evaluate('=BYROW(A1:C1, LAMBDA(row, SUM(row)))', context);
+      expect(Array.isArray(result)).toBe(true);
+      if (Array.isArray(result)) {
+        expect(result[0]).toBe(6); // SUM([1,2,3]) = 6
+      }
     });
   });
 });
