@@ -8,7 +8,7 @@
  */
 
 import { getErrorSolution, formatErrorSolutionHTML, getErrorSolutionCSS, ErrorSolution } from './error-solutions';
-import { getErrorType, isFormulaError } from './error-highlighter';
+import { isFormulaError } from './error-highlighter';
 
 /**
  * Tooltip configuration options
@@ -67,7 +67,7 @@ export class ErrorTooltipManager {
   private container: HTMLElement;
   private tooltip: HTMLElement | null = null;
   private currentCell: { row: number; col: number } | null = null;
-  private hoverTimeout: NodeJS.Timeout | null = null;
+  private hoverTimeout: number | null = null;
   private options: Required<TooltipOptions>;
   private isVisible = false;
 
