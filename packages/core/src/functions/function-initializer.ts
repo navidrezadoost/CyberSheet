@@ -18,6 +18,7 @@ import * as LookupFunctions from './lookup';
 import * as StatisticalFunctions from './statistical';
 import * as FunctionalFunctions from './functional';
 import * as FinancialFunctions from './financial';
+import * as InformationFunctions from './information';
 
 /**
  * Register all built-in functions
@@ -256,6 +257,14 @@ export function registerBuiltInFunctions(registry: FunctionRegistry): void {
     ['NOMINAL', FinancialFunctions.NOMINAL, { category: FunctionCategory.FINANCIAL, minArgs: 2, maxArgs: 2 }],
   ] as const;
 
+  // Information functions (Week 10 Day 2)
+  const informationFunctions = [
+    ['ISFORMULA', InformationFunctions.ISFORMULA, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['ISREF', InformationFunctions.ISREF, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['CELL', InformationFunctions.CELL, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 2 }],
+    ['INFO', InformationFunctions.INFO, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+  ] as const;
+
   // Batch register all functions
   registry.registerBatch(mathFunctions as any);
   registry.registerBatch(textFunctions as any);
@@ -266,4 +275,5 @@ export function registerBuiltInFunctions(registry: FunctionRegistry): void {
   registry.registerBatch(statisticalFunctions as any);
   registry.registerBatch(functionalFunctions as any);
   registry.registerBatch(financialFunctions as any);
+  registry.registerBatch(informationFunctions as any);
 }

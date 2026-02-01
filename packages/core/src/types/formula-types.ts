@@ -82,6 +82,7 @@ export enum FunctionCategory {
   DATE_TIME = 'DATE_TIME',
   FINANCIAL = 'FINANCIAL',
   ENGINEERING = 'ENGINEERING',
+  INFORMATION = 'INFORMATION',
 }
 
 /**
