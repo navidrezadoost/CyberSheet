@@ -7,29 +7,68 @@
 
 import { describe, test, expect } from '@jest/globals';
 import { ISFORMULA, ISREF, CELL, INFO } from '../../src/functions/information';
+import type { FormulaContext } from '../../src/types/formula-types';
+import type { Worksheet } from '../../src/worksheet';
+
+// Mock worksheet for testing
+const createMockWorksheet = (cells: Record<string, any>): Worksheet => {
+  return {
+    getCell: (addr: { row: number; col: number }) => {
+      const key = `${addr.row},${addr.col}`;
+      return cells[key] || null;
+    },
+  } as any;
+};
+
+// Helper to create context
+const createContext = (worksheet?: Worksheet): FormulaContext => {
+  return {
+    worksheet: worksheet || createMockWorksheet({}),
+    currentCell: { row: 0, col: 0 },
+  };
+};
 
 describe('Information Functions', () => {
   
   describe('ISFORMULA', () => {
-    test('should return FALSE for placeholder implementation', () => {
-      // Note: ISFORMULA is a placeholder until formula engine context is integrated
-      const result = ISFORMULA({ row: 0, col: 0 } as any);
+    test('should return TRUE for cell containing formula', () => {
+      const worksheet = createMockWorksheet({
+        '0,0': { value: '=SUM(B1:B10)' },
+      });
+      const context = createContext(worksheet);
+      const result = ISFORMULA(context, { row: 0, col: 0 } as any);
+      expect(result).toBe(true);
+    });
+
+    test('should return FALSE for cell containing number', () => {
+      const worksheet = createMockWorksheet({
+        '0,0': { value: 42 },
+      });
+      const context = createContext(worksheet);
+      const result = ISFORMULA(context, { row: 0, col: 0 } as any);
       expect(result).toBe(false);
     });
 
-    test('should accept cell reference argument', () => {
-      const result = ISFORMULA({ row: 5, col: 3 } as any);
+    test('should return FALSE for cell containing text', () => {
+      const worksheet = createMockWorksheet({
+        '5,3': { value: 'test' },
+      });
+      const context = createContext(worksheet);
+      const result = ISFORMULA(context, { row: 5, col: 3 } as any);
       expect(result).toBe(false);
     });
 
-    test('should handle numeric value', () => {
-      const result = ISFORMULA(42);
+    test('should return FALSE for empty cell', () => {
+      const worksheet = createMockWorksheet({});
+      const context = createContext(worksheet);
+      const result = ISFORMULA(context, { row: 10, col: 10 } as any);
       expect(result).toBe(false);
     });
 
-    test('should handle string value', () => {
-      const result = ISFORMULA('test');
-      expect(result).toBe(false);
+    test('should return FALSE for non-reference argument', () => {
+      const context = createContext();
+      expect(ISFORMULA(context, 42)).toBe(false);
+      expect(ISFORMULA(context, 'test')).toBe(false);
     });
   });
 
@@ -99,32 +138,32 @@ describe('Information Functions', () => {
   describe('CELL', () => {
     describe('address info type', () => {
       test('should return absolute address for cell A1', () => {
-        const result = CELL('address', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'address', { row: 0, col: 0 } as any);
         expect(result).toBe('$A$1');
       });
 
       test('should return absolute address for cell B5', () => {
-        const result = CELL('address', { row: 4, col: 1 } as any);
+        const result = CELL(createContext(), 'address', { row: 4, col: 1 } as any);
         expect(result).toBe('$B$5');
       });
 
       test('should return absolute address for cell Z10', () => {
-        const result = CELL('address', { row: 9, col: 25 } as any);
+        const result = CELL(createContext(), 'address', { row: 9, col: 25 } as any);
         expect(result).toBe('$Z$10');
       });
 
       test('should return absolute address for cell AA1', () => {
-        const result = CELL('address', { row: 0, col: 26 } as any);
+        const result = CELL(createContext(), 'address', { row: 0, col: 26 } as any);
         expect(result).toBe('$AA$1');
       });
 
       test('should return absolute address for cell AB20', () => {
-        const result = CELL('address', { row: 19, col: 27 } as any);
+        const result = CELL(createContext(), 'address', { row: 19, col: 27 } as any);
         expect(result).toBe('$AB$20');
       });
 
       test('should return error when reference missing', () => {
-        const result = CELL('address');
+        const result = CELL(createContext(), 'address');
         expect(result).toBeInstanceOf(Error);
         expect((result as Error).message).toBe('#VALUE!');
       });
@@ -132,152 +171,202 @@ describe('Information Functions', () => {
 
     describe('col info type', () => {
       test('should return 1-based column number', () => {
-        expect(CELL('col', { row: 0, col: 0 } as any)).toBe(1); // Column A
-        expect(CELL('col', { row: 0, col: 1 } as any)).toBe(2); // Column B
-        expect(CELL('col', { row: 0, col: 25 } as any)).toBe(26); // Column Z
-        expect(CELL('col', { row: 0, col: 26 } as any)).toBe(27); // Column AA
+        expect(CELL(createContext(), 'col', { row: 0, col: 0 } as any)).toBe(1); // Column A
+        expect(CELL(createContext(), 'col', { row: 0, col: 1 } as any)).toBe(2); // Column B
+        expect(CELL(createContext(), 'col', { row: 0, col: 25 } as any)).toBe(26); // Column Z
+        expect(CELL(createContext(), 'col', { row: 0, col: 26 } as any)).toBe(27); // Column AA
       });
 
       test('should return error when reference missing', () => {
-        const result = CELL('col');
+        const result = CELL(createContext(), 'col');
         expect(result).toBeInstanceOf(Error);
       });
     });
 
     describe('row info type', () => {
       test('should return 1-based row number', () => {
-        expect(CELL('row', { row: 0, col: 0 } as any)).toBe(1);
-        expect(CELL('row', { row: 4, col: 0 } as any)).toBe(5);
-        expect(CELL('row', { row: 99, col: 0 } as any)).toBe(100);
+        expect(CELL(createContext(), 'row', { row: 0, col: 0 } as any)).toBe(1);
+        expect(CELL(createContext(), 'row', { row: 4, col: 0 } as any)).toBe(5);
+        expect(CELL(createContext(), 'row', { row: 99, col: 0 } as any)).toBe(100);
       });
 
       test('should return error when reference missing', () => {
-        const result = CELL('row');
+        const result = CELL(createContext(), 'row');
         expect(result).toBeInstanceOf(Error);
       });
     });
 
     describe('type info type', () => {
-      test('should return "v" for value (placeholder)', () => {
-        const result = CELL('type', { row: 0, col: 0 } as any);
-        expect(result).toBe('v');
+      test('should return "v" for numeric value', () => {
+        const worksheet = createMockWorksheet({
+          '0,0': { value: 42 },
+          '1,1': { value: 3.14 }
+        });
+        const ctx = createContext(worksheet);
+        
+        expect(CELL(ctx, 'type', { row: 0, col: 0 } as any)).toBe('v');
+        expect(CELL(ctx, 'type', { row: 1, col: 1 } as any)).toBe('v');
       });
 
-      test('should work without reference', () => {
-        const result = CELL('type');
-        expect(result).toBe('v');
+      test('should return "l" for text (label)', () => {
+        const worksheet = createMockWorksheet({
+          '0,0': { value: 'Hello' },
+          '2,3': { value: '=SUM(A1:A10)' }
+        });
+        const ctx = createContext(worksheet);
+        
+        expect(CELL(ctx, 'type', { row: 0, col: 0 } as any)).toBe('l');
+        expect(CELL(ctx, 'type', { row: 2, col: 3 } as any)).toBe('l');
+      });
+
+      test('should return "b" for blank cell', () => {
+        const worksheet = createMockWorksheet({});
+        const ctx = createContext(worksheet);
+        
+        expect(CELL(ctx, 'type', { row: 0, col: 0 } as any)).toBe('b');
+        expect(CELL(ctx, 'type', { row: 5, col: 10 } as any)).toBe('b');
+      });
+
+      test('should return "b" when no worksheet provided', () => {
+        const result = CELL(createContext(), 'type', { row: 0, col: 0 } as any);
+        expect(result).toBe('b');
+      });
+
+      test('should work without reference (defaults to blank)', () => {
+        const result = CELL(createContext(), 'type');
+        expect(result).toBe('b');
       });
     });
 
     describe('width info type', () => {
       test('should return default width of 10', () => {
-        const result = CELL('width', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'width', { row: 0, col: 0 } as any);
         expect(result).toBe(10);
       });
 
       test('should work without reference', () => {
-        const result = CELL('width');
+        const result = CELL(createContext(), 'width');
         expect(result).toBe(10);
       });
     });
 
     describe('format info type', () => {
       test('should return "G" for general format', () => {
-        const result = CELL('format', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'format', { row: 0, col: 0 } as any);
         expect(result).toBe('G');
       });
 
       test('should work without reference', () => {
-        const result = CELL('format');
+        const result = CELL(createContext(), 'format');
         expect(result).toBe('G');
       });
     });
 
     describe('color info type', () => {
       test('should return 0 (not colored)', () => {
-        const result = CELL('color', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'color', { row: 0, col: 0 } as any);
         expect(result).toBe(0);
       });
 
       test('should work without reference', () => {
-        const result = CELL('color');
+        const result = CELL(createContext(), 'color');
         expect(result).toBe(0);
       });
     });
 
     describe('parentheses info type', () => {
       test('should return 0 (not formatted with parentheses)', () => {
-        const result = CELL('parentheses', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'parentheses', { row: 0, col: 0 } as any);
         expect(result).toBe(0);
       });
 
       test('should work without reference', () => {
-        const result = CELL('parentheses');
+        const result = CELL(createContext(), 'parentheses');
         expect(result).toBe(0);
       });
     });
 
     describe('prefix info type', () => {
       test('should return empty string (no alignment prefix)', () => {
-        const result = CELL('prefix', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'prefix', { row: 0, col: 0 } as any);
         expect(result).toBe('');
       });
 
       test('should work without reference', () => {
-        const result = CELL('prefix');
+        const result = CELL(createContext(), 'prefix');
         expect(result).toBe('');
       });
     });
 
     describe('protect info type', () => {
       test('should return 0 (unlocked)', () => {
-        const result = CELL('protect', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'protect', { row: 0, col: 0 } as any);
         expect(result).toBe(0);
       });
 
       test('should work without reference', () => {
-        const result = CELL('protect');
+        const result = CELL(createContext(), 'protect');
         expect(result).toBe(0);
       });
     });
 
     describe('contents info type', () => {
-      test('should return #N/A error (not supported)', () => {
-        const result = CELL('contents', { row: 0, col: 0 } as any);
-        expect(result).toBeInstanceOf(Error);
-        expect((result as Error).message).toBe('#N/A');
+      test('should return actual cell value when worksheet provided', () => {
+        const worksheet = createMockWorksheet({
+          '0,0': { value: 42 },
+          '1,2': { value: 'Hello' },
+          '5,3': { value: '=SUM(A1:A10)' }
+        });
+        const ctx = createContext(worksheet);
+        
+        expect(CELL(ctx, 'contents', { row: 0, col: 0 } as any)).toBe(42);
+        expect(CELL(ctx, 'contents', { row: 1, col: 2 } as any)).toBe('Hello');
+        expect(CELL(ctx, 'contents', { row: 5, col: 3 } as any)).toBe('=SUM(A1:A10)');
+      });
+
+      test('should return empty string for empty cell', () => {
+        const worksheet = createMockWorksheet({});
+        const ctx = createContext(worksheet);
+        
+        const result = CELL(ctx, 'contents', { row: 0, col: 0 } as any);
+        expect(result).toBe('');
+      });
+
+      test('should return empty string when no worksheet provided', () => {
+        const result = CELL(createContext(), 'contents', { row: 0, col: 0 } as any);
+        expect(result).toBe('');
       });
     });
 
     describe('case insensitivity', () => {
       test('should handle uppercase info types', () => {
-        expect(CELL('ADDRESS', { row: 0, col: 0 } as any)).toBe('$A$1');
-        expect(CELL('ROW', { row: 4, col: 0 } as any)).toBe(5);
-        expect(CELL('COL', { row: 0, col: 2 } as any)).toBe(3);
+        expect(CELL(createContext(), 'ADDRESS', { row: 0, col: 0 } as any)).toBe('$A$1');
+        expect(CELL(createContext(), 'ROW', { row: 4, col: 0 } as any)).toBe(5);
+        expect(CELL(createContext(), 'COL', { row: 0, col: 2 } as any)).toBe(3);
       });
 
       test('should handle mixed case info types', () => {
-        expect(CELL('AdDrEsS', { row: 0, col: 0 } as any)).toBe('$A$1');
-        expect(CELL('RoW', { row: 4, col: 0 } as any)).toBe(5);
-        expect(CELL('CoL', { row: 0, col: 2 } as any)).toBe(3);
+        expect(CELL(createContext(), 'AdDrEsS', { row: 0, col: 0 } as any)).toBe('$A$1');
+        expect(CELL(createContext(), 'RoW', { row: 4, col: 0 } as any)).toBe(5);
+        expect(CELL(createContext(), 'CoL', { row: 0, col: 2 } as any)).toBe(3);
       });
     });
 
     describe('error handling', () => {
       test('should return #VALUE! for invalid info type', () => {
-        const result = CELL('invalid', { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 'invalid', { row: 0, col: 0 } as any);
         expect(result).toBeInstanceOf(Error);
         expect((result as Error).message).toBe('#VALUE!');
       });
 
       test('should return #VALUE! for non-string info type', () => {
-        const result = CELL(42 as any, { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), 42 as any, { row: 0, col: 0 } as any);
         expect(result).toBeInstanceOf(Error);
         expect((result as Error).message).toBe('#VALUE!');
       });
 
       test('should return #VALUE! for null info type', () => {
-        const result = CELL(null as any, { row: 0, col: 0 } as any);
+        const result = CELL(createContext(), null as any, { row: 0, col: 0 } as any);
         expect(result).toBeInstanceOf(Error);
       });
     });
@@ -399,6 +488,7 @@ describe('Information Functions', () => {
     });
 
     test('CELL should work with various column numbers', () => {
+      const ctx = createContext();
       // Test column letter conversion for different ranges
       const testCases: [number, string][] = [
         [0, '$A$1'],     // Column A
@@ -411,7 +501,7 @@ describe('Information Functions', () => {
       ];
 
       testCases.forEach(([col, expected]) => {
-        const result = CELL('address', { row: 0, col } as any);
+        const result = CELL(ctx, 'address', { row: 0, col } as any);
         expect(result).toBe(expected);
       });
     });

@@ -6,11 +6,10 @@
  * 
  * These functions provide metadata and type information about cells and the workbook.
  * 
- * Note: ISFORMULA and CELL functions have limited functionality without formula engine context.
- * In a full implementation, these would need special handling to access the worksheet.
+ * Note: ISFORMULA and CELL use context-aware function signature to access worksheet.
  */
 
-import type { FormulaFunction } from '../../types/formula-types';
+import type { ContextAwareFormulaFunction, FormulaFunction, FormulaContext } from '../../types/formula-types';
 
 /**
  * ISFORMULA - Checks if a reference is to a cell containing a formula
@@ -18,17 +17,29 @@ import type { FormulaFunction } from '../../types/formula-types';
  * Syntax: ISFORMULA(reference)
  * Returns TRUE if the cell contains a formula, FALSE otherwise
  * 
- * Note: This is a placeholder implementation. Full functionality requires
- * formula engine integration to inspect cell formulas.
- * 
  * @example
  * =ISFORMULA(A1) → TRUE if A1 contains "=SUM(B1:B10)"
  * =ISFORMULA(A1) → FALSE if A1 contains the number 42
  */
-export const ISFORMULA: FormulaFunction = (reference: any) => {
-  // Placeholder: Without context, we cannot determine if a cell has a formula
-  // Return FALSE for now
-  // TODO: Implement with formula engine context support
+export const ISFORMULA: ContextAwareFormulaFunction = (context: FormulaContext, reference: any) => {
+  if (!context || !context.worksheet) {
+    return false;
+  }
+
+  // If reference is a cell address, check if it contains a formula
+  if (typeof reference === 'object' && reference !== null && 'row' in reference && 'col' in reference) {
+    const cell = context.worksheet.getCell(reference);
+    
+    // A cell has a formula if the value is a string starting with '='
+    // In our system, formulas are stored in the cell's value as strings starting with '='
+    if (cell && typeof cell.value === 'string' && cell.value.startsWith('=')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  // For non-reference values, return FALSE
   return false;
 };
 
@@ -73,9 +84,10 @@ export const ISREF: FormulaFunction = (value: any) => {
  * 
  * Supported info_types:
  * - "address" → Absolute cell reference (e.g., "$A$1") - requires reference object
- * - "col" → Column number
- * - "row" → Row number
- * - "type" → "v" (value - we don't have access to actual cell to determine type)
+ * - "col" → Column number (1-based)
+ * - "row" → Row number (1-based)
+ * - "contents" → Cell value
+ * - "type" → "b" (blank), "l" (label/text), "v" (value/number)
  * - "width" → Column width (returns default 10)
  * - "format" → Number format (returns "G" for general)
  * - "color" → 0 (not supported)
@@ -83,14 +95,12 @@ export const ISREF: FormulaFunction = (value: any) => {
  * - "prefix" → "" (not supported)
  * - "protect" → 0 (not supported)
  * 
- * Note: Limited implementation without worksheet context.
- * "contents" type is not supported in this version.
- * 
  * @example
  * =CELL("row", B5) → 5
  * =CELL("col", B5) → 2
+ * =CELL("contents", A1) → returns value in A1
  */
-export const CELL: FormulaFunction = (infoType: any, reference?: any) => {
+export const CELL: ContextAwareFormulaFunction = (context: FormulaContext, infoType: any, reference?: any) => {
   if (typeof infoType !== 'string') {
     return new Error('#VALUE!');
   }
@@ -142,9 +152,36 @@ export const CELL: FormulaFunction = (infoType: any, reference?: any) => {
       }
       return new Error('#VALUE!');
 
+    case 'contents':
+      // Return cell value - NOW WORKS with context!
+      if (row !== undefined && col !== undefined && context.worksheet) {
+        const cell = context.worksheet.getCell({ row, col });
+        if (!cell) return '';
+        
+        // Return the actual value, not the formula
+        const value = cell.value;
+        if (typeof value === 'string' && value.startsWith('=')) {
+          // This is a formula - we'd need to evaluate it
+          // For now, return the formula string
+          return value;
+        }
+        return value ?? '';
+      }
+      return '';
+
     case 'type':
-      // Return type: we default to "v" (value) since we can't inspect the cell
-      return 'v';
+      // Return type: "b" (blank), "l" (label/text), "v" (value/number)
+      if (row !== undefined && col !== undefined && context.worksheet) {
+        const cell = context.worksheet.getCell({ row, col });
+        if (!cell || cell.value === undefined || cell.value === null || cell.value === '') {
+          return 'b'; // blank
+        }
+        if (typeof cell.value === 'number') {
+          return 'v'; // value
+        }
+        return 'l'; // label (text)
+      }
+      return 'b';
 
     case 'width':
       // Return column width (default: 10)
@@ -169,10 +206,6 @@ export const CELL: FormulaFunction = (infoType: any, reference?: any) => {
     case 'protect':
       // Return 0 (unlocked)
       return 0;
-
-    case 'contents':
-      // Not supported without worksheet context
-      return new Error('#N/A');
 
     default:
       return new Error('#VALUE!');
