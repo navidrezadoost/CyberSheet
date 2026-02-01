@@ -16,7 +16,7 @@
  * - Inline cache friendly
  */
 
-import type { FormulaFunction, FunctionMetadata, FunctionCategory } from '../types/formula-types';
+import type { FormulaFunction, ContextAwareFormulaFunction, FunctionMetadata, FunctionCategory } from '../types/formula-types';
 
 export interface FunctionRegistryConfig {
   enableCaching?: boolean;
@@ -26,7 +26,7 @@ export interface FunctionRegistryConfig {
 
 export class FunctionRegistry {
   // Main function lookup map (O(1) access)
-  private readonly functions = new Map<string, FormulaFunction>();
+  private readonly functions = new Map<string, FormulaFunction | ContextAwareFormulaFunction>();
 
   // Function metadata for introspection
   private readonly metadata = new Map<string, FunctionMetadata>();
@@ -55,7 +55,7 @@ export class FunctionRegistry {
    */
   register(
     name: string,
-    handler: FormulaFunction,
+    handler: FormulaFunction | ContextAwareFormulaFunction,
     metadata?: Partial<FunctionMetadata>
   ): void {
     const upperName = name.toUpperCase();
@@ -71,6 +71,7 @@ export class FunctionRegistry {
       minArgs: metadata?.minArgs,
       maxArgs: metadata?.maxArgs,
       isSpecial: metadata?.isSpecial ?? false,
+      needsContext: metadata?.needsContext ?? false,
     };
 
     this.metadata.set(upperName, fullMetadata);
@@ -91,7 +92,7 @@ export class FunctionRegistry {
   /**
    * Register multiple functions at once
    */
-  registerBatch(functions: Array<[string, FormulaFunction, Partial<FunctionMetadata>?]>): void {
+  registerBatch(functions: Array<[string, FormulaFunction | ContextAwareFormulaFunction, Partial<FunctionMetadata>?]>): void {
     for (const [name, handler, metadata] of functions) {
       this.register(name, handler, metadata);
     }
@@ -100,7 +101,7 @@ export class FunctionRegistry {
   /**
    * Get function handler (O(1) lookup)
    */
-  get(name: string): FormulaFunction | undefined {
+  get(name: string): FormulaFunction | ContextAwareFormulaFunction | undefined {
     return this.functions.get(name.toUpperCase());
   }
 
@@ -125,7 +126,7 @@ export class FunctionRegistry {
     // Execute without metrics (fast path)
     if (!this.config.enableMetrics) {
       try {
-        return handler(...args);
+        return (handler as FormulaFunction)(...args);
       } catch (error) {
         return new Error('#VALUE!');
       }
@@ -135,7 +136,7 @@ export class FunctionRegistry {
     const startTime = performance.now();
     
     try {
-      const result = handler(...args);
+      const result = (handler as FormulaFunction)(...args);
       const endTime = performance.now();
       
       // Update metrics

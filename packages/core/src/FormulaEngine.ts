@@ -1055,10 +1055,10 @@ export class FormulaEngine {
     }
 
     // Now check if it's a registered function
-    const func = this.functionRegistry.get(name.toUpperCase());
+    const funcMetadata = this.functionRegistry.getMetadata(name.toUpperCase());
     
     // If not a built-in function, check for named lambda or LET-bound lambda
-    if (!func) {
+    if (!funcMetadata) {
       // Check if it's a named lambda
       if (context.namedLambdas) {
         const namedLambda = context.namedLambdas.get(name.toUpperCase());
@@ -1082,16 +1082,26 @@ export class FormulaEngine {
 
     const args = this.parseArguments(argsStr, context);
     
+    // Extract the function handler
+    const func = funcMetadata.handler;
+    
     // Check if any arguments are arrays and handle array broadcasting
     // For most functions, if an argument is an array, apply function element-wise
     const hasArrayArg = args.some(arg => Array.isArray(arg) && !this.isArrayFunction(name));
     
     if (hasArrayArg) {
-      return this.applyFunctionWithArrayBroadcasting(func, args);
+      return this.applyFunctionWithArrayBroadcasting(func, args, funcMetadata.needsContext ? context : undefined);
     }
     
     try {
-      return func(...args);
+      // Check if function needs context
+      if (funcMetadata.needsContext) {
+        // Call context-aware function with context as first parameter
+        return (func as any)(context, ...args);
+      } else {
+        // Call regular function without context
+        return (func as any)(...args);
+      }
     } catch (error) {
       return new Error('#VALUE!');
     }
@@ -1125,7 +1135,7 @@ export class FormulaEngine {
   /**
    * Apply a function with array broadcasting
    */
-  private applyFunctionWithArrayBroadcasting(func: Function, args: FormulaValue[]): FormulaValue {
+  private applyFunctionWithArrayBroadcasting(func: Function, args: FormulaValue[], context?: FormulaContext): FormulaValue {
     // Find the first array argument to determine the output shape
     const arrayArg = args.find(arg => Array.isArray(arg));
     if (!arrayArg) return new Error('#VALUE!');
@@ -1150,7 +1160,8 @@ export class FormulaEngine {
       });
       
       try {
-        const result = func(...elementArgs);
+        // If context is provided, pass it as first argument (context-aware function)
+        const result = context ? func(context, ...elementArgs) : func(...elementArgs);
         results.push(result);
       } catch (error) {
         results.push(new Error('#VALUE!'));

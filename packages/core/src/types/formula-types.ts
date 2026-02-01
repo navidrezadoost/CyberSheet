@@ -50,6 +50,13 @@ export interface FormulaContext {
 export type FormulaFunction = (...args: FormulaValue[]) => FormulaValue;
 
 /**
+ * Context-aware function handler signature
+ * Functions that need access to worksheet, current cell, etc. implement this interface
+ * Used for functions like ISFORMULA, CELL("contents"), etc.
+ */
+export type ContextAwareFormulaFunction = (context: FormulaContext, ...args: FormulaValue[]) => FormulaValue;
+
+/**
  * Operator handler signature
  * Binary operators (e.g., +, -, *, /) implement this interface
  */
@@ -61,11 +68,12 @@ export type OperatorHandler = (left: FormulaValue, right: FormulaValue) => Formu
  */
 export interface FunctionMetadata {
   name: string;
-  handler: FormulaFunction;
+  handler: FormulaFunction | ContextAwareFormulaFunction;
   category: FunctionCategory;
   minArgs?: number;
   maxArgs?: number;
   isSpecial?: boolean; // Special handling (e.g., LAMBDA, IF, LET)
+  needsContext?: boolean; // If true, handler is ContextAwareFormulaFunction
 }
 
 /**
