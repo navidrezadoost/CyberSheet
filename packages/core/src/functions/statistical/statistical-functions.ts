@@ -542,6 +542,169 @@ export const FREQUENCY: FormulaFunction = (dataArray, binsArray) => {
 };
 
 /**
+ * PERCENTRANK - Returns percent rank (inclusive)
+ * Alias for PERCENTRANK.INC
+ * 
+ * @example
+ * =PERCENTRANK({1,2,3,4,5}, 3) → 0.5
+ * =PERCENTRANK({10,20,30,40,50}, 35) → 0.625 (interpolated)
+ */
+export const PERCENTRANK: FormulaFunction = (array, x, significance) => {
+  return PERCENTRANK_INC(array, x, significance);
+};
+
+/**
+ * PERCENTRANK.INC - Returns percent rank of value in dataset (inclusive)
+ * 
+ * Returns the rank of a value in a data set as a percentage (0 to 1) of the data set.
+ * Uses inclusive method: values can be exactly 0 (minimum) or 1 (maximum).
+ * Interpolates between data points if value is not exact match.
+ * 
+ * @param array - Array or range of numeric values
+ * @param x - Value to find rank for
+ * @param significance - (optional) Number of significant digits (default: 3)
+ * 
+ * @example
+ * =PERCENTRANK.INC({1,2,3,4,5}, 3) → 0.5
+ * =PERCENTRANK.INC({1,2,3,4,5}, 3.5) → 0.625
+ * =PERCENTRANK.INC({10,20,30,40,50}, 25, 2) → 0.38
+ */
+export const PERCENTRANK_INC: FormulaFunction = (array, x, significance = 3) => {
+  const xNum = toNumber(x);
+  if (xNum instanceof Error) return xNum;
+
+  const sig = toNumber(significance);
+  if (sig instanceof Error) return sig;
+
+  if (sig < 1) {
+    return new Error('#NUM!');
+  }
+
+  const nums = filterNumbers(flattenArray([array]));
+  
+  if (nums.length === 0) {
+    return new Error('#N/A');
+  }
+
+  const sorted = nums.slice().sort((a, b) => a - b);
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+
+  // Check if value is within range
+  if (xNum < min || xNum > max) {
+    return new Error('#N/A');
+  }
+
+  // If exact match, calculate position
+  const exactIndex = sorted.indexOf(xNum);
+  if (exactIndex !== -1) {
+    const percentRank = exactIndex / (sorted.length - 1);
+    return roundToSignificance(percentRank, sig);
+  }
+
+  // Interpolate between two nearest values
+  let lowerIndex = 0;
+  let upperIndex = sorted.length - 1;
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (sorted[i] < xNum && sorted[i + 1] > xNum) {
+      lowerIndex = i;
+      upperIndex = i + 1;
+      break;
+    }
+  }
+
+  const lowerValue = sorted[lowerIndex];
+  const upperValue = sorted[upperIndex];
+  const lowerRank = lowerIndex / (sorted.length - 1);
+  const upperRank = upperIndex / (sorted.length - 1);
+
+  // Linear interpolation
+  const ratio = (xNum - lowerValue) / (upperValue - lowerValue);
+  const percentRank = lowerRank + ratio * (upperRank - lowerRank);
+
+  return roundToSignificance(percentRank, sig);
+};
+
+/**
+ * PERCENTRANK.EXC - Returns percent rank of value in dataset (exclusive)
+ * 
+ * Returns the rank of a value in a data set as a percentage of the data set.
+ * Uses exclusive method: values cannot be exactly 0 or 1 (min/max are excluded).
+ * Interpolates between data points if value is not exact match.
+ * 
+ * @param array - Array or range of numeric values
+ * @param x - Value to find rank for
+ * @param significance - (optional) Number of significant digits (default: 3)
+ * 
+ * @example
+ * =PERCENTRANK.EXC({1,2,3,4,5}, 3) → 0.5
+ * =PERCENTRANK.EXC({1,2,3,4,5}, 1) → #N/A (min excluded)
+ * =PERCENTRANK.EXC({1,2,3,4,5}, 5) → #N/A (max excluded)
+ */
+export const PERCENTRANK_EXC: FormulaFunction = (array, x, significance = 3) => {
+  const xNum = toNumber(x);
+  if (xNum instanceof Error) return xNum;
+
+  const sig = toNumber(significance);
+  if (sig instanceof Error) return sig;
+
+  if (sig < 1) {
+    return new Error('#NUM!');
+  }
+
+  const nums = filterNumbers(flattenArray([array]));
+  
+  if (nums.length < 2) {
+    return new Error('#N/A');
+  }
+
+  const sorted = nums.slice().sort((a, b) => a - b);
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+
+  // Exclusive: value cannot be min or max
+  if (xNum <= min || xNum >= max) {
+    return new Error('#N/A');
+  }
+
+  // Find position between values
+  let lowerIndex = 0;
+  let upperIndex = sorted.length - 1;
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (sorted[i] <= xNum && sorted[i + 1] >= xNum) {
+      lowerIndex = i;
+      upperIndex = i + 1;
+      break;
+    }
+  }
+
+  const lowerValue = sorted[lowerIndex];
+  const upperValue = sorted[upperIndex];
+  
+  // Use n+1 for exclusive method
+  const lowerRank = (lowerIndex + 1) / (sorted.length + 1);
+  const upperRank = (upperIndex + 1) / (sorted.length + 1);
+
+  // Linear interpolation
+  const ratio = (xNum - lowerValue) / (upperValue - lowerValue);
+  const percentRank = lowerRank + ratio * (upperRank - lowerRank);
+
+  return roundToSignificance(percentRank, sig);
+};
+
+/**
+ * Helper function to round to specified significance
+ * @param value - Value to round
+ * @param significance - Number of decimal places
+ */
+function roundToSignificance(value: number, significance: number): number {
+  const multiplier = Math.pow(10, significance);
+  return Math.round(value * multiplier) / multiplier;
+}
+
+/**
  * COUNT - Count numbers
  */
 export const COUNT: FormulaFunction = (...values) => {
