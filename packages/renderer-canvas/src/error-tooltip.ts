@@ -67,7 +67,7 @@ export class ErrorTooltipManager {
   private container: HTMLElement;
   private tooltip: HTMLElement | null = null;
   private currentCell: { row: number; col: number } | null = null;
-  private hoverTimeout: NodeJS.Timeout | null = null;
+  private hoverTimeout: ReturnType<typeof setTimeout> | null = null;
   private options: Required<TooltipOptions>;
   private isVisible = false;
 
