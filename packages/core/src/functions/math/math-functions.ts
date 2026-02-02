@@ -552,3 +552,270 @@ export const SUMPRODUCT: FormulaFunction = (...args) => {
 
   return sum;
 };
+
+// ============================================================================
+// Week 11 Day 2: Advanced Math Functions
+// ============================================================================
+
+/**
+ * MROUND - Round to nearest multiple
+ * 
+ * Syntax: MROUND(number, multiple)
+ * Rounds number to the nearest multiple of multiple
+ * 
+ * @example
+ * =MROUND(10, 3) → 9 (nearest multiple of 3)
+ * =MROUND(11, 3) → 12
+ * =MROUND(-10, -3) → -9
+ * =MROUND(1.3, 0.2) → 1.4
+ */
+export const MROUND: FormulaFunction = (number, multiple) => {
+  const num = toNumber(number);
+  const mult = toNumber(multiple);
+  
+  if (num instanceof Error) return num;
+  if (mult instanceof Error) return mult;
+  
+  // Multiple cannot be zero
+  if (mult === 0) return new Error('#NUM!');
+  
+  // If signs differ, return error
+  if ((num >= 0 && mult < 0) || (num < 0 && mult >= 0)) {
+    return new Error('#NUM!');
+  }
+  
+  return Math.round(num / mult) * mult;
+};
+
+/**
+ * QUOTIENT - Integer division
+ * 
+ * Syntax: QUOTIENT(numerator, denominator)
+ * Returns the integer portion of a division
+ * 
+ * @example
+ * =QUOTIENT(10, 3) → 3
+ * =QUOTIENT(5, 2) → 2
+ * =QUOTIENT(-10, 3) → -3
+ */
+export const QUOTIENT: FormulaFunction = (numerator, denominator) => {
+  const num = toNumber(numerator);
+  const denom = toNumber(denominator);
+  
+  if (num instanceof Error) return num;
+  if (denom instanceof Error) return denom;
+  
+  if (denom === 0) return new Error('#DIV/0!');
+  
+  return Math.trunc(num / denom);
+};
+
+/**
+ * PRODUCT - Multiply all numbers
+ * 
+ * Syntax: PRODUCT(number1, [number2], ...)
+ * Multiplies all numbers together
+ * 
+ * @example
+ * =PRODUCT(5, 2, 3) → 30
+ * =PRODUCT({2, 3}, 4) → 24
+ * =PRODUCT(0.5, 10) → 5
+ */
+export const PRODUCT: FormulaFunction = (...args) => {
+  const numbers = filterNumbers(args);
+  
+  if (numbers.length === 0) return 0;
+  
+  return numbers.reduce((product, n) => product * n, 1);
+};
+
+/**
+ * SQRTPI - Square root of (number * π)
+ * 
+ * Syntax: SQRTPI(number)
+ * Returns the square root of (number * π)
+ * 
+ * @example
+ * =SQRTPI(1) → 1.772... (√π)
+ * =SQRTPI(2) → 2.507... (√(2π))
+ * =SQRTPI(0) → 0
+ */
+export const SQRTPI: FormulaFunction = (number) => {
+  const num = toNumber(number);
+  
+  if (num instanceof Error) return num;
+  
+  if (num < 0) return new Error('#NUM!');
+  
+  return Math.sqrt(num * Math.PI);
+};
+
+/**
+ * MULTINOMIAL - Multinomial coefficient
+ * 
+ * Syntax: MULTINOMIAL(number1, [number2], ...)
+ * Returns the multinomial: (sum of values)! / (value1! * value2! * ...)
+ * 
+ * @example
+ * =MULTINOMIAL(2, 3, 4) → 1260 (9! / (2! * 3! * 4!))
+ * =MULTINOMIAL(3, 3) → 20 (6! / (3! * 3!))
+ */
+export const MULTINOMIAL: FormulaFunction = (...args) => {
+  const numbers = filterNumbers(args);
+  
+  if (numbers.length === 0) return new Error('#VALUE!');
+  
+  // All numbers must be non-negative integers
+  for (const num of numbers) {
+    if (num < 0 || !Number.isInteger(num)) {
+      return new Error('#NUM!');
+    }
+  }
+  
+  // Calculate sum
+  const sum = numbers.reduce((s, n) => s + n, 0);
+  
+  // Calculate factorial helper
+  const factorial = (n: number): number => {
+    if (n <= 1) return 1;
+    let result = 1;
+    for (let i = 2; i <= n; i++) {
+      result *= i;
+    }
+    return result;
+  };
+  
+  // Calculate multinomial: sum! / (n1! * n2! * ... * nk!)
+  let numerator = factorial(sum);
+  let denominator = 1;
+  
+  for (const num of numbers) {
+    denominator *= factorial(num);
+  }
+  
+  return numerator / denominator;
+};
+
+/**
+ * SUMX2MY2 - Sum of squared differences
+ * 
+ * Syntax: SUMX2MY2(array_x, array_y)
+ * Returns the sum of the difference of squares: Σ(x² - y²)
+ * 
+ * @example
+ * =SUMX2MY2({2, 3, 9}, {6, 5, 11}) → -55
+ * // (2²-6²) + (3²-5²) + (9²-11²) = (4-36) + (9-25) + (81-121) = -32 + -16 + -40 = -88
+ */
+export const SUMX2MY2: FormulaFunction = (arrayX, arrayY) => {
+  // Flatten arrays
+  const flattenArray = (arr: any): number[] => {
+    if (!Array.isArray(arr)) return [toNumber(arr)] as number[];
+    const result: number[] = [];
+    for (const item of arr) {
+      if (Array.isArray(item)) {
+        result.push(...flattenArray(item));
+      } else {
+        const num = toNumber(item);
+        if (typeof num === 'number') result.push(num);
+      }
+    }
+    return result;
+  };
+
+  const xValues = flattenArray(arrayX);
+  const yValues = flattenArray(arrayY);
+  
+  if (xValues.length !== yValues.length) {
+    return new Error('#N/A');
+  }
+  
+  let sum = 0;
+  for (let i = 0; i < xValues.length; i++) {
+    sum += (xValues[i] * xValues[i]) - (yValues[i] * yValues[i]);
+  }
+  
+  return sum;
+};
+
+/**
+ * SUMX2PY2 - Sum of sum of squares
+ * 
+ * Syntax: SUMX2PY2(array_x, array_y)
+ * Returns the sum of the sum of squares: Σ(x² + y²)
+ * 
+ * @example
+ * =SUMX2PY2({2, 3, 9}, {6, 5, 11}) → 271
+ * // (2²+6²) + (3²+5²) + (9²+11²) = 40 + 34 + 202 = 276
+ */
+export const SUMX2PY2: FormulaFunction = (arrayX, arrayY) => {
+  // Flatten arrays
+  const flattenArray = (arr: any): number[] => {
+    if (!Array.isArray(arr)) return [toNumber(arr)] as number[];
+    const result: number[] = [];
+    for (const item of arr) {
+      if (Array.isArray(item)) {
+        result.push(...flattenArray(item));
+      } else {
+        const num = toNumber(item);
+        if (typeof num === 'number') result.push(num);
+      }
+    }
+    return result;
+  };
+
+  const xValues = flattenArray(arrayX);
+  const yValues = flattenArray(arrayY);
+  
+  if (xValues.length !== yValues.length) {
+    return new Error('#N/A');
+  }
+  
+  let sum = 0;
+  for (let i = 0; i < xValues.length; i++) {
+    sum += (xValues[i] * xValues[i]) + (yValues[i] * yValues[i]);
+  }
+  
+  return sum;
+};
+
+/**
+ * SUMXMY2 - Sum of squared differences (alternative form)
+ * 
+ * Syntax: SUMXMY2(array_x, array_y)
+ * Returns the sum of squares of differences: Σ(x - y)²
+ * 
+ * @example
+ * =SUMXMY2({2, 3, 9}, {6, 5, 11}) → 36
+ * // (2-6)² + (3-5)² + (9-11)² = 16 + 4 + 4 = 24
+ */
+export const SUMXMY2: FormulaFunction = (arrayX, arrayY) => {
+  // Flatten arrays
+  const flattenArray = (arr: any): number[] => {
+    if (!Array.isArray(arr)) return [toNumber(arr)] as number[];
+    const result: number[] = [];
+    for (const item of arr) {
+      if (Array.isArray(item)) {
+        result.push(...flattenArray(item));
+      } else {
+        const num = toNumber(item);
+        if (typeof num === 'number') result.push(num);
+      }
+    }
+    return result;
+  };
+
+  const xValues = flattenArray(arrayX);
+  const yValues = flattenArray(arrayY);
+  
+  if (xValues.length !== yValues.length) {
+    return new Error('#N/A');
+  }
+  
+  let sum = 0;
+  for (let i = 0; i < xValues.length; i++) {
+    const diff = xValues[i] - yValues[i];
+    sum += diff * diff;
+  }
+  
+  return sum;
+};

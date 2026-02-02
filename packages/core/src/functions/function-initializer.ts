@@ -68,6 +68,15 @@ export function registerBuiltInFunctions(registry: FunctionRegistry): void {
     ['FACT', MathFunctions.FACT, { category: FunctionCategory.MATH, minArgs: 1, maxArgs: 1 }],
     ['COMBIN', MathFunctions.COMBIN, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
     ['SUMPRODUCT', MathFunctions.SUMPRODUCT, { category: FunctionCategory.MATH }],
+    // Week 11 Day 2: Advanced Math Functions
+    ['MROUND', MathFunctions.MROUND, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
+    ['QUOTIENT', MathFunctions.QUOTIENT, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
+    ['PRODUCT', MathFunctions.PRODUCT, { category: FunctionCategory.MATH }],
+    ['SQRTPI', MathFunctions.SQRTPI, { category: FunctionCategory.MATH, minArgs: 1, maxArgs: 1 }],
+    ['MULTINOMIAL', MathFunctions.MULTINOMIAL, { category: FunctionCategory.MATH }],
+    ['SUMX2MY2', MathFunctions.SUMX2MY2, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
+    ['SUMX2PY2', MathFunctions.SUMX2PY2, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
+    ['SUMXMY2', MathFunctions.SUMXMY2, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
   ] as const;
 
   // Text functions
