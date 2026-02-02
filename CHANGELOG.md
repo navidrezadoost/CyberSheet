@@ -5,6 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added - Week 11 Days 1-3: Information, Math, and Text Enhancement Functions
+
+#### Week 11 Day 1: Information & Type Checking Functions (8 functions, 54 tests)
+- **ISNUMBER**: Check if value is a number
+- **ISTEXT**: Check if value is text
+- **ISBLANK**: Check if cell is empty
+- **ISLOGICAL**: Check if value is boolean
+- **ISNONTEXT**: Check if value is not text
+- **TYPE**: Return numeric type code (1=number, 2=text, 4=boolean, 16=error, 64=array)
+- **N**: Convert value to number (logical values: TRUE=1, FALSE=0, text=0)
+- **T**: Return text if value is text, otherwise empty string
+- All 54 tests passing (100%)
+- Comprehensive error handling and edge case coverage
+
+#### Week 11 Day 2: Advanced Math Functions (8 functions, 55 tests)
+- **MROUND**: Round to nearest multiple
+- **QUOTIENT**: Integer division result
+- **PRODUCT**: Multiply all numbers in arguments
+- **SQRTPI**: Square root of (number × π)
+- **MULTINOMIAL**: Multinomial coefficient calculation
+- **SUMX2MY2**: Sum of differences of squares (Σ(x² - y²))
+- **SUMX2PY2**: Sum of sums of squares (Σ(x² + y²))
+- **SUMXMY2**: Sum of squares of differences (Σ(x - y)²)
+- All 55 tests passing (100%)
+- Fixed array broadcasting issue by adding functions to `isArrayFunction()` whitelist
+- Functions now correctly aggregate cell ranges instead of broadcasting element-wise
+
+#### Week 11 Day 3: Text Enhancement Functions (9 functions, 81 tests)
+- **CONCAT**: Modern text concatenation with array support
+  - Flattens nested arrays automatically
+  - Ignores errors in arguments
+  - Enhanced replacement for CONCATENATE
+- **PROPER**: Capitalize first letter of each word
+  - Handles mixed case correctly
+  - Capitalizes after non-letter characters
+- **CLEAN**: Remove non-printable control characters (ASCII 0-31)
+  - Useful for cleaning imported data
+  - Preserves spaces and printable characters
+- **UNICHAR**: Get Unicode character from code point
+  - Full Unicode range support (0 to 1,114,111)
+  - Emoji support (e.g., UNICHAR(128515) → "😃")
+  - Handles surrogate pairs correctly
+- **UNICODE**: Get code point from character
+  - Inverse of UNICHAR
+  - Emoji code point extraction
+  - Returns first character code point only
+- **DOLLAR**: Format numbers as currency
+  - Thousands separators included
+  - Negative numbers shown in parentheses
+  - Configurable decimal places
+- **FIXED**: Format numbers with fixed decimals
+  - Thousands separators (optional)
+  - Negative decimals for rounding to left of decimal point
+  - Highly configurable formatting
+- **TEXTBEFORE**: Extract text before delimiter
+  - Multiple occurrence support (positive/negative indexing)
+  - Case-sensitive/insensitive matching
+  - Customizable not-found behavior
+- **TEXTAFTER**: Extract text after delimiter
+  - Multiple occurrence support (positive/negative indexing)
+  - Case-sensitive/insensitive matching
+  - Email and file path parsing support
+- All 81 tests passing (100%)
+- Added CONCAT and CONCATENATE to `isArrayFunction()` whitelist for proper array handling
+- Full Excel compatibility maintained
+
+### Fixed
+- **TypeScript Compilation**: Fixed `NodeJS.Timeout` error in error-tooltip.ts
+  - Replaced `NodeJS.Timeout` with `ReturnType<typeof setTimeout>`
+  - Cross-environment compatibility (browser and Node.js)
+  - No functional changes, type-only fix
+
+### Documentation
+- Added WEEK_11_DAY_1_COMPLETE.md with comprehensive implementation details
+- Added WEEK_11_DAY_2_COMPLETE.md documenting array broadcasting fix
+- Added WEEK_11_DAY_3_COMPLETE.md with Unicode/emoji support examples
+
 ## [1.8.0] - 2026-01-31
 
 ### Added - Error Highlighting + Interactive Tooltips (Week 9 Day 3)
