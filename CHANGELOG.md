@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added - Week 11 Days 1-4: Information, Math, Text, and Engineering Functions
+### Added - Week 11 Days 1-5: Information, Math, Text, Engineering, and Statistical Distribution Functions
+
+#### Week 11 Day 5: Statistical Distribution Functions (10 functions, 58 tests, 100% pass rate)
+- **Normal Distribution Functions (4 functions)**:
+  - **NORM.DIST**: Returns normal distribution (CDF or PDF) with specified mean and standard deviation
+  - **NORM.INV**: Returns inverse of normal cumulative distribution (critical values)
+  - **NORM.S.DIST**: Returns standard normal distribution (mean=0, std=1)
+  - **NORM.S.INV**: Returns inverse of standard normal distribution (z-scores)
+- **Binomial Distribution Functions (2 functions)**:
+  - **BINOM.DIST**: Returns binomial distribution probability (PMF or CDF)
+  - **BINOM.INV**: Returns smallest value for cumulative binomial distribution ≥ alpha
+- **Poisson Distribution Functions (2 functions)**:
+  - **POISSON.DIST**: Returns Poisson distribution for counting rare events
+  - **POISSON**: Legacy Poisson distribution (Excel 2007 compatibility)
+- **Exponential Distribution Functions (2 functions)**:
+  - **EXPON.DIST**: Returns exponential distribution (memoryless property)
+  - **EXPONDIST**: Legacy exponential distribution (Excel 2007 compatibility)
+- **Implementation Highlights**:
+  - Helper functions: Error function (erf), complementary error function (erfc), standard normal CDF
+  - Beasley-Springer-Moro algorithm for inverse normal distribution
+  - Abramowitz & Stegun approximation for error function (accuracy: 1.5×10⁻⁷)
+  - Stirling's approximation for factorial in Poisson calculations
+  - Numerical stability using logarithms for large values
+  - 58 comprehensive tests: unit tests, error handling, integration tests
+  - All tests passing (100% pass rate maintained across Week 11)
 
 #### Week 11 Day 4: Engineering Advanced Functions - Complex Number Operations (20 functions, 74 tests)
 - **Complex Number Arithmetic (4 functions)**:

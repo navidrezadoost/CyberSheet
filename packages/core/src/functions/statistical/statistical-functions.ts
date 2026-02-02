@@ -10,7 +10,7 @@
 
 import type { FormulaFunction, FormulaValue } from '../../types/formula-types';
 import { filterNumbers, flattenArray } from '../../utils/array-utils';
-import { toNumber } from '../../utils/type-utils';
+import { toNumber, toBoolean } from '../../utils/type-utils';
 import type { ParsedCriteria } from '../../utils/criteria-utils';
 
 /**
@@ -1491,3 +1491,590 @@ export const TREND: FormulaFunction = (knownYs, knownXs, newXs?, constB?) => {
   
   return predictions.length === 1 ? predictions[0] : predictions;
 };
+
+// ============================================================================
+// Week 11 Day 5: Statistical Distribution Functions - Helper Functions
+// ============================================================================
+
+/**
+ * Error function (erf) - Used for normal distribution calculations
+ * Uses Abramowitz and Stegun approximation (maximum error: 1.5×10⁻⁷)
+ */
+function erf(x: number): number {
+  // Coefficients for Abramowitz and Stegun approximation
+  const a1 =  0.254829592;
+  const a2 = -0.284496736;
+  const a3 =  1.421413741;
+  const a4 = -1.453152027;
+  const a5 =  1.061405429;
+  const p  =  0.3275911;
+  
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  
+  return sign * y;
+}
+
+/**
+ * Complementary error function (erfc)
+ */
+function erfc(x: number): number {
+  return 1.0 - erf(x);
+}
+
+/**
+ * Standard normal cumulative distribution function (Φ)
+ */
+function standardNormalCDF(z: number): number {
+  return 0.5 * (1.0 + erf(z / Math.sqrt(2)));
+}
+
+/**
+ * Standard normal probability density function (φ)
+ */
+function standardNormalPDF(z: number): number {
+  return Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+}
+
+/**
+ * Inverse of standard normal CDF using rational approximation
+ * Beasley-Springer-Moro algorithm
+ */
+function inverseStandardNormalCDF(p: number): number {
+  if (p <= 0 || p >= 1) {
+    return p <= 0 ? -Infinity : Infinity;
+  }
+  
+  // Coefficients for rational approximation
+  const a = [
+    -3.969683028665376e+01,
+     2.209460984245205e+02,
+    -2.759285104469687e+02,
+     1.383577518672690e+02,
+    -3.066479806614716e+01,
+     2.506628277459239e+00
+  ];
+  
+  const b = [
+    -5.447609879822406e+01,
+     1.615858368580409e+02,
+    -1.556989798598866e+02,
+     6.680131188771972e+01,
+    -1.328068155288572e+01
+  ];
+  
+  const c = [
+    -7.784894002430432e-03,
+    -3.223964580411365e-01,
+    -2.400758277161838e+00,
+    -2.549732539343734e+00,
+     4.374664141464968e+00,
+     2.938163982698783e+00
+  ];
+  
+  const d = [
+     7.784695709041462e-03,
+     3.224671290700398e-01,
+     2.445134137142996e+00,
+     3.754408661907416e+00
+  ];
+  
+  const pLow = 0.02425;
+  const pHigh = 1 - pLow;
+  
+  let q: number, r: number, x: number;
+  
+  if (p < pLow) {
+    // Rational approximation for lower region
+    q = Math.sqrt(-2 * Math.log(p));
+    x = (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+        ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  } else if (p <= pHigh) {
+    // Rational approximation for central region
+    q = p - 0.5;
+    r = q * q;
+    x = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+        (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  } else {
+    // Rational approximation for upper region
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+         ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  
+  return x;
+}
+
+/**
+ * Binomial coefficient C(n, k) = n! / (k! * (n-k)!)
+ * Uses multiplicative formula for better numerical stability
+ */
+function binomialCoefficient(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  
+  // Take advantage of symmetry: C(n,k) = C(n,n-k)
+  k = Math.min(k, n - k);
+  
+  let result = 1;
+  for (let i = 0; i < k; i++) {
+    result = result * (n - i) / (i + 1);
+  }
+  
+  return result;
+}
+
+/**
+ * Natural logarithm of factorial using Stirling's approximation
+ * More numerically stable for large values
+ */
+function logFactorial(n: number): number {
+  if (n <= 1) return 0;
+  if (n === 2) return Math.log(2);
+  if (n === 3) return Math.log(6);
+  if (n === 4) return Math.log(24);
+  if (n === 5) return Math.log(120);
+  
+  // Stirling's approximation: ln(n!) ≈ n*ln(n) - n + 0.5*ln(2πn)
+  return n * Math.log(n) - n + 0.5 * Math.log(2 * Math.PI * n);
+}
+
+/**
+ * Factorial function for smaller values
+ */
+function factorial(n: number): number {
+  if (n <= 1) return 1;
+  if (n > 170) return Infinity; // Overflow protection
+  
+  let result = 1;
+  for (let i = 2; i <= n; i++) {
+    result *= i;
+  }
+  return result;
+}
+
+// ============================================================================
+// Week 11 Day 5: Normal Distribution Functions
+// ============================================================================
+
+/**
+ * NORM.DIST - Returns the normal distribution
+ * 
+ * Syntax: NORM.DIST(x, mean, standard_dev, cumulative)
+ * 
+ * @param x - Value for which you want the distribution
+ * @param mean - Arithmetic mean of the distribution
+ * @param standard_dev - Standard deviation of the distribution (must be > 0)
+ * @param cumulative - TRUE = cumulative distribution (CDF), FALSE = probability density (PDF)
+ * @returns Normal distribution value
+ * 
+ * Examples:
+ * - NORM.DIST(42, 40, 1.5, TRUE) → 0.9087888 (cumulative probability)
+ * - NORM.DIST(42, 40, 1.5, FALSE) → 0.10934005 (probability density)
+ * - NORM.DIST(40, 40, 1.5, TRUE) → 0.5 (mean is at 50th percentile)
+ * 
+ * Notes:
+ * - CDF: Probability that random variable ≤ x
+ * - PDF: Probability density at x (height of bell curve)
+ * - Standard deviation must be positive
+ */
+export function NORM_DIST(x: any, mean: any, standard_dev: any, cumulative: any): FormulaValue {
+  const xVal = toNumber(x);
+  const meanVal = toNumber(mean);
+  const stdDev = toNumber(standard_dev);
+  
+  if (xVal instanceof Error) return xVal;
+  if (meanVal instanceof Error) return meanVal;
+  if (stdDev instanceof Error) return stdDev;
+  
+  if (stdDev <= 0) {
+    return new Error('#NUM!');
+  }
+  
+  const cumulativeBool = toBoolean(cumulative);
+  if (cumulativeBool instanceof Error) return cumulativeBool;
+  
+  // Standardize: z = (x - μ) / σ
+  const z = (xVal - meanVal) / stdDev;
+  
+  if (cumulativeBool) {
+    // Cumulative distribution function (CDF)
+    return standardNormalCDF(z);
+  } else {
+    // Probability density function (PDF)
+    const pdf = standardNormalPDF(z) / stdDev;
+    return pdf;
+  }
+}
+
+/**
+ * NORM.INV - Returns the inverse of the normal cumulative distribution
+ * 
+ * Syntax: NORM.INV(probability, mean, standard_dev)
+ * 
+ * @param probability - Probability corresponding to the normal distribution (0 < p < 1)
+ * @param mean - Arithmetic mean of the distribution
+ * @param standard_dev - Standard deviation of the distribution (must be > 0)
+ * @returns Value x such that NORM.DIST(x, mean, standard_dev, TRUE) = probability
+ * 
+ * Examples:
+ * - NORM.INV(0.9087888, 40, 1.5) → 42 (approximately)
+ * - NORM.INV(0.5, 100, 10) → 100 (median equals mean)
+ * - NORM.INV(0.975, 0, 1) → 1.96 (95th percentile of standard normal)
+ * 
+ * Notes:
+ * - Used to find critical values for confidence intervals
+ * - Probability must be strictly between 0 and 1
+ */
+export function NORM_INV(probability: any, mean: any, standard_dev: any): FormulaValue {
+  const p = toNumber(probability);
+  const meanVal = toNumber(mean);
+  const stdDev = toNumber(standard_dev);
+  
+  if (p instanceof Error) return p;
+  if (meanVal instanceof Error) return meanVal;
+  if (stdDev instanceof Error) return stdDev;
+  
+  if (p <= 0 || p >= 1) {
+    return new Error('#NUM!');
+  }
+  
+  if (stdDev <= 0) {
+    return new Error('#NUM!');
+  }
+  
+  // Get z-score from standard normal inverse
+  const z = inverseStandardNormalCDF(p);
+  
+  // Transform back: x = μ + σ*z
+  return meanVal + stdDev * z;
+}
+
+/**
+ * NORM.S.DIST - Returns the standard normal distribution (mean=0, std=1)
+ * 
+ * Syntax: NORM.S.DIST(z, cumulative)
+ * 
+ * @param z - Value for which you want the distribution
+ * @param cumulative - TRUE = CDF, FALSE = PDF
+ * @returns Standard normal distribution value
+ * 
+ * Examples:
+ * - NORM.S.DIST(1.96, TRUE) → 0.975 (97.5th percentile)
+ * - NORM.S.DIST(0, TRUE) → 0.5 (mean is at 50th percentile)
+ * - NORM.S.DIST(0, FALSE) → 0.3989423 (peak of bell curve)
+ * - NORM.S.DIST(-1.96, TRUE) → 0.025 (2.5th percentile)
+ * 
+ * Notes:
+ * - Standard normal has μ=0, σ=1
+ * - Used for z-scores and standard statistical tables
+ * - ±1.96 captures 95% of distribution
+ */
+export function NORM_S_DIST(z: any, cumulative: any): FormulaValue {
+  const zVal = toNumber(z);
+  if (zVal instanceof Error) return zVal;
+  
+  const cumulativeBool = toBoolean(cumulative);
+  if (cumulativeBool instanceof Error) return cumulativeBool;
+  
+  if (cumulativeBool) {
+    // Cumulative distribution function
+    return standardNormalCDF(zVal);
+  } else {
+    // Probability density function
+    return standardNormalPDF(zVal);
+  }
+}
+
+/**
+ * NORM.S.INV - Returns the inverse of the standard normal cumulative distribution
+ * 
+ * Syntax: NORM.S.INV(probability)
+ * 
+ * @param probability - Probability corresponding to the normal distribution (0 < p < 1)
+ * @returns Z-score such that NORM.S.DIST(z, TRUE) = probability
+ * 
+ * Examples:
+ * - NORM.S.INV(0.975) → 1.96 (for 95% confidence interval)
+ * - NORM.S.INV(0.5) → 0 (median of standard normal)
+ * - NORM.S.INV(0.025) → -1.96
+ * - NORM.S.INV(0.95) → 1.645 (for 90% confidence interval)
+ * 
+ * Notes:
+ * - Returns z-scores for statistical tests
+ * - Commonly used critical values: 1.645 (90%), 1.96 (95%), 2.576 (99%)
+ */
+export function NORM_S_INV(probability: any): FormulaValue {
+  const p = toNumber(probability);
+  if (p instanceof Error) return p;
+  
+  if (p <= 0 || p >= 1) {
+    return new Error('#NUM!');
+  }
+  
+  return inverseStandardNormalCDF(p);
+}
+
+// ============================================================================
+// Week 11 Day 5: Binomial Distribution Functions
+// ============================================================================
+
+/**
+ * BINOM.DIST - Returns the individual term binomial distribution probability
+ * 
+ * Syntax: BINOM.DIST(number_s, trials, probability_s, cumulative)
+ * 
+ * @param number_s - Number of successes in trials (integer, 0 ≤ number_s ≤ trials)
+ * @param trials - Number of independent trials (integer, > 0)
+ * @param probability_s - Probability of success on each trial (0 ≤ p ≤ 1)
+ * @param cumulative - TRUE = CDF (≤ number_s), FALSE = PMF (exactly number_s)
+ * @returns Binomial probability
+ * 
+ * Examples:
+ * - BINOM.DIST(6, 10, 0.5, FALSE) → 0.205078125 (exactly 6 heads in 10 flips)
+ * - BINOM.DIST(6, 10, 0.5, TRUE) → 0.828125 (6 or fewer heads)
+ * - BINOM.DIST(0, 10, 0.1, FALSE) → 0.3486784401 (no successes)
+ * 
+ * Notes:
+ * - PMF: P(X=k) = C(n,k) * p^k * (1-p)^(n-k)
+ * - CDF: P(X≤k) = Σ(i=0 to k) PMF(i)
+ * - Used for yes/no experiments with fixed probability
+ */
+export function BINOM_DIST(number_s: any, trials: any, probability_s: any, cumulative: any): FormulaValue {
+  const k = toNumber(number_s);
+  const n = toNumber(trials);
+  const p = toNumber(probability_s);
+  
+  if (k instanceof Error) return k;
+  if (n instanceof Error) return n;
+  if (p instanceof Error) return p;
+  
+  // Validate parameters
+  if (k < 0 || k > n || Math.floor(k) !== k) {
+    return new Error('#NUM!');
+  }
+  
+  if (n < 0 || Math.floor(n) !== n) {
+    return new Error('#NUM!');
+  }
+  
+  if (p < 0 || p > 1) {
+    return new Error('#NUM!');
+  }
+  
+  const cumulativeBool = toBoolean(cumulative);
+  if (cumulativeBool instanceof Error) return cumulativeBool;
+  
+  if (cumulativeBool) {
+    // Cumulative distribution: P(X ≤ k)
+    let sum = 0;
+    for (let i = 0; i <= k; i++) {
+      const coef = binomialCoefficient(n, i);
+      sum += coef * Math.pow(p, i) * Math.pow(1 - p, n - i);
+    }
+    return sum;
+  } else {
+    // Probability mass function: P(X = k)
+    const coef = binomialCoefficient(n, k);
+    return coef * Math.pow(p, k) * Math.pow(1 - p, n - k);
+  }
+}
+
+/**
+ * BINOM.INV - Returns the smallest value for which cumulative binomial distribution ≥ alpha
+ * 
+ * Syntax: BINOM.INV(trials, probability_s, alpha)
+ * 
+ * @param trials - Number of Bernoulli trials (integer, ≥ 0)
+ * @param probability_s - Probability of success on each trial (0 ≤ p ≤ 1)
+ * @param alpha - Criterion value (0 ≤ α ≤ 1)
+ * @returns Smallest integer k such that P(X ≤ k) ≥ alpha
+ * 
+ * Examples:
+ * - BINOM.INV(100, 0.5, 0.95) → 58 (95th percentile)
+ * - BINOM.INV(10, 0.5, 0.5) → 5 (median)
+ * - BINOM.INV(20, 0.3, 0.9) → 9
+ * 
+ * Notes:
+ * - Used to find critical values for binomial tests
+ * - Returns the inverse of cumulative binomial distribution
+ */
+export function BINOM_INV(trials: any, probability_s: any, alpha: any): FormulaValue {
+  const n = toNumber(trials);
+  const p = toNumber(probability_s);
+  const a = toNumber(alpha);
+  
+  if (n instanceof Error) return n;
+  if (p instanceof Error) return p;
+  if (a instanceof Error) return a;
+  
+  if (n < 0 || Math.floor(n) !== n) {
+    return new Error('#NUM!');
+  }
+  
+  if (p < 0 || p > 1) {
+    return new Error('#NUM!');
+  }
+  
+  if (a < 0 || a > 1) {
+    return new Error('#NUM!');
+  }
+  
+  // Find smallest k where CDF(k) >= alpha
+  let cumulative = 0;
+  for (let k = 0; k <= n; k++) {
+    const coef = binomialCoefficient(n, k);
+    cumulative += coef * Math.pow(p, k) * Math.pow(1 - p, n - k);
+    
+    if (cumulative >= a) {
+      return k;
+    }
+  }
+  
+  return n;
+}
+
+// ============================================================================
+// Week 11 Day 5: Poisson Distribution Functions
+// ============================================================================
+
+/**
+ * POISSON.DIST - Returns the Poisson distribution
+ * 
+ * Syntax: POISSON.DIST(x, mean, cumulative)
+ * 
+ * @param x - Number of events (integer, ≥ 0)
+ * @param mean - Expected numeric value (λ, must be > 0)
+ * @param cumulative - TRUE = CDF (≤ x events), FALSE = PMF (exactly x events)
+ * @returns Poisson probability
+ * 
+ * Examples:
+ * - POISSON.DIST(2, 5, FALSE) → 0.084224 (exactly 2 events when expecting 5)
+ * - POISSON.DIST(2, 5, TRUE) → 0.124652 (2 or fewer events)
+ * - POISSON.DIST(5, 5, FALSE) → 0.1755 (mode of distribution)
+ * 
+ * Notes:
+ * - PMF: P(X=k) = (λ^k * e^(-λ)) / k!
+ * - Used for counting rare events over time/space
+ * - Mean equals variance in Poisson distribution
+ */
+export function POISSON_DIST(x: any, mean: any, cumulative: any): FormulaValue {
+  const k = toNumber(x);
+  const lambda = toNumber(mean);
+  
+  if (k instanceof Error) return k;
+  if (lambda instanceof Error) return lambda;
+  
+  if (k < 0 || Math.floor(k) !== k) {
+    return new Error('#NUM!');
+  }
+  
+  if (lambda <= 0) {
+    return new Error('#NUM!');
+  }
+  
+  const cumulativeBool = toBoolean(cumulative);
+  if (cumulativeBool instanceof Error) return cumulativeBool;
+  
+  if (cumulativeBool) {
+    // Cumulative distribution: P(X ≤ k)
+    let sum = 0;
+    for (let i = 0; i <= k; i++) {
+      sum += Math.exp(-lambda + i * Math.log(lambda) - logFactorial(i));
+    }
+    return sum;
+  } else {
+    // Probability mass function: P(X = k)
+    // Using log for numerical stability: e^(-λ + k*ln(λ) - ln(k!))
+    return Math.exp(-lambda + k * Math.log(lambda) - logFactorial(k));
+  }
+}
+
+/**
+ * POISSON - Legacy Poisson distribution (compatibility with Excel 2007)
+ * 
+ * Syntax: POISSON(x, mean, cumulative)
+ * 
+ * @param x - Number of events
+ * @param mean - Expected value
+ * @param cumulative - TRUE = CDF, FALSE = PMF
+ * @returns Poisson probability
+ * 
+ * Notes:
+ * - Same as POISSON.DIST, maintained for backward compatibility
+ */
+export function POISSON(x: any, mean: any, cumulative: any): FormulaValue {
+  return POISSON_DIST(x, mean, cumulative);
+}
+
+// ============================================================================
+// Week 11 Day 5: Exponential Distribution Functions
+// ============================================================================
+
+/**
+ * EXPON.DIST - Returns the exponential distribution
+ * 
+ * Syntax: EXPON.DIST(x, lambda, cumulative)
+ * 
+ * @param x - Value of the function (must be ≥ 0)
+ * @param lambda - Parameter value (rate, must be > 0)
+ * @param cumulative - TRUE = CDF, FALSE = PDF
+ * @returns Exponential distribution value
+ * 
+ * Examples:
+ * - EXPON.DIST(0.2, 10, TRUE) → 0.864665 (cumulative probability)
+ * - EXPON.DIST(0.2, 10, FALSE) → 1.353353 (probability density)
+ * - EXPON.DIST(0, 1, FALSE) → 1 (PDF at x=0)
+ * 
+ * Notes:
+ * - PDF: f(x) = λ * e^(-λx)
+ * - CDF: F(x) = 1 - e^(-λx)
+ * - Models time between events in Poisson process
+ * - Memoryless property: P(X > s+t | X > s) = P(X > t)
+ */
+export function EXPON_DIST(x: any, lambda: any, cumulative: any): FormulaValue {
+  const xVal = toNumber(x);
+  const lambdaVal = toNumber(lambda);
+  
+  if (xVal instanceof Error) return xVal;
+  if (lambdaVal instanceof Error) return lambdaVal;
+  
+  if (xVal < 0) {
+    return new Error('#NUM!');
+  }
+  
+  if (lambdaVal <= 0) {
+    return new Error('#NUM!');
+  }
+  
+  const cumulativeBool = toBoolean(cumulative);
+  if (cumulativeBool instanceof Error) return cumulativeBool;
+  
+  if (cumulativeBool) {
+    // Cumulative distribution function: F(x) = 1 - e^(-λx)
+    return 1 - Math.exp(-lambdaVal * xVal);
+  } else {
+    // Probability density function: f(x) = λ * e^(-λx)
+    return lambdaVal * Math.exp(-lambdaVal * xVal);
+  }
+}
+
+/**
+ * EXPONDIST - Legacy exponential distribution (compatibility with Excel 2007)
+ * 
+ * Syntax: EXPONDIST(x, lambda, cumulative)
+ * 
+ * @param x - Value of the function
+ * @param lambda - Parameter value
+ * @param cumulative - TRUE = CDF, FALSE = PDF
+ * @returns Exponential distribution value
+ * 
+ * Notes:
+ * - Same as EXPON.DIST, maintained for backward compatibility
+ */
+export function EXPONDIST(x: any, lambda: any, cumulative: any): FormulaValue {
+  return EXPON_DIST(x, lambda, cumulative);
+}
