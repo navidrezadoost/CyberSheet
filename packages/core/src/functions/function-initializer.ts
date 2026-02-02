@@ -266,24 +266,30 @@ export function registerBuiltInFunctions(registry: FunctionRegistry): void {
     ['INFO', InformationFunctions.INFO, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
   ] as const;
 
-  // Engineering functions (Week 10 Day 3)
+  // Engineering functions (Week 10 Days 3-4)
   const engineeringFunctions = [
-    // Binary conversions
+    // Binary conversions (Day 3)
     ['BIN2DEC', EngineeringFunctions.BIN2DEC, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 1 }],
     ['BIN2HEX', EngineeringFunctions.BIN2HEX, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
     ['BIN2OCT', EngineeringFunctions.BIN2OCT, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
-    // Decimal conversions
+    // Decimal conversions (Day 3)
     ['DEC2BIN', EngineeringFunctions.DEC2BIN, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
     ['DEC2HEX', EngineeringFunctions.DEC2HEX, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
     ['DEC2OCT', EngineeringFunctions.DEC2OCT, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
-    // Hexadecimal conversions
+    // Hexadecimal conversions (Day 3)
     ['HEX2BIN', EngineeringFunctions.HEX2BIN, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
     ['HEX2DEC', EngineeringFunctions.HEX2DEC, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 1 }],
     ['HEX2OCT', EngineeringFunctions.HEX2OCT, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
-    // Octal conversions
+    // Octal conversions (Day 3)
     ['OCT2BIN', EngineeringFunctions.OCT2BIN, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
     ['OCT2DEC', EngineeringFunctions.OCT2DEC, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 1 }],
     ['OCT2HEX', EngineeringFunctions.OCT2HEX, { category: FunctionCategory.ENGINEERING, minArgs: 1, maxArgs: 2 }],
+    // Bitwise operations (Day 4)
+    ['BITAND', EngineeringFunctions.BITAND, { category: FunctionCategory.ENGINEERING, minArgs: 2, maxArgs: 2 }],
+    ['BITOR', EngineeringFunctions.BITOR, { category: FunctionCategory.ENGINEERING, minArgs: 2, maxArgs: 2 }],
+    ['BITXOR', EngineeringFunctions.BITXOR, { category: FunctionCategory.ENGINEERING, minArgs: 2, maxArgs: 2 }],
+    ['BITLSHIFT', EngineeringFunctions.BITLSHIFT, { category: FunctionCategory.ENGINEERING, minArgs: 2, maxArgs: 2 }],
+    ['BITRSHIFT', EngineeringFunctions.BITRSHIFT, { category: FunctionCategory.ENGINEERING, minArgs: 2, maxArgs: 2 }],
   ] as const;
 
   // Batch register all functions

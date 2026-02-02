@@ -1,10 +1,12 @@
 /**
- * Tests for Engineering Base Conversion Functions
- * BIN2DEC, BIN2HEX, BIN2OCT, DEC2BIN, DEC2HEX, DEC2OCT
- * HEX2BIN, HEX2DEC, HEX2OCT, OCT2BIN, OCT2DEC, OCT2HEX
+ * Tests for Engineering Functions
+ * Base Conversion: BIN2DEC, BIN2HEX, BIN2OCT, DEC2BIN, DEC2HEX, DEC2OCT,
+ *                 HEX2BIN, HEX2DEC, HEX2OCT, OCT2BIN, OCT2DEC, OCT2HEX
+ * Bitwise Operations: BITAND, BITOR, BITXOR, BITLSHIFT, BITRSHIFT
  */
 
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, beforeEach } from '@jest/globals';
+import { FormulaEngine, FormulaContext, Worksheet } from '../../src';
 import * as EngineeringFunctions from '../../src/functions/engineering/engineering-functions';
 
 const {
@@ -12,7 +14,25 @@ const {
   DEC2BIN, DEC2HEX, DEC2OCT,
   HEX2BIN, HEX2DEC, HEX2OCT,
   OCT2BIN, OCT2DEC, OCT2HEX,
+  BITAND, BITOR, BITXOR, BITLSHIFT, BITRSHIFT,
 } = EngineeringFunctions;
+
+// Helper for evaluating formulas with engine
+let engine: FormulaEngine;
+let worksheet: Worksheet;
+let context: FormulaContext;
+let evaluate: (formula: string) => any;
+
+beforeEach(() => {
+  engine = new FormulaEngine();
+  worksheet = new Worksheet('Sheet1', 100, 26);
+  context = {
+    worksheet,
+    currentCell: { row: 0, col: 0 },
+    namedLambdas: new Map()
+  } as FormulaContext;
+  evaluate = (formula: string) => engine.evaluate(formula, context);
+});
 
 describe('Engineering Base Conversion Functions', () => {
   // ========================================================================
@@ -355,6 +375,305 @@ describe('Engineering Base Conversion Functions', () => {
       expect(DEC2OCT(10)).toBe('12');
       expect(BIN2OCT('1010')).toBe('12');
       expect(HEX2OCT('A')).toBe('12');
+    });
+  });
+});
+
+// ============================================================================
+// BITWISE OPERATIONS TESTS (Week 10 Day 4)
+// ============================================================================
+
+describe('Bitwise Engineering Functions', () => {
+  describe('BITAND', () => {
+    test('should perform bitwise AND on simple numbers', () => {
+      const result = evaluate('=BITAND(5, 3)');
+      expect(result).toBe(1); // 101 AND 011 = 001
+    });
+
+    test('should perform bitwise AND on larger numbers', () => {
+      const result = evaluate('=BITAND(13, 25)');
+      expect(result).toBe(9); // 1101 AND 11001 = 01001
+    });
+
+    test('should handle zero', () => {
+      expect(evaluate('=BITAND(0, 0)')).toBe(0);
+      expect(evaluate('=BITAND(15, 0)')).toBe(0);
+      expect(evaluate('=BITAND(0, 15)')).toBe(0);
+    });
+
+    test('should handle same numbers', () => {
+      const result = evaluate('=BITAND(42, 42)');
+      expect(result).toBe(42);
+    });
+
+    test('should return #NUM! for negative numbers', () => {
+      const result = evaluate('=BITAND(-1, 5)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should return #NUM! for non-integer', () => {
+      const result = evaluate('=BITAND(5.5, 3)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should return #NUM! for numbers exceeding 2^48-1', () => {
+      const MAX = Math.pow(2, 48);
+      const result = evaluate(`=BITAND(${MAX}, 1)`);
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should work with large safe numbers', () => {
+      const result = evaluate('=BITAND(1000000, 500000)');
+      expect(result).toBe(1000000 & 500000);
+    });
+  });
+
+  describe('BITOR', () => {
+    test('should perform bitwise OR on simple numbers', () => {
+      const result = evaluate('=BITOR(5, 3)');
+      expect(result).toBe(7); // 101 OR 011 = 111
+    });
+
+    test('should perform bitwise OR on larger numbers', () => {
+      const result = evaluate('=BITOR(13, 25)');
+      expect(result).toBe(29); // 01101 OR 11001 = 11101
+    });
+
+    test('should handle zero', () => {
+      expect(evaluate('=BITOR(0, 0)')).toBe(0);
+      expect(evaluate('=BITOR(15, 0)')).toBe(15);
+      expect(evaluate('=BITOR(0, 15)')).toBe(15);
+    });
+
+    test('should handle same numbers', () => {
+      const result = evaluate('=BITOR(42, 42)');
+      expect(result).toBe(42);
+    });
+
+    test('should return #NUM! for negative numbers', () => {
+      const result = evaluate('=BITOR(-1, 5)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should return #NUM! for non-integer', () => {
+      const result = evaluate('=BITOR(5.5, 3)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should work with large safe numbers', () => {
+      const result = evaluate('=BITOR(1000000, 500000)');
+      expect(result).toBe(1000000 | 500000);
+    });
+  });
+
+  describe('BITXOR', () => {
+    test('should perform bitwise XOR on simple numbers', () => {
+      const result = evaluate('=BITXOR(5, 3)');
+      expect(result).toBe(6); // 101 XOR 011 = 110
+    });
+
+    test('should perform bitwise XOR on larger numbers', () => {
+      const result = evaluate('=BITXOR(13, 25)');
+      expect(result).toBe(20); // 01101 XOR 11001 = 10100
+    });
+
+    test('should handle zero', () => {
+      expect(evaluate('=BITXOR(0, 0)')).toBe(0);
+      expect(evaluate('=BITXOR(15, 0)')).toBe(15);
+      expect(evaluate('=BITXOR(0, 15)')).toBe(15);
+    });
+
+    test('should handle same numbers (result is 0)', () => {
+      const result = evaluate('=BITXOR(42, 42)');
+      expect(result).toBe(0);
+    });
+
+    test('should return #NUM! for negative numbers', () => {
+      const result = evaluate('=BITXOR(-1, 5)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should return #NUM! for non-integer', () => {
+      const result = evaluate('=BITXOR(5.5, 3)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should work with large safe numbers', () => {
+      const result = evaluate('=BITXOR(1000000, 500000)');
+      expect(result).toBe(1000000 ^ 500000);
+    });
+
+    test('XOR twice should return original', () => {
+      // XOR is its own inverse: (A XOR B) XOR B = A
+      const result1 = evaluate('=BITXOR(42, 17)');
+      const result2 = evaluate(`=BITXOR(${result1}, 17)`);
+      expect(result2).toBe(42);
+    });
+  });
+
+  describe('BITLSHIFT', () => {
+    test('should shift left by specified bits', () => {
+      const result = evaluate('=BITLSHIFT(5, 2)');
+      expect(result).toBe(20); // 101 << 2 = 10100
+    });
+
+    test('should shift left by 4 bits', () => {
+      const result = evaluate('=BITLSHIFT(3, 4)');
+      expect(result).toBe(48); // 11 << 4 = 110000
+    });
+
+    test('should handle zero shift', () => {
+      const result = evaluate('=BITLSHIFT(42, 0)');
+      expect(result).toBe(42);
+    });
+
+    test('should handle zero value', () => {
+      const result = evaluate('=BITLSHIFT(0, 5)');
+      expect(result).toBe(0);
+    });
+
+    test('should multiply by powers of 2', () => {
+      // Left shift by N is equivalent to multiply by 2^N
+      expect(evaluate('=BITLSHIFT(7, 1)')).toBe(14); // 7 * 2
+      expect(evaluate('=BITLSHIFT(7, 2)')).toBe(28); // 7 * 4
+      expect(evaluate('=BITLSHIFT(7, 3)')).toBe(56); // 7 * 8
+    });
+
+    test('should return #NUM! for negative number', () => {
+      const result = evaluate('=BITLSHIFT(-5, 2)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should return #NUM! for non-integer', () => {
+      const result = evaluate('=BITLSHIFT(5.5, 2)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should return #NUM! if result exceeds 2^48-1', () => {
+      const result = evaluate('=BITLSHIFT(1000000000000, 10)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('negative shift should perform right shift', () => {
+      const result = evaluate('=BITLSHIFT(20, -2)');
+      expect(result).toBe(5); // Same as BITRSHIFT(20, 2)
+    });
+  });
+
+  describe('BITRSHIFT', () => {
+    test('should shift right by specified bits', () => {
+      const result = evaluate('=BITRSHIFT(20, 2)');
+      expect(result).toBe(5); // 10100 >> 2 = 101
+    });
+
+    test('should shift right by 4 bits', () => {
+      const result = evaluate('=BITRSHIFT(48, 4)');
+      expect(result).toBe(3); // 110000 >> 4 = 11
+    });
+
+    test('should handle zero shift', () => {
+      const result = evaluate('=BITRSHIFT(42, 0)');
+      expect(result).toBe(42);
+    });
+
+    test('should handle zero value', () => {
+      const result = evaluate('=BITRSHIFT(0, 5)');
+      expect(result).toBe(0);
+    });
+
+    test('should divide by powers of 2 (integer division)', () => {
+      // Right shift by N is equivalent to integer division by 2^N
+      expect(evaluate('=BITRSHIFT(14, 1)')).toBe(7); // 14 / 2
+      expect(evaluate('=BITRSHIFT(28, 2)')).toBe(7); // 28 / 4
+      expect(evaluate('=BITRSHIFT(56, 3)')).toBe(7); // 56 / 8
+    });
+
+    test('should return #NUM! for negative number', () => {
+      const result = evaluate('=BITRSHIFT(-5, 2)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('should return #NUM! for non-integer', () => {
+      const result = evaluate('=BITRSHIFT(5.5, 2)');
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#NUM!');
+    });
+
+    test('large shift should return 0', () => {
+      const result = evaluate('=BITRSHIFT(42, 100)');
+      expect(result).toBe(0);
+    });
+
+    test('negative shift should perform left shift', () => {
+      const result = evaluate('=BITRSHIFT(5, -2)');
+      expect(result).toBe(20); // Same as BITLSHIFT(5, 2)
+    });
+  });
+
+  describe('Bitwise integration tests', () => {
+    test('BITAND and BITOR relationship', () => {
+      // For any A and B: (A AND B) OR (A XOR B) = A OR B
+      const a = 13;
+      const b = 25;
+      const andResult = evaluate(`=BITAND(${a}, ${b})`);
+      const xorResult = evaluate(`=BITXOR(${a}, ${b})`);
+      const orFromParts = evaluate(`=BITOR(${andResult}, ${xorResult})`);
+      const orDirect = evaluate(`=BITOR(${a}, ${b})`);
+      expect(orFromParts).toBe(orDirect);
+    });
+
+    test('shift operations are inverse', () => {
+      // Left shift then right shift should return original (if no overflow)
+      const original = 42;
+      const shifted = evaluate(`=BITLSHIFT(${original}, 3)`);
+      const restored = evaluate(`=BITRSHIFT(${shifted}, 3)`);
+      expect(restored).toBe(original);
+    });
+
+    test('XOR with all 1s is equivalent to NOT', () => {
+      // In 8-bit space: A XOR 255 = NOT A
+      const a = 42;
+      const mask = 255;
+      const result = evaluate(`=BITXOR(${a}, ${mask})`);
+      expect(result).toBe(213); // ~42 in 8-bit = 213
+    });
+
+    test('combining operations', () => {
+      // (A AND B) OR (A AND NOT B) = A
+      // Using 8-bit mask for NOT
+      const a = 42;
+      const b = 17;
+      const mask = 255;
+      
+      const andB = evaluate(`=BITAND(${a}, ${b})`);
+      const notB = evaluate(`=BITXOR(${b}, ${mask})`);
+      const andNotB = evaluate(`=BITAND(${a}, ${notB})`);
+      const result = evaluate(`=BITOR(${andB}, ${andNotB})`);
+      
+      // Result should be A masked to 8 bits
+      expect(result).toBe(a);
+    });
+
+    test('shift and AND for masking', () => {
+      // Extract specific bits using shift and AND
+      const value = 0b11010110; // 214
+      
+      // Extract bits 2-4 (shift right by 2, then AND with 7)
+      const shifted = evaluate(`=BITRSHIFT(${value}, 2)`);
+      const masked = evaluate(`=BITAND(${shifted}, 7)`);
+      
+      expect(masked).toBe(5); // bits 2-4 are 101 = 5
     });
   });
 });

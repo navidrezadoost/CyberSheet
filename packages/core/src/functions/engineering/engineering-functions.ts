@@ -442,3 +442,222 @@ export function OCT2HEX(number: any, places?: any): FormulaValue {
   // Then convert decimal to hex
   return DEC2HEX(decimal, places);
 }
+
+// ============================================================================
+// BITWISE OPERATIONS
+// ============================================================================
+
+/**
+ * BITAND - Bitwise AND operation
+ * 
+ * @param number1 - First number (must be >= 0 and < 2^48)
+ * @param number2 - Second number (must be >= 0 and < 2^48)
+ * @returns Result of bitwise AND operation
+ * 
+ * @example
+ * BITAND(5, 3) → 1 (binary: 101 AND 011 = 001)
+ * BITAND(13, 25) → 9 (binary: 1101 AND 11001 = 01001)
+ */
+export function BITAND(number1: any, number2: any): FormulaValue {
+  // Validate inputs
+  const num1 = Number(number1);
+  const num2 = Number(number2);
+  
+  if (!Number.isFinite(num1) || !Number.isFinite(num2)) {
+    return new Error('#VALUE!');
+  }
+  
+  // Check if integers
+  if (!Number.isInteger(num1) || !Number.isInteger(num2)) {
+    return new Error('#NUM!');
+  }
+  
+  // Check range (0 to 2^48-1 in Excel)
+  const MAX_VALUE = Math.pow(2, 48) - 1;
+  if (num1 < 0 || num1 > MAX_VALUE || num2 < 0 || num2 > MAX_VALUE) {
+    return new Error('#NUM!');
+  }
+  
+  // Perform bitwise AND
+  // For large numbers, use BigInt to avoid precision issues
+  if (num1 > Number.MAX_SAFE_INTEGER || num2 > Number.MAX_SAFE_INTEGER) {
+    const result = BigInt(num1) & BigInt(num2);
+    return Number(result);
+  }
+  
+  return num1 & num2;
+}
+
+/**
+ * BITOR - Bitwise OR operation
+ * 
+ * @param number1 - First number (must be >= 0 and < 2^48)
+ * @param number2 - Second number (must be >= 0 and < 2^48)
+ * @returns Result of bitwise OR operation
+ * 
+ * @example
+ * BITOR(5, 3) → 7 (binary: 101 OR 011 = 111)
+ * BITOR(13, 25) → 29 (binary: 1101 OR 11001 = 11101)
+ */
+export function BITOR(number1: any, number2: any): FormulaValue {
+  // Validate inputs
+  const num1 = Number(number1);
+  const num2 = Number(number2);
+  
+  if (!Number.isFinite(num1) || !Number.isFinite(num2)) {
+    return new Error('#VALUE!');
+  }
+  
+  // Check if integers
+  if (!Number.isInteger(num1) || !Number.isInteger(num2)) {
+    return new Error('#NUM!');
+  }
+  
+  // Check range (0 to 2^48-1 in Excel)
+  const MAX_VALUE = Math.pow(2, 48) - 1;
+  if (num1 < 0 || num1 > MAX_VALUE || num2 < 0 || num2 > MAX_VALUE) {
+    return new Error('#NUM!');
+  }
+  
+  // Perform bitwise OR
+  if (num1 > Number.MAX_SAFE_INTEGER || num2 > Number.MAX_SAFE_INTEGER) {
+    const result = BigInt(num1) | BigInt(num2);
+    return Number(result);
+  }
+  
+  return num1 | num2;
+}
+
+/**
+ * BITXOR - Bitwise XOR (exclusive OR) operation
+ * 
+ * @param number1 - First number (must be >= 0 and < 2^48)
+ * @param number2 - Second number (must be >= 0 and < 2^48)
+ * @returns Result of bitwise XOR operation
+ * 
+ * @example
+ * BITXOR(5, 3) → 6 (binary: 101 XOR 011 = 110)
+ * BITXOR(13, 25) → 20 (binary: 01101 XOR 11001 = 10100)
+ */
+export function BITXOR(number1: any, number2: any): FormulaValue {
+  // Validate inputs
+  const num1 = Number(number1);
+  const num2 = Number(number2);
+  
+  if (!Number.isFinite(num1) || !Number.isFinite(num2)) {
+    return new Error('#VALUE!');
+  }
+  
+  // Check if integers
+  if (!Number.isInteger(num1) || !Number.isInteger(num2)) {
+    return new Error('#NUM!');
+  }
+  
+  // Check range (0 to 2^48-1 in Excel)
+  const MAX_VALUE = Math.pow(2, 48) - 1;
+  if (num1 < 0 || num1 > MAX_VALUE || num2 < 0 || num2 > MAX_VALUE) {
+    return new Error('#NUM!');
+  }
+  
+  // Perform bitwise XOR
+  if (num1 > Number.MAX_SAFE_INTEGER || num2 > Number.MAX_SAFE_INTEGER) {
+    const result = BigInt(num1) ^ BigInt(num2);
+    return Number(result);
+  }
+  
+  return num1 ^ num2;
+}
+
+/**
+ * BITLSHIFT - Bitwise left shift operation
+ * 
+ * @param number - Number to shift (must be >= 0 and < 2^48)
+ * @param shiftAmount - Number of bits to shift left (must be integer)
+ * @returns Number shifted left by specified bits
+ * 
+ * @example
+ * BITLSHIFT(5, 2) → 20 (binary: 101 << 2 = 10100)
+ * BITLSHIFT(3, 4) → 48 (binary: 11 << 4 = 110000)
+ */
+export function BITLSHIFT(number: any, shiftAmount: any): FormulaValue {
+  // Validate inputs
+  const num = Number(number);
+  const shift = Number(shiftAmount);
+  
+  if (!Number.isFinite(num) || !Number.isFinite(shift)) {
+    return new Error('#VALUE!');
+  }
+  
+  // Check if integers
+  if (!Number.isInteger(num) || !Number.isInteger(shift)) {
+    return new Error('#NUM!');
+  }
+  
+  // Check range for number (0 to 2^48-1 in Excel)
+  const MAX_VALUE = Math.pow(2, 48) - 1;
+  if (num < 0 || num > MAX_VALUE) {
+    return new Error('#NUM!');
+  }
+  
+  // Negative shift means right shift
+  if (shift < 0) {
+    return BITRSHIFT(num, -shift);
+  }
+  
+  // Perform left shift using BigInt for accuracy
+  const result = BigInt(num) << BigInt(shift);
+  const numResult = Number(result);
+  
+  // Check if result exceeds Excel's limit
+  if (numResult > MAX_VALUE || !Number.isFinite(numResult)) {
+    return new Error('#NUM!');
+  }
+  
+  return numResult;
+}
+
+/**
+ * BITRSHIFT - Bitwise right shift operation
+ * 
+ * @param number - Number to shift (must be >= 0 and < 2^48)
+ * @param shiftAmount - Number of bits to shift right (must be integer)
+ * @returns Number shifted right by specified bits
+ * 
+ * @example
+ * BITRSHIFT(20, 2) → 5 (binary: 10100 >> 2 = 101)
+ * BITRSHIFT(48, 4) → 3 (binary: 110000 >> 4 = 11)
+ */
+export function BITRSHIFT(number: any, shiftAmount: any): FormulaValue {
+  // Validate inputs
+  const num = Number(number);
+  const shift = Number(shiftAmount);
+  
+  if (!Number.isFinite(num) || !Number.isFinite(shift)) {
+    return new Error('#VALUE!');
+  }
+  
+  // Check if integers
+  if (!Number.isInteger(num) || !Number.isInteger(shift)) {
+    return new Error('#NUM!');
+  }
+  
+  // Check range for number (0 to 2^48-1 in Excel)
+  const MAX_VALUE = Math.pow(2, 48) - 1;
+  if (num < 0 || num > MAX_VALUE) {
+    return new Error('#NUM!');
+  }
+  
+  // Negative shift means left shift
+  if (shift < 0) {
+    return BITLSHIFT(num, -shift);
+  }
+  
+  // For very large shifts, result is always 0
+  if (shift >= 48) {
+    return 0;
+  }
+  
+  // Perform right shift using BigInt for accuracy
+  const result = BigInt(num) >> BigInt(shift);
+  return Number(result);
+}
