@@ -258,12 +258,21 @@ export function registerBuiltInFunctions(registry: FunctionRegistry): void {
     ['NOMINAL', FinancialFunctions.NOMINAL, { category: FunctionCategory.FINANCIAL, minArgs: 2, maxArgs: 2 }],
   ] as const;
 
-  // Information functions (Week 10 Day 2)
+  // Information functions (Week 10 Day 2, Week 11 Day 1)
   const informationFunctions = [
     ['ISFORMULA', InformationFunctions.ISFORMULA, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1, needsContext: true }],
     ['ISREF', InformationFunctions.ISREF, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
     ['CELL', InformationFunctions.CELL, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 2, needsContext: true }],
     ['INFO', InformationFunctions.INFO, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    // Week 11 Day 1: Type checking functions
+    ['ISNUMBER', InformationFunctions.ISNUMBER, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['ISTEXT', InformationFunctions.ISTEXT, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['ISBLANK', InformationFunctions.ISBLANK, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['ISLOGICAL', InformationFunctions.ISLOGICAL, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['ISNONTEXT', InformationFunctions.ISNONTEXT, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['TYPE', InformationFunctions.TYPE, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['N', InformationFunctions.N, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
+    ['T', InformationFunctions.T, { category: FunctionCategory.INFORMATION, minArgs: 1, maxArgs: 1 }],
   ] as const;
 
   // Engineering functions (Week 10 Days 3-5)

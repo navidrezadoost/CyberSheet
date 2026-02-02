@@ -3,6 +3,7 @@
  * 
  * Information and cell inspection functions for Excel compatibility.
  * Week 10 Day 2: ISFORMULA, ISREF, CELL, INFO
+ * Week 11 Day 1: ISNUMBER, ISTEXT, ISBLANK, ISLOGICAL, TYPE, N, T, ISNONTEXT
  * 
  * These functions provide metadata and type information about cells and the workbook.
  * 
@@ -271,4 +272,200 @@ export const INFO: FormulaFunction = (typeText: any) => {
     default:
       return new Error('#VALUE!');
   }
+};
+
+// ============================================================================
+// Week 11 Day 1: Type Checking and Conversion Functions
+// ============================================================================
+
+/**
+ * ISNUMBER - Checks if a value is a number
+ * 
+ * Syntax: ISNUMBER(value)
+ * Returns TRUE if the value is a number, FALSE otherwise
+ * 
+ * @example
+ * =ISNUMBER(100) → TRUE
+ * =ISNUMBER("100") → FALSE
+ * =ISNUMBER(3.14) → TRUE
+ * =ISNUMBER(TRUE) → FALSE
+ */
+export const ISNUMBER: FormulaFunction = (value: any) => {
+  // Numbers are true, everything else is false
+  return typeof value === 'number' && !isNaN(value);
+};
+
+/**
+ * ISTEXT - Checks if a value is text
+ * 
+ * Syntax: ISTEXT(value)
+ * Returns TRUE if the value is text, FALSE otherwise
+ * 
+ * @example
+ * =ISTEXT("hello") → TRUE
+ * =ISTEXT(100) → FALSE
+ * =ISTEXT("") → TRUE (empty string is text)
+ * =ISTEXT(TRUE) → FALSE
+ */
+export const ISTEXT: FormulaFunction = (value: any) => {
+  return typeof value === 'string';
+};
+
+/**
+ * ISBLANK - Checks if a value is blank
+ * 
+ * Syntax: ISBLANK(value)
+ * Returns TRUE if the value is blank (null, undefined, or empty string), FALSE otherwise
+ * 
+ * @example
+ * =ISBLANK(A1) → TRUE if A1 is empty
+ * =ISBLANK("") → TRUE
+ * =ISBLANK(0) → FALSE
+ * =ISBLANK(FALSE) → FALSE
+ */
+export const ISBLANK: FormulaFunction = (value: any) => {
+  return value === null || value === undefined || value === '';
+};
+
+/**
+ * ISLOGICAL - Checks if a value is a logical value (TRUE or FALSE)
+ * 
+ * Syntax: ISLOGICAL(value)
+ * Returns TRUE if the value is a boolean, FALSE otherwise
+ * 
+ * @example
+ * =ISLOGICAL(TRUE) → TRUE
+ * =ISLOGICAL(FALSE) → TRUE
+ * =ISLOGICAL(1) → FALSE
+ * =ISLOGICAL("TRUE") → FALSE
+ */
+export const ISLOGICAL: FormulaFunction = (value: any) => {
+  return typeof value === 'boolean';
+};
+
+/**
+ * ISNONTEXT - Checks if a value is not text
+ * 
+ * Syntax: ISNONTEXT(value)
+ * Returns TRUE if the value is not text, FALSE if it is text
+ * 
+ * @example
+ * =ISNONTEXT(100) → TRUE
+ * =ISNONTEXT("hello") → FALSE
+ * =ISNONTEXT(TRUE) → TRUE
+ * =ISNONTEXT("") → FALSE (empty string is text)
+ */
+export const ISNONTEXT: FormulaFunction = (value: any) => {
+  return typeof value !== 'string';
+};
+
+/**
+ * TYPE - Returns the type of value
+ * 
+ * Syntax: TYPE(value)
+ * Returns a number indicating the type:
+ * - 1: Number
+ * - 2: Text
+ * - 4: Logical (Boolean)
+ * - 16: Error
+ * - 64: Array
+ * 
+ * @example
+ * =TYPE(100) → 1
+ * =TYPE("hello") → 2
+ * =TYPE(TRUE) → 4
+ * =TYPE(#VALUE!) → 16
+ * =TYPE({1,2,3}) → 64
+ */
+export const TYPE: FormulaFunction = (value: any) => {
+  // Check for error first
+  if (value instanceof Error) {
+    return 16;
+  }
+  
+  // Check for array
+  if (Array.isArray(value)) {
+    return 64;
+  }
+  
+  // Check for number
+  if (typeof value === 'number' && !isNaN(value)) {
+    return 1;
+  }
+  
+  // Check for text
+  if (typeof value === 'string') {
+    return 2;
+  }
+  
+  // Check for logical
+  if (typeof value === 'boolean') {
+    return 4;
+  }
+  
+  // Default to text for unknown types
+  return 2;
+};
+
+/**
+ * N - Converts a value to a number
+ * 
+ * Syntax: N(value)
+ * Returns the numeric value:
+ * - Number: returns the number
+ * - TRUE: returns 1
+ * - FALSE: returns 0
+ * - Date: returns serial number
+ * - Text/Other: returns 0
+ * - Error: returns the error
+ * 
+ * @example
+ * =N(100) → 100
+ * =N(TRUE) → 1
+ * =N(FALSE) → 0
+ * =N("text") → 0
+ * =N("123") → 0 (text, not parsed)
+ */
+export const N: FormulaFunction = (value: any) => {
+  // Errors pass through
+  if (value instanceof Error) {
+    return value;
+  }
+  
+  // Numbers return as-is
+  if (typeof value === 'number' && !isNaN(value)) {
+    return value;
+  }
+  
+  // Booleans: TRUE=1, FALSE=0
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+  
+  // Everything else returns 0
+  return 0;
+};
+
+/**
+ * T - Converts a value to text
+ * 
+ * Syntax: T(value)
+ * Returns:
+ * - Text: returns the text
+ * - Non-text: returns empty string ""
+ * 
+ * @example
+ * =T("hello") → "hello"
+ * =T(100) → ""
+ * =T(TRUE) → ""
+ * =T("") → ""
+ */
+export const T: FormulaFunction = (value: any) => {
+  // Only text returns as-is
+  if (typeof value === 'string') {
+    return value;
+  }
+  
+  // Everything else returns empty string
+  return '';
 };
