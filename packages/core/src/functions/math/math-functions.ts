@@ -703,35 +703,25 @@ export const MULTINOMIAL: FormulaFunction = (...args) => {
  * Returns the sum of the difference of squares: Σ(x² - y²)
  * 
  * @example
- * =SUMX2MY2({2, 3, 9}, {6, 5, 11}) → -55
+ * =SUMX2MY2({2, 3, 9}, {6, 5, 11}) → -88
  * // (2²-6²) + (3²-5²) + (9²-11²) = (4-36) + (9-25) + (81-121) = -32 + -16 + -40 = -88
  */
 export const SUMX2MY2: FormulaFunction = (arrayX, arrayY) => {
-  // Flatten arrays
-  const flattenArray = (arr: any): number[] => {
-    if (!Array.isArray(arr)) return [toNumber(arr)] as number[];
-    const result: number[] = [];
-    for (const item of arr) {
-      if (Array.isArray(item)) {
-        result.push(...flattenArray(item));
-      } else {
-        const num = toNumber(item);
-        if (typeof num === 'number') result.push(num);
-      }
-    }
-    return result;
-  };
-
-  const xValues = flattenArray(arrayX);
-  const yValues = flattenArray(arrayY);
+  // Convert to arrays (same pattern as SUMPRODUCT)
+  const xArr = Array.isArray(arrayX) ? arrayX : [arrayX];
+  const yArr = Array.isArray(arrayY) ? arrayY : [arrayY];
   
-  if (xValues.length !== yValues.length) {
+  if (xArr.length !== yArr.length) {
     return new Error('#N/A');
   }
   
   let sum = 0;
-  for (let i = 0; i < xValues.length; i++) {
-    sum += (xValues[i] * xValues[i]) - (yValues[i] * yValues[i]);
+  for (let i = 0; i < xArr.length; i++) {
+    const x = toNumber(xArr[i]);
+    const y = toNumber(yArr[i]);
+    if (x instanceof Error) return x;
+    if (y instanceof Error) return y;
+    sum += (x * x) - (y * y);
   }
   
   return sum;
@@ -744,35 +734,25 @@ export const SUMX2MY2: FormulaFunction = (arrayX, arrayY) => {
  * Returns the sum of the sum of squares: Σ(x² + y²)
  * 
  * @example
- * =SUMX2PY2({2, 3, 9}, {6, 5, 11}) → 271
+ * =SUMX2PY2({2, 3, 9}, {6, 5, 11}) → 276
  * // (2²+6²) + (3²+5²) + (9²+11²) = 40 + 34 + 202 = 276
  */
 export const SUMX2PY2: FormulaFunction = (arrayX, arrayY) => {
-  // Flatten arrays
-  const flattenArray = (arr: any): number[] => {
-    if (!Array.isArray(arr)) return [toNumber(arr)] as number[];
-    const result: number[] = [];
-    for (const item of arr) {
-      if (Array.isArray(item)) {
-        result.push(...flattenArray(item));
-      } else {
-        const num = toNumber(item);
-        if (typeof num === 'number') result.push(num);
-      }
-    }
-    return result;
-  };
-
-  const xValues = flattenArray(arrayX);
-  const yValues = flattenArray(arrayY);
+  // Convert to arrays (same pattern as SUMPRODUCT)
+  const xArr = Array.isArray(arrayX) ? arrayX : [arrayX];
+  const yArr = Array.isArray(arrayY) ? arrayY : [arrayY];
   
-  if (xValues.length !== yValues.length) {
+  if (xArr.length !== yArr.length) {
     return new Error('#N/A');
   }
   
   let sum = 0;
-  for (let i = 0; i < xValues.length; i++) {
-    sum += (xValues[i] * xValues[i]) + (yValues[i] * yValues[i]);
+  for (let i = 0; i < xArr.length; i++) {
+    const x = toNumber(xArr[i]);
+    const y = toNumber(yArr[i]);
+    if (x instanceof Error) return x;
+    if (y instanceof Error) return y;
+    sum += (x * x) + (y * y);
   }
   
   return sum;
@@ -785,35 +765,25 @@ export const SUMX2PY2: FormulaFunction = (arrayX, arrayY) => {
  * Returns the sum of squares of differences: Σ(x - y)²
  * 
  * @example
- * =SUMXMY2({2, 3, 9}, {6, 5, 11}) → 36
+ * =SUMXMY2({2, 3, 9}, {6, 5, 11}) → 24
  * // (2-6)² + (3-5)² + (9-11)² = 16 + 4 + 4 = 24
  */
 export const SUMXMY2: FormulaFunction = (arrayX, arrayY) => {
-  // Flatten arrays
-  const flattenArray = (arr: any): number[] => {
-    if (!Array.isArray(arr)) return [toNumber(arr)] as number[];
-    const result: number[] = [];
-    for (const item of arr) {
-      if (Array.isArray(item)) {
-        result.push(...flattenArray(item));
-      } else {
-        const num = toNumber(item);
-        if (typeof num === 'number') result.push(num);
-      }
-    }
-    return result;
-  };
-
-  const xValues = flattenArray(arrayX);
-  const yValues = flattenArray(arrayY);
+  // Convert to arrays (same pattern as SUMPRODUCT)
+  const xArr = Array.isArray(arrayX) ? arrayX : [arrayX];
+  const yArr = Array.isArray(arrayY) ? arrayY : [arrayY];
   
-  if (xValues.length !== yValues.length) {
+  if (xArr.length !== yArr.length) {
     return new Error('#N/A');
   }
   
   let sum = 0;
-  for (let i = 0; i < xValues.length; i++) {
-    const diff = xValues[i] - yValues[i];
+  for (let i = 0; i < xArr.length; i++) {
+    const x = toNumber(xArr[i]);
+    const y = toNumber(yArr[i]);
+    if (x instanceof Error) return x;
+    if (y instanceof Error) return y;
+    const diff = x - y;
     sum += diff * diff;
   }
   

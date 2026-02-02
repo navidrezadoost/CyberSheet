@@ -1128,7 +1128,9 @@ export class FormulaEngine {
                         'STEYX', 'TREND', 'PEARSON',
                         // Financial functions (Week 8 Days 4-5)
                         'NPV', 'XNPV', 'PV', 'FV', 'PMT', 'IPMT', 'PPMT',
-                        'IRR', 'XIRR', 'MIRR', 'NPER', 'RATE', 'EFFECT', 'NOMINAL'];
+                        'IRR', 'XIRR', 'MIRR', 'NPER', 'RATE', 'EFFECT', 'NOMINAL',
+                        // Math array functions (Week 11 Day 2)
+                        'PRODUCT', 'SUMPRODUCT', 'SUMX2MY2', 'SUMX2PY2', 'SUMXMY2'];
     return arrayFuncs.includes(name.toUpperCase());
   }
 

@@ -74,9 +74,9 @@ export function registerBuiltInFunctions(registry: FunctionRegistry): void {
     ['PRODUCT', MathFunctions.PRODUCT, { category: FunctionCategory.MATH }],
     ['SQRTPI', MathFunctions.SQRTPI, { category: FunctionCategory.MATH, minArgs: 1, maxArgs: 1 }],
     ['MULTINOMIAL', MathFunctions.MULTINOMIAL, { category: FunctionCategory.MATH }],
-    ['SUMX2MY2', MathFunctions.SUMX2MY2, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
-    ['SUMX2PY2', MathFunctions.SUMX2PY2, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
-    ['SUMXMY2', MathFunctions.SUMXMY2, { category: FunctionCategory.MATH, minArgs: 2, maxArgs: 2 }],
+    ['SUMX2MY2', MathFunctions.SUMX2MY2, { category: FunctionCategory.MATH }],
+    ['SUMX2PY2', MathFunctions.SUMX2PY2, { category: FunctionCategory.MATH }],
+    ['SUMXMY2', MathFunctions.SUMXMY2, { category: FunctionCategory.MATH }],
   ] as const;
 
   // Text functions
