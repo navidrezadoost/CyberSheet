@@ -68,11 +68,58 @@ export type DataBarRule = RuleBase & {
 	maxValue?: number;
 };
 
+/**
+ * Excel's 19 Icon Sets
+ * 3-icon sets: arrows, triangles, traffic lights, signs, symbols, flags, stars
+ * 4-icon sets: arrows (4), traffic lights (4), ratings
+ * 5-icon sets: arrows (5), quarters, ratings (5), boxes
+ */
+export type ExcelIconSet =
+	| '3-arrows'
+	| '3-arrows-gray'
+	| '3-triangles'
+	| '3-traffic-lights'
+	| '3-traffic-lights-rimmed'
+	| '3-signs'
+	| '3-symbols-circled'
+	| '3-symbols'
+	| '3-flags'
+	| '3-stars'
+	| '4-arrows'
+	| '4-arrows-gray'
+	| '4-traffic-lights'
+	| '4-ratings'
+	| '5-arrows'
+	| '5-arrows-gray'
+	| '5-quarters'
+	| '5-ratings'
+	| '5-boxes';
+
+/**
+ * Icon threshold definition
+ * Determines which icon to show based on cell value
+ */
+export type IconThreshold = {
+	/** Threshold value (number, percentage, percentile, or formula) */
+	value: number | string;
+	/** Threshold type */
+	type: 'number' | 'percent' | 'percentile' | 'formula';
+	/** Icon identifier for this threshold */
+	icon: string;
+	/** Comparison operator */
+	operator: '>=' | '>' | '<=' | '<' | '=';
+};
+
 export type IconSetRule = RuleBase & {
 	type: 'icon-set';
-	iconSet: 'arrows' | 'traffic-lights' | 'flags' | 'stars';
-	thresholds: number[]; // ascending values
+	/** One of Excel's 19 icon sets */
+	iconSet: ExcelIconSet;
+	/** Threshold definitions (ordered from highest to lowest) */
+	thresholds: IconThreshold[];
+	/** Reverse icon order (flip assignment) */
 	reverseOrder?: boolean;
+	/** Show icon only, hide cell value (renderer handles this) */
+	showIconOnly?: boolean;
 };
 
 export type FormulaRule = RuleBase & {
@@ -223,8 +270,8 @@ export class ConditionalFormattingEngine {
 			}
 			case 'icon-set': {
 				if (typeof value !== 'number') return { matched: false };
-				const idx = this.pickIconIndex(value, rule.thresholds, rule.reverseOrder);
-				return { matched: true, icon: { iconSet: rule.iconSet, iconIndex: idx, reverseOrder: rule.reverseOrder } };
+				const result = this.evaluateIconSetRule(value, rule, ctx);
+				return result;
 			}
 			case 'formula': {
 				const evaluator = options?.formulaEvaluator;
@@ -316,6 +363,208 @@ export class ConditionalFormattingEngine {
 		return Math.min(1, Math.max(0, percent));
 	}
 
+	/**
+	 * Evaluate icon set rule (Phase 4)
+	 * Uses statisticalCache for percentile calculations
+	 */
+	private evaluateIconSetRule(
+		value: number,
+		rule: IconSetRule,
+		ctx: ConditionalFormattingContext
+	): { matched: boolean; icon?: IconRender } {
+		if (!rule.thresholds || rule.thresholds.length === 0) {
+			throw new Error('Icon set rule missing thresholds');
+		}
+
+		// Validate icon set name
+		const validIconSets: ExcelIconSet[] = [
+			'3-arrows', '3-arrows-gray', '3-triangles',
+			'3-traffic-lights', '3-traffic-lights-rimmed', '3-signs',
+			'3-symbols-circled', '3-symbols', '3-flags', '3-stars',
+			'4-arrows', '4-arrows-gray', '4-traffic-lights', '4-ratings',
+			'5-arrows', '5-arrows-gray', '5-quarters', '5-ratings', '5-boxes'
+		];
+		
+		if (!validIconSets.includes(rule.iconSet)) {
+			throw new Error(`Invalid icon set: ${rule.iconSet}`);
+		}
+
+		// Get range values for percentile calculation
+		const ranges = rule.ranges ?? [];
+		if (ranges.length === 0 || !ctx.getValue) {
+			// No range specified, use simple threshold comparison
+			return this.evaluateIconSetSimple(value, rule);
+		}
+
+		// Use cache for percentile calculation (invariant #1: engine owns cache)
+		const stats = this.statisticalCache.getIconSetStats(
+			rule,
+			ranges,
+			ctx.getValue
+		);
+
+		// Excel-accurate algorithm: 
+		// 1. For 'number' thresholds: Compare value directly
+		// 2. For 'percent'/'percentile' thresholds: Compare value's percentile rank
+		//
+		// Example: [67% →icon0, 33% →icon1, 0% →icon2] with value=50 in dataset [50,50,...,50]
+		//   Value 50 is at 50th percentile rank
+		//   Check 67%: rank(50%) >= 67%? NO
+		//   Check 33%: rank(50%) >= 33%? YES → icon1 ✓
+		//
+		// Key insight: When all values equal, percentile rank = 50%, not 100%
+		
+		let iconIndex = rule.thresholds.length - 1; // Default: last icon if no match
+
+		// Determine if we need percentile rank comparison
+		const needsPercentileRank = rule.thresholds.some(
+			t => t.type === 'percent' || t.type === 'percentile'
+		);
+
+		let valuePercentileRank: number | undefined;
+		if (needsPercentileRank) {
+			// Find where this value falls in the sorted distribution
+			// Use MIDPOINT of all equal values (Excel behavior for ties)
+			const firstIndex = stats.sortedValues.findIndex(v => v >= value);
+			
+			// Find last occurrence of this value
+			let lastIndex = firstIndex;
+			if (firstIndex !== -1) {
+				for (let i = firstIndex + 1; i < stats.sortedValues.length; i++) {
+					if (stats.sortedValues[i] <= value) {
+						lastIndex = i;
+					} else {
+						break;
+					}
+				}
+			}
+			
+			if (firstIndex === -1) {
+				// Value is outside range (shouldn't happen in practice)
+				valuePercentileRank = value > stats.max ? 1.0 : 0.0;
+			} else {
+				// Use midpoint of the range of equal values
+				const midpoint = (firstIndex + lastIndex) / 2;
+				valuePercentileRank = stats.sortedValues.length > 1
+					? midpoint / (stats.sortedValues.length - 1)
+					: 0.5; // Edge case: single value
+			}
+		}
+
+		for (let i = 0; i < rule.thresholds.length; i++) {
+			const threshold = rule.thresholds[i];
+			let meetsThreshold: boolean;
+
+			switch (threshold.type) {
+				case 'number':
+					// Direct value comparison
+					const thresholdValue = Number(threshold.value);
+					meetsThreshold = this.compareValue(value, thresholdValue, threshold.operator);
+					break;
+				
+				case 'percent':
+					// Compare value's percentile rank against threshold percentile
+					const percentileThreshold = Number(threshold.value) / 100; // 67 → 0.67
+					meetsThreshold = this.compareValue(
+						valuePercentileRank!,
+						percentileThreshold,
+						threshold.operator
+					);
+					break;
+				
+				case 'percentile':
+					// Direct percentile comparison (0.67 means 67th percentile)
+					meetsThreshold = this.compareValue(
+						valuePercentileRank!,
+						Number(threshold.value),
+						threshold.operator
+					);
+					break;
+				
+				case 'formula':
+					// Formula evaluation (future enhancement)
+					throw new Error('Formula thresholds not yet implemented');
+				
+				default:
+					throw new Error(`Unknown threshold type: ${threshold.type}`);
+			}
+
+			if (meetsThreshold) {
+				iconIndex = i;
+				break; // First matching threshold wins
+			}
+		}
+
+		// Apply reverseOrder if specified
+		if (rule.reverseOrder) {
+			iconIndex = rule.thresholds.length - 1 - iconIndex;
+		}
+
+		return {
+			matched: true,
+			icon: {
+				iconSet: rule.iconSet,
+				iconIndex,
+				reverseOrder: rule.reverseOrder,
+			},
+		};
+	}
+
+	/**
+	 * Simple icon set evaluation (no percentiles, just direct value comparison)
+	 */
+	private evaluateIconSetSimple(value: number, rule: IconSetRule): { matched: boolean; icon?: IconRender } {
+		let iconIndex = rule.thresholds.length - 1; // Default to last icon
+
+		for (let i = 0; i < rule.thresholds.length; i++) {
+			const threshold = rule.thresholds[i];
+			if (threshold.type !== 'number') {
+				throw new Error('Percentile/formula thresholds require range context');
+			}
+
+			const thresholdValue = Number(threshold.value);
+			const meetsThreshold = this.compareValue(value, thresholdValue, threshold.operator);
+			if (meetsThreshold) {
+				iconIndex = i;
+				break;
+			}
+		}
+
+		if (rule.reverseOrder) {
+			iconIndex = rule.thresholds.length - 1 - iconIndex;
+		}
+
+		return {
+			matched: true,
+			icon: {
+				iconSet: rule.iconSet,
+				iconIndex,
+				reverseOrder: rule.reverseOrder,
+			},
+		};
+	}
+
+	/**
+	 * Compare value against threshold using operator
+	 */
+	private compareValue(value: number, threshold: number, operator: IconThreshold['operator']): boolean {
+		switch (operator) {
+			case '>=':
+				return value >= threshold;
+			case '>':
+				return value > threshold;
+			case '<=':
+				return value <= threshold;
+			case '<':
+				return value < threshold;
+			case '=':
+				return value === threshold;
+			default:
+				return false;
+		}
+	}
+
+	/** @deprecated Legacy method, replaced by evaluateIconSetRule */
 	private pickIconIndex(value: number, thresholds: number[], reverse?: boolean): number {
 		const sorted = [...thresholds].sort((a, b) => a - b);
 		let idx = 0;

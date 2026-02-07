@@ -14,6 +14,7 @@ import type {
 	TopBottomRule,
 	AboveAverageRule,
 	DuplicateUniqueRule,
+	IconSetRule,
 } from './ConditionalFormattingEngine';
 
 /**
@@ -55,7 +56,22 @@ export interface DuplicateUniqueCache {
 	timestamp: number;
 }
 
-export type StatisticalCache = TopBottomCache | AboveAverageCache | DuplicateUniqueCache;
+/**
+ * Cached icon set statistics (Phase 4)
+ * Stores percentile calculations for icon threshold mapping
+ */
+export interface IconSetCache {
+	type: 'icon-set';
+	values: number[]; // All numeric values in range
+	sortedValues: number[]; // Sorted for percentile calculation
+	percentiles: Map<number, number>; // percentile → value
+	min: number;
+	max: number;
+	rangeSignature: string;
+	timestamp: number;
+}
+
+export type StatisticalCache = TopBottomCache | AboveAverageCache | DuplicateUniqueCache | IconSetCache;
 
 /**
  * Statistical Computation Cache Manager
@@ -266,10 +282,104 @@ export class StatisticalCacheManager {
 	}
 
 	/**
+	 * Get or compute icon set statistics for a range (Phase 4)
+	 * Computes percentiles for threshold mapping
+	 */
+	getIconSetStats(
+		rule: IconSetRule,
+		ranges: Range[],
+		getValue: (address: Address) => CellValue
+	): IconSetCache {
+		const sig = this.getCacheKey('icon-set', ranges, rule);
+		const cached = this.cache.get(sig) as IconSetCache | undefined;
+
+		if (cached && cached.type === 'icon-set') {
+			this.cacheHits++;
+			return cached;
+		}
+
+		this.cacheMisses++;
+
+		// Collect all numeric values from range(s)
+		const values: number[] = [];
+		for (const range of ranges) {
+			for (let row = range.start.row; row <= range.end.row; row++) {
+				for (let col = range.start.col; col <= range.end.col; col++) {
+					const cellValue = getValue({ row, col });
+					if (typeof cellValue === 'number' && !isNaN(cellValue)) {
+						values.push(cellValue);
+					}
+				}
+			}
+		}
+
+		if (values.length === 0) {
+			// Empty range: return default values
+			const emptyResult: IconSetCache = {
+				type: 'icon-set',
+				values: [],
+				sortedValues: [],
+				percentiles: new Map(),
+				min: 0,
+				max: 0,
+				rangeSignature: this.getRangeSignature(ranges),
+				timestamp: Date.now(),
+			};
+			this.cache.set(sig, emptyResult);
+			return emptyResult;
+		}
+
+		// Sort values for percentile calculation
+		const sortedValues = [...values].sort((a, b) => a - b);
+		const min = sortedValues[0];
+		const max = sortedValues[sortedValues.length - 1];
+
+		// Compute percentiles (0.0 to 1.0)
+		const percentiles = new Map<number, number>();
+		const commonPercentiles = [0, 0.25, 0.33, 0.5, 0.67, 0.75, 1.0];
+		
+		for (const p of commonPercentiles) {
+			const index = Math.floor(p * (sortedValues.length - 1));
+			percentiles.set(p, sortedValues[index]);
+		}
+
+		// Also compute percentiles from rule thresholds
+		for (const threshold of rule.thresholds) {
+			if (threshold.type === 'percent') {
+				const p = Number(threshold.value) / 100;
+				if (!percentiles.has(p)) {
+					const index = Math.floor(p * (sortedValues.length - 1));
+					percentiles.set(p, sortedValues[index]);
+				}
+			} else if (threshold.type === 'percentile') {
+				const p = Number(threshold.value);
+				if (!percentiles.has(p)) {
+					const index = Math.floor(p * (sortedValues.length - 1));
+					percentiles.set(p, sortedValues[index]);
+				}
+			}
+		}
+
+		const result: IconSetCache = {
+			type: 'icon-set',
+			values,
+			sortedValues,
+			percentiles,
+			min,
+			max,
+			rangeSignature: this.getRangeSignature(ranges),
+			timestamp: Date.now(),
+		};
+
+		this.cache.set(sig, result);
+		return result;
+	}
+
+	/**
 	 * Generate cache key for a rule + range combination
 	 */
 	private getCacheKey(
-		type: 'top-bottom' | 'above-average' | 'duplicate-unique',
+		type: 'top-bottom' | 'above-average' | 'duplicate-unique' | 'icon-set',
 		ranges: Range[],
 		rule: any
 	): string {
