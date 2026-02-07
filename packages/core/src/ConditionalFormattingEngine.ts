@@ -1,5 +1,6 @@
 import { Address, CellValue, Range, CellStyle } from './types';
 import { CF_COLOR_SCALES, hexToRgb, rgbToHex } from './ExcelColor';
+import { StatisticalCacheManager } from './StatisticalCacheManager';
 
 export type ValueOperator = '>' | '>=' | '<' | '<=' | '=' | '!=' | 'between' | 'notBetween' | 'contains' | 'notContains' | 'startsWith' | 'endsWith';
 
@@ -145,6 +146,26 @@ export type IconRender = {
 };
 
 export class ConditionalFormattingEngine {
+	private statisticalCache: StatisticalCacheManager;
+
+	constructor() {
+		this.statisticalCache = new StatisticalCacheManager();
+	}
+
+	/**
+	 * Clear statistical cache (call when data changes)
+	 */
+	clearCache(): void {
+		this.statisticalCache.clearCache();
+	}
+
+	/**
+	 * Get cache statistics for performance monitoring
+	 */
+	getCacheStats() {
+		return this.statisticalCache.getCacheStats();
+	}
+
 	applyRules(
 		value: CellValue,
 		rules: ConditionalFormattingRule[],
@@ -555,8 +576,8 @@ export class ConditionalFormattingEngine {
 
 	/**
 	 * Evaluates Top/Bottom N or Top/Bottom N% rule.
-	 * Requires range context with all values to compute rank/percentile.
-	 * If ranges not provided, attempts to scan current column (cells 1-100).
+	 * Uses StatisticalCacheManager to eliminate O(n²) bottleneck.
+	 * Cache computes statistics once per range, not once per cell.
 	 */
 	private evaluateTopBottomRule(value: CellValue, rule: TopBottomRule, ctx: ConditionalFormattingContext): boolean {
 		if (typeof value !== 'number') return false;
@@ -571,50 +592,24 @@ export class ConditionalFormattingEngine {
 		
 		if (!ranges) return false;
 
-		// Collect all numeric values from the range(s)
-		const values: number[] = [];
-		for (const range of ranges) {
-			for (let row = range.start.row; row <= range.end.row; row++) {
-				for (let col = range.start.col; col <= range.end.col; col++) {
-					const cellValue = ctx.getValue({ row, col });
-					if (typeof cellValue === 'number') {
-						values.push(cellValue);
-					}
-				}
-			}
-		}
+		// ✅ Wave 5: Use cache to eliminate O(n²) loop
+		// Get or compute statistics (cached for subsequent cells in same range)
+		const stats = this.statisticalCache.getTopBottomStats(rule, ranges, ctx.getValue);
 
-		if (values.length === 0) return false;
+		if (stats.sortedValues.length === 0) return false;
 
-		// Sort values: descending for top, ascending for bottom
-		const sorted = [...values].sort((a, b) => (rule.mode === 'top' ? b - a : a - b));
-
-		if (rule.rankType === 'number') {
-			// Top/Bottom N items
-			const n = Math.min(Math.max(1, Math.floor(rule.rank)), sorted.length);
-			const threshold = sorted[n - 1];
-			if (rule.mode === 'top') {
-				return value >= threshold;
-			} else {
-				return value <= threshold;
-			}
+		// ✅ Wave 5: Simple threshold comparison (no loops, no sorting)
+		if (rule.mode === 'top') {
+			return value >= stats.threshold;
 		} else {
-			// Top/Bottom N%
-			const percent = Math.min(100, Math.max(0, rule.rank)) / 100;
-			const count = Math.max(1, Math.ceil(values.length * percent));
-			const threshold = sorted[count - 1];
-			if (rule.mode === 'top') {
-				return value >= threshold;
-			} else {
-				return value <= threshold;
-			}
+			return value <= stats.threshold;
 		}
 	}
 
 	/**
 	 * Evaluates Above/Below Average rule.
-	 * Computes average from range, handles empty/error cells, supports standard deviations.
-	 * If ranges not provided, attempts to scan current column (cells 1-100).
+	 * Uses StatisticalCacheManager to eliminate O(n²) bottleneck.
+	 * Cache computes average/stddev once per range, not once per cell.
 	 */
 	private evaluateAboveAverageRule(value: CellValue, rule: AboveAverageRule, ctx: ConditionalFormattingContext): boolean {
 		if (typeof value !== 'number') return false;
@@ -629,35 +624,16 @@ export class ConditionalFormattingEngine {
 		
 		if (!ranges) return false;
 
-		// Collect numeric values from range(s)
-		const values: number[] = [];
-		for (const range of ranges) {
-			for (let row = range.start.row; row <= range.end.row; row++) {
-				for (let col = range.start.col; col <= range.end.col; col++) {
-					const cellValue = ctx.getValue({ row, col });
-					if (typeof cellValue === 'number') {
-						values.push(cellValue);
-					}
-				}
-			}
-		}
+		// ✅ Wave 5: Use cache to eliminate O(n²) loop
+		// Get or compute statistics (cached for subsequent cells in same range)
+		const stats = this.statisticalCache.getAboveAverageStats(rule, ranges, ctx.getValue);
 
-		if (values.length === 0) return false;
+		if (stats.values.length === 0) return false;
 
-		// Compute average
-		const sum = values.reduce((acc, val) => acc + val, 0);
-		const average = sum / values.length;
-
-		// Optionally compute standard deviation
-		let threshold = average;
-		if (rule.standardDeviations != null && rule.standardDeviations > 0) {
-			const variance = values.reduce((acc, val) => acc + Math.pow(val - average, 2), 0) / values.length;
-			const stdDev = Math.sqrt(variance);
-			threshold = average + rule.standardDeviations * stdDev;
-		}
-
-		// Compare value to threshold (use threshold when standardDeviations set, otherwise average)
-		const compareValue = (rule.standardDeviations != null && rule.standardDeviations > 0) ? threshold : average;
+		// ✅ Wave 5: Simple threshold comparison (no loops, no recomputation)
+		const compareValue = (rule.standardDeviations != null && rule.standardDeviations > 0 && stats.adjustedThreshold != null)
+			? stats.adjustedThreshold
+			: stats.average;
 		
 		switch (rule.mode) {
 			case 'above':
@@ -674,9 +650,10 @@ export class ConditionalFormattingEngine {
 	}
 
 	/**
+	/**
 	 * Evaluates Duplicate/Unique Values rule.
-	 * Case-insensitive by default (Excel parity), handles mixed text/number types.
-	 * If ranges not provided, attempts to scan current column (cells 1-100).
+	 * Uses StatisticalCacheManager to eliminate O(n²) bottleneck.
+	 * Cache scans range once and builds value sets, not scanning per cell.
 	 */
 	private evaluateDuplicateUniqueRule(value: CellValue, rule: DuplicateUniqueRule, ctx: ConditionalFormattingContext): boolean {
 		if (value === null || value === undefined || value === '') return false;
@@ -691,9 +668,13 @@ export class ConditionalFormattingEngine {
 		
 		if (!ranges) return false;
 
+		// ✅ Wave 5: Use cache to eliminate O(n²) loop
+		// Get or compute statistics (cached for subsequent cells in same range)
+		const stats = this.statisticalCache.getDuplicateUniqueStats(rule, ranges, ctx.getValue);
+
 		const caseSensitive = rule.caseSensitive ?? false;
 
-		// Normalize value for comparison
+		// Normalize current value for comparison
 		const normalizeValue = (val: CellValue): string => {
 			if (val === null || val === undefined) return '';
 			const str = String(val);
@@ -702,24 +683,12 @@ export class ConditionalFormattingEngine {
 
 		const targetNormalized = normalizeValue(value);
 
-		// Count occurrences of this value in range(s)
-		let count = 0;
-		for (const range of ranges) {
-			for (let row = range.start.row; row <= range.end.row; row++) {
-				for (let col = range.start.col; col <= range.end.col; col++) {
-					const cellValue = ctx.getValue({ row, col });
-					if (normalizeValue(cellValue) === targetNormalized) {
-						count++;
-					}
-				}
-			}
-		}
-
-		// Duplicate = appears more than once, Unique = appears exactly once
+		// ✅ Wave 5: Simple set lookup (no loops, no scanning)
 		if (rule.mode === 'duplicate') {
-			return count > 1;
+			return stats.duplicates.has(targetNormalized);
 		} else {
-			return count === 1;
+			// Unique = appears in valueSet but NOT in duplicates
+			return stats.valueSet.has(targetNormalized) && !stats.duplicates.has(targetNormalized);
 		}
 	}
 

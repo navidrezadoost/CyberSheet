@@ -23,6 +23,11 @@ import { Address, CellValue } from '../src/types';
 describe('Phase 3 Wave 3.1: Statistical Rules with Real Context', () => {
 	const engine = new ConditionalFormattingEngine();
 
+	// Clear cache before each test to ensure isolation
+	beforeEach(() => {
+		engine.clearCache();
+	});
+
 	// Helper: Convert column number to letter (1 = A, 2 = B, etc.)
 	const colToLetter = (col: number): string => {
 		let letter = '';
