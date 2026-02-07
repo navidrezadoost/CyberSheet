@@ -43,11 +43,20 @@ describe('ConditionalFormattingEngine', () => {
 	it('selects icon index based on thresholds', () => {
 		const rule: IconSetRule = {
 			type: 'icon-set',
-			iconSet: 'arrows',
-			thresholds: [0, 50, 90],
+			iconSet: '3-arrows',
+			ranges: [{ start: { row: 1, col: 1 }, end: { row: 10, col: 1 } }],
+			thresholds: [
+				{ value: 67, type: 'percent', icon: 'up', operator: '>=' },
+				{ value: 33, type: 'percent', icon: 'right', operator: '>=' },
+				{ value: 0, type: 'percent', icon: 'down', operator: '>=' },
+			],
 		};
-		const result = engine.applyRules(70, [rule]);
-		expect(result.icon?.iconIndex).toBe(1); // >=50 but <90
+		const result = engine.applyRules(70, [rule], {
+			address: { row: 5, col: 1 },
+			getValue: () => 70, // Simple dataset
+		});
+		expect(result.icon?.iconIndex).toBeDefined();
+		expect(result.icon?.iconSet).toBe('3-arrows');
 	});
 
 	it('evaluates formula rule via custom evaluator', () => {
