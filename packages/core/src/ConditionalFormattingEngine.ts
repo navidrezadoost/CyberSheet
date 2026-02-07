@@ -207,7 +207,21 @@ export class ConditionalFormattingEngine {
 			}
 			case 'formula': {
 				const evaluator = options?.formulaEvaluator;
-				const res = evaluator?.(rule.expression, { ...ctx, value }) ?? false;
+				
+				// Excel: Errors during formula evaluation → no formatting (fail gracefully)
+				let res: boolean | number | string | null;
+				try {
+					res = evaluator?.(rule.expression, { ...ctx, value }) ?? false;
+				} catch (error) {
+					// Thrown errors (e.g., invalid functions, circular refs) → no match
+					return { matched: false };
+				}
+				
+				// Excel error strings are treated as false
+				if (this.isExcelError(res)) {
+					return { matched: false };
+				}
+				
 				const truthy = typeof res === 'number' ? res !== 0 : !!res;
 				return truthy ? { matched: true, style: rule.style } : { matched: false };
 			}
@@ -293,36 +307,225 @@ export class ConditionalFormattingEngine {
 
 	private evaluateValueRule(value: CellValue, rule: ValueRule): boolean {
 		const { operator, value: ruleValue, value2 } = rule;
-		if (value === null || value === undefined) return false;
-
-		const asNumber = typeof value === 'number' ? value : Number(value);
-		const targetNumber = typeof ruleValue === 'number' ? ruleValue : Number(ruleValue);
-		const targetNumber2 = typeof value2 === 'number' ? value2 : value2 != null ? Number(value2) : undefined;
-
-		const valStr = String(value).toLowerCase();
-		const targetStr = String(ruleValue).toLowerCase();
-		const targetStr2 = value2 != null ? String(value2).toLowerCase() : undefined;
+		
+		// Excel-accurate type coercion for comparison operators
+		// Key insight: null, undefined, empty string, and false are DISTINCT from 0
+		
+		// For equality operators, use Excel-accurate comparison
+		if (operator === '=' || operator === '!=') {
+			// Excel: null, undefined, '', false should NOT equal 0
+			// Excel: boolean true should NOT equal string "true"
+			// Excel: numeric strings SHOULD equal their numeric value ("0" == 0)
+			const exactMatch = this.excelEquals(value, ruleValue);
+			return operator === '=' ? exactMatch : !exactMatch;
+		}
+		
+		// For text operators, convert to strings
+		if (operator === 'contains' || operator === 'notContains' || operator === 'startsWith' || operator === 'endsWith') {
+			if (value === null || value === undefined) return false;
+			const valStr = String(value).toLowerCase();
+			const targetStr = String(ruleValue).toLowerCase();
+			
+			switch (operator) {
+				case 'contains': return valStr.includes(targetStr);
+				case 'notContains': return !valStr.includes(targetStr);
+				case 'startsWith': return valStr.startsWith(targetStr);
+				case 'endsWith': return valStr.endsWith(targetStr);
+			}
+		}
+		
+		// For numeric operators, use Excel-accurate numeric coercion
+		const asNumber = this.excelToNumber(value);
+		const targetNumber = this.excelToNumber(ruleValue);
+		const targetNumber2 = value2 != null ? this.excelToNumber(value2) : undefined;
+		
+		// If coercion failed (non-numeric values), treat as false
+		if (asNumber === null || targetNumber === null) return false;
 
 		switch (operator) {
 			case '>': return asNumber > targetNumber;
 			case '>=': return asNumber >= targetNumber;
 			case '<': return asNumber < targetNumber;
 			case '<=': return asNumber <= targetNumber;
-			case '=': return String(value) === String(ruleValue);
-			case '!=': return String(value) !== String(ruleValue);
 			case 'between':
 				if (targetNumber2 == null) return false;
 				return asNumber >= Math.min(targetNumber, targetNumber2) && asNumber <= Math.max(targetNumber, targetNumber2);
 			case 'notBetween':
 				if (targetNumber2 == null) return false;
 				return asNumber < Math.min(targetNumber, targetNumber2) || asNumber > Math.max(targetNumber, targetNumber2);
-			case 'contains': return valStr.includes(targetStr);
-			case 'notContains': return !valStr.includes(targetStr);
-			case 'startsWith': return valStr.startsWith(targetStr);
-			case 'endsWith': return valStr.endsWith(targetStr);
 			default:
 				return false;
 		}
+	}
+	
+	/**
+	 * Check if value is an Excel error string.
+	 * Excel errors: #DIV/0!, #N/A, #NAME?, #NULL!, #NUM!, #REF!, #VALUE!
+	 */
+	private isExcelError(value: CellValue): boolean {
+		if (typeof value !== 'string') return false;
+		const errorPatterns = /^#(DIV\/0!|N\/A|NAME\?|NULL!|NUM!|REF!|VALUE!)$/i;
+		return errorPatterns.test(value);
+	}
+	
+	/**
+	 * Excel-accurate equality check with numeric string coercion.
+	 * null, undefined, '', false are DISTINCT from 0.
+	 * boolean true is DISTINCT from string "true".
+	 * Numeric strings DO equal their numeric value ("0" == 0).
+	 */
+	private excelEquals(a: CellValue, b: CellValue): boolean {
+		// Handle null/undefined: they equal each other but nothing else
+		if (a === null || a === undefined) {
+			return b === null || b === undefined;
+		}
+		if (b === null || b === undefined) {
+			return false; // a is not null/undefined, so not equal
+		}
+		
+		// false and '' are DISTINCT from 0
+		if (a === false || a === '') {
+			return b === false || b === '';
+		}
+		if (b === false || b === '') {
+			return false;
+		}
+		
+		// Booleans only equal other booleans (true !== "true", true !== 1)
+		if (typeof a === 'boolean' || typeof b === 'boolean') {
+			return typeof a === 'boolean' && typeof b === 'boolean' && a === b;
+		}
+		
+		// Check if both can be coerced to numbers (including numeric strings)
+		const aNum = this.tryNumericCoercion(a);
+		const bNum = this.tryNumericCoercion(b);
+		
+		// If both are numeric (or numeric strings), compare as numbers
+		if (aNum !== null && bNum !== null) {
+			return aNum === bNum;
+		}
+		
+		// Type must match for non-numeric equality
+		if (typeof a !== typeof b) {
+			return false; // Different types never equal
+		}
+		
+		// Same type comparison
+		return a === b;
+	}
+	
+	/**
+	 * Try to coerce value to number, including numeric strings.
+	 * Returns number if successful, null otherwise.
+	 * Used for equality checks where "0" should equal 0.
+	 */
+	private tryNumericCoercion(value: CellValue): number | null {
+		// Already a number
+		if (typeof value === 'number') {
+			return isNaN(value) ? null : value;
+		}
+		
+		// true → 1 (Excel converts boolean true to 1)
+		if (value === true) {
+			return 1;
+		}
+		
+		// Numeric strings
+		if (typeof value === 'string') {
+			const trimmed = value.trim();
+			if (trimmed === '') return null; // Empty string is NOT 0
+			const num = Number(trimmed);
+			return isNaN(num) ? null : num;
+		}
+		
+		// null, undefined, false, etc. are NOT numbers
+		return null;
+	}
+	
+	/**
+	 * Excel-accurate strict equality check.
+	 * null, undefined, '', false are DISTINCT from 0.
+	 * boolean true is DISTINCT from string "true".
+	 */
+	private excelStrictEquals(a: CellValue, b: CellValue): boolean {
+		// Handle null/undefined: they equal each other but nothing else
+		if (a === null || a === undefined) {
+			return b === null || b === undefined;
+		}
+		if (b === null || b === undefined) {
+			return false; // a is not null/undefined, so not equal
+		}
+		
+		// Type must match for equality
+		if (typeof a !== typeof b) {
+			return false; // Different types never equal (e.g., true !== "true", 0 !== false)
+		}
+		
+		// Same type comparison
+		if (typeof a === 'boolean' && typeof b === 'boolean') {
+			return a === b;
+		}
+		if (typeof a === 'number' && typeof b === 'number') {
+			return a === b;
+		}
+		if (typeof a === 'string' && typeof b === 'string') {
+			return a === b;
+		}
+		
+		// Fallback
+		return a === b;
+	}
+	
+	/**
+	 * Excel-accurate numeric coercion FOR NUMERIC COMPARISONS.
+	 * Returns number or null if cannot coerce.
+	 * Key differences from JavaScript Number():
+	 * - null → null (not 0)
+	 * - undefined → null (not NaN → 0)
+	 * - false → null (not 0)
+	 * - true → 1
+	 * - "" → 0 (Excel treats empty string as 0 in numeric comparisons)
+	 * - " " → 0 (whitespace-only strings as 0)
+	 * - Error strings (#DIV/0!, etc.) → null
+	 */
+	private excelToNumber(value: CellValue): number | null {
+		// null, undefined, false: NOT numbers
+		if (value === null || value === undefined || value === false) {
+			return null;
+		}
+		
+		// Empty string or whitespace-only → 0 (Excel behavior for numeric comparisons)
+		if (value === '' || (typeof value === 'string' && value.trim() === '')) {
+			return 0;
+		}
+		
+		// Excel error strings: NOT numbers
+		if (this.isExcelError(value)) {
+			return null;
+		}
+		
+		// true → 1 (Excel converts boolean true to 1)
+		if (value === true) {
+			return 1;
+		}
+		
+		// Already a number
+		if (typeof value === 'number') {
+			return isNaN(value) ? null : value;
+		}
+		
+		// String: try to parse as number
+		if (typeof value === 'string') {
+			// Trim whitespace
+			const trimmed = value.trim();
+			if (trimmed === '') return null;
+			
+			const num = Number(trimmed);
+			return isNaN(num) ? null : num;
+		}
+		
+		// Unknown type
+		return null;
 	}
 
 	private interpolateColor(startColor: string, endColor: string, ratio: number): string {
