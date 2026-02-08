@@ -18,7 +18,7 @@ import { ConditionalFormattingEngine, IconSetRule, ColorScaleRule, DataBarRule }
 import { Address, CellValue } from '../../src/types';
 import * as fs from 'fs';
 import * as path from 'path';
-import { generateOracleTestCases, OracleTestCase } from './oracle-test-data';
+import { generateOracleTestCases, OracleTestCase, generateColorScaleTestCases, ColorScaleTestCase } from './oracle-test-data';
 
 // Note: XLSX library will be added when we need to load actual Excel files
 // For now, we're using programmatically generated expected results based on Excel's documented behavior
@@ -340,6 +340,143 @@ describe('Excel Oracle Validation - Wave 4', () => {
         });
     });
 
+    describe('Phase C: Color Scale Validation (Oracle Comparison)', () => {
+        const colorScaleTestCases = generateColorScaleTestCases();
+
+        // Helper to convert RGB to hex string
+        function rgbToHex(r: number, g: number, b: number): string {
+            return '#' + [r, g, b].map(x => {
+                const hex = x.toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            }).join('');
+        }
+
+        // Helper to parse hex color to RGB
+        function hexToRgb(hex: string): { r: number; g: number; b: number } {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 255, g: 255, b: 255 };
+        }
+
+        colorScaleTestCases.forEach((testCase: ColorScaleTestCase) => {
+            it(`should match Excel for ${testCase.name}`, () => {
+                let exactMatches = 0;
+                let closeMatches = 0;
+                const mismatches: Array<{
+                    value: number;
+                    expected: { r: number; g: number; b: number };
+                    actual: { r: number; g: number; b: number };
+                    diff: { r: number; g: number; b: number };
+                }> = [];
+
+                const getValue = (addr: Address) => testCase.dataset[addr.row] ?? null;
+
+                // Build color scale rule based on test case
+                const rule: ColorScaleRule = {
+                    type: 'color-scale',
+                    ranges: [{ start: { row: 0, col: 0 }, end: { row: testCase.dataset.length - 1, col: 0 } }],
+                    minColor: rgbToHex(testCase.rule.minColor.r, testCase.rule.minColor.g, testCase.rule.minColor.b),
+                    maxColor: rgbToHex(testCase.rule.maxColor.r, testCase.rule.maxColor.g, testCase.rule.maxColor.b),
+                };
+
+                // Add mid color for 3-color scales
+                if (testCase.rule.type === '3-color' && testCase.rule.midColor) {
+                    rule.midColor = rgbToHex(testCase.rule.midColor.r, testCase.rule.midColor.g, testCase.rule.midColor.b);
+                    rule.midValue = testCase.rule.midValue;
+                }
+
+                // Set min/max values if specified
+                if (testCase.rule.minValue !== undefined) {
+                    rule.minValue = testCase.rule.minValue;
+                }
+                if (testCase.rule.maxValue !== undefined) {
+                    rule.maxValue = testCase.rule.maxValue;
+                }
+
+                // Calculate dataset range
+                const datasetMin = Math.min(...testCase.dataset);
+                const datasetMax = Math.max(...testCase.dataset);
+
+                testCase.expectedResults.forEach((expected) => {
+                    const row = testCase.dataset.indexOf(expected.value);
+                    const result = engine.applyRules(expected.value, [rule], {
+                        address: { row, col: 0 },
+                        getValue,
+                        valueRange: { min: datasetMin, max: datasetMax },
+                    });
+
+                    // Get background color from result
+                    const fillColor = result.style?.fillColor;
+                    const actualColor = fillColor ? hexToRgb(fillColor) : { r: 255, g: 255, b: 255 };
+                    
+                    const rDiff = Math.abs(actualColor.r - expected.expectedColor.r);
+                    const gDiff = Math.abs(actualColor.g - expected.expectedColor.g);
+                    const bDiff = Math.abs(actualColor.b - expected.expectedColor.b);
+
+                    // Exact match: all channels within ±0
+                    if (rDiff === 0 && gDiff === 0 && bDiff === 0) {
+                        exactMatches++;
+                    }
+                    // Close match: all channels within ±5 (allowing for rounding differences)
+                    else if (rDiff <= 5 && gDiff <= 5 && bDiff <= 5) {
+                        closeMatches++;
+                    } else {
+                        mismatches.push({
+                            value: expected.value,
+                            expected: expected.expectedColor,
+                            actual: actualColor,
+                            diff: { r: rDiff, g: gDiff, b: bDiff },
+                        });
+                    }
+                });
+
+                const totalTests = testCase.expectedResults.length;
+                const acceptableMatches = exactMatches + closeMatches;
+                const matchRate = (acceptableMatches / totalTests) * 100;
+
+                console.log(`\n${testCase.name}:`);
+                console.log(`  Dataset size: ${testCase.dataset.length}`);
+                console.log(`  Exact matches: ${exactMatches}/${totalTests} (${((exactMatches / totalTests) * 100).toFixed(1)}%)`);
+                console.log(`  Close matches (±5): ${closeMatches}/${totalTests} (${((closeMatches / totalTests) * 100).toFixed(1)}%)`);
+                console.log(`  Total acceptable: ${acceptableMatches}/${totalTests} (${matchRate.toFixed(1)}%)`);
+
+                if (mismatches.length > 0) {
+                    console.log(`  Mismatches (${mismatches.length}):`);
+                    mismatches.slice(0, 3).forEach((m) => {
+                        console.log(
+                            `    Value ${m.value}: expected RGB(${m.expected.r},${m.expected.g},${m.expected.b}), ` +
+                            `got RGB(${m.actual.r},${m.actual.g},${m.actual.b}) ` +
+                            `(diff: ${m.diff.r},${m.diff.g},${m.diff.b})`
+                        );
+                    });
+                }
+
+                // Assert: ≥90% match rate for color scales (wider tolerance than icon sets)
+                expect(matchRate).toBeGreaterThanOrEqual(90);
+            });
+        });
+
+        it('should report Phase C summary statistics', () => {
+            const testCases = generateColorScaleTestCases();
+            
+            console.log('\n=== Phase C Color Scale Validation Summary ===');
+            console.log(`Test Cases: ${testCases.length}`);
+            
+            const totalValues = testCases.reduce((sum: number, tc: ColorScaleTestCase) => sum + tc.expectedResults.length, 0);
+            console.log(`Total Values Tested: ${totalValues}`);
+            console.log(`Color Scale Types: 2-color, 3-color`);
+            console.log(`Tolerance: ±5 RGB per channel`);
+            console.log(`Scenarios: min/max, percentile, fixed values, large datasets`);
+            console.log('===============================================');
+            
+            expect(testCases.length).toBeGreaterThan(0);
+            expect(totalValues).toBeGreaterThan(0);
+        });
+    });
+
     describe('Phase D: Data Bar Validation (Placeholder)', () => {
         it.skip('should match Excel for solid fill data bars', () => {
             // TODO: Requires Excel file with data bar rules
@@ -354,38 +491,51 @@ describe('Excel Oracle Validation - Wave 4', () => {
 
     describe('Wave 4 Summary', () => {
         it('should report validation statistics', () => {
-            const testCases = generateOracleTestCases();
+            const iconSetTestCases = generateOracleTestCases();
+            const colorScaleTestCases = generateColorScaleTestCases();
             
             // Phase A: Infrastructure tests (2 passing)
             const phaseATests = 2;
             
-            // Phase B: Oracle tests (testCases.length + 1 summary)
-            const phaseBTests = testCases.length + 1;
-            
-            // Phase B Edge Cases: 6 tests
+            // Phase B: Icon Set Oracle tests (iconSetTestCases.length + 1 summary) + 6 edge cases
+            const phaseBTests = iconSetTestCases.length + 1;
             const edgeCaseTests = 6;
+            
+            // Phase C: Color Scale tests (colorScaleTestCases.length + 1 summary)
+            const phaseCTests = colorScaleTestCases.length + 1;
+            
+            const iconSetValues = iconSetTestCases.reduce((sum: number, tc: OracleTestCase) => sum + tc.dataset.length, 0);
+            const colorScaleValues = colorScaleTestCases.reduce((sum: number, tc: ColorScaleTestCase) => sum + tc.expectedResults.length, 0);
             
             const stats = {
                 phaseA: phaseATests,
-                phaseB: phaseBTests,
-                edgeCases: edgeCaseTests,
-                total: phaseATests + phaseBTests + edgeCaseTests,
-                oracleTestCases: testCases.length,
-                totalValuesValidated: testCases.reduce((sum, tc) => sum + tc.dataset.length, 0),
+                phaseB: phaseBTests + edgeCaseTests,
+                phaseC: phaseCTests,
+                total: phaseATests + phaseBTests + edgeCaseTests + phaseCTests,
+                iconSetCases: iconSetTestCases.length,
+                colorScaleCases: colorScaleTestCases.length,
+                iconSetValues,
+                colorScaleValues,
+                totalValues: iconSetValues + colorScaleValues,
             };
 
             console.log('\n=== Wave 4 Validation Summary ===');
             console.log(`Phase A (Infrastructure): ${stats.phaseA} tests`);
-            console.log(`Phase B (Oracle Validation): ${stats.phaseB} tests`);
-            console.log(`  - Oracle test cases: ${stats.oracleTestCases}`);
-            console.log(`  - Values validated: ${stats.totalValuesValidated}`);
-            console.log(`Edge Cases: ${stats.edgeCases} tests`);
+            console.log(`Phase B (Icon Sets): ${stats.phaseB} tests`);
+            console.log(`  - Oracle test cases: ${stats.iconSetCases}`);
+            console.log(`  - Values validated: ${stats.iconSetValues}`);
+            console.log(`  - Match rate: ≥95%`);
+            console.log(`Phase C (Color Scales): ${stats.phaseC} tests`);
+            console.log(`  - Oracle test cases: ${stats.colorScaleCases}`);
+            console.log(`  - Values validated: ${stats.colorScaleValues}`);
+            console.log(`  - Match rate: ≥90% (±5 RGB tolerance)`);
             console.log(`Total Tests: ${stats.total}`);
-            console.log(`Expected Match Rate: ≥95%`);
+            console.log(`Total Values Validated: ${stats.totalValues}`);
             console.log('=================================\n');
 
             expect(stats.total).toBeGreaterThan(0);
-            expect(stats.oracleTestCases).toBeGreaterThan(0);
+            expect(stats.iconSetCases).toBeGreaterThan(0);
+            expect(stats.colorScaleCases).toBeGreaterThan(0);
         });
     });
 });
