@@ -3092,12 +3092,8 @@ export const F_INV: FormulaFunction = (probability, deg_freedom1, deg_freedom2) 
   // Edge cases
   if (p === 0) return 0;
   if (p === 1) return Infinity;
-  if (p === 0.5 && d2 > 2) {
-    // Median approximation
-    return d2 / (d2 - 2);
-  }
   
-  // Use bisection method for robustness
+  // Use bisection method for robustness (removed median approximation for accuracy)
   let low = 0;
   let high = d2 > 2 ? 10 * (d2 / (d2 - 2)) : 100; // Upper bound estimate
   

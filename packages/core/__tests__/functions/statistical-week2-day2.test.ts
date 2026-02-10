@@ -34,16 +34,18 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
   describe('F.DIST - F Distribution', () => {
     test('Oracle Test 1: Cumulative at x=1', () => {
       // F.DIST(1, 5, 10, TRUE) - x=1 is median-ish for F(5,10)
+      // Oracle corrected: Maps to Beta(1/3, 2.5, 5) via Beta-F transformation
       const result = evaluate('=F.DIST(1, 5, 10, TRUE)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeCloseTo(0.5461, 3);
+      expect(result as number).toBeCloseTo(0.5349, 4);
     });
 
     test('Oracle Test 2: Cumulative at x=2', () => {
       // F.DIST(2, 5, 10, TRUE)
+      // Oracle corrected: Maps to Beta(1/2, 2.5, 5) via Beta-F transformation
       const result = evaluate('=F.DIST(2, 5, 10, TRUE)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeCloseTo(0.8331, 3);
+      expect(result as number).toBeCloseTo(0.8358, 4);
     });
 
     test('Oracle Test 3: Cumulative at x=0', () => {
@@ -54,16 +56,18 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
 
     test('Oracle Test 4: Density (PDF) at x=1', () => {
       // F.DIST(1, 5, 10, FALSE) - probability density
+      // Oracle corrected: F-PDF derived from Beta-PDF transformation
       const result = evaluate('=F.DIST(1, 5, 10, FALSE)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeCloseTo(0.4590, 3);
+      expect(result as number).toBeCloseTo(0.4955, 4);
     });
 
     test('Oracle Test 5: Density at x=2', () => {
       // F.DIST(2, 5, 10, FALSE)
+      // Oracle corrected: F-PDF derived from Beta-PDF transformation
       const result = evaluate('=F.DIST(2, 5, 10, FALSE)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeCloseTo(0.2176, 3);
+      expect(result as number).toBeCloseTo(0.1620, 4);
     });
 
     test('Oracle Test 6: Different degrees of freedom', () => {
@@ -89,16 +93,18 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
   describe('F.DIST.RT - Right-Tailed F Distribution', () => {
     test('Oracle Test 1: Right tail at x=1', () => {
       // F.DIST.RT(1, 5, 10) = 1 - F.DIST(1, 5, 10, TRUE)
+      // Oracle corrected: 1 - 0.5349 = 0.4651
       const result = evaluate('=F.DIST.RT(1, 5, 10)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeCloseTo(0.4539, 3);
+      expect(result as number).toBeCloseTo(0.4651, 4);
     });
 
     test('Oracle Test 2: Right tail at x=2', () => {
       // F.DIST.RT(2, 5, 10)
+      // Oracle corrected: 1 - 0.8358 = 0.1642
       const result = evaluate('=F.DIST.RT(2, 5, 10)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeCloseTo(0.1669, 3);
+      expect(result as number).toBeCloseTo(0.1642, 4);
     });
 
     test('Oracle Test 3: Right tail at high x', () => {
@@ -122,10 +128,10 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
   describe('F.INV - Inverse F Distribution', () => {
     test('Oracle Test 1: Inverse at p=0.5', () => {
       // F.INV(0.5, 5, 10) - median
+      // Oracle corrected: Bisection converges to true median ≈ 0.932
       const result = evaluate('=F.INV(0.5, 5, 10)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeGreaterThan(0.8);
-      expect(result as number).toBeLessThan(1.2);
+      expect(result as number).toBeCloseTo(0.932, 3);
     });
 
     test('Oracle Test 2: Inverse at p=0.99', () => {
@@ -137,9 +143,10 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
 
     test('Oracle Test 3: Inverse at p=0.05', () => {
       // F.INV(0.05, 5, 10)
+      // Oracle corrected: Inverse of corrected CDF
       const result = evaluate('=F.INV(0.05, 5, 10)');
       expect(typeof result).toBe('number');
-      expect(result as number).toBeCloseTo(0.3310, 3);
+      expect(result as number).toBeCloseTo(0.2112, 4);
     });
 
     test('Oracle Test 4: Inverse at p=0.95', () => {
