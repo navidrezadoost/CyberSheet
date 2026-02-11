@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { loadXlsxFromUrl } from '../packages/io-xlsx/src';
 import { CyberSheet } from '../packages/react/src';
 import { FormulaBar } from '../packages/react/src/FormulaBar';
+import { SheetTabs } from '../packages/react/src/SheetTabs';
 import { useFormulaController } from '../packages/react/src/useFormulaController';
 import type { Address } from '../packages/core/src/types';
 
@@ -15,6 +16,8 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempted, setLoadAttempted] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [fontFamily, setFontFamily] = useState<string>('Segoe UI, Arial, sans-serif');
+  const [fontSize, setFontSize] = useState<number>(11);
   const [filterMenu, setFilterMenu] = useState<{ col: number; x: number; y: number; values: Array<{ value: string; count: number }>; apply: (sel: string[]) => void; clear: () => void } | null>(null);
   const [filterSel, setFilterSel] = useState<Set<string>>(new Set());
   const [filterSearch, setFilterSearch] = useState('');
@@ -36,6 +39,63 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
     worksheet: activeSheet,
     selectedCell: selectedCell || { row: 1, col: 1 },
   });
+
+  // Reset scroll when sheet changes to prevent duplicate scrollbars
+  useEffect(() => {
+    console.log('🔄 Sheet changed to:', sheetName);
+    if (rendererRef.current) {
+      // Reset scroll position and state when switching sheets
+      rendererRef.current.setScroll?.(0, 0);
+      setScroll({ x: 0, y: 0, maxX: 0, maxY: 0 });
+      
+      // Force recalculation after a brief delay to let renderer update
+      setTimeout(() => {
+        if (rendererRef.current) {
+          const { x, y } = rendererRef.current.getScroll?.() ?? { x: 0, y: 0 };
+          const max = rendererRef.current.getMaxScroll?.() ?? { x: 0, y: 0 };
+          setScroll({ x, y, maxX: max.x, maxY: max.y });
+        }
+      }, 50);
+    }
+  }, [sheetName]);
+
+  // Memoize scrollbar calculations to prevent blinking
+  // MUST be at top level before any conditional returns (Rules of Hooks)
+  const verticalScrollbarStyle = useMemo(() => {
+    const track = rendererRef.current?.canvas?.parentElement as HTMLElement;
+    const trackH = track ? (track.clientHeight - 24 - 16) : 200;
+    const vpH = rendererRef.current?.getViewportSize?.().height || 0;
+    const contentH = scroll.maxY + vpH;
+    const thumbH = Math.max(24, contentH > 0 ? (vpH / contentH) * trackH : trackH);
+    const topPx = contentH > 0 && scroll.maxY > 0 ? (scroll.y / scroll.maxY) * (trackH - thumbH) : 0;
+    return { 
+      position: 'absolute' as const, 
+      left: 1, 
+      width: 8, 
+      borderRadius: 4, 
+      background: 'rgba(0,0,0,0.25)', 
+      height: thumbH + 'px', 
+      top: Math.max(0, topPx) + 'px' 
+    };
+  }, [scroll.y, scroll.maxY]);
+
+  const horizontalScrollbarStyle = useMemo(() => {
+    const track = rendererRef.current?.canvas?.parentElement as HTMLElement;
+    const trackW = track ? (track.clientWidth - 48 - 16) : 300;
+    const vpW = rendererRef.current?.getViewportSize?.().width || 0;
+    const contentW = scroll.maxX + vpW;
+    const thumbW = Math.max(24, contentW > 0 ? (vpW / contentW) * trackW : trackW);
+    const leftPx = contentW > 0 && scroll.maxX > 0 ? (scroll.x / scroll.maxX) * (trackW - thumbW) : 0;
+    return { 
+      position: 'absolute' as const, 
+      top: 1, 
+      height: 8, 
+      borderRadius: 4, 
+      background: 'rgba(0,0,0,0.25)', 
+      width: thumbW + 'px', 
+      left: Math.max(0, leftPx) + 'px' 
+    };
+  }, [scroll.x, scroll.maxX]);
 
   const recomputeHeaderIcons = () => {
     const r = rendererRef.current;
@@ -233,6 +293,58 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
     return { row, col };
   };
 
+  // Sheet management handlers
+  const handleAddSheet = () => {
+    if (!workbook) return;
+    const names = workbook.getSheetNames ? workbook.getSheetNames() : [];
+    let counter = 1;
+    let newName = `Sheet${counter}`;
+    while (names.includes(newName)) {
+      counter++;
+      newName = `Sheet${counter}`;
+    }
+    workbook.addSheet(newName);
+    setSheetName(newName);
+    forceUpdate({});
+  };
+
+  const handleRenameSheet = (oldName: string, newName: string) => {
+    if (!workbook || !newName || oldName === newName) return;
+    const names = workbook.getSheetNames ? workbook.getSheetNames() : [];
+    if (names.includes(newName)) {
+      alert(`A sheet named "${newName}" already exists.`);
+      return;
+    }
+    // If workbook has renameSheet method, use it
+    if (typeof workbook.renameSheet === 'function') {
+      workbook.renameSheet(oldName, newName);
+    } else {
+      // Fallback: recreate sheet with new name (lose data for now)
+      console.warn('Workbook.renameSheet not implemented, skipping rename');
+    }
+    setSheetName(newName);
+    forceUpdate({});
+  };
+
+  const handleDeleteSheet = (name: string) => {
+    if (!workbook) return;
+    const names = workbook.getSheetNames ? workbook.getSheetNames() : [];
+    if (names.length <= 1) {
+      alert('Cannot delete the last sheet.');
+      return;
+    }
+    // If workbook has deleteSheet method, use it
+    if (typeof workbook.deleteSheet === 'function') {
+      workbook.deleteSheet(name);
+      // Switch to first remaining sheet
+      const remaining = workbook.getSheetNames();
+      setSheetName(remaining[0]);
+      forceUpdate({});
+    } else {
+      console.warn('Workbook.deleteSheet not implemented, skipping delete');
+    }
+  };
+
   return (
     <div className="container">
       <div className="title-bar">
@@ -270,20 +382,23 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
           workbook={workbook}
           sheetName={sheetName}
           zoom={zoom}
+          fontFamily={fontFamily}
+          fontSize={fontSize}
           onRendererReady={(r) => {
             rendererRef.current = r;
-            const update = () => {
-              try {
-                const { x, y } = r.getScroll();
-                const max = r.getMaxScroll?.() ?? { x: 0, y: 0 };
-                setScroll({ x, y, maxX: max.x, maxY: max.y });
-              } catch {}
+            console.log('✅ Renderer ready');
+            
+            // Subscribe to scroll events from core renderer (event-driven, not polling)
+            const scrollDisposable = r.onScrollChange?.((scroll) => {
+              console.log('🔄 Scroll event from core:', scroll);
+              setScroll(scroll);
               recomputeHeaderIcons();
-            };
-            const observer = new MutationObserver(update);
-            observer.observe((r as any).container ?? (r as any).canvas?.parentElement ?? document.body, { attributes: true, childList: false, subtree: false });
-            const id = setInterval(update, 150);
-            update();
+            });
+            
+            // Initial state
+            const initialScroll = r.getScroll();
+            const maxScroll = r.getMaxScroll?.() ?? { x: 0, y: 0 };
+            setScroll({ ...initialScroll, maxX: maxScroll.x, maxY: maxScroll.y });
             
             // Listen for cell selection events to update formula bar
             const handleCellEvent = (event: any) => {
@@ -300,20 +415,17 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
             
             // Subscribe to cell events
             const sheet = r.sheetReadonly;
-            let disposable: { dispose(): void } | null = null;
+            let cellDisposable: { dispose(): void } | null = null;
             if (sheet && typeof sheet.on === 'function') {
-              disposable = sheet.on(handleCellEvent);
+              cellDisposable = sheet.on(handleCellEvent);
             }
             
             // Save cleanup on the instance for unmount
             (rendererRef.current as any).__sbCleanup = () => { 
               try { 
-                observer.disconnect(); 
-                if (disposable) {
-                  disposable.dispose();
-                }
+                scrollDisposable?.dispose();
+                cellDisposable?.dispose();
               } catch {}
-              clearInterval(id as any); 
             };
           }}
           rendererOptions={{
@@ -351,34 +463,28 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
                 },
                 clear: () => { clear(); setFilterMenu(null); }
               });
-            },
-            onRender: () => { try { const { x, y } = rendererRef.current.getScroll(); const max = rendererRef.current.getMaxScroll?.() ?? { x: 0, y: 0 }; setScroll({ x, y, maxX: max.x, maxY: max.y }); recomputeHeaderIcons(); } catch {} }
+            }
           } as any}
           style={{ width: '100%', height: 'calc(100vh - 140px)', overflow: 'hidden' }}
         />
         {/* Custom Scrollbars */}
         {/* Vertical */}
-        <div style={{ position: 'absolute', right: 2, top: 24, bottom: 16, width: 10, background: 'rgba(0,0,0,0.04)', borderRadius: 5 }}
-          onWheel={(e) => { e.preventDefault(); const r = rendererRef.current; if (!r) return; r.scrollBy(0, e.deltaY); setScroll(s => ({ ...s, y: r.getScroll().y })); }}
+        <div 
+          key={`vscroll-${sheetName}`}
+          style={{ position: 'absolute', right: 2, top: 24, bottom: 16, width: 10, background: 'rgba(0,0,0,0.04)', borderRadius: 5 }}
+          onWheel={(e) => { e.preventDefault(); const r = rendererRef.current; if (!r) return; r.scrollBy(0, e.deltaY); }}
         >
           {scroll.maxY > 0 && (
             <div
-              style={(function(){
-                const track = (rendererRef.current?.canvas?.parentElement as HTMLElement) || null;
-                const trackH = (track ? (track.clientHeight - 24 - 16) : 200); // match top/bottom of track container
-                const vpH = rendererRef.current?.getViewportSize?.().height || 0;
-                const contentH = scroll.maxY + vpH;
-                const thumbH = Math.max(24, contentH > 0 ? (vpH / contentH) * trackH : trackH);
-                const topPx = contentH > 0 ? (scroll.y / scroll.maxY) * (trackH - thumbH) : 0;
-                return { position:'absolute' as const, left:1, width:8, borderRadius:4, background:'rgba(0,0,0,0.25)', height: thumbH + 'px', top: Math.max(0, topPx) + 'px' };
-              })()}
+              key={`vthumb-${sheetName}`}
+              style={verticalScrollbarStyle}
               onMouseDown={(e) => {
                 e.preventDefault();
                 const track = (e.currentTarget.parentElement as HTMLElement);
                 const startY = e.clientY; const startScroll = scroll.y; const trackH = track.clientHeight;
                 const onMove = (ev: MouseEvent) => {
                   const dy = ev.clientY - startY; const ratio = dy / Math.max(1, trackH); const r = rendererRef.current;
-                  if (!r) return; const next = Math.min(scroll.maxY, Math.max(0, startScroll + ratio * scroll.maxY)); r.setScroll(scroll.x, next); setScroll(s => ({ ...s, y: next }));
+                  if (!r) return; const next = Math.min(scroll.maxY, Math.max(0, startScroll + ratio * scroll.maxY)); r.setScroll(scroll.x, next);
                 };
                 const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
                 window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
@@ -387,27 +493,22 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
           )}
         </div>
         {/* Horizontal */}
-        <div style={{ position: 'absolute', left: 48, right: 16, bottom: 2, height: 10, background: 'rgba(0,0,0,0.04)', borderRadius: 5 }}
-          onWheel={(e) => { e.preventDefault(); const r = rendererRef.current; if (!r) return; r.scrollBy(e.deltaX, 0); setScroll(s => ({ ...s, x: r.getScroll().x })); }}
+        <div 
+          key={`hscroll-${sheetName}`}
+          style={{ position: 'absolute', left: 48, right: 16, bottom: 2, height: 10, background: 'rgba(0,0,0,0.04)', borderRadius: 5 }}
+          onWheel={(e) => { e.preventDefault(); const r = rendererRef.current; if (!r) return; r.scrollBy(e.deltaX, 0); }}
         >
           {scroll.maxX > 0 && (
             <div
-              style={(function(){
-                const track = (rendererRef.current?.canvas?.parentElement as HTMLElement) || null;
-                const trackW = (track ? (track.clientWidth - 48 - 16) : 300);
-                const vpW = rendererRef.current?.getViewportSize?.().width || 0;
-                const contentW = scroll.maxX + vpW;
-                const thumbW = Math.max(24, contentW > 0 ? (vpW / contentW) * trackW : trackW);
-                const leftPx = contentW > 0 ? (scroll.x / scroll.maxX) * (trackW - thumbW) : 0;
-                return { position:'absolute' as const, top:1, height:8, borderRadius:4, background:'rgba(0,0,0,0.25)', width: thumbW + 'px', left: Math.max(0, leftPx) + 'px' };
-              })()}
+              key={`hthumb-${sheetName}`}
+              style={horizontalScrollbarStyle}
               onMouseDown={(e) => {
                 e.preventDefault();
                 const track = (e.currentTarget.parentElement as HTMLElement);
                 const startX = e.clientX; const startScroll = scroll.x; const trackW = track.clientWidth;
                 const onMove = (ev: MouseEvent) => {
                   const dx = ev.clientX - startX; const ratio = dx / Math.max(1, trackW); const r = rendererRef.current;
-                  if (!r) return; const next = Math.min(scroll.maxX, Math.max(0, startScroll + ratio * scroll.maxX)); r.setScroll(next, scroll.y); setScroll(s => ({ ...s, x: next }));
+                  if (!r) return; const next = Math.min(scroll.maxX, Math.max(0, startScroll + ratio * scroll.maxX)); r.setScroll(next, scroll.y);
                 };
                 const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
                 window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
@@ -531,11 +632,61 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
           );
         })}
       </div>
+      
+      {/* Sheet Tabs - Excel-style navigation at bottom */}
+      {workbook && (
+        <SheetTabs
+          sheets={workbook.getSheetNames ? workbook.getSheetNames() : []}
+          activeSheet={sheetName || ''}
+          onSheetChange={setSheetName}
+          onAddSheet={handleAddSheet}
+          onRenameSheet={handleRenameSheet}
+          onDeleteSheet={handleDeleteSheet}
+        />
+      )}
+      
       <div className="status-bar">
         <div className="status-left">
           <span>{status}</span>
         </div>
         <div className="status-right">
+          <label style={{ marginRight: '8px' }}>Font</label>
+          <select 
+            value={fontFamily} 
+            onChange={e => setFontFamily(e.target.value)}
+            style={{ 
+              padding: '2px 6px', 
+              marginRight: '12px',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              fontSize: '11px'
+            }}
+          >
+            <option value="Segoe UI, Arial, sans-serif">Segoe UI</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="Calibri, sans-serif">Calibri</option>
+            <option value="'Times New Roman', serif">Times New Roman</option>
+            <option value="'Courier New', monospace">Courier New</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="Verdana, sans-serif">Verdana</option>
+            <option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+          </select>
+          <label style={{ marginRight: '8px' }}>Size</label>
+          <input 
+            type="number" 
+            min={8} 
+            max={24} 
+            value={fontSize} 
+            onChange={e => setFontSize(parseInt(e.target.value, 10))}
+            style={{ 
+              width: '50px', 
+              padding: '2px 6px',
+              marginRight: '12px',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              fontSize: '11px'
+            }}
+          />
           <label>Zoom</label>
           <input className="zoom-slider" type="range" min={50} max={200} value={Math.round(zoom * 100)} onChange={e => setZoom(parseInt(e.target.value, 10) / 100)} />
           <span>{Math.round(zoom * 100)}%</span>

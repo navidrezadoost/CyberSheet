@@ -1,0 +1,713 @@
+/**
+ * lookup-functions.ts
+ * 
+ * Lookup and reference formula functions.
+ * Excel-compatible VLOOKUP, HLOOKUP, XLOOKUP, INDEX, MATCH, etc.
+ */
+
+import type { FormulaFunction, FormulaValue } from '../../types/formula-types';
+import { toNumber, toString, compareValues } from '../../utils/type-utils';
+import { is2DArray, isArray } from '../../utils/type-utils';
+import { validateRange } from '../../utils/validation-utils';
+
+/**
+ * VLOOKUP - Vertical lookup
+ */
+export const VLOOKUP: FormulaFunction = (lookupValue, tableArray, colIndexNum, rangeLookup = true) => {
+  if (!is2DArray(tableArray)) {
+    return new Error('#VALUE!');
+  }
+
+  const colIndex = toNumber(colIndexNum);
+  if (colIndex instanceof Error) return colIndex;
+
+  const table = tableArray as FormulaValue[][];
+  
+  if (colIndex < 1 || colIndex > table[0].length) {
+    return new Error('#REF!');
+  }
+
+  const exact = !rangeLookup;
+
+  // Search first column
+  for (let i = 0; i < table.length; i++) {
+    const cellValue = table[i][0];
+    
+    if (exact) {
+      // Exact match
+      if (compareValues(cellValue, lookupValue) === 0) {
+        return table[i][colIndex - 1];
+      }
+    } else {
+      // Approximate match (assumes sorted)
+      const cmp = compareValues(cellValue, lookupValue);
+      if (cmp instanceof Error) return cmp;
+      if (cmp === 0) {
+        return table[i][colIndex - 1];
+      }
+      if (cmp > 0) {
+        // Passed the value
+        if (i === 0) return new Error('#N/A');
+        return table[i - 1][colIndex - 1];
+      }
+    }
+  }
+
+  // Not found
+  if (exact) {
+    return new Error('#N/A');
+  } else {
+    // Return last row for approximate match
+    return table[table.length - 1][colIndex - 1];
+  }
+};
+
+/**
+ * HLOOKUP - Horizontal lookup
+ */
+export const HLOOKUP: FormulaFunction = (lookupValue, tableArray, rowIndexNum, rangeLookup = true) => {
+  if (!is2DArray(tableArray)) {
+    return new Error('#VALUE!');
+  }
+
+  const rowIndex = toNumber(rowIndexNum);
+  if (rowIndex instanceof Error) return rowIndex;
+
+  const table = tableArray as FormulaValue[][];
+  
+  if (rowIndex < 1 || rowIndex > table.length) {
+    return new Error('#REF!');
+  }
+
+  const exact = !rangeLookup;
+  const firstRow = table[0];
+
+  // Search first row
+  for (let i = 0; i < firstRow.length; i++) {
+    const cellValue = firstRow[i];
+    
+    if (exact) {
+      // Exact match
+      if (compareValues(cellValue, lookupValue) === 0) {
+        return table[rowIndex - 1][i];
+      }
+    } else {
+      // Approximate match (assumes sorted)
+      const cmp = compareValues(cellValue, lookupValue);
+      if (cmp instanceof Error) return cmp;
+      if (cmp === 0) {
+        return table[rowIndex - 1][i];
+      }
+      if (cmp > 0) {
+        // Passed the value
+        if (i === 0) return new Error('#N/A');
+        return table[rowIndex - 1][i - 1];
+      }
+    }
+  }
+
+  // Not found
+  if (exact) {
+    return new Error('#N/A');
+  } else {
+    // Return last column for approximate match
+    return table[rowIndex - 1][firstRow.length - 1];
+  }
+};
+
+/**
+ * INDEX - Returns value at row/column intersection
+ */
+export const INDEX: FormulaFunction = (array, rowNum, colNum?) => {
+  if (is2DArray(array)) {
+    const arr = array as FormulaValue[][];
+    const row = toNumber(rowNum);
+    
+    if (row instanceof Error) return row;
+    if (row < 1 || row > arr.length) return new Error('#REF!');
+
+    // If colNum not provided, return entire row
+    if (colNum === undefined) {
+      return arr[row - 1];
+    }
+
+    const col = toNumber(colNum);
+    if (col instanceof Error) return col;
+    if (col < 1 || col > arr[0].length) return new Error('#REF!');
+
+    return arr[row - 1][col - 1];
+  }
+
+  if (isArray(array)) {
+    const arr = array as FormulaValue[];
+    const index = toNumber(rowNum);
+    
+    if (index instanceof Error) return index;
+    if (index < 1 || index > arr.length) return new Error('#REF!');
+
+    return arr[index - 1];
+  }
+
+  return new Error('#VALUE!');
+};
+
+/**
+ * MATCH - Returns position of value in array
+ */
+export const MATCH: FormulaFunction = (lookupValue, lookupArray, matchType = 1) => {
+  const type = toNumber(matchType);
+  if (type instanceof Error) return type;
+
+  let arr: FormulaValue[];
+  
+  if (is2DArray(lookupArray)) {
+    // Flatten to 1D if 2D
+    const arr2d = lookupArray as FormulaValue[][];
+    arr = arr2d[0].length === 1 
+      ? arr2d.map(row => row[0]) 
+      : arr2d[0];
+  } else if (isArray(lookupArray)) {
+    arr = lookupArray as FormulaValue[];
+  } else {
+    return new Error('#VALUE!');
+  }
+
+  if (type === 0) {
+    // Exact match
+    for (let i = 0; i < arr.length; i++) {
+      if (compareValues(arr[i], lookupValue) === 0) {
+        return i + 1; // 1-based index
+      }
+    }
+    return new Error('#N/A');
+  }
+
+  if (type === 1) {
+    // Largest value <= lookup (assumes sorted ascending)
+    let lastMatch = -1;
+    for (let i = 0; i < arr.length; i++) {
+      const cmp = compareValues(arr[i], lookupValue);
+      if (cmp instanceof Error) return cmp;
+      if (cmp === 0) return i + 1;
+      if (cmp > 0) break;
+      lastMatch = i;
+    }
+    return lastMatch >= 0 ? lastMatch + 1 : new Error('#N/A');
+  }
+
+  if (type === -1) {
+    // Smallest value >= lookup (assumes sorted descending)
+    for (let i = 0; i < arr.length; i++) {
+      const cmp = compareValues(arr[i], lookupValue);
+      if (cmp instanceof Error) return cmp;
+      if (cmp === 0 || cmp < 0) return i + 1;
+    }
+    return new Error('#N/A');
+  }
+
+  return new Error('#VALUE!');
+};
+
+/**
+ * XLOOKUP - Excel 365 enhanced lookup
+ */
+export const XLOOKUP: FormulaFunction = (...args) => {
+  const [lookupValue, lookupArray, returnArray, ifNotFound = new Error('#N/A'), matchMode = 0, searchMode = 1] = args;
+
+  // Validate inputs
+  if (!Array.isArray(lookupArray)) return new Error('#VALUE!');
+  if (!Array.isArray(returnArray)) return new Error('#VALUE!');
+  if (lookupArray.length !== returnArray.length) return new Error('#VALUE!');
+  if (lookupArray.length === 0) return new Error('#N/A');
+
+  const matchModeNum = typeof matchMode === 'number' ? matchMode : 0;
+  const searchModeNum = typeof searchMode === 'number' ? searchMode : 1;
+
+  // Helper: Compare values
+  const compare = (a: FormulaValue, b: FormulaValue): number => {
+    if (a === b) return 0;
+    if (a == null) return -1;
+    if (b == null) return 1;
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    const aStr = String(a).toLowerCase();
+    const bStr = String(b).toLowerCase();
+    return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+  };
+
+  // Helper: Wildcard match
+  const wildcardMatch = (text: string, pattern: string): boolean => {
+    const regexPattern = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape regex special chars except * and ?
+      .replace(/\*/g, '.*')                    // * matches any characters
+      .replace(/\?/g, '.');                    // ? matches single character
+    const regex = new RegExp(`^${regexPattern}$`, 'i');
+    return regex.test(text);
+  };
+
+  // Binary search helper
+  const binarySearch = (ascending: boolean): number => {
+    let left = 0;
+    let right = lookupArray.length - 1;
+    let result = -1;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const cmp = compare(lookupArray[mid], lookupValue);
+
+      if (cmp === 0) {
+        return mid;  // Exact match
+      }
+
+      if (ascending) {
+        if (cmp < 0) {
+          result = mid;  // Potential next smallest
+          left = mid + 1;
+        } else {
+          right = mid - 1;
+        }
+      } else {
+        if (cmp > 0) {
+          result = mid;  // Potential next largest
+          left = mid + 1;
+        } else {
+          right = mid - 1;
+        }
+      }
+    }
+
+    return result;
+  };
+
+  // Search logic based on search_mode
+  let foundIndex = -1;
+
+  if (searchModeNum === 2) {
+    // Binary search (ascending)
+    foundIndex = binarySearch(true);
+  } else if (searchModeNum === -2) {
+    // Binary search (descending)
+    foundIndex = binarySearch(false);
+  } else {
+    // Linear search
+    const startIdx = searchModeNum === -1 ? lookupArray.length - 1 : 0;
+    const endIdx = searchModeNum === -1 ? -1 : lookupArray.length;
+    const step = searchModeNum === -1 ? -1 : 1;
+
+    if (matchModeNum === 2) {
+      // Wildcard match
+      const pattern = String(lookupValue);
+      for (let i = startIdx; i !== endIdx; i += step) {
+        if (wildcardMatch(String(lookupArray[i]), pattern)) {
+          foundIndex = i;
+          break;
+        }
+      }
+    } else if (matchModeNum === 0) {
+      // Exact match
+      for (let i = startIdx; i !== endIdx; i += step) {
+        if (compare(lookupArray[i], lookupValue) === 0) {
+          foundIndex = i;
+          break;
+        }
+      }
+    } else if (matchModeNum === -1) {
+      // Exact match or next smallest
+      let bestIdx = -1;
+      let bestValue: FormulaValue = null;
+
+      for (let i = startIdx; i !== endIdx; i += step) {
+        const cmp = compare(lookupArray[i], lookupValue);
+        if (cmp === 0) {
+          foundIndex = i;
+          break;
+        } else if (cmp < 0) {
+          if (bestIdx === -1 || compare(lookupArray[i], bestValue) > 0) {
+            bestIdx = i;
+            bestValue = lookupArray[i];
+          }
+        }
+      }
+
+      if (foundIndex === -1) foundIndex = bestIdx;
+    } else if (matchModeNum === 1) {
+      // Exact match or next largest
+      let bestIdx = -1;
+      let bestValue: FormulaValue = null;
+
+      for (let i = startIdx; i !== endIdx; i += step) {
+        const cmp = compare(lookupArray[i], lookupValue);
+        if (cmp === 0) {
+          foundIndex = i;
+          break;
+        } else if (cmp > 0) {
+          if (bestIdx === -1 || compare(lookupArray[i], bestValue) < 0) {
+            bestIdx = i;
+            bestValue = lookupArray[i];
+          }
+        }
+      }
+
+      if (foundIndex === -1) foundIndex = bestIdx;
+    }
+  }
+
+  // Return result or not-found value
+  if (foundIndex >= 0) {
+    return returnArray[foundIndex];
+  }
+
+  return ifNotFound;
+};
+
+/**
+ * LOOKUP - Simple lookup (array or vector form)
+ */
+export const LOOKUP: FormulaFunction = (lookupValue, ...args) => {
+  if (args.length === 1) {
+    // Array form: LOOKUP(value, array)
+    const array = args[0];
+    
+    if (!is2DArray(array)) {
+      return new Error('#VALUE!');
+    }
+
+    const arr = array as FormulaValue[][];
+    const firstRow = arr[0];
+    const lastRow = arr[arr.length - 1];
+
+    // Search first row/column
+    let lastMatch = -1;
+    for (let i = 0; i < firstRow.length; i++) {
+      const cmp = compareValues(firstRow[i], lookupValue);
+      if (cmp instanceof Error) return cmp;
+      if (cmp === 0) return lastRow[i];
+      if (cmp > 0) break;
+      lastMatch = i;
+    }
+
+    return lastMatch >= 0 ? lastRow[lastMatch] : new Error('#N/A');
+  }
+
+  if (args.length === 2) {
+    // Vector form: LOOKUP(value, lookupVector, resultVector)
+    const lookupVector = args[0];
+    const resultVector = args[1];
+
+    if (!isArray(lookupVector) || !isArray(resultVector)) {
+      return new Error('#VALUE!');
+    }
+
+    const lookupArr = lookupVector as FormulaValue[];
+    const resultArr = resultVector as FormulaValue[];
+
+    // Find largest value <= lookup
+    let lastMatch = -1;
+    for (let i = 0; i < lookupArr.length; i++) {
+      const cmp = compareValues(lookupArr[i], lookupValue);
+      if (cmp instanceof Error) return cmp;
+      if (cmp === 0) return resultArr[i];
+      if (cmp > 0) break;
+      lastMatch = i;
+    }
+
+    return lastMatch >= 0 ? resultArr[lastMatch] : new Error('#N/A');
+  }
+
+  return new Error('#VALUE!');
+};
+
+/**
+ * OFFSET - Returns reference offset from starting point
+ */
+/**
+ * OFFSET - Returns reference offset from starting reference
+ */
+export const OFFSET: FormulaFunction = (
+  reference,
+  rows,
+  cols,
+  height?,
+  width?
+) => {
+  // Validate reference is an array
+  if (!Array.isArray(reference)) {
+    return new Error('#REF!');
+  }
+
+  // Validate offsets are numeric
+  if (typeof rows !== 'number' || typeof cols !== 'number') {
+    return new Error('#VALUE!');
+  }
+
+  // Convert offsets to integers
+  const rowsOffset = Math.floor(rows);
+  const colsOffset = Math.floor(cols);
+
+  // Determine if reference is 1D or 2D
+  const is2D = Array.isArray(reference[0]);
+  
+  let refHeight: number;
+  let refWidth: number;
+  let sourceArray: any[][];
+
+  if (is2D) {
+    // 2D array
+    sourceArray = reference as any[][];
+    refHeight = sourceArray.length;
+    refWidth = refHeight > 0 ? sourceArray[0].length : 0;
+  } else {
+    // 1D array - treat as single row
+    sourceArray = [reference];
+    refHeight = 1;
+    refWidth = reference.length;
+  }
+
+  // Determine result dimensions
+  let resultHeight: number;
+  let resultWidth: number;
+  
+  if (typeof height === 'number') {
+    resultHeight = Math.floor(height);
+    if (resultHeight <= 0) {
+      return new Error('#REF!');
+    }
+  } else {
+    // Use remaining rows after offset
+    resultHeight = refHeight - rowsOffset;
+  }
+  
+  if (typeof width === 'number') {
+    resultWidth = Math.floor(width);
+    if (resultWidth <= 0) {
+      return new Error('#REF!');
+    }
+  } else {
+    // Use remaining columns after offset
+    resultWidth = refWidth - colsOffset;
+  }
+
+  // Validate final dimensions
+  if (resultHeight <= 0 || resultWidth <= 0) {
+    return new Error('#REF!');
+  }
+
+  // Calculate starting position
+  const startRow = rowsOffset;
+  const startCol = colsOffset;
+
+  // Validate bounds
+  if (startRow < 0 || startCol < 0) {
+    return new Error('#REF!');
+  }
+
+  // Validate end position
+  const endRow = startRow + resultHeight;
+  const endCol = startCol + resultWidth;
+
+  if (endRow > refHeight || endCol > refWidth) {
+    return new Error('#REF!');
+  }
+
+  // Extract the offset range
+  const result: any[][] = [];
+  
+  for (let r = 0; r < resultHeight; r++) {
+    const sourceRow = sourceArray[startRow + r];
+    if (!sourceRow) {
+      return new Error('#REF!');
+    }
+
+    const resultRow: any[] = [];
+    for (let c = 0; c < resultWidth; c++) {
+      const sourceCol = startCol + c;
+      if (sourceCol >= sourceRow.length) {
+        return new Error('#REF!');
+      }
+      resultRow.push(sourceRow[sourceCol]);
+    }
+    result.push(resultRow);
+  }
+
+  // Return format based on result dimensions
+  if (resultHeight === 1 && resultWidth === 1) {
+    // Single cell
+    return result[0][0];
+  } else if (resultHeight === 1) {
+    // Single row
+    return result[0];
+  } else if (resultWidth === 1) {
+    // Single column
+    return result.map(row => row[0]);
+  } else {
+    // Multi-row, multi-column
+    return result;
+  }
+};
+
+/**
+ * INDIRECT - Returns reference from text
+ */
+/**
+ * INDIRECT - Returns reference specified by text string
+ */
+export const INDIRECT: FormulaFunction = (refText, a1Style = true) => {
+  if (typeof refText !== 'string') {
+    return new Error('#VALUE!');
+  }
+
+  const isA1 = a1Style === true || a1Style === 1;
+
+  // Helper: Parse A1-style reference (e.g., "A1", "B5", "AA100")
+  const parseA1Reference = (ref: string): { row: number; col: number } | null => {
+    const match = ref.match(/^([A-Z]+)(\d+)$/i);
+    if (!match) return null;
+
+    const colStr = match[1].toUpperCase();
+    const rowStr = match[2];
+
+    // Convert column letters to number (A=1, B=2, ..., Z=26, AA=27, etc.)
+    let col = 0;
+    for (let i = 0; i < colStr.length; i++) {
+      col = col * 26 + (colStr.charCodeAt(i) - 65 + 1);
+    }
+
+    const row = parseInt(rowStr, 10);
+
+    if (row < 1 || col < 1 || row > 1048576 || col > 16384) {
+      return null; // Excel limits
+    }
+
+    return { row, col };
+  };
+
+  // Helper: Parse R1C1-style reference
+  const parseR1C1Reference = (ref: string): { row: number; col: number } | null => {
+    const match = ref.match(/^R(\d+)C(\d+)$/i);
+    if (!match) return null;
+
+    const row = parseInt(match[1], 10);
+    const col = parseInt(match[2], 10);
+
+    if (row < 1 || col < 1 || row > 1048576 || col > 16384) {
+      return null;
+    }
+
+    return { row, col };
+  };
+
+  // Helper: Convert column number to letters
+  const colToLetters = (col: number): string => {
+    let letters = '';
+    while (col > 0) {
+      const remainder = (col - 1) % 26;
+      letters = String.fromCharCode(65 + remainder) + letters;
+      col = Math.floor((col - 1) / 26);
+    }
+    return letters;
+  };
+
+  // Remove whitespace
+  const cleanRef = refText.trim();
+
+  // Check for sheet name
+  let sheetName: string | undefined;
+  let cellRef = cleanRef;
+  
+  const sheetSeparator = cleanRef.indexOf('!');
+  if (sheetSeparator > 0) {
+    sheetName = cleanRef.substring(0, sheetSeparator);
+    cellRef = cleanRef.substring(sheetSeparator + 1);
+  }
+
+  // Check for range reference
+  const rangeSeparator = cellRef.indexOf(':');
+  if (rangeSeparator > 0) {
+    const startRef = cellRef.substring(0, rangeSeparator);
+    const endRef = cellRef.substring(rangeSeparator + 1);
+
+    let start: { row: number; col: number } | null;
+    let end: { row: number; col: number } | null;
+
+    if (isA1) {
+      start = parseA1Reference(startRef);
+      end = parseA1Reference(endRef);
+    } else {
+      start = parseR1C1Reference(startRef);
+      end = parseR1C1Reference(endRef);
+    }
+
+    if (!start || !end) {
+      return new Error('#REF!');
+    }
+
+    // Validate range
+    if (start.row > end.row || start.col > end.col) {
+      return new Error('#REF!');
+    }
+
+    // Return normalized range string
+    const normalizedRange = isA1
+      ? `${colToLetters(start.col)}${start.row}:${colToLetters(end.col)}${end.row}`
+      : `R${start.row}C${start.col}:R${end.row}C${end.col}`;
+
+    return sheetName ? `${sheetName}!${normalizedRange}` : normalizedRange;
+  }
+
+  // Parse single cell reference
+  let parsed: { row: number; col: number } | null;
+
+  if (isA1) {
+    parsed = parseA1Reference(cellRef);
+  } else {
+    parsed = parseR1C1Reference(cellRef);
+  }
+
+  if (!parsed) {
+    return new Error('#REF!');
+  }
+
+  // Return normalized cell reference string
+  const normalizedCell = isA1
+    ? `${colToLetters(parsed.col)}${parsed.row}`
+    : `R${parsed.row}C${parsed.col}`;
+
+  return sheetName ? `${sheetName}!${normalizedCell}` : normalizedCell;
+};
+
+/**
+ * CHOOSE - Returns value from list by index
+ */
+/**
+ * CHOOSE - Returns value from list by index
+ */
+export const CHOOSE: FormulaFunction = (indexNum, ...values) => {
+  const index = toNumber(indexNum);
+  if (index instanceof Error) return index;
+
+  // Floor the index (Excel truncates decimals)
+  const flooredIndex = Math.floor(index);
+
+  if (flooredIndex < 1 || flooredIndex > values.length) {
+    return new Error('#VALUE!');
+  }
+
+  return values[flooredIndex - 1];
+};
+
+/**
+ * ROW - Returns row number of reference
+ */
+export const ROW: FormulaFunction = (reference?) => {
+  // Note: Requires cell reference context
+  // This is a placeholder
+  return new Error('#NAME?');
+};
+
+/**
+ * COLUMN - Returns column number of reference
+ */
+export const COLUMN: FormulaFunction = (reference?) => {
+  // Note: Requires cell reference context
+  // This is a placeholder
+  return new Error('#NAME?');
+};

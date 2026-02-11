@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sprint 2: Interactive Chart Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    header {
+      text-align: center;
+      color: white;
+      margin-bottom: 30px;
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .subtitle {
+      font-size: 1.2rem;
+      opacity: 0.9;
+    }
+    
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    
+    @media (max-width: 968px) {
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .canvas-container {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    
+    canvas {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: grab;
+      touch-action: none;
+    }
+    
+    canvas:active {
+      cursor: grabbing;
+    }
+    
+    .controls {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    
+    .control-section {
+      margin-bottom: 25px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .control-section:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+    
+    .control-section h3 {
+      color: #667eea;
+      font-size: 1.1rem;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .control-group {
+      margin-bottom: 15px;
+    }
+    
+    .control-group label {
+      display: block;
+      font-size: 0.9rem;
+      color: #4a5568;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    
+    button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin-bottom: 8px;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button.secondary {
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+    }
+    
+    button.danger {
+      background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+    }
+    
+    input[type="range"] {
+      width: 100%;
+      margin: 8px 0;
+    }
+    
+    .value-display {
+      text-align: right;
+      font-size: 0.9rem;
+      color: #667eea;
+      font-weight: 600;
+    }
+    
+    .status {
+      background: #f7fafc;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+    }
+    
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    .status-label {
+      color: #718096;
+    }
+    
+    .status-value {
+      color: #2d3748;
+      font-weight: 600;
+    }
+    
+    .feature-tag {
+      display: inline-block;
+      background: #4299e1;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 5px;
+      margin-bottom: 5px;
+    }
+    
+    .instructions {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    
+    .instructions h3 {
+      color: #667eea;
+      margin-bottom: 15px;
+    }
+    
+    .instructions ul {
+      list-style: none;
+      padding: 0;
+    }
+    
+    .instructions li {
+      padding: 10px;
+      margin-bottom: 8px;
+      background: #f7fafc;
+      border-radius: 6px;
+      border-left: 3px solid #667eea;
+    }
+    
+    .instructions li strong {
+      color: #2d3748;
+    }
+    
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #48bb78;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+    
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎨 Sprint 2: Interactive Charts</h1>
+      <p class="subtitle">Full Touch Support • Callbacks • Transform Utilities • Animated Zoom</p>
+      <div style="margin-top: 15px;">
+        <span class="feature-tag">📱 Mobile Ready</span>
+        <span class="feature-tag">🔄 Pinch to Zoom</span>
+        <span class="feature-tag">✏️ Annotations</span>
+        <span class="feature-tag">🎯 Selection</span>
+        <span class="feature-tag">🔍 Zoom/Pan</span>
+      </div>
+    </header>
+    
+    <div class="demo-grid">
+      <div class="canvas-container">
+        <canvas id="chartCanvas" width="800" height="600"></canvas>
+      </div>
+      
+      <div class="controls">
+        <div class="status">
+          <div class="status-item">
+            <span class="status-label">Zoom Level:</span>
+            <span class="status-value" id="zoomLevel">100%</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Position:</span>
+            <span class="status-value" id="position">0, 0</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Selected:</span>
+            <span class="status-value" id="selected">None</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Redraws:</span>
+            <span class="status-value" id="redraws">0</span>
+          </div>
+        </div>
+        
+        <div class="control-section">
+          <h3>🔍 Zoom & Pan</h3>
+          <div class="control-group">
+            <button onclick="demo.zoomIn()">Zoom In (+)</button>
+            <button onclick="demo.zoomOut()">Zoom Out (-)</button>
+            <button onclick="demo.resetView()" class="secondary">Reset View</button>
+          </div>
+        </div>
+        
+        <div class="control-section">
+          <h3>✏️ Annotations</h3>
+          <button onclick="demo.addTextAnnotation()">Add Text</button>
+          <button onclick="demo.addArrowAnnotation()">Add Arrow</button>
+          <button onclick="demo.addShapeAnnotation()">Add Shape</button>
+          <button onclick="demo.clearAnnotations()" class="danger">Clear All</button>
+        </div>
+        
+        <div class="control-section">
+          <h3>🎯 Interaction</h3>
+          <button onclick="demo.toggleCrosshair()">Toggle Crosshair</button>
+          <button onclick="demo.clearSelection()">Clear Selection</button>
+        </div>
+        
+        <div class="control-section">
+          <h3>🎬 Animation</h3>
+          <div class="control-group">
+            <label>Target Zoom:</label>
+            <input type="range" id="zoomSlider" min="50" max="300" value="100" 
+                   oninput="document.getElementById('zoomValue').textContent = this.value + '%'">
+            <div class="value-display" id="zoomValue">100%</div>
+          </div>
+          <button onclick="demo.animateToZoom()">Animate Zoom</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="instructions">
+      <h3>📖 How to Use</h3>
+      <ul>
+        <li><strong>Desktop:</strong> Mouse wheel to zoom, Shift+Drag to pan, Click to select</li>
+        <li><strong>Mobile:</strong> Pinch to zoom, Single finger to pan, Tap to select</li>
+        <li><strong>Annotations:</strong> Add text labels, arrows, or shapes to highlight data</li>
+        <li><strong>Callbacks:</strong> Watch the status panel update in real-time</li>
+        <li><strong>Transforms:</strong> All rendering respects zoom/pan state automatically</li>
+        <li><strong>Animations:</strong> Smooth zoom transitions with cubic easing</li>
+      </ul>
+    </div>
+  </div>
+  
+  <div id="toast" class="toast"></div>
+  
+  <script type="module">
+    // This would normally import from the built package
+    // For demo purposes, we'll simulate the functionality
+    
+    class InteractiveChartDemo {
+      constructor() {
+        this.canvas = document.getElementById('chartCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.redrawCount = 0;
+        this.zoomScale = 1;
+        this.panX = 0;
+        this.panY = 0;
+        this.annotations = [];
+        this.crosshairEnabled = false;
+        this.selectedPoints = [];
+        
+        this.setupEventListeners();
+        this.drawChart();
+        this.showToast('Demo loaded! Try pinch-to-zoom on mobile 📱');
+      }
+      
+      setupEventListeners() {
+        // Mouse wheel zoom
+        this.canvas.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? 0.9 : 1.1;
+          this.zoomScale = Math.max(0.5, Math.min(5, this.zoomScale * delta));
+          this.onZoomChange();
+          this.drawChart();
+        });
+        
+        // Touch gestures
+        let lastDist = 0;
+        this.canvas.addEventListener('touchstart', (e) => {
+          if (e.touches.length === 2) {
+            const dx = e.touches[1].clientX - e.touches[0].clientX;
+            const dy = e.touches[1].clientY - e.touches[0].clientY;
+            lastDist = Math.sqrt(dx * dx + dy * dy);
+          }
+        });
+        
+        this.canvas.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          if (e.touches.length === 2) {
+            const dx = e.touches[1].clientX - e.touches[0].clientX;
+            const dy = e.touches[1].clientY - e.touches[0].clientY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (lastDist > 0) {
+              const scale = dist / lastDist;
+              this.zoomScale = Math.max(0.5, Math.min(5, this.zoomScale * scale));
+              this.onZoomChange();
+              this.drawChart();
+            }
+            lastDist = dist;
+          }
+        }, { passive: false });
+        
+        // Click selection
+        this.canvas.addEventListener('click', (e) => {
+          const rect = this.canvas.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          this.onSelectionChange([Math.floor(x / 100)]);
+        });
+      }
+      
+      drawChart() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Apply transform
+        this.ctx.save();
+        this.ctx.translate(this.panX, this.panY);
+        this.ctx.scale(this.zoomScale, this.zoomScale);
+        
+        // Draw sample bar chart
+        const data = [45, 67, 89, 56, 78, 90, 34, 67];
+        const barWidth = 80;
+        const spacing = 20;
+        
+        data.forEach((value, i) => {
+          const x = i * (barWidth + spacing) + 50;
+          const height = value * 4;
+          const y = this.canvas.height - height - 50;
+          
+          // Bar
+          const gradient = this.ctx.createLinearGradient(x, y, x, y + height);
+          gradient.addColorStop(0, '#667eea');
+          gradient.addColorStop(1, '#764ba2');
+          this.ctx.fillStyle = gradient;
+          this.ctx.fillRect(x, y, barWidth, height);
+          
+          // Value label
+          this.ctx.fillStyle = '#2d3748';
+          this.ctx.font = '14px sans-serif';
+          this.ctx.textAlign = 'center';
+          this.ctx.fillText(value.toString(), x + barWidth / 2, y - 10);
+        });
+        
+        // Draw annotations
+        this.annotations.forEach(ann => {
+          if (ann.type === 'text') {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            this.ctx.font = '16px sans-serif';
+            this.ctx.fillText(ann.text, ann.x, ann.y);
+          } else if (ann.type === 'arrow') {
+            this.ctx.strokeStyle = '#f56565';
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(ann.x, ann.y);
+            this.ctx.lineTo(ann.endX, ann.endY);
+            this.ctx.stroke();
+            
+            // Arrowhead
+            const angle = Math.atan2(ann.endY - ann.y, ann.endX - ann.x);
+            this.ctx.beginPath();
+            this.ctx.moveTo(ann.endX, ann.endY);
+            this.ctx.lineTo(
+              ann.endX - 15 * Math.cos(angle - Math.PI / 6),
+              ann.endY - 15 * Math.sin(angle - Math.PI / 6)
+            );
+            this.ctx.lineTo(
+              ann.endX - 15 * Math.cos(angle + Math.PI / 6),
+              ann.endY - 15 * Math.sin(angle + Math.PI / 6)
+            );
+            this.ctx.closePath();
+            this.ctx.fillStyle = '#f56565';
+            this.ctx.fill();
+          } else if (ann.type === 'shape') {
+            this.ctx.strokeStyle = '#48bb78';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(ann.x, ann.y, 100, 80);
+          }
+        });
+        
+        this.ctx.restore();
+        
+        // Crosshair
+        if (this.crosshairEnabled) {
+          this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+          this.ctx.lineWidth = 1;
+          this.ctx.setLineDash([5, 5]);
+          this.ctx.beginPath();
+          this.ctx.moveTo(this.canvas.width / 2, 0);
+          this.ctx.lineTo(this.canvas.width / 2, this.canvas.height);
+          this.ctx.moveTo(0, this.canvas.height / 2);
+          this.ctx.lineTo(this.canvas.width, this.canvas.height / 2);
+          this.ctx.stroke();
+          this.ctx.setLineDash([]);
+        }
+        
+        this.onRedraw();
+      }
+      
+      // Callbacks
+      onRedraw() {
+        this.redrawCount++;
+        document.getElementById('redraws').textContent = this.redrawCount;
+      }
+      
+      onZoomChange() {
+        document.getElementById('zoomLevel').textContent = 
+          Math.round(this.zoomScale * 100) + '%';
+        document.getElementById('position').textContent = 
+          `${Math.round(this.panX)}, ${Math.round(this.panY)}`;
+      }
+      
+      onSelectionChange(indices) {
+        this.selectedPoints = indices;
+        document.getElementById('selected').textContent = 
+          indices.length > 0 ? `Point ${indices[0]}` : 'None';
+      }
+      
+      // Control methods
+      zoomIn() {
+        this.animateZoom(this.zoomScale * 1.2);
+        this.showToast('Zooming in...');
+      }
+      
+      zoomOut() {
+        this.animateZoom(this.zoomScale * 0.8);
+        this.showToast('Zooming out...');
+      }
+      
+      resetView() {
+        this.animateZoom(1);
+        this.panX = 0;
+        this.panY = 0;
+        this.showToast('View reset!');
+      }
+      
+      animateZoom(targetScale) {
+        targetScale = Math.max(0.5, Math.min(5, targetScale));
+        const startScale = this.zoomScale;
+        const startTime = Date.now();
+        const duration = 300;
+        
+        const animate = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          
+          // Cubic ease-in-out
+          const eased = progress < 0.5
+            ? 4 * progress * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+          
+          this.zoomScale = startScale + (targetScale - startScale) * eased;
+          this.onZoomChange();
+          this.drawChart();
+          
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          }
+        };
+        
+        animate();
+      }
+      
+      animateToZoom() {
+        const slider = document.getElementById('zoomSlider');
+        const targetZoom = parseInt(slider.value) / 100;
+        this.animateZoom(targetZoom);
+        this.showToast(`Animating to ${slider.value}%...`);
+      }
+      
+      addTextAnnotation() {
+        this.annotations.push({
+          type: 'text',
+          text: '⭐ Important!',
+          x: 200 + Math.random() * 400,
+          y: 100 + Math.random() * 300,
+        });
+        this.drawChart();
+        this.showToast('Text annotation added!');
+      }
+      
+      addArrowAnnotation() {
+        const x = 200 + Math.random() * 400;
+        const y = 150 + Math.random() * 200;
+        this.annotations.push({
+          type: 'arrow',
+          x: x,
+          y: y,
+          endX: x + 100,
+          endY: y + 80,
+        });
+        this.drawChart();
+        this.showToast('Arrow annotation added!');
+      }
+      
+      addShapeAnnotation() {
+        this.annotations.push({
+          type: 'shape',
+          x: 200 + Math.random() * 400,
+          y: 150 + Math.random() * 250,
+        });
+        this.drawChart();
+        this.showToast('Shape annotation added!');
+      }
+      
+      clearAnnotations() {
+        this.annotations = [];
+        this.drawChart();
+        this.showToast('All annotations cleared!');
+      }
+      
+      toggleCrosshair() {
+        this.crosshairEnabled = !this.crosshairEnabled;
+        this.drawChart();
+        this.showToast(this.crosshairEnabled ? 'Crosshair enabled!' : 'Crosshair disabled!');
+      }
+      
+      clearSelection() {
+        this.onSelectionChange([]);
+        this.showToast('Selection cleared!');
+      }
+      
+      showToast(message) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+      }
+    }
+    
+    // Initialize demo
+    window.demo = new InteractiveChartDemo();
+  </script>
+</body>
+</html>

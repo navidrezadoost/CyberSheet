@@ -10,6 +10,8 @@ export type CyberSheetProps = {
   style?: any;
   physicsOptions?: PhysicsOptions;
   zoom?: number; // external zoom control (1 = 100%)
+  fontFamily?: string; // global font family configuration
+  fontSize?: number; // global font size configuration (in pixels)
   onRendererReady?: (renderer: CanvasRenderer) => void;
 };
 
@@ -29,7 +31,7 @@ export type PhysicsOptions = {
   snapIntervalMs?: number;           // how often to check snap (default 200)
 };
 
-export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physicsOptions, zoom, onRendererReady }: CyberSheetProps) => {
+export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physicsOptions, zoom, fontFamily, fontSize, onRendererReady }: CyberSheetProps) => {
   const containerRef = useRef(null as any);
   const rendererRef = useRef(null as any);
   const sheetRef = useRef(undefined as any);
@@ -47,9 +49,9 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
 
   // Defaults for physics
   const p = {
-    kineticScroll: true,
-    selectionInertia: true,
-    snapToGrid: true,
+    kineticScroll: false, // Disabled by default - let renderer handle scrolling
+    selectionInertia: false, // Disabled by default
+    snapToGrid: false, // Disabled by default
     allowTouch: true,
     touchPanWithTwoFingers: true,
     friction: 0.92,
@@ -83,15 +85,31 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     }
   }, [zoom, rendererRef.current]);
 
+  // React to font configuration changes
+  useEffect(() => {
+    const r = rendererRef.current as CanvasRenderer | null;
+    if (!r || typeof r.setTheme !== 'function') return;
+    
+    const themeUpdate: any = {};
+    if (fontFamily !== undefined) themeUpdate.fontFamily = fontFamily;
+    if (fontSize !== undefined) themeUpdate.fontSize = fontSize;
+    
+    if (Object.keys(themeUpdate).length > 0) {
+      r.setTheme(themeUpdate);
+    }
+  }, [fontFamily, fontSize, rendererRef.current]);
+
   // Basic wheel scroll handler
   useEffect(() => {
     const el = containerRef.current;
     const r = rendererRef.current;
     if (!el || !r) return;
-    // Kinetic scrolling: accumulate velocity and animate with friction + boundary resistance
+    
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      
       if (p.kineticScroll) {
+        // Advanced: Kinetic scrolling with momentum (opt-in feature)
         const now = performance.now();
         const dt = Math.max(1, now - (lastWheelTimeRef.current || now));
         lastWheelTimeRef.current = now;
@@ -100,9 +118,11 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
         stepScroll(r, velRef.current.vx, velRef.current.vy, true);
         if (rafRef.current == null) rafRef.current = requestAnimationFrame(() => animate(r));
       } else {
+        // Simple: Direct scroll - let renderer handle all logic
         r.scrollBy(e.deltaX, e.deltaY);
       }
     };
+    
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [rendererRef.current]);
@@ -139,33 +159,11 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     if (active) rafRef.current = requestAnimationFrame(() => animate(r));
   };
 
-  // Apply scroll delta with boundary resistance and edge autoscroll while selecting
+  // Apply scroll delta (only used when kineticScroll is enabled)
   const stepScroll = (r: any, dx: number, dy: number, immediate: boolean) => {
     const { x: sx, y: sy } = r.getScroll();
-    const max = r.getMaxScroll?.() ?? { x: Infinity, y: Infinity };
-    let nx = sx;
-    let ny = sy;
-    // Boundary resistance: scale delta as we approach or attempt to cross bounds
-    const applyAxis = (pos: number, d: number, maxPos: number) => {
-      const next = pos + d;
-      if (next < 0) {
-        const overshoot = -next;
-        const factor = 1 / Math.sqrt(1 + overshoot / (p.resistanceScale || 40));
-        return pos + d * factor;
-      }
-      if (next > maxPos) {
-        const overshoot = next - maxPos;
-        const factor = 1 / Math.sqrt(1 + overshoot / (p.resistanceScale || 40));
-        return pos + d * factor;
-      }
-      // Also ease when very close to edge to create soft feel
-      const edge = Math.min(pos, maxPos - pos);
-      const edgeFactor = edge < 20 ? (0.5 + edge / 40) : 1;
-      return pos + d * edgeFactor;
-    };
-    nx = applyAxis(sx, dx, max.x);
-    ny = applyAxis(sy, dy, max.y);
-    r.setScroll(nx, ny);
+    // Simple: Just apply delta, renderer will handle clamping
+    r.setScroll(sx + dx, sy + dy);
   };
 
   // Update selection position with inertia; also autoscroll when near edges

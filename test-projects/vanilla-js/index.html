@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CyberSheet - Vanilla JS Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .header {
+      background: #2b579a;
+      color: white;
+      padding: 15px 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 20px auto;
+      padding: 0 20px;
+    }
+
+    .controls {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #f0f0f0;
+      border-color: #999;
+    }
+
+    button.primary {
+      background: #2b579a;
+      color: white;
+      border-color: #2b579a;
+    }
+
+    button.primary:hover {
+      background: #1e3f6f;
+    }
+
+    .sheet-container {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+
+    #sheet {
+      width: 100%;
+      height: 600px;
+    }
+
+    .info {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .info h3 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .info ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .info li {
+      padding: 5px 0;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .info li:before {
+      content: "✓ ";
+      color: #4caf50;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🚀 CyberSheet - Vanilla JS Integration Test</h1>
+  </div>
+
+  <div class="container">
+    <div class="controls">
+      <button id="addData" class="primary">Add Sample Data</button>
+      <button id="addFormulas">Add Formulas</button>
+      <button id="clearSheet">Clear Sheet</button>
+      <button id="exportData">Export to Console</button>
+      <button id="zoomIn">Zoom In</button>
+      <button id="zoomOut">Zoom Out</button>
+      <button id="resetZoom">Reset Zoom</button>
+    </div>
+
+    <div class="sheet-container">
+      <div id="sheet"></div>
+    </div>
+
+    <div class="info">
+      <h3>Test Checklist</h3>
+      <ul>
+        <li>Core package loads correctly</li>
+        <li>Renderer initializes without errors</li>
+        <li>Canvas renders properly</li>
+        <li>Data updates reflect immediately</li>
+        <li>Formulas calculate correctly</li>
+        <li>Zoom controls work smoothly</li>
+        <li>Export functionality works</li>
+        <li>No console errors</li>
+      </ul>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

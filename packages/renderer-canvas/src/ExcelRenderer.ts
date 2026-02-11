@@ -12,7 +12,7 @@
  * ✅ Dirty rectangle optimization for partial redraws
  */
 
-import { Worksheet, Address, CellStyle, resolveExcelColor, ExcelColorSpec } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, resolveExcelColor, ExcelColorSpec, ConditionalFormattingEngine, ConditionalFormattingRule, ConditionalFormattingResult, DataBarRender, IconRender } from '@cyber-sheet/core';
 import { MultiLayerCanvas, CanvasLayerType, ExcelBorderRenderer, ExcelBorderStyle } from './MultiLayerCanvas';
 import { TextMeasureCache } from './TextMeasureCache';
 import { FormatCache } from './FormatCache';
@@ -56,6 +56,8 @@ export class ExcelRenderer {
   private plugins: RenderPlugin[] = [];
   private heatmapRange: { min: number; max: number } | null = null;
   private rafId: number | null = null;
+  private cfEngine = new ConditionalFormattingEngine();
+  private cachedCFRules: ConditionalFormattingRule[] = [];
   private _lastRenderMs = 0;
 
   constructor(container: HTMLElement, sheet: Worksheet, options: ExcelRendererOptions = {}) {
@@ -122,6 +124,12 @@ export class ExcelRenderer {
     });
 
     this.observeResize();
+    this.cachedCFRules = sheet.getConditionalFormattingRules?.() ?? [];
+    sheet.on(e => {
+      if (e.type === 'sheet-mutated' || e.type === 'style-changed') {
+        this.cachedCFRules = sheet.getConditionalFormattingRules?.() ?? [];
+      }
+    });
     this.redraw();
   }
 
@@ -422,10 +430,19 @@ export class ExcelRenderer {
         const cw = this.sheet.getColumnWidth(col);
         const addr = { row, col };
         const value = this.sheet.getCellValue(addr);
-        const style = this.sheet.getCellStyle(addr);
+        let style = this.sheet.getCellStyle(addr);
+
+        // Conditional formatting
+        const { result: cfResult, style: cfStyle } = this.applyConditionalFormatting(value, addr, style);
+        style = cfStyle;
 
         // Render cell background
         this.renderCellBackground(ctx, x, y, cw, rh, addr, value, style);
+
+        // Data bars
+        if (cfResult?.dataBar) {
+          this.renderDataBar(ctx, x, y, cw, rh, cfResult.dataBar);
+        }
 
         // Render cell borders
         this.renderCellBorders(ctx, x, y, cw, rh, style, dpr);
@@ -433,6 +450,11 @@ export class ExcelRenderer {
         // Render cell text
         if (value !== null && value !== undefined && value !== '') {
           this.renderCellText(ctx, x, y, cw, rh, addr, value, style);
+        }
+
+        // Icons overlay (after text to keep on top)
+        if (cfResult?.icon) {
+          this.renderIcon(ctx, x, y, cw, rh, cfResult.icon);
         }
 
         // Plugin after-render hook
@@ -503,6 +525,71 @@ export class ExcelRenderer {
   // ============================================================================
   // Cell Rendering Helpers
   // ============================================================================
+
+  private applyConditionalFormatting(value: any, addr: Address, baseStyle?: CellStyle): { result?: ConditionalFormattingResult; style?: CellStyle } {
+    if (!this.cachedCFRules.length) return { style: baseStyle };
+
+    const result = this.cfEngine.applyRules(value, this.cachedCFRules, {
+      address: addr,
+      valueRange: this.heatmapRange ?? undefined,
+    });
+
+    const mergedStyle = result.style ? { ...(baseStyle ?? {}), ...result.style } : baseStyle;
+    return { result, style: mergedStyle };
+  }
+
+  private renderDataBar(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    dataBar: DataBarRender
+  ) {
+    const margin = 3;
+    const barHeight = Math.max(4, h - margin * 2);
+    const barWidth = Math.max(0, (w - margin * 2) * Math.min(1, Math.max(0, dataBar.percent)));
+
+    ctx.save();
+    ctx.fillStyle = dataBar.color;
+    if (dataBar.gradient) {
+      const grad = ctx.createLinearGradient(x, y, x + barWidth, y);
+      grad.addColorStop(0, dataBar.color);
+      grad.addColorStop(1, this.applyAlpha(dataBar.color, 0.65));
+      ctx.fillStyle = grad;
+    }
+    ctx.fillRect(x + margin, y + (h - barHeight) / 2, barWidth, barHeight);
+    ctx.restore();
+  }
+
+  private renderIcon(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    icon: IconRender
+  ) {
+    const palette = icon.iconSet === 'traffic-lights'
+      ? ['#d32f2f', '#fbc02d', '#388e3c']
+      : icon.iconSet === 'flags'
+        ? ['#d32f2f', '#1976d2', '#388e3c']
+        : icon.iconSet === 'stars'
+          ? ['#c0c0c0', '#c0c0c0', '#fbc02d']
+          : ['#d32f2f', '#fbc02d', '#388e3c'];
+
+    const color = palette[Math.min(palette.length - 1, Math.max(0, icon.iconIndex))];
+    const size = Math.min(14, h - 4);
+    const px = x + 4;
+    const py = y + (h - size) / 2;
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(px + size / 2, py + size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   private renderCellBackground(
     ctx: CanvasRenderingContext2D,
@@ -676,6 +763,18 @@ export class ExcelRenderer {
   // ============================================================================
   // Utility Methods
   // ============================================================================
+
+  private applyAlpha(color: string, alpha: number): string {
+    if (color.startsWith('#')) {
+      const hex = color.slice(1);
+      const isShort = hex.length === 3;
+      const r = parseInt(isShort ? hex[0] + hex[0] : hex.substring(0, 2), 16);
+      const g = parseInt(isShort ? hex[1] + hex[1] : hex.substring(2, 4), 16);
+      const b = parseInt(isShort ? hex[2] + hex[2] : hex.substring(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    return color;
+  }
 
   private resolveColor(color: string | ExcelColorSpec | undefined | null, defaultColor: string = '#000000'): string {
     if (!color) return defaultColor;
