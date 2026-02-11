@@ -1,4 +1,5 @@
 import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, Range, SheetEvents, IFormulaEngine } from './types';
+import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 
 function key(addr: Address): string {
@@ -14,6 +15,7 @@ export class Worksheet {
   private events = new Emitter<SheetEvents>();
   private formulaEngine?: IFormulaEngine;
   private merges: Range[] = [];
+  private conditionalRules: ConditionalFormattingRule[] = [];
   rowCount: number;
   colCount: number;
 
@@ -55,6 +57,27 @@ export class Worksheet {
     c.style = style ? { ...style } : undefined;
     this.cells.set(k, c);
     this.events.emit({ type: 'style-changed', address: addr, style });
+  }
+
+  // ==================== Conditional Formatting ====================
+
+  setConditionalFormattingRules(rules: ConditionalFormattingRule[]): void {
+    this.conditionalRules = rules.slice();
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  addConditionalFormattingRule(rule: ConditionalFormattingRule): void {
+    this.conditionalRules.push(rule);
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  clearConditionalFormatting(): void {
+    this.conditionalRules = [];
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  getConditionalFormattingRules(): ConditionalFormattingRule[] {
+    return this.conditionalRules.slice();
   }
 
   setColumnFilter(col: number, filter: ColumnFilter): void {

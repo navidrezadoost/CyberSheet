@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { loadXlsxFromUrl } from '../packages/io-xlsx/src';
+import { SheetTabs } from '../packages/react/src/SheetTabs';
 
 type CellAddress = { row: number; col: number };
 type Range = { start: CellAddress; end: CellAddress };
@@ -721,19 +722,25 @@ export const ExcelReactViewer = ({ url = DEFAULT_URL }: ExcelReactViewerProps) =
         </div>
       </div>
 
-      <div className="sheet-tabs-container">
-        <div className="sheet-tabs">
-          {sheetNames.map(name => (
-            <div
-              key={name}
-              className={`sheet-tab${name === activeSheetName ? ' active' : ''}`}
-              onClick={() => setActiveSheetName(name)}
-            >
-              {name}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Excel-style sheet tabs */}
+      <SheetTabs
+        sheets={sheetNames}
+        activeSheet={activeSheetName || ''}
+        onSheetChange={setActiveSheetName}
+        onAddSheet={() => {
+          const newName = `Sheet${sheetNames.length + 1}`;
+          workbook?.addSheet(newName);
+          setActiveSheetName(newName);
+        }}
+        onRenameSheet={(oldName, newName) => {
+          // TODO: Implement rename in core
+          console.log('Rename', oldName, 'to', newName);
+        }}
+        onDeleteSheet={(sheetName) => {
+          // TODO: Implement delete in core
+          console.log('Delete', sheetName);
+        }}
+      />
 
       <div className="status-bar">
         <div className="status-left">

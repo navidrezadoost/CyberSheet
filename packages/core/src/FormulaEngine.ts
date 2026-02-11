@@ -8,13 +8,15 @@
 import type { Address, Cell, CellValue } from './types';
 import type { Worksheet } from './worksheet';
 
-export type FormulaValue = number | string | boolean | null | Error;
-export type FormulaFunction = (...args: FormulaValue[]) => FormulaValue;
+import type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext } from './types/formula-types';
 
-export interface FormulaContext {
-  worksheet: Worksheet;
-  currentCell: Address;
-}
+// Import modular components
+import { FunctionRegistry } from './registry/FunctionRegistry';
+import { registerBuiltInFunctions } from './functions/function-initializer';
+import { OperatorRegistry } from './operators/operators';
+
+// Re-export types for backward compatibility
+export type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext };
 
 /**
  * Dependency graph for tracking cell dependencies
@@ -100,12 +102,20 @@ class DependencyGraph {
  * Formula parser and evaluator
  */
 export class FormulaEngine {
-  private functions = new Map<string, FormulaFunction>();
+  private functionRegistry = new FunctionRegistry();
+  private operatorRegistry = new OperatorRegistry();
   private dependencyGraph = new DependencyGraph();
   private calculating = new Set<string>();
 
   constructor() {
-    this.registerBuiltInFunctions();
+    registerBuiltInFunctions(this.functionRegistry);
+  }
+
+  /**
+   * Getter for backward compatibility with tests that access engine.functions
+   */
+  get functions() {
+    return this.functionRegistry;
   }
 
   /**
@@ -139,6 +149,29 @@ export class FormulaEngine {
   private evaluateExpression(expr: string, context: FormulaContext): FormulaValue {
     expr = expr.trim();
 
+    // Parenthesized expression - remove outer parens and evaluate inner
+    if (expr.startsWith('(') && expr.endsWith(')')) {
+      // Check if these are matching outer parens
+      let depth = 0;
+      let isOuterParens = true;
+      
+      for (let i = 0; i < expr.length - 1; i++) {
+        if (expr[i] === '(') depth++;
+        else if (expr[i] === ')') depth--;
+        
+        // If depth hits 0 before the end, the outer parens don't match
+        if (depth === 0 && i < expr.length - 1) {
+          isOuterParens = false;
+          break;
+        }
+      }
+      
+      if (isOuterParens) {
+        // Remove outer parens and evaluate inner expression
+        return this.evaluateExpression(expr.slice(1, -1), context);
+      }
+    }
+
     // String literal
     if (expr.startsWith('"') && expr.endsWith('"')) {
       return expr.slice(1, -1);
@@ -153,6 +186,30 @@ export class FormulaEngine {
     if (expr.toLowerCase() === 'true') return true;
     if (expr.toLowerCase() === 'false') return false;
 
+    // Lambda parameter - check if this is a parameter name in lambda context
+    if (context.lambdaContext) {
+      // Simple identifier pattern (parameter names)
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expr)) {
+        const paramValue = context.lambdaContext.get(expr);
+        if (paramValue !== undefined) {
+          return paramValue;
+        }
+      }
+    }
+    
+    // Named lambda - check if this is a named lambda identifier
+    if (context.namedLambdas && /^[a-zA-Z_][a-zA-Z0-9_]*$/i.test(expr)) {
+      // Try exact case match first
+      let namedLambda = context.namedLambdas.get(expr);
+      // If not found, try uppercase (Excel is case-insensitive)
+      if (!namedLambda) {
+        namedLambda = context.namedLambdas.get(expr.toUpperCase());
+      }
+      if (namedLambda) {
+        return namedLambda as any;
+      }
+    }
+
     // Cell reference (e.g., A1, B2)
     if (/^[A-Z]+\d+$/i.test(expr)) {
       return this.evaluateCellReference(expr, context);
@@ -163,25 +220,155 @@ export class FormulaEngine {
       return new Error('#VALUE!');
     }
 
-    // Binary operations (check BEFORE function calls to handle expressions like SUM(A1:A2)+SUM(B1:B2))
-    const operators = ['+', '-', '*', '/', '^', '=', '<>', '<', '>', '<=', '>=', '&'];
+    // Unary minus (e.g., -5, -val, -A1)
+    if (expr.startsWith('-') && expr.length > 1) {
+      const operand = this.evaluateExpression(expr.substring(1), context);
+      if (operand instanceof Error) return operand;
+      if (typeof operand === 'number') {
+        return -operand;
+      }
+      // Handle array negation
+      if (Array.isArray(operand)) {
+        return operand.map(item => {
+          if (Array.isArray(item)) {
+            return item.map(val => typeof val === 'number' ? -val : new Error('#VALUE!'));
+          }
+          return typeof item === 'number' ? -item : new Error('#VALUE!');
+        });
+      }
+      return new Error('#VALUE!');
+    }
+
+    // Unary plus (e.g., +5, +val) - just return the value
+    if (expr.startsWith('+') && expr.length > 1) {
+      return this.evaluateExpression(expr.substring(1), context);
+    }
+
+    // Binary operations (check AFTER unary to handle expressions correctly)
+    // NOTE: Check compound operators (<=, >=, <>) BEFORE single operators to avoid incorrect splits
+    const operators = ['<>', '<=', '>=', '+', '-', '*', '/', '^', '=', '<', '>', '&'];
     for (const op of operators) {
       const parts = this.splitByOperator(expr, op);
-      if (parts.length === 2) {
-        const left = this.evaluateExpression(parts[0], context);
-        const right = this.evaluateExpression(parts[1], context);
-        return this.applyOperator(op, left, right);
+      if (parts.length > 1) {
+        // For operators like -, we need to be careful about unary minus
+        // Only treat as binary if we have valid left side
+        if (parts[0].trim().length > 0) {
+          const left = this.evaluateExpression(parts[0], context);
+          const right = this.evaluateExpression(parts.slice(1).join(op), context);
+          return this.applyOperator(op, left, right);
+        }
       }
     }
 
-    // Function call (e.g., SUM(A1:A10))
-    const functionMatch = expr.match(/^([A-Z_]+)\((.*)\)$/i);
+    // Function call (e.g., SUM(A1:A10), STDEV.S(A1:A10))
+    // Special handling for lambda invocation: LAMBDA(...)(args)
+    // Updated regex to support dotted function names like STDEV.S, VAR.P, MODE.SNGL
+    const functionMatch = expr.match(/^([A-Z_][A-Z0-9_.]*)\((.*)\)$/i);
     if (functionMatch) {
       const [, funcName, argsStr] = functionMatch;
+      
+      // Check if this is a named lambda invocation
+      if (context.namedLambdas) {
+        // Try exact case match first
+        let namedLambda = context.namedLambdas.get(funcName);
+        // If not found, try uppercase (Excel is case-insensitive)
+        if (!namedLambda) {
+          namedLambda = context.namedLambdas.get(funcName.toUpperCase());
+        }
+        if (namedLambda) {
+          return this.invokeLambda(namedLambda, argsStr, context);
+        }
+      }
+      
+      // Check if this is a lambda invocation pattern: LAMBDA(...)(...)
+      if (funcName.toUpperCase() === 'LAMBDA') {
+        // Find the matching closing paren for LAMBDA arguments
+        let depth = 0;
+        let lambdaArgsEnd = -1;
+        
+        for (let i = funcName.length + 1; i < expr.length; i++) {
+          if (expr[i] === '(') depth++;
+          else if (expr[i] === ')') {
+            if (depth === 0) {
+              lambdaArgsEnd = i;
+              break;
+            }
+            depth--;
+          }
+        }
+        
+        // Check if there's an invocation after the lambda definition
+        if (lambdaArgsEnd > 0 && lambdaArgsEnd < expr.length - 1) {
+          // Extract lambda definition and invocation args
+          const lambdaArgsStr = expr.slice(funcName.length + 1, lambdaArgsEnd);
+          const remaining = expr.slice(lambdaArgsEnd + 1);
+          
+          // Check if remaining starts with (...)
+          const invocationMatch = remaining.match(/^\((.+)\)$/);
+          if (invocationMatch) {
+            // This is LAMBDA(...)(invocation_args)
+            const invocationArgsStr = invocationMatch[1];
+            
+            // First, create the lambda
+            const lambda = this.evaluateFunction(funcName, lambdaArgsStr, context);
+            
+            // If lambda creation failed, return the error
+            if (lambda instanceof Error) {
+              return lambda;
+            }
+            
+            // Now invoke the lambda with the provided arguments
+            return this.invokeLambda(lambda as any, invocationArgsStr, context);
+          }
+        }
+      }
+      
       return this.evaluateFunction(funcName, argsStr, context);
     }
 
     return new Error('#NAME?');
+  }
+
+  /**
+   * Invokes a lambda function with arguments
+   */
+  private invokeLambda(lambda: LambdaFunction, argsStr: string, context: FormulaContext): FormulaValue {
+    // Check recursion depth to prevent stack overflow
+    const currentDepth = (context as any).recursionDepth || 0;
+    const MAX_RECURSION_DEPTH = 100;
+    
+    if (currentDepth >= MAX_RECURSION_DEPTH) {
+      return new Error('#N/A'); // Excel's error for recursion limit
+    }
+    
+    // Parse invocation arguments (these ARE evaluated)
+    const invocationArgs = this.parseArguments(argsStr, context);
+    
+    // Check parameter count matches
+    if (invocationArgs.length !== lambda.parameters.length) {
+      return new Error('#VALUE!');
+    }
+    
+    // Create lambda context starting with captured context (for closures)
+    const lambdaContext = new Map<string, FormulaValue>(lambda.capturedContext);
+    
+    // Add parameter bindings (these override any captured values with same name)
+    for (let i = 0; i < lambda.parameters.length; i++) {
+      lambdaContext.set(lambda.parameters[i], invocationArgs[i]);
+    }
+    
+    // Create new context with lambda bindings and incremented recursion depth
+    // Explicitly preserve namedLambdas for recursion support
+    const newContext: FormulaContext = {
+      worksheet: context.worksheet,
+      currentCell: context.currentCell,
+      namedLambdas: context.namedLambdas, // Explicit preservation for recursion
+      lambdaContext,
+      recursionDepth: currentDepth + 1
+    } as any;
+    
+    // Evaluate the lambda body with the bound parameters
+    return this.evaluateExpression(lambda.body, newContext);
   }
 
   /**
@@ -215,6 +402,51 @@ export class FormulaEngine {
   private applyOperator(op: string, left: FormulaValue, right: FormulaValue): FormulaValue {
     if (left instanceof Error) return left;
     if (right instanceof Error) return right;
+
+    // Array broadcasting: if either operand is an array, apply operator element-wise
+    // Handle nested arrays (2D arrays)
+    const isLeftArray = Array.isArray(left);
+    const isRightArray = Array.isArray(right);
+    
+    if (isLeftArray && !isRightArray) {
+      // Broadcast right to all elements of left
+      return (left as any[]).map(item => {
+        // If item is itself an array (row in 2D array), recursively apply
+        if (Array.isArray(item)) {
+          return this.applyOperator(op, item, right);
+        }
+        return this.applyOperator(op, item, right);
+      });
+    }
+    
+    if (!isLeftArray && isRightArray) {
+      // Broadcast left to all elements of right
+      return (right as any[]).map(item => {
+        // If item is itself an array (row in 2D array), recursively apply
+        if (Array.isArray(item)) {
+          return this.applyOperator(op, left, item);
+        }
+        return this.applyOperator(op, left, item);
+      });
+    }
+    
+    if (isLeftArray && isRightArray) {
+      // Both are arrays - apply element-wise
+      const leftArr = left as any[];
+      const rightArr = right as any[];
+      
+      if (leftArr.length !== rightArr.length) {
+        return new Error('#VALUE!');
+      }
+      
+      return leftArr.map((item, i) => {
+        // Handle 2D arrays
+        if (Array.isArray(item) || Array.isArray(rightArr[i])) {
+          return this.applyOperator(op, item, rightArr[i]);
+        }
+        return this.applyOperator(op, item, rightArr[i]);
+      });
+    }
 
     switch (op) {
       case '+':
@@ -277,34 +509,31 @@ export class FormulaEngine {
 
     const values: FormulaValue[] = [];
 
-    console.log(`Evaluating range ${ref}: from (${startAddr.row},${startAddr.col}) to (${endAddr.row},${endAddr.col})`);
-
     for (let row = startAddr.row; row <= endAddr.row; row++) {
       for (let col = startAddr.col; col <= endAddr.col; col++) {
         const addr = { row, col };
         this.dependencyGraph.addDependency(context.currentCell, addr);
         
         const cell = context.worksheet.getCell(addr);
+        
         if (cell) {
           if (cell.formula) {
             values.push(this.evaluate(cell.formula, { ...context, currentCell: addr }));
           } else {
-            console.log(`  Cell (${row},${col}): value =`, cell.value, typeof cell.value);
             values.push(cell.value);
           }
         } else {
-          console.log(`  Cell (${row},${col}): NO CELL`);
           values.push(null);
         }
       }
     }
 
-    console.log(`Range ${ref} values:`, values);
     return values;
   }
 
   /**
    * Parses cell reference (e.g., "A1" -> {row: 0, col: 0})
+   * Converts Excel-style 1-based references (A1, B2) to 0-based internal addresses
    */
   private parseCellReference(ref: string): Address {
     const match = ref.match(/^([A-Z]+)(\d+)$/i);
@@ -317,8 +546,9 @@ export class FormulaEngine {
     for (let i = 0; i < colStr.length; i++) {
       col = col * 26 + (colStr.charCodeAt(i) - 65 + 1);
     }
-    // Addresses in this project are 1-based; do not convert to 0-based
-    const row = parseInt(rowStr, 10);
+    // Convert from 1-based Excel notation to 0-based internal storage
+    col = col - 1;
+    const row = parseInt(rowStr, 10) - 1;
 
     return { row, col };
   }
@@ -327,35 +557,635 @@ export class FormulaEngine {
    * Evaluates a function call
    */
   private evaluateFunction(name: string, argsStr: string, context: FormulaContext): FormulaValue {
-    console.log(`Evaluating function: ${name}(${argsStr})`);
-    const func = this.functions.get(name.toUpperCase());
-    if (!func) {
-      console.log(`Function ${name} not found!`);
+    // Special handling for functions that need lazy evaluation or special lambda handling
+    // These are checked BEFORE looking up in the functions registry
+    
+    // Special handling for LAMBDA - don't evaluate parameter names
+    if (name.toUpperCase() === 'LAMBDA') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      
+      // Need at least 2 arguments: 1 parameter + calculation
+      if (rawArgs.length < 2) {
+        return new Error('#VALUE!');
+      }
+
+      // All args except last are parameters (must be strings)
+      const parameters: string[] = [];
+      
+      for (let i = 0; i < rawArgs.length - 1; i++) {
+        const param = rawArgs[i].trim();
+        
+        // Parameter must be a simple identifier
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(param)) {
+          return new Error('#VALUE!');
+        }
+        
+        // Check for duplicate parameters
+        if (parameters.includes(param)) {
+          return new Error('#VALUE!');
+        }
+        
+        parameters.push(param);
+      }
+
+      // Last argument is the calculation body
+      const body = rawArgs[rawArgs.length - 1];
+      
+      // Body must be a string (formula expression)
+      if (typeof body !== 'string') {
+        return new Error('#VALUE!');
+      }
+
+      // Create the lambda function object with captured context
+      // This allows the lambda to access variables from outer scope (closures)
+      const lambdaFn: LambdaFunction = {
+        parameters,
+        body,
+        capturedContext: context.lambdaContext
+      };
+
+      return lambdaFn as any;
+    }
+
+    // Special handling for LET - define local variables
+    // Syntax: LET(name1, value1, name2, value2, ..., calculation)
+    if (name.toUpperCase() === 'LET') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      
+      // Must have at least 3 arguments (name, value, calculation)
+      // Must have odd number of arguments
+      if (rawArgs.length < 3 || rawArgs.length % 2 === 0) {
+        return new Error('#VALUE!');
+      }
+      
+      // Create a new context with variable bindings
+      const letContext = new Map<string, FormulaValue>(context.lambdaContext);
+      
+      // Process pairs of (name, value)
+      for (let i = 0; i < rawArgs.length - 1; i += 2) {
+        const varName = rawArgs[i].trim();
+        const varValueExpr = rawArgs[i + 1];
+        
+        // Variable name must be a simple identifier
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(varName)) {
+          return new Error('#VALUE!');
+        }
+        
+        // Evaluate the value expression with current context
+        // This allows later variables to reference earlier ones
+        const tempContext: FormulaContext = {
+          worksheet: context.worksheet,
+          currentCell: context.currentCell,
+          namedLambdas: context.namedLambdas,
+          lambdaContext: letContext,
+          recursionDepth: context.recursionDepth
+        };
+        
+        // Special handling: if value is a range reference, store it as a string
+        // so it can be used in function calls later
+        let varValue: FormulaValue;
+        
+        if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(varValueExpr.trim())) {
+          // This is a range reference - store as string to be parsed by functions
+          varValue = varValueExpr.trim();
+        } else {
+          // Regular value - evaluate normally
+          varValue = this.evaluateExpression(varValueExpr, tempContext);
+          
+          // Allow errors to propagate
+          if (varValue instanceof Error) {
+            return varValue;
+          }
+        }
+        
+        // Bind the variable
+        letContext.set(varName, varValue);
+      }
+      
+      // Evaluate the final calculation with all variables bound
+      const finalContext: FormulaContext = {
+        worksheet: context.worksheet,
+        currentCell: context.currentCell,
+        namedLambdas: context.namedLambdas,
+        lambdaContext: letContext,
+        recursionDepth: context.recursionDepth
+      };
+      
+      return this.evaluateExpression(rawArgs[rawArgs.length - 1], finalContext);
+    }
+
+    // Special handling for IF - lazy evaluation of branches
+    if (name.toUpperCase() === 'IF') {
+      // Parse arguments as raw strings, then evaluate only what's needed
+      const rawArgs = this.parseRawArguments(argsStr);
+      if (rawArgs.length < 2 || rawArgs.length > 3) {
+        return new Error('#VALUE!');
+      }
+      
+      // Evaluate the condition
+      const condition = this.evaluateExpression(rawArgs[0], context);
+      if (condition instanceof Error) return condition;
+      
+      // Evaluate only the appropriate branch
+      if (condition) {
+        return this.evaluateExpression(rawArgs[1], context);
+      } else {
+        return rawArgs.length === 3 ? this.evaluateExpression(rawArgs[2], context) : false;
+      }
+    }
+
+    // Special handling for MAP - applies lambda to each array element
+    if (name.toUpperCase() === 'MAP') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      if (rawArgs.length !== 2) {
+        return new Error('#VALUE!');
+      }
+      
+      // Evaluate the array (could be a range)
+      let array: FormulaValue[];
+      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(rawArgs[0].trim())) {
+        // It's a range reference
+        array = this.evaluateRangeReference(rawArgs[0].trim(), context);
+      } else {
+        // Evaluate as expression
+        const arrayResult = this.evaluateExpression(rawArgs[0], context);
+        if (arrayResult instanceof Error) return arrayResult;
+        array = Array.isArray(arrayResult) ? arrayResult : [arrayResult];
+      }
+      
+      // Evaluate the lambda
+      const lambdaResult = this.evaluateExpression(rawArgs[1], context);
+      if (lambdaResult instanceof Error) return lambdaResult;
+      
+      // Check if it's a valid lambda
+      const lambda = lambdaResult as any;
+      if (!lambda.parameters || !lambda.body || lambda.parameters.length !== 1) {
+        return new Error('#VALUE!');
+      }
+      
+      // Apply lambda to each element
+      const results: FormulaValue[] = [];
+      for (const item of array) {
+        const itemResult = this.invokeLambda(lambda, String(item), context);
+        results.push(itemResult);
+      }
+      
+      return results;
+    }
+
+    // Special handling for REDUCE - reduces array to single value using lambda
+    if (name.toUpperCase() === 'REDUCE') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      if (rawArgs.length !== 3) {
+        return new Error('#VALUE!');
+      }
+      
+      // Evaluate initial value
+      const initialValue = this.evaluateExpression(rawArgs[0], context);
+      if (initialValue instanceof Error) return initialValue;
+      
+      // Evaluate the array (could be a range)
+      let array: FormulaValue[];
+      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(rawArgs[1].trim())) {
+        // It's a range reference
+        array = this.evaluateRangeReference(rawArgs[1].trim(), context);
+      } else {
+        // Evaluate as expression
+        const arrayResult = this.evaluateExpression(rawArgs[1], context);
+        if (arrayResult instanceof Error) return arrayResult;
+        array = Array.isArray(arrayResult) ? arrayResult : [arrayResult];
+      }
+      
+      // Evaluate the lambda
+      const lambdaResult = this.evaluateExpression(rawArgs[2], context);
+      if (lambdaResult instanceof Error) return lambdaResult;
+      
+      // Check if it's a valid lambda
+      const lambda = lambdaResult as any;
+      if (!lambda.parameters || !lambda.body || lambda.parameters.length !== 2) {
+        return new Error('#VALUE!');
+      }
+      
+      // Reduce the array
+      let accumulator: FormulaValue = initialValue;
+      for (const item of array) {
+        const lambdaArgs = `${accumulator},${item}`;
+        accumulator = this.invokeLambda(lambda, lambdaArgs, context);
+        if (accumulator instanceof Error) return accumulator;
+      }
+      
+      return accumulator;
+    }
+
+    // Special handling for SCAN - cumulative reduce (returns all intermediate values)
+    if (name.toUpperCase() === 'SCAN') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      
+      // SCAN can have 2 or 3 arguments
+      // SCAN(array, lambda) - no initial value, uses first array element
+      // SCAN(initial, array, lambda) - with initial value
+      if (rawArgs.length < 2 || rawArgs.length > 3) {
+        return new Error('#VALUE!');
+      }
+      
+      let initialValue: FormulaValue | undefined;
+      let arrayArg: string;
+      let lambdaArg: string;
+      
+      if (rawArgs.length === 2) {
+        // SCAN(array, lambda)
+        arrayArg = rawArgs[0];
+        lambdaArg = rawArgs[1];
+      } else {
+        // SCAN(initial, array, lambda)
+        const initResult = this.evaluateExpression(rawArgs[0], context);
+        if (initResult instanceof Error) return initResult;
+        initialValue = initResult;
+        arrayArg = rawArgs[1];
+        lambdaArg = rawArgs[2];
+      }
+      
+      // Evaluate the array (could be a range)
+      let array: FormulaValue[];
+      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(arrayArg.trim())) {
+        // It's a range reference
+        array = this.evaluateRangeReference(arrayArg.trim(), context);
+      } else {
+        // Evaluate as expression
+        const arrayResult = this.evaluateExpression(arrayArg, context);
+        if (arrayResult instanceof Error) return arrayResult;
+        
+        if (!Array.isArray(arrayResult)) {
+          // Single value becomes a 1-element array
+          array = [arrayResult];
+        } else {
+          array = arrayResult;
+        }
+      }
+      
+      // Evaluate the lambda
+      const lambdaResult = this.evaluateExpression(lambdaArg, context);
+      if (lambdaResult instanceof Error) return lambdaResult;
+      
+      // Check if it's a valid lambda
+      const lambda = lambdaResult as any;
+      if (!lambda.parameters || !lambda.body || lambda.parameters.length !== 2) {
+        return new Error('#VALUE!');
+      }
+      
+      // Scan the array - accumulate and collect all intermediate results
+      const results: FormulaValue[] = [];
+      let accumulator: FormulaValue;
+      
+      if (initialValue !== undefined) {
+        accumulator = initialValue;
+        for (const item of array) {
+          const lambdaArgs = `${accumulator},${item}`;
+          accumulator = this.invokeLambda(lambda, lambdaArgs, context);
+          if (accumulator instanceof Error) return accumulator;
+          results.push(accumulator);
+        }
+      } else {
+        // Use first element as initial value
+        if (array.length === 0) {
+          return new Error('#VALUE!');
+        }
+        accumulator = array[0];
+        results.push(accumulator);
+        
+        for (let i = 1; i < array.length; i++) {
+          const lambdaArgs = `${accumulator},${array[i]}`;
+          accumulator = this.invokeLambda(lambda, lambdaArgs, context);
+          if (accumulator instanceof Error) return accumulator;
+          results.push(accumulator);
+        }
+      }
+      
+      return results;
+    }
+
+    // Special handling for BYROW - applies lambda to each row
+    if (name.toUpperCase() === 'BYROW') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      if (rawArgs.length !== 2) {
+        return new Error('#VALUE!');
+      }
+      
+      // Evaluate the array (should be 2D, but we'll treat 1D as single row)
+      let array: FormulaValue[];
+      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(rawArgs[0].trim())) {
+        // It's a range reference
+        array = this.evaluateRangeReference(rawArgs[0].trim(), context);
+      } else {
+        // Evaluate as normal expression
+        const arrayResult = this.evaluateExpression(rawArgs[0], context);
+        if (arrayResult instanceof Error) return arrayResult;
+        
+        // If result is a string that looks like a range (e.g., from LET variable),
+        // evaluate it as a range
+        if (typeof arrayResult === 'string' && /^[A-Z]+\d+:[A-Z]+\d+$/i.test(arrayResult)) {
+          array = this.evaluateRangeReference(arrayResult, context);
+        } else {
+          array = Array.isArray(arrayResult) ? arrayResult : [arrayResult];
+        }
+      }
+      
+      // Evaluate the lambda
+      const lambdaResult = this.evaluateExpression(rawArgs[1], context);
+      if (lambdaResult instanceof Error) return lambdaResult;
+      
+      // Check if it's a valid lambda
+      const lambda = lambdaResult as any;
+      if (!lambda.parameters || !lambda.body || lambda.parameters.length !== 1) {
+        return new Error('#VALUE!');
+      }
+      
+      // For simplicity, treat the entire array as one row
+      // Create lambda context directly with the array bound to the parameter
+      const lambdaContext = new Map<string, FormulaValue>(lambda.capturedContext || []);
+      lambdaContext.set(lambda.parameters[0], array);
+      
+      const newContext: FormulaContext = {
+        worksheet: context.worksheet,
+        currentCell: context.currentCell,
+        namedLambdas: context.namedLambdas,
+        lambdaContext,
+        recursionDepth: ((context as any).recursionDepth || 0) + 1
+      } as any;
+      
+      // Evaluate the lambda body with the array bound
+      const result = this.evaluateExpression(lambda.body, newContext);
+      if (result instanceof Error) return result;
+      
+      return [result];
+    }
+
+    // Special handling for MAKEARRAY - creates calculated array
+    if (name.toUpperCase() === 'MAKEARRAY') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      if (rawArgs.length !== 3) {
+        return new Error('#VALUE!');
+      }
+      
+      // Evaluate rows parameter
+      const rowsResult = this.evaluateExpression(rawArgs[0], context);
+      if (rowsResult instanceof Error) return rowsResult;
+      if (typeof rowsResult !== 'number' || rowsResult <= 0 || !Number.isInteger(rowsResult)) {
+        return new Error('#VALUE!');
+      }
+      const rows = rowsResult;
+      
+      // Evaluate columns parameter
+      const columnsResult = this.evaluateExpression(rawArgs[1], context);
+      if (columnsResult instanceof Error) return columnsResult;
+      if (typeof columnsResult !== 'number' || columnsResult <= 0 || !Number.isInteger(columnsResult)) {
+        return new Error('#VALUE!');
+      }
+      const columns = columnsResult;
+      
+      // Validate reasonable array size (prevent memory issues)
+      const maxSize = 1000000; // 1 million cells max
+      if (rows * columns > maxSize) {
+        return new Error('#VALUE!');
+      }
+      
+      // Evaluate the lambda
+      const lambdaResult = this.evaluateExpression(rawArgs[2], context);
+      if (lambdaResult instanceof Error) return lambdaResult;
+      
+      // Check if it's a valid lambda with 2 parameters (row, col)
+      const lambda = lambdaResult as any;
+      if (!lambda.parameters || !lambda.body || lambda.parameters.length !== 2) {
+        return new Error('#VALUE!');
+      }
+      
+      // Build the 2D array by calling lambda for each position
+      const result: FormulaValue[][] = [];
+      
+      for (let r = 1; r <= rows; r++) {
+        const row: FormulaValue[] = [];
+        
+        for (let c = 1; c <= columns; c++) {
+          // Invoke lambda with (row, col) - both are 1-based
+          const lambdaArgs = `${r},${c}`;
+          const cellValue = this.invokeLambda(lambda, lambdaArgs, context);
+          
+          // If lambda returns an error, return the error immediately
+          if (cellValue instanceof Error) return cellValue;
+          
+          row.push(cellValue);
+        }
+        
+        result.push(row);
+      }
+      
+      // For 1x1 array, return as scalar
+      if (rows === 1 && columns === 1) {
+        return result[0][0];
+      }
+      
+      // For single row, return as 1D array
+      if (rows === 1) {
+        return result[0];
+      }
+      
+      // For single column, return as 1D array
+      if (columns === 1) {
+        return result.map(row => row[0]);
+      }
+      
+      return result;
+    }
+
+    // Special handling for BYCOL - applies lambda to each column
+    if (name.toUpperCase() === 'BYCOL') {
+      const rawArgs = this.parseRawArguments(argsStr);
+      if (rawArgs.length !== 2) {
+        return new Error('#VALUE!');
+      }
+      
+      // Evaluate the array (should be 2D, but we'll treat 1D as single column)
+      let array: FormulaValue[];
+      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(rawArgs[0].trim())) {
+        // It's a range reference
+        array = this.evaluateRangeReference(rawArgs[0].trim(), context);
+      } else {
+        // Evaluate as normal expression
+        const arrayResult = this.evaluateExpression(rawArgs[0], context);
+        if (arrayResult instanceof Error) return arrayResult;
+        
+        // If result is a string that looks like a range (e.g., from LET variable),
+        // evaluate it as a range
+        if (typeof arrayResult === 'string' && /^[A-Z]+\d+:[A-Z]+\d+$/i.test(arrayResult)) {
+          array = this.evaluateRangeReference(arrayResult, context);
+        } else {
+          array = Array.isArray(arrayResult) ? arrayResult : [arrayResult];
+        }
+      }
+      
+      // Evaluate the lambda
+      const lambdaResult = this.evaluateExpression(rawArgs[1], context);
+      if (lambdaResult instanceof Error) return lambdaResult;
+      
+      // Check if it's a valid lambda
+      const lambda = lambdaResult as any;
+      if (!lambda.parameters || !lambda.body || lambda.parameters.length !== 1) {
+        return new Error('#VALUE!');
+      }
+      
+      // For simplicity, treat the entire array as one column
+      // Also propagate captured context from closures (e.g. LET variables)
+      // Create lambda context, merging captured context with the new parameter
+      const lambdaContext = new Map<string, FormulaValue>(lambda.capturedContext || []);
+      lambdaContext.set(lambda.parameters[0], array);
+      
+      const newContext: FormulaContext = {
+        worksheet: context.worksheet,
+        currentCell: context.currentCell,
+        namedLambdas: context.namedLambdas,
+        lambdaContext,
+        recursionDepth: ((context as any).recursionDepth || 0) + 1
+      } as any;
+      
+      // Evaluate the lambda body with the array bound
+      const result = this.evaluateExpression(lambda.body, newContext);
+      if (result instanceof Error) return result;
+      
+      return [result];
+    }
+
+    // Now check if it's a registered function
+    const funcMetadata = this.functionRegistry.getMetadata(name.toUpperCase());
+    
+    // If not a built-in function, check for named lambda or LET-bound lambda
+    if (!funcMetadata) {
+      // Check if it's a named lambda
+      if (context.namedLambdas) {
+        const namedLambda = context.namedLambdas.get(name.toUpperCase());
+        if (namedLambda) {
+          // It's a named lambda, invoke it
+          return this.invokeLambda(namedLambda, argsStr, context);
+        }
+      }
+      
+      // Check if it's a LET-bound lambda
+      if (context.lambdaContext && context.lambdaContext.has(name)) {
+        const letBoundValue = context.lambdaContext.get(name);
+        const lambda = letBoundValue as any;
+        if (lambda && lambda.parameters && lambda.body) {
+          return this.invokeLambda(lambda, argsStr, context);
+        }
+      }
+      
       return new Error('#NAME?');
     }
 
     const args = this.parseArguments(argsStr, context);
-    console.log(`Parsed args for ${name}:`, args);
+    
+    // Extract the function handler
+    const func = funcMetadata.handler;
+    
+    // Check if any arguments are arrays and handle array broadcasting
+    // For most functions, if an argument is an array, apply function element-wise
+    const hasArrayArg = args.some(arg => Array.isArray(arg) && !this.isArrayFunction(name));
+    
+    if (hasArrayArg) {
+      return this.applyFunctionWithArrayBroadcasting(func, args, funcMetadata.needsContext ? context : undefined);
+    }
     
     try {
-      return func(...args);
+      // Check if function needs context
+      if (funcMetadata.needsContext) {
+        // Call context-aware function with context as first parameter
+        return (func as any)(context, ...args);
+      } else {
+        // Call regular function without context
+        return (func as any)(...args);
+      }
     } catch (error) {
-      console.log(`Error calling ${name}:`, error);
       return new Error('#VALUE!');
     }
   }
 
   /**
-   * Parses function arguments
+   * Check if a function expects array arguments (doesn't need broadcasting)
    */
-  private parseArguments(argsStr: string, context: FormulaContext): FormulaValue[] {
-    console.log(`Parsing arguments: "${argsStr}"`);
+  private isArrayFunction(name: string): boolean {
+    const arrayFuncs = ['FILTER', 'SORT', 'UNIQUE', 'SORTBY', 'TRANSPOSE', 'XLOOKUP', 
+                        'VLOOKUP', 'HLOOKUP', 'INDEX', 'MATCH', 'XMATCH', 'MAP', 
+                        'REDUCE', 'SCAN', 'BYROW', 'BYCOL', 'SUM', 'AVERAGE', 'COUNT',
+                        'MAX', 'MIN', 'SUMIF', 'AVERAGEIF', 'COUNTIF',
+                        'SUMIFS', 'AVERAGEIFS', 'COUNTIFS', 'MAXIFS', 'MINIFS',
+                        'TAKE', 'DROP', 'CHOOSECOLS', 'CHOOSEROWS', 'TEXTSPLIT', 'TEXTJOIN',
+                        // Statistical functions that aggregate arrays
+                        'AVERAGEA', 'MEDIAN', 'MODE', 'MODE.SNGL', 'MODE.MULT',
+                        'STDEV', 'STDEV.S', 'STDEV.P', 'STDEVPA', 'STDEVA',
+                        'VAR', 'VAR.S', 'VAR.P', 'VARPA', 'VARA',
+                        'QUARTILE', 'QUARTILE.INC', 'QUARTILE.EXC',
+                        'PERCENTILE', 'PERCENTILE.INC', 'PERCENTILE.EXC',
+                        'CORREL', 'COVARIANCE.P', 'COVARIANCE.S', 'RSQ',
+                        'FORECAST', 'FORECAST.LINEAR', 'SLOPE', 'INTERCEPT',
+                        'STEYX', 'TREND', 'PEARSON',
+                        // Financial functions (Week 8 Days 4-5)
+                        'NPV', 'XNPV', 'PV', 'FV', 'PMT', 'IPMT', 'PPMT',
+                        'IRR', 'XIRR', 'MIRR', 'NPER', 'RATE', 'EFFECT', 'NOMINAL',
+                        // Math array functions (Week 11 Day 2)
+                        'PRODUCT', 'SUMPRODUCT', 'SUMX2MY2', 'SUMX2PY2', 'SUMXMY2',
+                        // Text array functions (Week 11 Day 3)
+                        'CONCAT', 'CONCATENATE'];
+    return arrayFuncs.includes(name.toUpperCase());
+  }
+
+  /**
+   * Apply a function with array broadcasting
+   */
+  private applyFunctionWithArrayBroadcasting(func: Function, args: FormulaValue[], context?: FormulaContext): FormulaValue {
+    // Find the first array argument to determine the output shape
+    const arrayArg = args.find(arg => Array.isArray(arg));
+    if (!arrayArg) return new Error('#VALUE!');
+    
+    const arrayLength = (arrayArg as any[]).length;
+    const results: FormulaValue[] = [];
+    
+    // Apply function to each element
+    for (let i = 0; i < arrayLength; i++) {
+      const elementArgs = args.map(arg => {
+        if (Array.isArray(arg)) {
+          // Handle 2D arrays
+          if (Array.isArray(arg[i])) {
+            return arg[i];
+          }
+          // For mismatched array sizes, use the argument as-is
+          if (i >= arg.length) return arg;
+          return arg[i];
+        }
+        // Scalar arguments are broadcast to all elements
+        return arg;
+      });
+      
+      try {
+        // If context is provided, pass it as first argument (context-aware function)
+        const result = context ? func(context, ...elementArgs) : func(...elementArgs);
+        results.push(result);
+      } catch (error) {
+        results.push(new Error('#VALUE!'));
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Parses raw arguments without evaluation (for special functions like LAMBDA)
+   */
+  private parseRawArguments(argsStr: string): string[] {
     if (!argsStr.trim()) return [];
 
-    const args: FormulaValue[] = [];
+    const args: string[] = [];
     let current = '';
     let depth = 0;
     let inString = false;
+    let lastWasComma = false;
 
     for (let i = 0; i < argsStr.length; i++) {
       const char = argsStr[i];
@@ -363,45 +1193,127 @@ export class FormulaEngine {
       if (char === '"') {
         inString = !inString;
         current += char;
+        lastWasComma = false;
       } else if (!inString) {
-        if (char === '(') depth++;
-        else if (char === ')') depth--;
-        else if (char === ',' && depth === 0) {
-          const token = current.trim();
-          console.log(`  Token: "${token}", is range: ${/^[A-Z]+\d+:[A-Z]+\d+$/i.test(token)}`);
-          if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(token)) {
-            // Spread range values into args array
-            const rangeValues = this.evaluateRangeReference(token, context);
-            console.log(`  Range ${token} evaluated to:`, rangeValues);
-            args.push(rangeValues as any);
-          } else {
-            args.push(this.evaluateExpression(token, context));
-          }
+        if (char === '(') {
+          depth++;
+          current += char;
+          lastWasComma = false;
+        } else if (char === ')') {
+          depth--;
+          current += char;
+          lastWasComma = false;
+        } else if (char === ',' && depth === 0) {
+          // Push argument (empty or not)
+          args.push(current.trim());
           current = '';
+          lastWasComma = true;
           continue;
+        } else {
+          current += char;
+          lastWasComma = false;
         }
-        current += char;
       } else {
         current += char;
+        lastWasComma = false;
       }
     }
 
-    if (current.trim()) {
-      const token = current.trim();
-      console.log(`  Final token: "${token}", is range: ${/^[A-Z]+\d+:[A-Z]+\d+$/i.test(token)}`);
-      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(token)) {
+    // Handle last argument
+    // If we had a trailing comma or there's actual content, add the argument
+    if (lastWasComma || current.trim() !== '' || current !== '') {
+      args.push(current.trim());
+    }
+
+    return args;
+  }
+
+  /**
+   * Parses function arguments
+   */
+  private parseArguments(argsStr: string, context: FormulaContext): FormulaValue[] {
+    if (!argsStr.trim()) return [];
+
+    const args: FormulaValue[] = [];
+    let current = '';
+    let depth = 0;
+    let inString = false;
+    let lastWasComma = false;
+
+    for (let i = 0; i < argsStr.length; i++) {
+      const char = argsStr[i];
+
+      if (char === '"') {
+        inString = !inString;
+        current += char;
+        lastWasComma = false;
+      } else if (!inString) {
+        if (char === '(') {
+          depth++;
+          current += char;
+          lastWasComma = false;
+        } else if (char === ')') {
+          depth--;
+          current += char;
+          lastWasComma = false;
+        } else if (char === ',' && depth === 0) {
+          const token = current.trim();
+          // Handle empty argument (e.g., "a,,b" or "a, ,b")
+          if (token === '') {
+            args.push(undefined as any);
+          } else if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(token)) {
+            // Spread range values into args array
+            const rangeValues = this.evaluateRangeReference(token, context);
+            args.push(rangeValues as any);
+          } else {
+            const result = this.evaluateExpression(token, context);
+            // If result is a string that looks like a range (e.g., from LET variable),
+            // evaluate it as a range
+            if (typeof result === 'string' && /^[A-Z]+\d+:[A-Z]+\d+$/i.test(result)) {
+              const rangeValues = this.evaluateRangeReference(result, context);
+              args.push(rangeValues as any);
+            } else {
+              args.push(result);
+            }
+          }
+          current = '';
+          lastWasComma = true;
+          continue;
+        } else {
+          current += char;
+          lastWasComma = false;
+        }
+      } else {
+        current += char;
+        lastWasComma = false;
+      }
+    }
+
+    // Handle last argument
+    const token = current.trim();
+    // If we had a trailing comma or there's actual content, add the argument
+    if (lastWasComma || token !== '' || current !== '') {
+      if (token === '') {
+        // Empty last argument (e.g., "a,b," or "a,,")
+        args.push(undefined as any);
+      } else if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(token)) {
         // Spread range values into args array
         const rangeValues = this.evaluateRangeReference(token, context);
-        console.log(`  Range ${token} evaluated to:`, rangeValues);
         args.push(rangeValues as any);
       } else {
         const result = this.evaluateExpression(token, context);
-        console.log(`  Expression "${token}" evaluated to:`, result);
-        args.push(result);
+        // If result is a string that looks like a range (e.g., from LET variable),
+        // evaluate it as a range
+        if (typeof result === 'string' && /^[A-Z]+\d+:[A-Z]+\d+$/i.test(result)) {
+          const rangeValues = this.evaluateRangeReference(result, context);
+          args.push(rangeValues as any);
+        } else {
+          args.push(result);
+        }
       }
     }
 
-    console.log(`  Final args:`, args);
+
     return args;
   }
 
@@ -433,184 +1345,8 @@ export class FormulaEngine {
   /**
    * Registers built-in Excel functions
    */
-  private registerBuiltInFunctions(): void {
-    // Math functions
-    this.functions.set('SUM', (...args) => {
-      console.log('SUM called with args:', args);
-      // Log any errors
-      args.forEach((arg, i) => {
-        if (arg instanceof Error) {
-          console.log(`  Arg ${i} is Error:`, arg.message);
-        }
-      });
-      const numbers = this.getNumbers(args);
-      console.log('SUM numbers after filtering:', numbers);
-      const result = numbers.reduce((sum, n) => sum + n, 0);
-      console.log('SUM result:', result);
-      return result;
-    });
-
-    this.functions.set('AVERAGE', (...args) => {
-      const numbers = this.getNumbers(args);
-      if (numbers.length === 0) return new Error('#DIV/0!');
-      return numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
-    });
-
-    this.functions.set('MIN', (...args) => {
-      const numbers = this.getNumbers(args);
-      if (numbers.length === 0) return new Error('#NUM!');
-      return Math.min(...numbers);
-    });
-
-    this.functions.set('MAX', (...args) => {
-      const numbers = this.getNumbers(args);
-      if (numbers.length === 0) return new Error('#NUM!');
-      return Math.max(...numbers);
-    });
-
-    this.functions.set('COUNT', (...args) => {
-      return this.getNumbers(args).length;
-    });
-
-    this.functions.set('COUNTA', (...args) => {
-      return this.flattenArgs(args).filter(v => v != null).length;
-    });
-
-    this.functions.set('ABS', (value) => {
-      if (typeof value !== 'number') return new Error('#VALUE!');
-      return Math.abs(value);
-    });
-
-    this.functions.set('ROUND', (value, digits) => {
-      if (typeof value !== 'number' || typeof digits !== 'number') return new Error('#VALUE!');
-      const factor = Math.pow(10, digits);
-      return Math.round(value * factor) / factor;
-    });
-
-    this.functions.set('ROUNDUP', (value, digits) => {
-      if (typeof value !== 'number' || typeof digits !== 'number') return new Error('#VALUE!');
-      const factor = Math.pow(10, digits);
-      return Math.ceil(value * factor) / factor;
-    });
-
-    this.functions.set('ROUNDDOWN', (value, digits) => {
-      if (typeof value !== 'number' || typeof digits !== 'number') return new Error('#VALUE!');
-      const factor = Math.pow(10, digits);
-      return Math.floor(value * factor) / factor;
-    });
-
-    this.functions.set('SQRT', (value) => {
-      if (typeof value !== 'number' || value < 0) return new Error('#NUM!');
-      return Math.sqrt(value);
-    });
-
-    this.functions.set('POWER', (base, exponent) => {
-      if (typeof base !== 'number' || typeof exponent !== 'number') return new Error('#VALUE!');
-      return Math.pow(base, exponent);
-    });
-
-    // Logical functions
-    this.functions.set('IF', (condition, trueValue, falseValue) => {
-      return condition ? trueValue : falseValue;
-    });
-
-    this.functions.set('AND', (...args) => {
-      const values = this.flattenArgs(args);
-      return values.every(v => v === true);
-    });
-
-    this.functions.set('OR', (...args) => {
-      const values = this.flattenArgs(args);
-      return values.some(v => v === true);
-    });
-
-    this.functions.set('NOT', (value) => {
-      return !value;
-    });
-
-    // Text functions
-    this.functions.set('CONCATENATE', (...args) => {
-      return this.flattenArgs(args).map(v => String(v ?? '')).join('');
-    });
-
-    this.functions.set('LEFT', (text, numChars = 1) => {
-      if (typeof numChars !== 'number') return new Error('#VALUE!');
-      return String(text).slice(0, numChars);
-    });
-
-    this.functions.set('RIGHT', (text, numChars = 1) => {
-      if (typeof numChars !== 'number') return new Error('#VALUE!');
-      return String(text).slice(-numChars);
-    });
-
-    this.functions.set('MID', (text, start, numChars) => {
-      if (typeof start !== 'number' || typeof numChars !== 'number') return new Error('#VALUE!');
-      return String(text).slice(start - 1, start - 1 + numChars);
-    });
-
-    this.functions.set('LEN', (text) => {
-      return String(text).length;
-    });
-
-    this.functions.set('UPPER', (text) => {
-      return String(text).toUpperCase();
-    });
-
-    this.functions.set('LOWER', (text) => {
-      return String(text).toLowerCase();
-    });
-
-    this.functions.set('TRIM', (text) => {
-      return String(text).trim();
-    });
-
-    // Date functions
-    this.functions.set('TODAY', () => {
-      return new Date().toLocaleDateString();
-    });
-
-    this.functions.set('NOW', () => {
-      return new Date().toLocaleString();
-    });
-
-    this.functions.set('YEAR', (dateStr) => {
-      const date = new Date(String(dateStr));
-      return isNaN(date.getTime()) ? new Error('#VALUE!') : date.getFullYear();
-    });
-
-    this.functions.set('MONTH', (dateStr) => {
-      const date = new Date(String(dateStr));
-      return isNaN(date.getTime()) ? new Error('#VALUE!') : date.getMonth() + 1;
-    });
-
-    this.functions.set('DAY', (dateStr) => {
-      const date = new Date(String(dateStr));
-      return isNaN(date.getTime()) ? new Error('#VALUE!') : date.getDate();
-    });
-
-    // Lookup functions
-    this.functions.set('VLOOKUP', (lookupValue, tableArray, colIndex, rangeLookup = true) => {
-      if (!Array.isArray(tableArray)) return new Error('#REF!');
-      if (typeof colIndex !== 'number') return new Error('#VALUE!');
-      
-      // Simplified VLOOKUP (exact match only for now)
-      for (let i = 0; i < tableArray.length; i++) {
-        if (tableArray[i] === lookupValue) {
-          const rowStart = Math.floor(i / 10); // Assuming 10 columns
-          const targetIndex = rowStart * 10 + (colIndex - 1);
-          return tableArray[targetIndex] ?? new Error('#N/A');
-        }
-      }
-      
-      return new Error('#N/A');
-    });
-  }
-
-  /**
-   * Registers a custom function
-   */
   registerFunction(name: string, func: FormulaFunction): void {
-    this.functions.set(name.toUpperCase(), func);
+    this.functionRegistry.register(name.toUpperCase(), func);
   }
 
   /**
@@ -626,7 +1362,13 @@ export class FormulaEngine {
         const value = this.evaluate(cell.formula, { worksheet, currentCell: addr });
         // Only set value if it's not an error (CellValue doesn't support Error type)
         if (!(value instanceof Error)) {
-          worksheet.setCellValue(addr, value);
+          // Handle arrays: for now, store as string representation
+          // TODO: Implement proper spill behavior in Phase 2
+          if (Array.isArray(value)) {
+            worksheet.setCellValue(addr, JSON.stringify(value));
+          } else {
+            worksheet.setCellValue(addr, value);
+          }
         }
       }
     }

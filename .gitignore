@@ -31,6 +31,9 @@ pids
 coverage/
 *.lcov
 .nyc_output
+test-results/
+playwright-report/
+*.spec.ts-snapshots/
 
 # IDEs and editors
 .idea/
@@ -68,6 +71,16 @@ Thumbs.db
 .cache/
 .temp/
 .tmp/
+
+# Temporary test files (debugging)
+test-*.js
+test-*.ts
+!packages/**/test/
+!packages/**/__tests__/
+!*.test.ts
+!*.test.js
+!*.spec.ts
+!*.spec.js
 
 # Excel/Office files
 ~$*.xlsx

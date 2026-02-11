@@ -83,6 +83,15 @@ export type Cell = {
   comments?: CellComment[];
   /** Cell icon overlay */
   icon?: CellIcon;
+  /** Spill metadata: if this cell is the source of a spilled array */
+  spillSource?: {
+    /** Dimensions of spilled array [rows, cols] */
+    dimensions: [number, number];
+    /** End address of spilled range */
+    endAddress: Address;
+  };
+  /** If this cell is part of a spilled range, points to the source cell */
+  spilledFrom?: Address;
 };
 
 export type ColumnFilter = {

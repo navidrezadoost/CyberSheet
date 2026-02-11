@@ -1,9 +1,8 @@
-import { Worksheet, Address, CellStyle, CellEvent, resolveExcelColor, ExcelColorSpec } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, CellEvent, resolveExcelColor, ExcelColorSpec, Emitter } from '@cyber-sheet/core';
 import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
 import { RenderPlugin } from './plugins';
-import { Emitter } from '@cyber-sheet/core/dist/events';
 
 export type CanvasRendererOptions = {
   headerHeight?: number; // px
@@ -65,6 +64,7 @@ export class CanvasRenderer {
   private hoveredCell: Address | null = null;
   private clickStartTime = 0;
   private clickStartCell: Address | null = null;
+  private scrollEmitter = new Emitter<{ type: 'scroll'; scroll: { x: number; y: number; maxX: number; maxY: number } }>();
   // Distinct value cache per column for filter menus
 
   private clearValueCacheForColumn(col?: number) {
@@ -166,15 +166,48 @@ export class CanvasRenderer {
     // Clamp to bounds
     const clampedX = Math.min(Math.max(0, x), max.x);
     const clampedY = Math.min(Math.max(0, y), max.y);
+    
+    // Only redraw if scroll actually changed
+    if (this.scrollX === clampedX && this.scrollY === clampedY) return;
+    
     this.scrollX = clampedX;
     this.scrollY = clampedY;
-    this.redraw();
+    
+    // Emit scroll event for adapters to listen
+    this.scrollEmitter.emit({
+      type: 'scroll',
+      scroll: { x: clampedX, y: clampedY, maxX: max.x, maxY: max.y }
+    });
+    
+    // Schedule redraw via RAF to batch multiple scroll updates
+    this.scheduleRedraw();
   }
-  setSelection(sel: { start: Address; end: Address } | null) { this.selection = sel; this.selections = sel ? [sel] : []; this.redraw(); }
-  setSelections(ranges: { start: Address; end: Address }[]) { this.selections = ranges.slice(); this.selection = ranges[0] ?? null; this.redraw(); }
+  
+  private scheduleRedraw() {
+    if (this.rafId !== null) return; // Already scheduled
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      this.redraw();
+    });
+  }
+  setSelection(sel: { start: Address; end: Address } | null) { this.selection = sel; this.selections = sel ? [sel] : []; this.scheduleRedraw(); }
+  setSelections(ranges: { start: Address; end: Address }[]) { this.selections = ranges.slice(); this.selection = ranges[0] ?? null; this.scheduleRedraw(); }
   getSelections(): { start: Address; end: Address }[] { return this.selections.slice(); }
   getScroll() { return { x: this.scrollX, y: this.scrollY }; }
   scrollBy(dx: number, dy: number) { this.setScroll(this.scrollX + dx, this.scrollY + dy); }
+  
+  /**
+   * Subscribe to scroll change events. Returns a disposable to unsubscribe.
+   * This is the proper way for adapters to listen to scroll changes instead of polling.
+   */
+  onScrollChange(listener: (event: { x: number; y: number; maxX: number; maxY: number }) => void): { dispose: () => void } {
+    return this.scrollEmitter.on((event) => {
+      if (event.type === 'scroll') {
+        listener(event.scroll);
+      }
+    });
+  }
+  
   // Expose read-only handles for host wrappers (React) that need to align/snapping or edge checks
   get optionsReadonly(): Readonly<Required<CanvasRendererOptions>> { return this.options; }
   get sheetReadonly(): Worksheet { return this.sheet; }
@@ -193,7 +226,9 @@ export class CanvasRenderer {
   // The full content size based on row/column sizes (excluding headers), in CSS pixels.
   getContentSize(): { width: number; height: number } {
     let w = 0; for (let c = 1; c <= this.sheet.colCount; c++) w += this.sheet.getColumnWidth(c) * this.zoom;
-    let h = 0; for (const r of this.getVisibleRows()) h += this.sheet.getRowHeight(r) * this.zoom;
+    let h = 0; 
+    const visRows = this.getVisibleRows();
+    for (const r of visRows) h += this.sheet.getRowHeight(r) * this.zoom;
     return { width: w, height: h };
   }
   // The maximum scroll offsets allowed (content minus viewport), never negative.
@@ -344,7 +379,10 @@ export class CanvasRenderer {
 
   private resizeObserver?: ResizeObserver;
   private observeResize() {
-    this.resizeObserver = new ResizeObserver(() => { this.resize(); this.redraw(); });
+    this.resizeObserver = new ResizeObserver(() => { 
+      this.resize(); 
+      this.scheduleRedraw();
+    });
     this.resizeObserver.observe(this.container);
   }
 
@@ -777,13 +815,49 @@ export class CanvasRenderer {
     const y = clientY - rect.top;
     const { headerHeight, headerWidth } = this.options;
     if (x < headerWidth || y < headerHeight) return null;
-    let cx = headerWidth - this.scrollX;
-    let cy = headerHeight - this.scrollY;
+    
+    // Calculate starting positions accounting for scroll offset
     let col = 1;
+    let scrollRemainX = this.scrollX;
+    // Skip columns that are scrolled out of view
+    while (scrollRemainX > 0 && col <= this.sheet.colCount) {
+      const w = this.sheet.getColumnWidth(col) * this.zoom;
+      if (scrollRemainX < w) break;
+      scrollRemainX -= w;
+      col++;
+    }
+    
     const visRows = this.getVisibleRows();
     let rowIndex = 0;
-    while (cx <= x && col <= this.sheet.colCount) { const w = this.sheet.getColumnWidth(col) * this.zoom; if (x < cx + w) break; cx += w; col++; }
-    while (cy <= y && rowIndex < visRows.length) { const h = this.sheet.getRowHeight(visRows[rowIndex]) * this.zoom; if (y < cy + h) break; cy += h; rowIndex++; }
+    let scrollRemainY = this.scrollY;
+    // Skip rows that are scrolled out of view
+    while (scrollRemainY > 0 && rowIndex < visRows.length) {
+      const h = this.sheet.getRowHeight(visRows[rowIndex]) * this.zoom;
+      if (scrollRemainY < h) break;
+      scrollRemainY -= h;
+      rowIndex++;
+    }
+    
+    // Now walk from the first visible cell, starting with partial offsets
+    let cx = headerWidth - scrollRemainX;
+    let cy = headerHeight - scrollRemainY;
+    
+    // Find column
+    while (cx <= x && col <= this.sheet.colCount) {
+      const w = this.sheet.getColumnWidth(col) * this.zoom;
+      if (x < cx + w) break;
+      cx += w;
+      col++;
+    }
+    
+    // Find row
+    while (cy <= y && rowIndex < visRows.length) {
+      const h = this.sheet.getRowHeight(visRows[rowIndex]) * this.zoom;
+      if (y < cy + h) break;
+      cy += h;
+      rowIndex++;
+    }
+    
     const row = visRows[rowIndex];
     if (col > this.sheet.colCount || row == null) return null;
     return { row, col };
