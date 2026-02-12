@@ -5,56 +5,73 @@
 **Target:** 300 functions (100% web-compatible coverage, excluding ~200 VBA/Macro functions)  
 **Remaining:** 202 functions to implement
 
-**CRITICAL UPDATE (Feb 12, 2026):** Wave 0 Platform Hardening (Enforcement-Driven) required BEFORE Wave 1
+**CRITICAL UPDATE (Feb 12, 2026):** Wave 0 Platform Hardening (SDK-Grade) required BEFORE Wave 1
 
 ---
 
-## 🚨 Strategic Revision: Wave 0 First (Enforcement-Driven)
+## 🚨 Strategic Revision: Wave 0 First (SDK-Grade)
 
 **Management Decision:**  
-Current metadata is **descriptive, not enforcement-driven**. At 300 functions: volatile functions won't recalc if scheduler doesn't consume metadata, tolerance drift if precision isn't centralized, iterative solvers will each invent their own Newton loop. Execute **Wave 0 Platform Hardening (8-9 days)** with runtime enforcement before implementing 202 functions.
+Enforcement-driven architecture is insufficient for 300-function scale. SDK requires **compile-time enforcement, error engine layer, global numeric policy, performance introspection API, date system policy, and strict mode**. Execute **Wave 0 Platform Hardening (10-12 days, SDK-grade)** before implementing 202 functions.
+
+**🔒 Wave 1 is BLOCKED until Wave 0 complete.**
 
 **See:** `docs/WAVE_0_PLATFORM_HARDENING.md` for full specification
 
 ---
 
-## Wave 0: Platform Hardening (8-9 focused days) — MANDATORY FIRST STEP
+## Wave 0: Platform Hardening (10-12 focused days) — MANDATORY FIRST STEP
 
-**Goal:** Runtime enforcement infrastructure for 300-function scale
+**Goal:** Production SDK infrastructure for 300-function scale
 
-### Four Critical Systems:
-1. **Extended metadata + runtime enforcement** (3 days): 
-   - Wire `volatile` into scheduler (RAND in IF still recalcs)
-   - `isExpensive()` helper for O(n²) and ITERATIVE
-   - Centralized precision policy (automatic tolerance)
-   - Per-function `ErrorStrategy` (AVERAGE skips errors, IF is lazy)
-   - `IterationPolicy` for IRR, YIELD, XIRR, RATE (no reinvented Newton loops)
+### Seven Critical Systems:
+1. **Compile-time metadata enforcement** (3 days): 
+   - `StrictFunctionMetadata = Required<>` type
+   - Registry only accepts complete metadata
+   - TypeScript build fails if incomplete
+   - Pre-commit hook validates all 98 functions
+   - **Fail fast at development time, not runtime**
 
-2. **Error propagation matrix + per-function overrides** (3 days): 
-   - Category defaults (20 tests)
-   - Per-function quirks (AVERAGE/COUNT/IF/AND/OR/MATCH/VLOOKUP/SUMIFS/PRICE/YIELD)
+2. **Error Engine Layer** (2 days):
+   - `EvaluationContext` with `errorPolicy` and `coercionPolicy`
+   - ErrorStrategy wired into evaluator (not just metadata)
+   - IF lazy evaluation, AND/OR short-circuit at AST/evaluator level
+   - **Metadata without evaluator integration = documentation theater**
+
+3. **Global Numeric Policy + Strict Mode** (3 days):
+   - `EngineNumericPolicy`: maxGlobalIterations, tolerance, roundingMode (bankers vs Excel vs IEEE 754)
+   - Strict mode: no implicit coercion, deterministic rounding, fixed 1900 bug
+   - Excel-compatible mode: match quirks exactly
+   - **Decouples future from Excel, path to platform**
+
+4. **Performance Introspection API** (2 days):
+   - Public `getFunctionProfile()` → complexity, precision, volatile, iterative
+   - `getExpensiveFunctions()` query
+   - **SaaS can budget performance before execution (competitive advantage)**
+
+5. **Date System Policy** (2 days) — **CRITICAL for financial functions**:
+   - `DateSystemPolicy`: 1900 vs 1904, leap year bug, serial numbers
+   - Financial functions (PRICE, YIELD, ACCRINT) need this
+   - **Without: off by 1-2 days in bond calculations**
+
+6. **Error propagation matrix** (3 days): 
+   - Category defaults + per-function overrides (AVERAGE/COUNT/IF/AND/OR/MATCH/VLOOKUP/SUMIFS/PRICE/YIELD)
    - 50+ tests, Excel quirks documented explicitly
 
-3. **Performance budget + non-blocking benchmarks** (2 days): 
-   - Label all 98 functions with `ComplexityClass`
-   - Baseline JSON (committed to repo)
-   - CI: Log warning if >20% regression, fail if >100% (never block on noise)
-
-4. **Iteration control system** (integrated with #1):
-   - Shared `iterativeSolver()` abstraction
-   - IRR, XIRR, YIELD, RATE use standardized Newton/bisection/secant
-   - Convergence failure = #NUM! with diagnostic
+7. **Performance budget + iteration control** (2 days):
+   - Non-blocking CI (log warning >20%, fail >100%)
+   - Shared `iterativeSolver()` abstraction for IRR, YIELD, XIRR, RATE
 
 **Why it matters:**
 - Prevents technical debt collapse at function 150
-- Financial functions won't invent custom solvers
-- Tolerance drift eliminated
-- Performance regressions detected early
+- Financial functions won't fail silently (date policy, strict coercion)
+- SDK without configurability = locked to one use case
+- Performance introspection = competitive advantage
 
-**Timeline:** 8-9 focused days → **Ready for Wave 1**
+**Timeline:** 10-12 focused days → **Ready for Wave 1**
 
-**Platform Identity:** Embeddable SDK (not Excel clone, not SaaS backend)  
-**Design Principle:** Excel fidelity with deterministic guarantees. Quirks matched but explicitly documented.
+**Platform Identity:** The reference computational spreadsheet engine for the web ecosystem  
+**Design Principle:** Excel fidelity with deterministic guarantees. Strict mode for computational correctness.
 
 ---
 
