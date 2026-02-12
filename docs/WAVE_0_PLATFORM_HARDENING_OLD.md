@@ -38,7 +38,9 @@ At 300 functions:
 
 ---
 
-## 📋 Four Critical Systems (Enforcement-Driven)
+## 📋 Four Critical Systems (Revised)
+
+## 📋 Four Critical Systems (Revised)
 
 ### 1️⃣ **Extended Metadata + Runtime Enforcement** (3 days)
 
@@ -250,65 +252,14 @@ if (current > baseline * 2.0) {
 - RATE (secant method)
 - GOALSEEK-like (future)
 
-**Without standardization:** Each function invents its own loop → financial engine rot.
-
-**With standardization:**
-
-```typescript
-interface IterationPolicy {
-  maxIterations: number;  // e.g., 100 for IRR, 50 for YIELD
-  tolerance: number;      // e.g., 1e-7
-  algorithm: 'newton' | 'bisection' | 'secant';
-}
-
-// Shared iteration abstraction
-function iterativeSolver(
-  fn: (x: number) => number,
-  derivative: (x: number) => number | null,
-  initialGuess: number,
-  policy: IterationPolicy
-): number | FormulaError {
-  // Centralized Newton/bisection/secant implementation
-  // Returns result or #NUM! with diagnostic
-}
-```
-
-**Tasks:**
-- Add `IterationPolicy` to `FunctionMetadata`
-- Create `iterative-solver.ts` with shared Newton/bisection/secant
-- Refactor IRR, XIRR to use shared abstraction
-- Document convergence failure modes: "IRR failed to converge after 100 iterations; try better guess"
-
-**Why it matters:**
-- Prevents each financial function from reinventing Newton's method
-- Consistent convergence diagnostics
-- Future GOALSEEK/SOLVER can reuse infrastructure
-
 ---
 
 ## 🧪 Testing Requirements
 
-**New test suites (95% coverage):**
-
-1. **`metadata-validation.test.ts`** — All 98 functions have complete metadata
-   - Volatile functions wired into scheduler
-   - Complexity class drives `isExpensive()` helper
-   - Precision class drives tolerance
-
-2. **`error-propagation-matrix.test.ts`** — 50+ tests
-   - Category defaults (20 tests)
-   - Per-function overrides (20 tests)
-   - Edge cases: empty cells, string coercion, #N/A in IF (10 tests)
-
-3. **`performance-benchmarks.test.ts`** — Baseline validation
-   - Runs in CI with warning/failure thresholds
-   - Stores baseline JSON (committed to repo)
-   - Logs warnings for >20% regression, fails for >100%
-
-4. **`iterative-solver.test.ts`** — Convergence validation
-   - Newton/bisection/secant correctness
-   - Convergence failure handling (#NUM! with diagnostic)
-   - Tolerance edge cases
+**New test suites:**
+1. `metadata-validation.test.ts` — All 98 functions have complete metadata
+2. `error-propagation-matrix.test.ts` — 50+ error cases
+3. `performance-benchmarks.test.ts` — Baseline for regressions
 
 **Coverage:** 95% for new infrastructure
 
@@ -316,131 +267,30 @@ function iterativeSolver(
 
 ## 📊 Success Metrics
 
-| System | Target | Status |
-|--------|--------|--------|
-| Extended metadata + enforcement | 98/98 functions | ❌ Not started |
-| Volatile wired into scheduler | Test passing | ❌ Not started |
-| Complexity class drives warnings | `isExpensive()` working | ❌ Not started |
-| Precision class drives tolerance | Centralized policy | ❌ Not started |
-| Error strategy per function | 50+ tests | ❌ Not started |
-| Performance benchmarks | 98 functions, non-blocking CI | ❌ Not started |
-| Iteration control system | Shared abstraction | ❌ Not started |
+| Task | Target | Status |
+|------|--------|--------|
+| Extended metadata | 98/98 functions | ❌ Not started |
+| Error matrix | 50+ tests | ❌ Not started |
+| Performance baselines | 98 functions | ❌ Not started |
 
 ---
 
-## ⏱️ Realistic Timeline
+## ⏱️ Timeline
 
-**Day 1-3:** Extended metadata + runtime enforcement  
-- Volatile → scheduler integration
-- Complexity → `isExpensive()` helper + dev warnings
-- Precision → centralized tolerance policy
-- Error strategy → per-function overrides
-- Iteration policy → shared abstraction
+**Day 1-2:** Extended metadata system  
+**Day 3-4:** Error propagation matrix  
+**Day 5:** Performance benchmarks  
 
-**Day 4-6:** Error propagation matrix + per-function overrides  
-- Category defaults
-- Per-function quirks (AVERAGE, IF, MATCH, VLOOKUP, SUMIFS)
-- 50+ tests
-- Documentation with Excel references
-
-**Day 7-8:** Performance budget + iteration system  
-- Label all 98 functions with complexity
-- Benchmark suite (n=10, 100, 1000)
-- Non-blocking CI with warning/failure thresholds
-- Baseline JSON committed
-
-**Day 9:** Integration testing + documentation  
-- All 4 systems working together
-- 95% coverage validated
-- Documentation complete
-
-**Total:** 8-9 focused days → **Ready for Wave 1**
+**Total:** 1 week → **Ready for Wave 1**
 
 ---
 
-## 📈 Risk Assessment If You Skip Wave 0
+## � Management Decision
 
-**At function 150:**
-- Tolerance inconsistencies → statistical drift bugs return
-- Financial rounding mismatch → ±$1 errors undetected
-- Volatile recalculation bugs → RAND in IF branches doesn't recalc
-- Iterative convergence chaos → each financial function has different Newton loop
-- O(n²) freeze reports → no performance warnings
-- Duplicate coercion logic everywhere → 80% of error-handling bugs
+**Option A:** Skip Wave 0, start Wave 1 immediately  
+**Risk:** Technical debt collapse at function 150, 2-3x cost to fix later
 
-**Refactor cost:** 3-4x later.
+**Option B:** Execute Wave 0 first  
+**Benefit:** Clean foundation, prevents future pain, pays dividends in all 202 functions
 
----
-
-## 🧠 Strategic Observation
-
-You are no longer building "Excel functions".
-
-You are building:
-
-> **A deterministic formula execution engine with numeric policy guarantees that developers trust.**
-
-That is infrastructure-level responsibility.
-
----
-
-## 🏆 Final Architecture Answers
-
-### Platform Identity
-**Embeddable SDK** — not Excel clone, not SaaS backend.
-
-### Optimization Priority
-1. **Long-term computational correctness** (deterministic, documented)
-2. **Excel compatibility** (reference implementation, not gospel)
-3. **Developer trust** (transparency > quirk hiding)
-
-### Design Principle
-> **Excel fidelity with deterministic guarantees. Quirks matched but explicitly documented.**
-
-Example:
-- ✅ AVERAGE skips #N/A (Excel quirk matched)
-- ✅ Documented: "Excel quirk: AVERAGE skips errors, COUNT doesn't"
-- ✅ ErrorStrategy.SKIP_ERRORS enforced by metadata
-
----
-
-## 🎯 Wave 0 Deliverables
-
-**Infrastructure (code):**
-1. Extended `FunctionMetadata` with 5 new enforcement fields
-2. Runtime integration: scheduler, tolerance policy, iteration abstraction
-3. Error propagation system with per-function overrides
-4. Non-blocking performance budget with CI integration
-
-**Documentation:**
-1. `FUNCTION_METADATA_SPEC.md` — metadata schema with examples
-2. `ERROR_PROPAGATION_MATRIX.md` — category defaults + per-function quirks
-3. `PERFORMANCE_BUDGET.md` — complexity labels + recommended limits
-4. `ITERATION_POLICY.md` — convergence management for financial functions
-
-**Tests:**
-1. `metadata-validation.test.ts` (98 functions validated)
-2. `error-propagation-matrix.test.ts` (50+ tests)
-3. `performance-benchmarks.test.ts` (non-blocking CI)
-4. `iterative-solver.test.ts` (convergence validation)
-
----
-
-## ✅ Management Decision Confirmed
-
-**Execute Wave 0 with these enforcement-driven upgrades:**
-
-✅ Metadata must drive runtime behavior (not just documentation)  
-✅ Error strategy per function (not just category defaults)  
-✅ Centralized precision policy (automatic tolerance)  
-✅ Iteration policy abstraction (no reinvented Newton loops)  
-✅ Non-blocking benchmark suite (warnings, not CI failures)
-
-**Timeline:** 8-9 focused days  
-**Outcome:** Wave 1 (Financial) becomes mechanical instead of fragile
-
----
-
-**This is the exact moment projects either become serious infrastructure or a collection of clever functions.**
-
-**Verdict:** Execute Wave 0. This is infrastructure-level responsibility now.
+**Recommendation:** **Execute Wave 0** — low risk, high ROI, correct engineering approach.

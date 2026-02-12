@@ -5,34 +5,56 @@
 **Target:** 300 functions (100% web-compatible coverage, excluding ~200 VBA/Macro functions)  
 **Remaining:** 202 functions to implement
 
-**CRITICAL UPDATE (Feb 12, 2026):** Wave 0 Platform Hardening required BEFORE Wave 1
+**CRITICAL UPDATE (Feb 12, 2026):** Wave 0 Platform Hardening (Enforcement-Driven) required BEFORE Wave 1
 
 ---
 
-## 🚨 Strategic Revision: Wave 0 First
+## 🚨 Strategic Revision: Wave 0 First (Enforcement-Driven)
 
 **Management Decision:**  
-Current engine built for ~100 functions. Financial functions (YIELD, XIRR, ACCRINT) will expose architectural weaknesses. Execute **Wave 0 Platform Hardening (1 week)** before implementing 202 functions.
+Current metadata is **descriptive, not enforcement-driven**. At 300 functions: volatile functions won't recalc if scheduler doesn't consume metadata, tolerance drift if precision isn't centralized, iterative solvers will each invent their own Newton loop. Execute **Wave 0 Platform Hardening (8-9 days)** with runtime enforcement before implementing 202 functions.
 
 **See:** `docs/WAVE_0_PLATFORM_HARDENING.md` for full specification
 
 ---
 
-## Wave 0: Platform Hardening (1 week) — MANDATORY FIRST STEP
+## Wave 0: Platform Hardening (8-9 focused days) — MANDATORY FIRST STEP
 
-**Goal:** Architectural foundation for 300-function scale
+**Goal:** Runtime enforcement infrastructure for 300-function scale
 
-### Three Critical Tasks:
-1. **Extended metadata** (2 days): Add `volatile`, `complexityClass`, `precisionClass` to all 98 functions
-2. **Error propagation matrix** (2 days): Formalize rules (empty → 0 vs "", #N/A handling), 50+ tests
-3. **Performance budget** (1 day): Label complexity O(1)/O(n)/O(n²)/ITERATIVE, establish baselines
+### Four Critical Systems:
+1. **Extended metadata + runtime enforcement** (3 days): 
+   - Wire `volatile` into scheduler (RAND in IF still recalcs)
+   - `isExpensive()` helper for O(n²) and ITERATIVE
+   - Centralized precision policy (automatic tolerance)
+   - Per-function `ErrorStrategy` (AVERAGE skips errors, IF is lazy)
+   - `IterationPolicy` for IRR, YIELD, XIRR, RATE (no reinvented Newton loops)
+
+2. **Error propagation matrix + per-function overrides** (3 days): 
+   - Category defaults (20 tests)
+   - Per-function quirks (AVERAGE/COUNT/IF/AND/OR/MATCH/VLOOKUP/SUMIFS/PRICE/YIELD)
+   - 50+ tests, Excel quirks documented explicitly
+
+3. **Performance budget + non-blocking benchmarks** (2 days): 
+   - Label all 98 functions with `ComplexityClass`
+   - Baseline JSON (committed to repo)
+   - CI: Log warning if >20% regression, fail if >100% (never block on noise)
+
+4. **Iteration control system** (integrated with #1):
+   - Shared `iterativeSolver()` abstraction
+   - IRR, XIRR, YIELD, RATE use standardized Newton/bisection/secant
+   - Convergence failure = #NUM! with diagnostic
 
 **Why it matters:**
 - Prevents technical debt collapse at function 150
-- Financial functions need formal error propagation
-- Performance budget prevents regression
+- Financial functions won't invent custom solvers
+- Tolerance drift eliminated
+- Performance regressions detected early
 
-**Timeline:** 1 week → **Ready for Wave 1**
+**Timeline:** 8-9 focused days → **Ready for Wave 1**
+
+**Platform Identity:** Embeddable SDK (not Excel clone, not SaaS backend)  
+**Design Principle:** Excel fidelity with deterministic guarantees. Quirks matched but explicitly documented.
 
 ---
 
