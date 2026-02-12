@@ -61,7 +61,7 @@ export class FunctionRegistry {
   }
 
   /**
-   * Register a function with STRICT metadata enforcement
+   * Register a function with strict metadata validation
    * 
    * SDK-Grade: TypeScript will fail to compile if metadata incomplete
    * NO runtime defaults, NO implicit assumptions

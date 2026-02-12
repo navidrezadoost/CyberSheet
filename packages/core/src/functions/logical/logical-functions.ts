@@ -9,11 +9,40 @@ import type { FormulaFunction, FormulaValue } from '../../types/formula-types';
 import { toBoolean } from '../../utils/type-utils';
 
 /**
- * IF - Conditional value
- * Note: Special handling in engine for lazy evaluation
+ * IF - Conditional value with lazy evaluation
+ * 
+ * Accepts thunks (zero-arg functions) to enable lazy evaluation.
+ * Only the condition is evaluated first, then only the taken branch.
+ * 
+ * @param conditionThunk - Zero-arg function returning the condition to test
+ * @param trueThunk - Zero-arg function returning value if condition is TRUE
+ * @param falseThunk - Zero-arg function returning value if condition is FALSE
+ * @returns The result of evaluating the taken branch
  */
-export const IF: FormulaFunction = (condition, trueValue, falseValue) => {
-  return condition ? trueValue : falseValue;
+export const IF: FormulaFunction = (
+  conditionThunk: any,
+  trueThunk: any,
+  falseThunk: any
+) => {
+  // Evaluate condition thunk
+  const conditionValue = typeof conditionThunk === 'function' 
+    ? conditionThunk() 
+    : conditionThunk;
+  
+  // Convert to boolean
+  const condition = toBoolean(conditionValue);
+  
+  // If condition is an error, propagate immediately
+  if (condition instanceof Error) {
+    return condition;
+  }
+  
+  // Evaluate only the taken branch
+  if (condition) {
+    return typeof trueThunk === 'function' ? trueThunk() : trueThunk;
+  } else {
+    return typeof falseThunk === 'function' ? falseThunk() : falseThunk;
+  }
 };
 
 /**
@@ -72,17 +101,28 @@ export const OR: FormulaFunction = (...args) => {
 
 /**
  * NOT - Logical NOT
+ * Phase 6: Thunk-aware implementation for lazy evaluation
  */
-export const NOT: FormulaFunction = (value) => {
+export const NOT: FormulaFunction = (valueThunk: any) => {
+  // Evaluate value thunk (might be thunk or raw value)
+  const value = typeof valueThunk === 'function' ? valueThunk() : valueThunk;
+  
+  // Convert to boolean
   const bool = toBoolean(value);
+  
+  // Propagate errors
   if (bool instanceof Error) return bool;
+  
+  // Return negation
   return !bool;
 };
 
 /**
  * XOR - Exclusive OR
+ * Phase 6: Thunk-aware implementation for lazy evaluation
+ * Note: XOR needs all values to compute result, so all thunks must be evaluated
  */
-export const XOR: FormulaFunction = (...args) => {
+export const XOR: FormulaFunction = (...args: any[]) => {
   const flatten = (arr: FormulaValue[]): FormulaValue[] => {
     const result: FormulaValue[] = [];
     for (const item of arr) {
@@ -95,7 +135,12 @@ export const XOR: FormulaFunction = (...args) => {
     return result;
   };
 
-  const values = flatten(args);
+  // Evaluate all argument thunks (XOR needs all values)
+  const evaluatedArgs = args.map((arg: any) => 
+    typeof arg === 'function' ? arg() : arg
+  );
+
+  const values = flatten(evaluatedArgs);
   let trueCount = 0;
 
   for (const val of values) {
@@ -131,59 +176,139 @@ export const NA: FormulaFunction = () => {
 
 /**
  * IFERROR - Return value if no error, else return error value
+ * Phase 6: Thunk-aware implementation for lazy evaluation
+ * Only evaluates fallback if value errors
  */
-export const IFERROR: FormulaFunction = (value, valueIfError) => {
-  return value instanceof Error ? valueIfError : value;
+export const IFERROR: FormulaFunction = (
+  valueThunk: any,
+  fallbackThunk: any
+) => {
+  // Evaluate value thunk (might be thunk or raw value)
+  let value: any;
+  try {
+    value = typeof valueThunk === 'function' ? valueThunk() : valueThunk;
+  } catch (error) {
+    // If value evaluation throws, treat as error and evaluate fallback
+    return typeof fallbackThunk === 'function' ? fallbackThunk() : fallbackThunk;
+  }
+
+  // If value is an Error, evaluate fallback thunk
+  if (value instanceof Error) {
+    return typeof fallbackThunk === 'function' ? fallbackThunk() : fallbackThunk;
+  }
+
+  // No error - return value, never evaluate fallback
+  return value;
 };
 
 /**
  * IFNA - Return value if not #N/A, else return NA value
+ * Phase 6: Thunk-aware implementation for lazy evaluation
+ * Only evaluates fallback if value is #N/A error
  */
-export const IFNA: FormulaFunction = (value, valueIfNA) => {
-  if (value instanceof Error && value.message === '#N/A') {
-    return valueIfNA;
+export const IFNA: FormulaFunction = (
+  valueThunk: any,
+  fallbackThunk: any
+) => {
+  // Evaluate value thunk (might be thunk or raw value)
+  let value: any;
+  try {
+    value = typeof valueThunk === 'function' ? valueThunk() : valueThunk;
+  } catch (error) {
+    // If value evaluation throws, check if it's #N/A
+    if (error instanceof Error && error.message === '#N/A') {
+      return typeof fallbackThunk === 'function' ? fallbackThunk() : fallbackThunk;
+    }
+    // Non-#N/A errors propagate without evaluating fallback
+    throw error;
   }
+
+  // If value is #N/A Error, evaluate fallback thunk
+  if (value instanceof Error && value.message === '#N/A') {
+    return typeof fallbackThunk === 'function' ? fallbackThunk() : fallbackThunk;
+  }
+
+  // Value is not #N/A (could be valid value or other error) - return as-is, never evaluate fallback
   return value;
 };
 
 /**
  * IFS - Multiple IF conditions
+ * Phase 6: Thunk-aware implementation for lazy evaluation
+ * Evaluates test thunks sequentially, stops at first TRUE, evaluates only that value thunk
  */
-export const IFS: FormulaFunction = (...args) => {
+export const IFS: FormulaFunction = (...args: any[]) => {
+  // Validate args: must have even number (test/value pairs)
   if (args.length % 2 !== 0) {
     return new Error('#N/A');
   }
 
+  // Loop through test/value pairs
   for (let i = 0; i < args.length; i += 2) {
-    const condition = toBoolean(args[i]);
+    const testThunk = args[i];
+    const valueThunk = args[i + 1];
+
+    // Evaluate test thunk (might be thunk or raw value)
+    const testValue = typeof testThunk === 'function' ? testThunk() : testThunk;
+    
+    // Convert to boolean
+    const condition = toBoolean(testValue);
+    
+    // If test evaluation errors, propagate immediately
     if (condition instanceof Error) return condition;
 
+    // If test is TRUE: evaluate corresponding value thunk and return
     if (condition) {
-      return args[i + 1];
+      return typeof valueThunk === 'function' ? valueThunk() : valueThunk;
     }
+    
+    // Otherwise: continue to next test (don't evaluate this value thunk)
   }
 
+  // No matching condition found
   return new Error('#N/A');
 };
 
 /**
  * SWITCH - Switch case statement
+ * Phase 6: Thunk-aware implementation for lazy evaluation
+ * Evaluates expression first, then case thunks sequentially, stops at first match
  */
-export const SWITCH: FormulaFunction = (expression, ...args) => {
+export const SWITCH: FormulaFunction = (expressionThunk: any, ...args: any[]) => {
   if (args.length < 2) return new Error('#N/A');
+
+  // Evaluate expression thunk (might be thunk or raw value)
+  const expression = typeof expressionThunk === 'function' 
+    ? expressionThunk() 
+    : expressionThunk;
 
   // Check for default value (odd number of args means last is default)
   const hasDefault = args.length % 2 === 1;
-  const defaultValue = hasDefault ? args[args.length - 1] : new Error('#N/A');
+  const defaultThunk = hasDefault ? args[args.length - 1] : null;
   const pairsCount = hasDefault ? args.length - 1 : args.length;
 
+  // Loop through case/value pairs
   for (let i = 0; i < pairsCount; i += 2) {
-    if (expression === args[i]) {
-      return args[i + 1];
+    const caseThunk = args[i];
+    const valueThunk = args[i + 1];
+
+    // Evaluate case thunk (might be thunk or raw value)
+    const caseValue = typeof caseThunk === 'function' ? caseThunk() : caseThunk;
+
+    // If case matches expression: evaluate corresponding value thunk and return
+    if (expression === caseValue) {
+      return typeof valueThunk === 'function' ? valueThunk() : valueThunk;
     }
+
+    // Otherwise: continue to next case (don't evaluate this value thunk)
   }
 
-  return defaultValue;
+  // No matching case found - evaluate default or return #N/A
+  if (hasDefault && defaultThunk !== null) {
+    return typeof defaultThunk === 'function' ? defaultThunk() : defaultThunk;
+  }
+
+  return new Error('#N/A');
 };
 
 /**

@@ -16,6 +16,7 @@
     "test": "jest --passWithNoTests --config jest.config.js",
     "test:watch": "jest --watch --config jest.config.js",
     "test:ci": "jest --ci --runInBand --config jest.config.js",
+    "validate:metadata": "./scripts/validate-metadata.sh",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "bench": "node benchmarks/run.js",

@@ -10,7 +10,7 @@ import type { Worksheet } from '../worksheet';
 
 /**
  * FormulaValue represents any value that can be computed or stored in a formula
- * Supports scalars, arrays (1D/2D for Excel 365 dynamic arrays), and errors
+ * Supports scalars, arrays (1D/2D for Excel 365 dynamic arrays), errors, and thunks (Phase 6: LAZY_EVALUATION)
  */
 export type FormulaValue = 
   | number 
@@ -19,7 +19,8 @@ export type FormulaValue =
   | null 
   | Error 
   | FormulaValue[] 
-  | FormulaValue[][];
+  | FormulaValue[][]
+  | (() => FormulaValue); // Thunk for lazy evaluation (Phase 6)
 
 /**
  * Lambda function representation for LAMBDA() and higher-order functions
