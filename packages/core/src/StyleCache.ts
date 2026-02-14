@@ -417,35 +417,6 @@ export class StyleCache {
   }
   
   /**
-   * Release a style reference.
-   * 
-   * Decrements ref count. If zero, removes from cache.
-   * 
-   * CRITICAL: Must be called when cell style changes or cell is deleted.
-   * Failure to release causes memory leaks.
-   * 
-   * @param style Style to release
-   */
-  release(style: CellStyle): void {
-    const count = this.refCount.get(style);
-    
-    if (count === undefined) {
-      // Style not in cache (possible if manually created)
-      return;
-    }
-    
-    if (count <= 1) {
-      // Last reference: remove from cache
-      this.refCount.delete(style);
-      this.removeFromBucket(style);
-      this.metrics.cacheSize--;
-    } else {
-      // Decrement ref count
-      this.refCount.set(style, count - 1);
-    }
-  }
-  
-  /**
    * Clear all cached styles.
    * 
    * Used when workbook is closed.
@@ -552,6 +523,35 @@ export class StyleCache {
   private incrementRef(style: CellStyle): void {
     const count = this.refCount.get(style) || 0;
     this.refCount.set(style, count + 1);
+  }
+
+  /**
+   * Release a style reference. Decrements refCount and removes the style
+   * from its bucket when the count reaches zero.
+   *
+   * This method is correctness-critical: it must not leak strong references
+   * inside buckets (which would prevent GC) and must tolerate double-release
+   * or releasing styles not present in the cache.
+   */
+  release(style: CellStyle): void {
+    const count = this.refCount.get(style);
+
+    if (count === undefined) {
+      // Style not tracked (already removed or never interned). Warn and return.
+      // Do not throw — callers may call release defensively.
+      // eslint-disable-next-line no-console
+      console.warn('StyleCache.release: style not found in refCount');
+      return;
+    }
+
+    if (count <= 1) {
+      // Remove from refCount map and bucket (allow GC)
+      this.refCount.delete(style);
+      this.removeFromBucket(style);
+      if (this.metrics.cacheSize > 0) this.metrics.cacheSize--;
+    } else {
+      this.refCount.set(style, count - 1);
+    }
   }
   
   /**
