@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 2: Layout Layer (2026-02-14)
+
+#### Pure Function Layout Computation
+
+**CellLayout Implementation Complete**
+- **Architecture**: Pure function layout computation leveraging StyleCache identity primitive
+- **Design Principle**: Phase 1 earned simplicity. Phase 2 spends it.
+- **Data Flow**: `(value, style, width) → Layout` - no cache, no graph, no complexity
+
+**Performance: Layout is Trivial**
+- **Baseline (100k single-line)**: 0.12µs per layout, 8.2M layouts/sec
+- **High Diversity (100k varying styles)**: 0.07µs per layout, 14.8M layouts/sec
+- **Stress Test (1M layouts)**: 0.03µs per layout, 29.5M layouts/sec
+- **Conclusion**: Layout is 300x faster than <10µs gate → **No memoization needed**
+
+**Identity Leverage Validated**
+- Reference equality check: O(1), no deep comparison
+- Style change detection: `prevStyle === newStyle` is canonical truth
+- Phase 1 primitive (`styleA === styleB` ⇔ structurally equal) enables trivial invalidation
+
+**Immutability Guarantees**
+- Layout outputs: Object.freeze() enforced
+- Style inputs: Frozen references from StyleCache (Phase 1)
+- No mutation possible in layout computation or rendering
+
+**Decision: Baseline is Sufficient**
+- Profiler evidence: 0.03-0.12µs is **insanely cheap**
+- No WeakMap memo required (would add overhead for no gain)
+- No DAG, no observers, no invalidation graph
+- **Architecture victory: Leverage made Phase 2 trivial**
+
+---
+
 ### Added - Phase 1: StyleCache Enterprise Validation (2026-02-14)
 
 #### Foundation: Workbook-Level Immutable Style Interning
