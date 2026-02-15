@@ -1,3 +1,5 @@
+import { formatValue as formatValueSpec, hasFormatSpec } from '@cyber-sheet/core';
+
 export type Align = 'left' | 'right' | 'center';
 
 type NumKey = string; // serialized NumberFormat options
@@ -23,6 +25,12 @@ export class FormatCache {
   formatValue(value: any, fmt?: string): FormatResult {
     if (value == null || value === '') return { text: '' };
     if (typeof value === 'number') {
+      // Try spec-based formatter first (16 registered formats)
+      if (fmt && hasFormatSpec(fmt)) {
+        return { text: formatValueSpec(value, fmt), color: this.extractColor(fmt, value) };
+      }
+      
+      // Fall back to runtime interpreter for unregistered formats
       // Check for duration format [h]:mm:ss or [m]:ss etc
       if (fmt && this.isDurationFormat(fmt)) {
         return { text: this.formatDuration(value, fmt), color: this.extractColor(fmt) };
