@@ -54,7 +54,8 @@ export function isInternedStyle(style: CellStyle | undefined): boolean {
  */
 export function assertInternedStyle(style: CellStyle | undefined, context: string): void {
   // Only enforce in development
-  if (process.env.NODE_ENV === 'production') return;
+  // @ts-ignore - process.env is available in Node.js and bundlers (Vite/Webpack)
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return;
   
   if (style && !isInternedStyle(style)) {
     throw new Error(

@@ -16,14 +16,16 @@ export class Worksheet {
   private formulaEngine?: IFormulaEngine;
   private merges: Range[] = [];
   private conditionalRules: ConditionalFormattingRule[] = [];
+  private workbook?: any; // Reference to parent Workbook (for StyleCache access)
   rowCount: number;
   colCount: number;
 
-  constructor(name: string, rows = 1000, cols = 26, engine?: IFormulaEngine) {
+  constructor(name: string, rows = 1000, cols = 26, engine?: IFormulaEngine, workbook?: any) {
     this.name = name;
     this.rowCount = rows;
     this.colCount = cols;
     this.formulaEngine = engine;
+    this.workbook = workbook;
   }
 
   on(listener: (e: SheetEvents) => void) {
@@ -54,9 +56,17 @@ export class Worksheet {
   setCellStyle(addr: Address, style: CellStyle | undefined): void {
     const k = key(addr);
     const c = this.cells.get(k) ?? { value: null };
-    c.style = style ? { ...style } : undefined;
+    
+    // Auto-intern through workbook StyleCache (entropy-resistant boundary)
+    // Protects against XLSX import, UI mutations, and spread operators
+    let internedStyle = style;
+    if (style && this.workbook?.getStyleCache) {
+      internedStyle = this.workbook.getStyleCache().intern(style);
+    }
+    
+    c.style = internedStyle; // Reference to canonical style (not a copy)
     this.cells.set(k, c);
-    this.events.emit({ type: 'style-changed', address: addr, style });
+    this.events.emit({ type: 'style-changed', address: addr, style: internedStyle });
   }
 
   // ==================== Conditional Formatting ====================
