@@ -146,13 +146,30 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
   ]);
 
   // fonts
-  const fonts: { bold?: boolean; italic?: boolean; size?: number; color?: string; name?: string }[] = [];
+  const fonts: { 
+    bold?: boolean; 
+    italic?: boolean; 
+    size?: number; 
+    color?: string; 
+    name?: string;
+    strikethrough?: boolean;
+    superscript?: boolean;
+    subscript?: boolean;
+  }[] = [];
   const fontsXml = (xml.match(/<fonts[\s\S]*?<\/fonts>/) || [])[0] || '';
   const fontMatches = Array.from(fontsXml.matchAll(/<font>([\s\S]*?)<\/font>/g)) as unknown as RegExpMatchArray[];
   for (const fm of fontMatches) {
     const fxml = (fm as any)[1] as string;
     const bold = /<b\b/.test(fxml) ? true : undefined;
     const italic = /<i\b/.test(fxml) ? true : undefined;
+    const strikethrough = /<strike\b/.test(fxml) ? true : undefined; // Phase 1 UI
+    
+    // Phase 1 UI: superscript/subscript (mutually exclusive)
+    const vertAlignMatch = fxml.match(/<vertAlign[^>]*val="(\w+)"/);
+    const vertAlign = vertAlignMatch ? vertAlignMatch[1] : undefined;
+    const superscript = vertAlign === 'superscript' ? true : undefined;
+    const subscript = vertAlign === 'subscript' ? true : undefined;
+    
     const szMatch = fxml.match(/<sz[^>]*val="([\d.]+)"/);
     const size = szMatch ? parseFloat(szMatch[1]) : undefined;
     const nameMatch = fxml.match(/<name[^>]*val="([^"]+)"/);
@@ -168,7 +185,7 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
       const tint = colorTint ? parseFloat(colorTint[1]) : 0;
       color = themeColorToCss(theme, idx, tint);
     }
-    fonts.push({ bold, italic, size, color, name });
+    fonts.push({ bold, italic, strikethrough, superscript, subscript, size, color, name });
   }
 
   // fills
@@ -243,6 +260,10 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
       if (font.bold) style.bold = font.bold;
       if (font.italic) style.italic = font.italic;
       if (font.color) style.color = font.color;
+      // Phase 1 UI: strikethrough, superscript, subscript
+      if (font.strikethrough) (style as any).strikethrough = font.strikethrough;
+      if (font.superscript) (style as any).superscript = font.superscript;
+      if (font.subscript) (style as any).subscript = font.subscript;
     }
     // Apply fill if applyFill is set OR if fillId > 1 (Excel often omits applyFill but still uses fills)
     if ((applyFill || fillId > 1) && fill) style.fill = fill;
@@ -261,10 +282,12 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
         const v = (t.match(/vertical="(\w+)"/) || [])[1];
         const wrap = (t.match(/wrapText="(\d+)"/) || [])[1];
         const rot = (t.match(/textRotation="(-?\d+)"/) || [])[1];
+        const indent = (t.match(/indent="(\d+)"/) || [])[1]; // Phase 1 UI
         if (h === 'left' || h === 'center' || h === 'right') (style as any).align = h;
         if (v === 'top' || v === 'center' || v === 'bottom') (style as any).valign = v === 'center' ? 'middle' : (v as any);
         if (wrap) (style as any).wrap = wrap === '1';
         if (rot) (style as any).rotation = parseInt(rot, 10);
+        if (indent) (style as any).indent = parseInt(indent, 10); // Phase 1 UI
       }
     }
     (style as any).textOverflow = 'clip';
