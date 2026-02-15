@@ -351,4 +351,143 @@ describe('Phase 1 UI: Identity Guard Tests', () => {
       console.log(`Generated ${uniqueCount} unique styles from ${iterations} iterations (${(collisionRate * 100).toFixed(1)}% collision rate)`);
     });
   });
+
+  describe('Diagonal Borders Identity', () => {
+    it('should intern diagonal borders independently', () => {
+      const styleA = cache.intern({ border: { diagonalUp: '#FF0000' } });
+      const styleB = cache.intern({ border: { diagonalDown: '#00FF00' } });
+      const styleC = cache.intern({ border: { diagonalUp: '#FF0000', diagonalDown: '#00FF00' } });
+
+      expect(Object.isFrozen(styleA)).toBe(true);
+      expect(Object.isFrozen(styleB)).toBe(true);
+      expect(Object.isFrozen(styleC)).toBe(true);
+
+      // Different diagonal borders = different identity
+      expect(styleA).not.toBe(styleB);
+      expect(styleA).not.toBe(styleC);
+      expect(styleB).not.toBe(styleC);
+    });
+
+    it('should deduplicate identical diagonal borders', () => {
+      const styleA = cache.intern({ border: { diagonalUp: '#FF0000' } });
+      const styleB = cache.intern({ border: { diagonalUp: '#FF0000' } });
+
+      expect(styleA).toBe(styleB);
+    });
+
+    it('should handle diagonal borders with regular borders', () => {
+      const style1 = cache.intern({
+        border: {
+          top: '#000000',
+          diagonalUp: '#FF0000'
+        }
+      });
+
+      const style2 = cache.intern({
+        border: {
+          top: '#000000',
+          diagonalDown: '#FF0000'
+        }
+      });
+
+      const style3 = cache.intern({
+        border: {
+          top: '#000000'
+        }
+      });
+
+      // Different diagonal borders = different identity
+      expect(style1).not.toBe(style2);
+      expect(style1).not.toBe(style3);
+      expect(style2).not.toBe(style3);
+    });
+
+    it('should handle both diagonal borders simultaneously', () => {
+      const style = cache.intern({
+        border: {
+          diagonalUp: '#FF0000',
+          diagonalDown: '#0000FF'
+        }
+      });
+
+      expect(Object.isFrozen(style)).toBe(true);
+      expect(style.border?.diagonalUp).toBe('#FF0000');
+      expect(style.border?.diagonalDown).toBe('#0000FF');
+
+      // Re-intern should return same pointer
+      const style2 = cache.intern({
+        border: {
+          diagonalUp: '#FF0000',
+          diagonalDown: '#0000FF'
+        }
+      });
+
+      expect(style2).toBe(style);
+    });
+
+    it('should distinguish diagonal borders by color', () => {
+      const red = cache.intern({ border: { diagonalUp: '#FF0000' } });
+      const blue = cache.intern({ border: { diagonalUp: '#0000FF' } });
+      const green = cache.intern({ border: { diagonalUp: '#00FF00' } });
+
+      expect(red).not.toBe(blue);
+      expect(red).not.toBe(green);
+      expect(blue).not.toBe(green);
+    });
+
+    it('should handle diagonal borders with complex styles', () => {
+      const style = cache.intern({
+        bold: true,
+        fontSize: 14,
+        color: '#000000',
+        border: {
+          top: '#CCCCCC',
+          right: '#CCCCCC',
+          bottom: '#CCCCCC',
+          left: '#CCCCCC',
+          diagonalUp: '#FF0000',
+          diagonalDown: '#FF0000'
+        }
+      });
+
+      expect(Object.isFrozen(style)).toBe(true);
+      expect(Object.isFrozen(style.border)).toBe(true);
+
+      // Same style should return same pointer
+      const style2 = cache.intern({
+        bold: true,
+        fontSize: 14,
+        color: '#000000',
+        border: {
+          top: '#CCCCCC',
+          right: '#CCCCCC',
+          bottom: '#CCCCCC',
+          left: '#CCCCCC',
+          diagonalUp: '#FF0000',
+          diagonalDown: '#FF0000'
+        }
+      });
+
+      expect(style2).toBe(style);
+    });
+
+    it('should normalize absent diagonal borders', () => {
+      const style1 = cache.intern({
+        border: {
+          top: '#000000'
+        }
+      });
+
+      const style2 = cache.intern({
+        border: {
+          top: '#000000'
+        }
+      });
+
+      // Same style (no diagonals) = same pointer
+      expect(style1).toBe(style2);
+      expect(style1.border?.diagonalUp).toBeUndefined();
+      expect(style1.border?.diagonalDown).toBeUndefined();
+    });
+  });
 });

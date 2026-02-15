@@ -35,6 +35,8 @@ export type CellStyle = {
     right?: string | ExcelColorSpec;
     bottom?: string | ExcelColorSpec;
     left?: string | ExcelColorSpec;
+    diagonalUp?: string | ExcelColorSpec;
+    diagonalDown?: string | ExcelColorSpec;
   };
 };
 

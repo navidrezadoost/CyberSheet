@@ -29,6 +29,8 @@ export interface CellLayout {
   readonly lines: readonly string[];
   /** Whether text was truncated/ellipsized */
   readonly truncated: boolean;
+  /** Vertical offset from cell top (computed from valign) */
+  readonly verticalOffset: number;
 }
 
 /**
@@ -38,7 +40,8 @@ export interface CellLayout {
 export interface LayoutInput {
   readonly value: string;
   readonly style: CellStyle;
-  readonly width: number;  // Cell width constraint
+  readonly width: number;   // Cell width constraint
+  readonly height: number;  // Cell height for vertical alignment
 }
 
 /**
@@ -104,6 +107,55 @@ export class MockTextMeasurer implements TextMeasurer {
 }
 
 /**
+ * Compute vertical text offset based on vertical alignment
+ * 
+ * Pure function: No side effects, no mutations
+ * 
+ * @param valign - Vertical alignment ('top' | 'middle' | 'bottom')
+ * @param cellHeight - Cell height in pixels
+ * @param contentHeight - Content height in pixels (after wrap/rotation)
+ * @param fontSize - Font size for baseline adjustment
+ * @param paddingTop - Top padding (default: 2)
+ * @param paddingBottom - Bottom padding (default: 4)
+ * @returns Vertical offset from cell top in pixels
+ */
+export function computeVerticalOffset(
+  valign: 'top' | 'middle' | 'bottom' | undefined,
+  cellHeight: number,
+  contentHeight: number,
+  fontSize: number,
+  paddingTop: number = 2,
+  paddingBottom: number = 4
+): number {
+  // Default to 'bottom' (Excel convention)
+  const align = valign ?? 'bottom';
+  
+  // Available height after padding
+  const availableHeight = cellHeight - paddingTop - paddingBottom;
+  
+  let offset: number;
+  
+  switch (align) {
+    case 'top':
+      offset = paddingTop + fontSize;
+      break;
+    case 'middle':
+      offset = paddingTop + (availableHeight + contentHeight) / 2;
+      break;
+    case 'bottom':
+      offset = cellHeight - paddingBottom;
+      break;
+    default:
+      offset = cellHeight - paddingBottom;
+  }
+  
+  // Clamp to ensure text stays within padding bounds
+  offset = Math.max(paddingTop + fontSize, offset);
+  
+  return offset;
+}
+
+/**
  * Pure layout computation
  * No cache, no observers, no graph
  * Just: compute layout from inputs
@@ -114,12 +166,13 @@ export function computeLayout(
   input: LayoutInput,
   measurer: TextMeasurer
 ): CellLayout {
-  const { value, style, width } = input;
+  const { value, style, width, height } = input;
   
   // Extract style properties (frozen, safe to read)
   const fontSize = style.fontSize ?? 12;
   const bold = style.bold ?? false;
   const italic = style.italic ?? false;
+  const valign = style.valign;
   
   // Measure the full text
   const metrics = measurer.measure(value, fontSize, bold, italic);
@@ -129,12 +182,21 @@ export function computeLayout(
   const lines = Object.freeze([value]);
   const truncated = metrics.width > width;
   
+  // Compute vertical offset (pure layout concern)
+  const verticalOffset = computeVerticalOffset(
+    valign,
+    height,
+    metrics.height,
+    fontSize
+  );
+  
   const layout: CellLayout = {
     textWidth: metrics.width,
     textHeight: metrics.height,
     lineCount: 1,
     lines,
     truncated,
+    verticalOffset,
   };
   
   // Freeze output (immutability guarantee)

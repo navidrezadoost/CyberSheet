@@ -302,6 +302,27 @@ export function normalizeStyle(style: CellStyle): CellStyle {
       continue; // Skip subscript if superscript is true
     }
     
+    // Border normalization: Remove undefined sides, skip if empty
+    if (key === 'border' && typeof value === 'object' && value !== null) {
+      const borderObj = value as any;
+      const normalizedBorder: Record<string, any> = {};
+      
+      // Copy only defined border sides
+      for (const side of ['top', 'right', 'bottom', 'left', 'diagonalUp', 'diagonalDown']) {
+        if (borderObj[side] !== undefined) {
+          normalizedBorder[side] = borderObj[side];
+        }
+      }
+      
+      // Skip border if empty after removing undefined sides
+      if (Object.keys(normalizedBorder).length === 0) {
+        continue;
+      }
+      
+      (normalized as any)[key] = normalizedBorder;
+      continue;
+    }
+    
     (normalized as any)[key] = value;
   }
   

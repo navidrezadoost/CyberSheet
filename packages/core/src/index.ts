@@ -14,3 +14,5 @@ export * from './metadata-api';
 export * from './formatting/NumberFormatter';
 export * from './formatting/NumberFormatSpec';
 export * from './StyleCache';
+export * from './CommandManager';
+export * from './CellLayout';

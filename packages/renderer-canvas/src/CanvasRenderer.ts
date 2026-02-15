@@ -1,4 +1,4 @@
-import { Worksheet, Address, CellStyle, CellEvent, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, CellEvent, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset } from '@cyber-sheet/core';
 import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
@@ -580,6 +580,8 @@ export class CanvasRenderer {
               if (style.border.bottom) { ctx.strokeStyle = transformBorder(style.border.bottom)!; ctx.beginPath(); ctx.moveTo(x, y + bh + 0.5); ctx.lineTo(x + bw, y + bh + 0.5); ctx.stroke(); }
               if (style.border.left) { ctx.strokeStyle = transformBorder(style.border.left)!; ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + bh); ctx.stroke(); }
               if (style.border.right) { ctx.strokeStyle = transformBorder(style.border.right)!; ctx.beginPath(); ctx.moveTo(x + bw + 0.5, y); ctx.lineTo(x + bw + 0.5, y + bh); ctx.stroke(); }
+              if (style.border.diagonalDown) { ctx.strokeStyle = transformBorder(style.border.diagonalDown)!; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + bw, y + bh); ctx.stroke(); }
+              if (style.border.diagonalUp) { ctx.strokeStyle = transformBorder(style.border.diagonalUp)!; ctx.beginPath(); ctx.moveTo(x, y + bh); ctx.lineTo(x + bw, y); ctx.stroke(); }
             }
           }
 
@@ -616,8 +618,9 @@ export class CanvasRenderer {
             }
             ctx.fillStyle = textColor;
             const drawW = merged ? spanW : cw; const drawH = merged ? spanH : rh; const maxWidth = Math.max(0, drawW - 8);
-            let tx = x + 4; let ty = y + drawH / 2 + fontSize / 2 - 2;
-            const valign = style?.valign ?? 'middle'; if (valign === 'top') ty = y + fontSize + 2; if (valign === 'bottom') ty = y + drawH - 4;
+            let tx = x + 4;
+            // Compute vertical offset using layout function (pure layout concern)
+            let ty = y + computeVerticalOffset(style?.valign, drawH, fontSize, fontSize, 2, 4) - fontSize / 2 + 2;
             const align = style?.align ?? this.formatCache.preferredAlign(v, style?.numberFormat);
             let textWidth = this.textCache.get(font, text); if (textWidth === undefined) { textWidth = ctx.measureText(text).width; this.textCache.set(font, text, textWidth); }
             // Shrink-to-fit scaling if specified (tolerate style flag if present)
@@ -633,9 +636,9 @@ export class CanvasRenderer {
               let localTx = -drawW / 2 + 4;
               if (align === 'right') localTx = drawW / 2 - 4 - (textWidth as number);
               else if (align === 'center') localTx = -(textWidth as number) / 2;
-              let localTy = (fontSize / 2) - 2; // approx vertical center line
-              if (valign === 'top') localTy = -drawH / 2 + fontSize + 2;
-              if (valign === 'bottom') localTy = drawH / 2 - 4;
+              // Compute vertical offset using layout function (scaled context)
+              const valignOffset = computeVerticalOffset(style?.valign, drawH, fontSize, fontSize, 2, 4);
+              let localTy = valignOffset - drawH / 2 - fontSize / 2 + 2;
               ctx.beginPath(); ctx.rect(-drawW / 2 + 1, -drawH / 2 + 1, drawW - 2, drawH - 2); ctx.clip();
               ctx.fillText(text, localTx, localTy, maxWidth);
               ctx.restore();
@@ -713,7 +716,9 @@ export class CanvasRenderer {
               const lines: string[] = []; let line = '';
               for (const wtoken of words) { if (wtoken === '\n') { if (line) { lines.push(line); line = ''; } continue; } const candidate = line ? line + ' ' + wtoken : wtoken; const cw = this.textCache.get(font, candidate) ?? ctx.measureText(candidate).width; if (cw <= maxWidth || !line) { line = candidate; this.textCache.set(font, candidate, cw); } else { lines.push(line); line = wtoken; } }
               if (line) lines.push(line);
-              let lineY = y + fontSize + 2; if (valign === 'middle') { const totalH = lines.length * (fontSize + 2); lineY = y + (drawH - totalH) / 2 + fontSize; } else if (valign === 'bottom') { const totalH = lines.length * (fontSize + 2); lineY = y + drawH - totalH + fontSize; }
+              // Compute vertical offset using layout function (multi-line case)
+              const totalH = lines.length * (fontSize + 2);
+              let lineY = y + computeVerticalOffset(style?.valign, drawH, totalH, fontSize, 2, 4) - fontSize;
               const startX = align === 'center' ? (x + drawW / 2) : (align === 'right' ? (x + drawW - 4) : (x + 4 + indentOffset));
               
               // Phase 1 UI: Apply superscript/subscript to wrapped text (fast path: only if needed)

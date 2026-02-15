@@ -12,7 +12,7 @@
  * ✅ Dirty rectangle optimization for partial redraws
  */
 
-import { Worksheet, Address, CellStyle, resolveExcelColor, ExcelColorSpec, ConditionalFormattingEngine, ConditionalFormattingRule, ConditionalFormattingResult, DataBarRender, IconRender } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, resolveExcelColor, ExcelColorSpec, ConditionalFormattingEngine, ConditionalFormattingRule, ConditionalFormattingResult, DataBarRender, IconRender, computeVerticalOffset } from '@cyber-sheet/core';
 import { MultiLayerCanvas, CanvasLayerType, ExcelBorderRenderer, ExcelBorderStyle } from './MultiLayerCanvas';
 import { TextMeasureCache } from './TextMeasureCache';
 import { FormatCache } from './FormatCache';
@@ -683,6 +683,31 @@ export class ExcelRenderer {
         ExcelBorderRenderer.drawBorder(ctx, x + w, y, 0, h, borderStyle, color, dpr);
       }
     }
+
+    // Diagonal borders
+    if (style.border.diagonalDown) {
+      const color = transformBorder(style.border.diagonalDown);
+      if (color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + w, y + h);
+        ctx.stroke();
+      }
+    }
+
+    if (style.border.diagonalUp) {
+      const color = transformBorder(style.border.diagonalUp);
+      if (color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y + h);
+        ctx.lineTo(x + w, y);
+        ctx.stroke();
+      }
+    }
   }
 
   private renderCellText(
@@ -734,13 +759,10 @@ export class ExcelRenderer {
 
     const maxWidth = Math.max(0, w - 8);
     const align = style?.align ?? this.formatCache.preferredAlign(value, style?.numberFormat);
-    const valign = style?.valign ?? 'middle';
 
     let tx = x + 4;
-    let ty = y + h / 2 + fontSize / 2 - 2;
-
-    if (valign === 'top') ty = y + fontSize + 2;
-    if (valign === 'bottom') ty = y + h - 4;
+    // Compute vertical offset using layout function (pure layout concern)
+    const ty = y + computeVerticalOffset(style?.valign, h, fontSize, fontSize, 2, 4) - fontSize / 2 + 2;
 
     const textWidth = this.textCache.get(font, text) ?? ctx.measureText(text).width;
     this.textCache.set(font, text, textWidth as number);

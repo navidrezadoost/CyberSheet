@@ -8,6 +8,7 @@ import { Workbook, Worksheet, CellStyle } from '@cyber-sheet/core';
 export * from './import';
 export * from './LightweightParser';
 export * from './CommentParser';
+export * from './export';
 
 type FetchLike = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 
@@ -100,17 +101,20 @@ export function loadXlsxFromArrayBuffer(data: Uint8Array): Workbook {
         const mappedStyle = sIdx != null ? styles.xfStyles[sIdx] : undefined;
         const { col } = a1ToAddress(addr);
         
-        if (t === 's') {
-          const idx = parseInt(val, 10);
-          ws.setCellValue({ row: rowR, col }, sharedStrings[idx] ?? '');
-        } else if (t === 'b') {
-          ws.setCellValue({ row: rowR, col }, val === '1');
-        } else if (t === 'str' || t === 'inlineStr') {
-          ws.setCellValue({ row: rowR, col }, decodeXml(val));
-        } else {
-          // number or date (we'll treat as number for now; formatting later)
-          const num = Number(val);
-          ws.setCellValue({ row: rowR, col }, Number.isFinite(num) ? num : val);
+        // Only set value if cell has content (not self-closing)
+        if (vMatch || inner.length > 0) {
+          if (t === 's') {
+            const idx = parseInt(val, 10);
+            ws.setCellValue({ row: rowR, col }, sharedStrings[idx] ?? '');
+          } else if (t === 'b') {
+            ws.setCellValue({ row: rowR, col }, val === '1');
+          } else if (t === 'str' || t === 'inlineStr') {
+            ws.setCellValue({ row: rowR, col }, decodeXml(val));
+          } else {
+            // number or date (we'll treat as number for now; formatting later)
+            const num = Number(val);
+            ws.setCellValue({ row: rowR, col }, Number.isFinite(num) ? num : val);
+          }
         }
         if (mappedStyle) {
           ws.setCellStyle({ row: rowR, col }, mappedStyle);
@@ -148,7 +152,8 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
   // fonts
   const fonts: { 
     bold?: boolean; 
-    italic?: boolean; 
+    italic?: boolean;
+    underline?: boolean;
     size?: number; 
     color?: string; 
     name?: string;
@@ -162,6 +167,7 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
     const fxml = (fm as any)[1] as string;
     const bold = /<b\b/.test(fxml) ? true : undefined;
     const italic = /<i\b/.test(fxml) ? true : undefined;
+    const underline = /<u\b/.test(fxml) ? true : undefined;
     const strikethrough = /<strike\b/.test(fxml) ? true : undefined; // Phase 1 UI
     
     // Phase 1 UI: superscript/subscript (mutually exclusive)
@@ -185,7 +191,7 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
       const tint = colorTint ? parseFloat(colorTint[1]) : 0;
       color = themeColorToCss(theme, idx, tint);
     }
-    fonts.push({ bold, italic, strikethrough, superscript, subscript, size, color, name });
+    fonts.push({ bold, italic, underline, strikethrough, superscript, subscript, size, color, name });
   }
 
   // fills
@@ -259,6 +265,7 @@ function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle 
       if (font.size) style.fontSize = font.size;
       if (font.bold) style.bold = font.bold;
       if (font.italic) style.italic = font.italic;
+      if (font.underline) style.underline = font.underline;
       if (font.color) style.color = font.color;
       // Phase 1 UI: strikethrough, superscript, subscript
       if (font.strikethrough) (style as any).strikethrough = font.strikethrough;
