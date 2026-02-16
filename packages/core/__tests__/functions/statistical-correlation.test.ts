@@ -19,7 +19,7 @@ describe('Statistical Functions - Correlation & Regression (Week 8 Day 2-3)', ()
     worksheet = new Worksheet('Sheet1', 100, 26);
     context = {
       worksheet,
-      currentCell: { row: 1, col: 1 },
+      currentCell: { row: 2, col: 2 },
       namedLambdas: new Map()
     } as FormulaContext;
   });
@@ -273,8 +273,8 @@ describe('Statistical Functions - Correlation & Regression (Week 8 Day 2-3)', ()
     test('predicts for new X values', () => {
       setupData([1, 2, 3, 4], [2, 4, 6, 8]);
       // Add new X values in column C
-      worksheet.setCellValue({ row: 0, col: 2 }, 5);
-      worksheet.setCellValue({ row: 1, col: 2 }, 6);
+      worksheet.setCellValue({ row: 1, col: 3 }, 5);
+      worksheet.setCellValue({ row: 2, col: 3 }, 6);
       const result = evaluate('=TREND(B1:B4, A1:A4, C1:C2)');
       expect(Array.isArray(result)).toBe(true);
       if (Array.isArray(result)) {

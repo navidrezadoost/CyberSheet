@@ -25,7 +25,7 @@ describe('Statistical Functions - Week 2 Day 3 (Chi-Square)', () => {
     worksheet = new Worksheet('Sheet1', 100, 26);
     context = {
       worksheet,
-      currentCell: { row: 10, col: 0 },
+      currentCell: { row: 11, col: 1 },
     };
     
     evaluate = (formula: string) => engine.evaluate(formula, context);
@@ -288,9 +288,9 @@ describe('Statistical Functions - Week 2 Day 3 (Chi-Square)', () => {
 
     test('Oracle Test 5: Error - zero expected', () => {
       // Set zero in expected value
-      worksheet.setCellValue({ row: 0, col: 4 }, 10);
-      worksheet.setCellValue({ row: 1, col: 4 }, 0); // Zero!
-      worksheet.setCellValue({ row: 2, col: 4 }, 20);
+      worksheet.setCellValue({ row: 1, col: 5 }, 10);
+      worksheet.setCellValue({ row: 2, col: 5 }, 0); // Zero!
+      worksheet.setCellValue({ row: 3, col: 5 }, 20);
       
       const result = evaluate('=CHISQ.TEST(A1:A3, E1:E3)');
       expect(result).toBeInstanceOf(Error);

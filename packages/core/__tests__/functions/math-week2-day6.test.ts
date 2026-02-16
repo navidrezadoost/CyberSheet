@@ -20,7 +20,7 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
     worksheet = new Worksheet('Sheet1', 100, 26);
     context = {
       worksheet,
-      currentCell: { row: 1, col: 1 },
+      currentCell: { row: 2, col: 2 },
       namedLambdas: new Map()
     } as FormulaContext;
   });
@@ -131,11 +131,11 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
       }
       
       // B1:B5 = [100, 200, 300, 400, 500]
-      worksheet.setCellValue({ row: 0, col: 1 }, 100);
-      worksheet.setCellValue({ row: 1, col: 1 }, 200);
-      worksheet.setCellValue({ row: 2, col: 1 }, 300);
-      worksheet.setCellValue({ row: 3, col: 1 }, 400);
-      worksheet.setCellValue({ row: 4, col: 1 }, 500);
+      worksheet.setCellValue({ row: 1, col: 2 }, 100);
+      worksheet.setCellValue({ row: 2, col: 2 }, 200);
+      worksheet.setCellValue({ row: 3, col: 2 }, 300);
+      worksheet.setCellValue({ row: 4, col: 2 }, 400);
+      worksheet.setCellValue({ row: 5, col: 2 }, 500);
     });
 
     test('function 1: AVERAGE (option 0)', () => {
@@ -176,14 +176,14 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
     test('function 7: STDEV.S (sample standard deviation)', () => {
       // Simplified data for predictable stdev
       // C1:C8 = [2, 4, 4, 4, 5, 5, 7, 9] (col: 2, 0-based)
-      worksheet.setCellValue({ row: 0, col: 2 }, 2);
-      worksheet.setCellValue({ row: 1, col: 2 }, 4);
-      worksheet.setCellValue({ row: 2, col: 2 }, 4);
-      worksheet.setCellValue({ row: 3, col: 2 }, 4);
-      worksheet.setCellValue({ row: 4, col: 2 }, 5);
-      worksheet.setCellValue({ row: 5, col: 2 }, 5);
-      worksheet.setCellValue({ row: 6, col: 2 }, 7);
-      worksheet.setCellValue({ row: 7, col: 2 }, 9);
+      worksheet.setCellValue({ row: 1, col: 3 }, 2);
+      worksheet.setCellValue({ row: 2, col: 3 }, 4);
+      worksheet.setCellValue({ row: 3, col: 3 }, 4);
+      worksheet.setCellValue({ row: 4, col: 3 }, 4);
+      worksheet.setCellValue({ row: 5, col: 3 }, 5);
+      worksheet.setCellValue({ row: 6, col: 3 }, 5);
+      worksheet.setCellValue({ row: 7, col: 3 }, 7);
+      worksheet.setCellValue({ row: 8, col: 3 }, 9);
       
       const result = engine.evaluate('=AGGREGATE(7, 0, C1:C8)', context);
       expect(result).toBeCloseTo(2, 0); // Approximately 2.0
@@ -263,19 +263,19 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
       // Create data using CEILING.MATH
       // Column A (col: 0) has raw values, Column B (col: 1) has rounded
       // Note: Worksheet uses 0-based indexing (A1 = row:0, col:0)
-      worksheet.setCellValue({ row: 0, col: 0 }, 1.2);
-      worksheet.setCellValue({ row: 1, col: 0 }, 2.7);
-      worksheet.setCellValue({ row: 2, col: 0 }, 3.1);
-      worksheet.setCellValue({ row: 3, col: 0 }, 4.9);
-      worksheet.setCellValue({ row: 4, col: 0 }, 5.5);
+      worksheet.setCellValue({ row: 1, col: 1 }, 1.2);
+      worksheet.setCellValue({ row: 2, col: 1 }, 2.7);
+      worksheet.setCellValue({ row: 3, col: 1 }, 3.1);
+      worksheet.setCellValue({ row: 4, col: 1 }, 4.9);
+      worksheet.setCellValue({ row: 5, col: 1 }, 5.5);
       
       // Can't use CEILING.MATH in cell formulas yet (need full evaluation)
       // So manually set rounded values in column B
-      worksheet.setCellValue({ row: 0, col: 1 }, 2);
-      worksheet.setCellValue({ row: 1, col: 1 }, 3);
-      worksheet.setCellValue({ row: 2, col: 1 }, 4);
-      worksheet.setCellValue({ row: 3, col: 1 }, 5);
-      worksheet.setCellValue({ row: 4, col: 1 }, 6);
+      worksheet.setCellValue({ row: 1, col: 2 }, 2);
+      worksheet.setCellValue({ row: 2, col: 2 }, 3);
+      worksheet.setCellValue({ row: 3, col: 2 }, 4);
+      worksheet.setCellValue({ row: 4, col: 2 }, 5);
+      worksheet.setCellValue({ row: 5, col: 2 }, 6);
       
       const median = engine.evaluate('=AGGREGATE(12, 0, B1:B5)', context);
       expect(median).toBe(4); // Middle value of [2,3,4,5,6]
