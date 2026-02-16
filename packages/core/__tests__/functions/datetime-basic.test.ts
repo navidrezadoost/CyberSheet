@@ -229,18 +229,23 @@ describe('Date & Time Functions - Basic', () => {
 
     test('extracting year from TODAY', () => {
       const result = evaluate('=YEAR(TODAY())');
-      expect(result).toBe(2026); // Current year
+      const today = new Date();
+      const expectedYear = today.getUTCFullYear();
+      expect(result).toBe(expectedYear);
     });
 
     test('extracting month from TODAY', () => {
       const result = evaluate('=MONTH(TODAY())');
-      expect(result).toBe(1); // Current month (January)
+      const today = new Date();
+      const expectedMonth = today.getUTCMonth() + 1; // getUTCMonth() is 0-based (0-11), Excel uses 1-based (1-12)
+      expect(result).toBe(expectedMonth);
     });
 
     test('extracting day from TODAY', () => {
       const result = evaluate('=DAY(TODAY())');
-      // Fixed: Should now return correct day (29) with UTC-based conversion
-      expect(result).toBe(29);
+      const today = new Date();
+      const expectedDay = today.getUTCDate();
+      expect(result).toBe(expectedDay);
     });
   });
 

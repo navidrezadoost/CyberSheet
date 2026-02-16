@@ -2,7 +2,11 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["jest", "node"],
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cyber-sheet/core": ["../core/src/index.ts"]
+    }
   },
   "include": [
     "__tests__/**/*.ts",

@@ -79,9 +79,9 @@ describe('Financial Functions - Week 8 Day 4', () => {
     });
 
     test('NPV with range reference', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 300);
-      worksheet.setCellValue({ row: 1, col: 0 }, 400);
-      worksheet.setCellValue({ row: 2, col: 0 }, 500);
+      worksheet.setCellValue({ row: 1, col: 1 }, 300);
+      worksheet.setCellValue({ row: 2, col: 1 }, 400);
+      worksheet.setCellValue({ row: 3, col: 1 }, 500);
       const result = evaluate('=NPV(0.10, A1:A3)');
       expect(result).toBeCloseTo(1010.518407, 2);
     });
@@ -94,16 +94,16 @@ describe('Financial Functions - Week 8 Day 4', () => {
 
   describe('XNPV (Net Present Value with irregular dates)', () => {
     test('XNPV with regular annual dates', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, -1000);
-      worksheet.setCellValue({ row: 1, col: 0 }, 300);
-      worksheet.setCellValue({ row: 2, col: 0 }, 400);
-      worksheet.setCellValue({ row: 3, col: 0 }, 500);
+      worksheet.setCellValue({ row: 1, col: 1 }, -1000);
+      worksheet.setCellValue({ row: 2, col: 1 }, 300);
+      worksheet.setCellValue({ row: 3, col: 1 }, 400);
+      worksheet.setCellValue({ row: 4, col: 1 }, 500);
       
       // Set dates as Excel serial numbers (days since 1900-01-01)
-      worksheet.setCellValue({ row: 0, col: 1 }, 44562); // 2022-01-01
-      worksheet.setCellValue({ row: 1, col: 1 }, 44927); // 2023-01-01
-      worksheet.setCellValue({ row: 2, col: 1 }, 45292); // 2024-01-01
-      worksheet.setCellValue({ row: 3, col: 1 }, 45657); // 2025-01-01
+      worksheet.setCellValue({ row: 1, col: 2 }, 44562); // 2022-01-01
+      worksheet.setCellValue({ row: 2, col: 2 }, 44927); // 2023-01-01
+      worksheet.setCellValue({ row: 3, col: 2 }, 45292); // 2024-01-01
+      worksheet.setCellValue({ row: 4, col: 2 }, 45657); // 2025-01-01
       
       const result = evaluate('=XNPV(0.10, A1:A4, B1:B4)');
       expect(typeof result).toBe('number');
@@ -111,23 +111,23 @@ describe('Financial Functions - Week 8 Day 4', () => {
     });
 
     test('XNPV with irregular dates', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, -1000);
-      worksheet.setCellValue({ row: 1, col: 0 }, 300);
-      worksheet.setCellValue({ row: 2, col: 0 }, 400);
+      worksheet.setCellValue({ row: 1, col: 1 }, -1000);
+      worksheet.setCellValue({ row: 2, col: 1 }, 300);
+      worksheet.setCellValue({ row: 3, col: 1 }, 400);
       
       // Irregular spacing (6 months, then 18 months)
-      worksheet.setCellValue({ row: 0, col: 1 }, 44562); // 2022-01-01
-      worksheet.setCellValue({ row: 1, col: 1 }, 44745); // 2022-07-01 (6 months)
-      worksheet.setCellValue({ row: 2, col: 1 }, 45292); // 2024-01-01 (18 months)
+      worksheet.setCellValue({ row: 1, col: 2 }, 44562); // 2022-01-01
+      worksheet.setCellValue({ row: 2, col: 2 }, 44745); // 2022-07-01 (6 months)
+      worksheet.setCellValue({ row: 3, col: 2 }, 45292); // 2024-01-01 (18 months)
       
       const result = evaluate('=XNPV(0.10, A1:A3, B1:B3)');
       expect(typeof result).toBe('number');
     });
 
     test('XNPV with mismatched array lengths returns #NUM!', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 100);
-      worksheet.setCellValue({ row: 1, col: 0 }, 200);
-      worksheet.setCellValue({ row: 0, col: 1 }, 44562);
+      worksheet.setCellValue({ row: 1, col: 1 }, 100);
+      worksheet.setCellValue({ row: 2, col: 1 }, 200);
+      worksheet.setCellValue({ row: 1, col: 2 }, 44562);
       
       const result = evaluate('=XNPV(0.10, A1:A2, B1)');
       expect(result).toBeInstanceOf(Error);
@@ -360,9 +360,9 @@ describe('Financial Functions - Week 8 Day 4', () => {
     });
 
     test('Financial functions with range references', () => {
-      // Set up cash flows in range
+      // Set up cash flows in range (1-based: A1=row1, A5=row5)
       for (let i = 0; i < 5; i++) {
-        worksheet.setCellValue({ row: i, col: 0 }, 1000 * (i + 1));
+        worksheet.setCellValue({ row: i + 1, col: 1 }, 1000 * (i + 1));
       }
       
       const npv = evaluate('=NPV(0.10, A1:A5)');

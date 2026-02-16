@@ -45,10 +45,13 @@ import { TEXT_METADATA } from '../src/functions/metadata/text-metadata';
 import { ARRAY_METADATA } from '../src/functions/metadata/array-metadata';
 import { INFORMATION_METADATA } from '../src/functions/metadata/information-metadata';
 import { STATISTICAL_METADATA } from '../src/functions/metadata/statistical-metadata';
+import { ENGINEERING_METADATA } from '../src/functions/metadata/engineering-metadata';
+import { EXOTIC_METADATA } from '../src/functions/metadata/exotic-metadata';
+import { FUNCTIONAL_METADATA } from '../src/functions/metadata/functional-metadata';
 
 /**
  * ALL_METADATA: Complete metadata registry
- * Expected: 269 functions (100% coverage)
+ * Expected: 342 functions (100% coverage)
  */
 const ALL_METADATA: StrictFunctionMetadata[] = [
   ...MATH_METADATA,
@@ -60,6 +63,9 @@ const ALL_METADATA: StrictFunctionMetadata[] = [
   ...ARRAY_METADATA,
   ...INFORMATION_METADATA,
   ...STATISTICAL_METADATA,
+  ...ENGINEERING_METADATA,
+  ...EXOTIC_METADATA,
+  ...FUNCTIONAL_METADATA,
 ];
 
 /**
@@ -68,15 +74,18 @@ const ALL_METADATA: StrictFunctionMetadata[] = [
  */
 const EXPECTED_TOTALS = {
   MATH: 52,          // Updated from 42 (additional functions added)
-  FINANCIAL: 19,     // Updated from 18
+  FINANCIAL: 24,     // Updated: core 19 + FVSCHEDULE, DISC, INTRATE, EFFECT, NOMINAL
   LOGICAL: 17,
   DATETIME: 20,
   LOOKUP: 12,
-  TEXT: 31,
+  TEXT: 34,          // Updated: 31 + FIXED, TEXTBEFORE, TEXTAFTER
   ARRAY: 20,
   INFORMATION: 14,   // Updated from 15
   STATISTICAL: 94,
-  TOTAL: 279,        // Updated from 269
+  ENGINEERING: 43,   // Added: all engineering functions
+  EXOTIC: 10,        // Added: FORMULATEXT, SHEET, SHEETS, CUBE*
+  FUNCTIONAL: 8,     // Added: LAMBDA, LET, MAP, REDUCE, etc.
+  TOTAL: 349,        // Updated: 346 + 3 text functions
 };
 
 /**
@@ -96,7 +105,7 @@ describe('Wave 0 Day 3: Metadata Completeness Validation', () => {
     expect(MATH_METADATA.length).toBe(EXPECTED_TOTALS.MATH);
   });
   
-  test('1.2: Financial metadata count = 19', () => {
+  test('1.2: Financial metadata count = 24', () => {
     expect(FINANCIAL_METADATA.length).toBe(EXPECTED_TOTALS.FINANCIAL);
   });
   
@@ -112,7 +121,7 @@ describe('Wave 0 Day 3: Metadata Completeness Validation', () => {
     expect(LOOKUP_METADATA.length).toBe(EXPECTED_TOTALS.LOOKUP);
   });
   
-  test('1.6: Text metadata count = 31', () => {
+  test('1.6: Text metadata count = 34', () => {
     expect(TEXT_METADATA.length).toBe(EXPECTED_TOTALS.TEXT);
   });
   
@@ -128,9 +137,9 @@ describe('Wave 0 Day 3: Metadata Completeness Validation', () => {
     expect(STATISTICAL_METADATA.length).toBe(EXPECTED_TOTALS.STATISTICAL);
   });
   
-  test('1.10: TOTAL metadata count = 279 (100% coverage)', () => {
+  test('1.10: TOTAL metadata count = 349 (100% coverage)', () => {
     expect(ALL_METADATA.length).toBe(EXPECTED_TOTALS.TOTAL);
-    console.log(`✅ 279 functions with complete metadata`);
+    console.log(`✅ ${EXPECTED_TOTALS.TOTAL} functions with complete metadata`);
   });
   
   // ============================================================================
@@ -308,9 +317,9 @@ describe('Wave 0 Day 3: Metadata Completeness Validation', () => {
   // TEST 6: CONTEXT-AWARE FUNCTIONS (5 expected)
   // ============================================================================
   
-  test('6.1: Context-aware function count = 5', () => {
+  test('6.1: Context-aware function count = 9', () => {
     const contextAwareFunctions = ALL_METADATA.filter(m => m.needsContext);
-    expect(contextAwareFunctions.length).toBe(5);
+    expect(contextAwareFunctions.length).toBe(9);
     console.log(`✅ Context-aware functions: ${contextAwareFunctions.map(m => m.name).join(', ')}`);
   });
   

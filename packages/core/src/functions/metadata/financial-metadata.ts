@@ -353,6 +353,89 @@ export const FINANCIAL_METADATA: StrictFunctionMetadata[] = [
   },
   
   // ============================================================================
+  // VARIABLE RATE & DISCOUNT FUNCTIONS
+  // ============================================================================
+  
+  {
+    name: 'FVSCHEDULE',
+    handler: FinancialFunctions.FVSCHEDULE,
+    category: FunctionCategory.FINANCIAL,
+    minArgs: 2,
+    maxArgs: 2,
+    isSpecial: false,
+    needsContext: false,
+    volatile: false,
+    complexityClass: ComplexityClass.O_N,
+    precisionClass: PrecisionClass.FINANCIAL,
+    errorStrategy: ErrorStrategy.FINANCIAL_STRICT,
+    iterationPolicy: null,
+  },
+  
+  {
+    name: 'DISC',
+    handler: FinancialFunctions.DISC,
+    category: FunctionCategory.FINANCIAL,
+    minArgs: 4,
+    maxArgs: 5,
+    isSpecial: false,
+    needsContext: false,
+    volatile: false,
+    complexityClass: ComplexityClass.O_1,
+    precisionClass: PrecisionClass.FINANCIAL,
+    errorStrategy: ErrorStrategy.FINANCIAL_STRICT,
+    iterationPolicy: null,
+  },
+  
+  {
+    name: 'INTRATE',
+    handler: FinancialFunctions.INTRATE,
+    category: FunctionCategory.FINANCIAL,
+    minArgs: 4,
+    maxArgs: 5,
+    isSpecial: false,
+    needsContext: false,
+    volatile: false,
+    complexityClass: ComplexityClass.O_1,
+    precisionClass: PrecisionClass.FINANCIAL,
+    errorStrategy: ErrorStrategy.FINANCIAL_STRICT,
+    iterationPolicy: null,
+  },
+  
+  // ============================================================================
+  // INTEREST RATE CONVERSION FUNCTIONS
+  // ============================================================================
+  
+  {
+    name: 'EFFECT',
+    handler: FinancialFunctions.EFFECT,
+    category: FunctionCategory.FINANCIAL,
+    minArgs: 2,
+    maxArgs: 2,
+    isSpecial: false,
+    needsContext: false,
+    volatile: false,
+    complexityClass: ComplexityClass.O_1,
+    precisionClass: PrecisionClass.FINANCIAL,
+    errorStrategy: ErrorStrategy.FINANCIAL_STRICT,
+    iterationPolicy: null,
+  },
+  
+  {
+    name: 'NOMINAL',
+    handler: FinancialFunctions.NOMINAL,
+    category: FunctionCategory.FINANCIAL,
+    minArgs: 2,
+    maxArgs: 2,
+    isSpecial: false,
+    needsContext: false,
+    volatile: false,
+    complexityClass: ComplexityClass.O_1,
+    precisionClass: PrecisionClass.FINANCIAL,
+    errorStrategy: ErrorStrategy.FINANCIAL_STRICT,
+    iterationPolicy: null,
+  },
+  
+  // ============================================================================
   // BOND/TREASURY FUNCTIONS (Future: PRICE, YIELD, ACCRINT)
   // ============================================================================
   

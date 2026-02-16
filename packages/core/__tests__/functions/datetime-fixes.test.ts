@@ -72,9 +72,9 @@ describe('Date & Time Fixes - Week 7 Days 3-4', () => {
     });
 
     test('TODAY returns correct day', () => {
-      // This test assumes January 29, 2026
       const day = evaluate('=DAY(TODAY())');
-      expect(day).toBe(29);
+      const expectedDay = new Date().getUTCDate();
+      expect(day).toBe(expectedDay);
     });
 
     test('sequential dates are exactly 1 apart', () => {
@@ -271,13 +271,14 @@ describe('Date & Time Fixes - Week 7 Days 3-4', () => {
     });
 
     test('TODAY + wrapped TIME gives correct datetime', () => {
-      // Assuming today is Jan 29, 2026
+      // TODAY() + TIME(30, 0, 0) - check if wrapped time affects day
       const result = evaluate('=TODAY() + TIME(30, 0, 0)');
       
       const day = evaluate(`=DAY(${result})`);
       const hour = evaluate(`=HOUR(${result})`);
+      const expectedDay = new Date().getUTCDate();
 
-      expect(day).toBe(29); // Same day (wrapped time doesn't add days)
+      expect(day).toBe(expectedDay); // Same day (wrapped time doesn't add days)
       expect(hour).toBe(6); // 30 hours mod 24 = 6 AM
     });
 
@@ -289,9 +290,10 @@ describe('Date & Time Fixes - Week 7 Days 3-4', () => {
       const month = evaluate(`=MONTH(${now})`);
       const day = evaluate(`=DAY(${now})`);
 
-      expect(year).toBe(2026);
-      expect(month).toBe(1);
-      expect(day).toBe(29);
+      const currentDate = new Date();
+      expect(year).toBe(currentDate.getUTCFullYear());
+      expect(month).toBe(currentDate.getUTCMonth() + 1);
+      expect(day).toBe(currentDate.getUTCDate());
     });
   });
 

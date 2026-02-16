@@ -40,10 +40,10 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 10);
-      worksheet.setCellValue({ row: 1, col: 0 }, 20);
-      worksheet.setCellValue({ row: 2, col: 0 }, 30);
-      worksheet.setCellValue({ row: 3, col: 0 }, 40);
+      worksheet.setCellValue({ row: 1, col: 1 }, 10);
+      worksheet.setCellValue({ row: 2, col: 1 }, 20);
+      worksheet.setCellValue({ row: 3, col: 1 }, 30);
+      worksheet.setCellValue({ row: 4, col: 1 }, 40);
       
       const result = evaluate('=AVERAGE(A1:A4)');
       expect(result).toBe(25);
@@ -81,10 +81,10 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays containing mixed types', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 10);
-      worksheet.setCellValue({ row: 1, col: 0 }, 20);
-      worksheet.setCellValue({ row: 2, col: 0 }, 'text');
-      worksheet.setCellValue({ row: 3, col: 0 }, true);
+      worksheet.setCellValue({ row: 1, col: 1 }, 10);
+      worksheet.setCellValue({ row: 2, col: 1 }, 20);
+      worksheet.setCellValue({ row: 3, col: 1 }, 'text');
+      worksheet.setCellValue({ row: 4, col: 1 }, true);
       
       const result = evaluate('=AVERAGEA(A1:A4)');
       expect(result).toBe(7.75); // (10+20+0+1)/4
@@ -123,11 +123,11 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 15);
-      worksheet.setCellValue({ row: 1, col: 0 }, 5);
-      worksheet.setCellValue({ row: 2, col: 0 }, 25);
-      worksheet.setCellValue({ row: 3, col: 0 }, 10);
-      worksheet.setCellValue({ row: 4, col: 0 }, 20);
+      worksheet.setCellValue({ row: 1, col: 1 }, 15);
+      worksheet.setCellValue({ row: 2, col: 1 }, 5);
+      worksheet.setCellValue({ row: 3, col: 1 }, 25);
+      worksheet.setCellValue({ row: 4, col: 1 }, 10);
+      worksheet.setCellValue({ row: 5, col: 1 }, 20);
       
       const result = evaluate('=MEDIAN(A1:A5)');
       expect(result).toBe(15);
@@ -158,11 +158,11 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 5);
-      worksheet.setCellValue({ row: 1, col: 0 }, 10);
-      worksheet.setCellValue({ row: 2, col: 0 }, 5);
-      worksheet.setCellValue({ row: 3, col: 0 }, 15);
-      worksheet.setCellValue({ row: 4, col: 0 }, 5);
+      worksheet.setCellValue({ row: 1, col: 1 }, 5);
+      worksheet.setCellValue({ row: 2, col: 1 }, 10);
+      worksheet.setCellValue({ row: 3, col: 1 }, 5);
+      worksheet.setCellValue({ row: 4, col: 1 }, 15);
+      worksheet.setCellValue({ row: 5, col: 1 }, 5);
       
       const result = evaluate('=MODE.SNGL(A1:A5)');
       expect(result).toBe(5);
@@ -202,10 +202,10 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 2);
-      worksheet.setCellValue({ row: 1, col: 0 }, 4);
-      worksheet.setCellValue({ row: 2, col: 0 }, 6);
-      worksheet.setCellValue({ row: 3, col: 0 }, 8);
+      worksheet.setCellValue({ row: 1, col: 1 }, 2);
+      worksheet.setCellValue({ row: 2, col: 1 }, 4);
+      worksheet.setCellValue({ row: 3, col: 1 }, 6);
+      worksheet.setCellValue({ row: 4, col: 1 }, 8);
       
       const result = evaluate('=STDEV.S(A1:A4)');
       expect(result).toBeCloseTo(2.581988, 5);
@@ -248,9 +248,9 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 5);
-      worksheet.setCellValue({ row: 1, col: 0 }, 10);
-      worksheet.setCellValue({ row: 2, col: 0 }, 15);
+      worksheet.setCellValue({ row: 1, col: 1 }, 5);
+      worksheet.setCellValue({ row: 2, col: 1 }, 10);
+      worksheet.setCellValue({ row: 3, col: 1 }, 15);
       
       const result = evaluate('=STDEV.P(A1:A3)');
       expect(result).toBeCloseTo(4.082482, 5);
@@ -287,9 +287,9 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 3);
-      worksheet.setCellValue({ row: 1, col: 0 }, 6);
-      worksheet.setCellValue({ row: 2, col: 0 }, 9);
+      worksheet.setCellValue({ row: 1, col: 1 }, 3);
+      worksheet.setCellValue({ row: 2, col: 1 }, 6);
+      worksheet.setCellValue({ row: 3, col: 1 }, 9);
       
       const result = evaluate('=VAR.S(A1:A3)');
       expect(result).toBe(9);
@@ -339,10 +339,10 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('works with arrays', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 2);
-      worksheet.setCellValue({ row: 1, col: 0 }, 4);
-      worksheet.setCellValue({ row: 2, col: 0 }, 6);
-      worksheet.setCellValue({ row: 3, col: 0 }, 8);
+      worksheet.setCellValue({ row: 1, col: 1 }, 2);
+      worksheet.setCellValue({ row: 2, col: 1 }, 4);
+      worksheet.setCellValue({ row: 3, col: 1 }, 6);
+      worksheet.setCellValue({ row: 4, col: 1 }, 8);
       
       const result = evaluate('=VAR.P(A1:A4)');
       expect(result).toBe(5);
@@ -351,10 +351,10 @@ describe('Statistical Functions - Week 8 Day 1', () => {
 
   describe('Integration with Dynamic Arrays', () => {
     test('AVERAGE with FILTER', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 10);
-      worksheet.setCellValue({ row: 1, col: 0 }, 20);
-      worksheet.setCellValue({ row: 2, col: 0 }, 30);
-      worksheet.setCellValue({ row: 3, col: 0 }, 40);
+      worksheet.setCellValue({ row: 1, col: 1 }, 10);
+      worksheet.setCellValue({ row: 2, col: 1 }, 20);
+      worksheet.setCellValue({ row: 3, col: 1 }, 30);
+      worksheet.setCellValue({ row: 4, col: 1 }, 40);
       
       const result = evaluate('=AVERAGE(FILTER(A1:A4, A1:A4>15))');
       expect(result).toBe(30); // Average of 20, 30, 40
@@ -366,9 +366,9 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('STDEV.S with MAP', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
-      worksheet.setCellValue({ row: 1, col: 0 }, 2);
-      worksheet.setCellValue({ row: 2, col: 0 }, 3);
+      worksheet.setCellValue({ row: 1, col: 1 }, 1);
+      worksheet.setCellValue({ row: 2, col: 1 }, 2);
+      worksheet.setCellValue({ row: 3, col: 1 }, 3);
       
       // MAP doubles each value: 1→2, 2→4, 3→6
       const result = evaluate('=STDEV.S(MAP(A1:A3, LAMBDA(x, x*2)))');
@@ -381,10 +381,10 @@ describe('Statistical Functions - Week 8 Day 1', () => {
     });
 
     test('VAR.P with FILTER and condition', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 5);
-      worksheet.setCellValue({ row: 1, col: 0 }, 10);
-      worksheet.setCellValue({ row: 2, col: 0 }, 15);
-      worksheet.setCellValue({ row: 3, col: 0 }, 20);
+      worksheet.setCellValue({ row: 1, col: 1 }, 5);
+      worksheet.setCellValue({ row: 2, col: 1 }, 10);
+      worksheet.setCellValue({ row: 3, col: 1 }, 15);
+      worksheet.setCellValue({ row: 4, col: 1 }, 20);
       
       const result = evaluate('=VAR.P(FILTER(A1:A4, A1:A4>=10))');
       expect(result).toBeCloseTo(16.666666, 5); // Variance of 10,15,20

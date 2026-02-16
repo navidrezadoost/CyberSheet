@@ -50,21 +50,25 @@ function serialToDate(serial: number): Date {
 function dateToSerial(date: Date): number {
   // Use UTC components to avoid timezone offset issues
   const utcDate = Date.UTC(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    date.getHours(),
-    date.getMinutes(),
-    date.getSeconds(),
-    date.getMilliseconds()
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+    date.getUTCSeconds(),
+    date.getUTCMilliseconds()
   );
   
   const diff = utcDate - EXCEL_EPOCH;
-  const days = Math.floor(diff / MS_PER_DAY);
+  let serial = Math.floor(diff / MS_PER_DAY);
   
-  // Add 1 because Excel serial 1 = January 1, 1900 (not 0)
-  // Add another 1 if after Feb 28, 1900 to account for Excel's leap year bug
-  return days + 1 + (days >= 59 ? 1 : 0);
+  // Excel's leap year bug: it treats 1900 as a leap year (it wasn't)
+  // For dates after Feb 28, 1900 (serial > 59), add 1 to account for fake leap day
+  if (serial > 59) {
+    serial += 1;
+  }
+  
+  return serial;
 }
 
 /**
@@ -72,15 +76,34 @@ function dateToSerial(date: Date): number {
  */
 export const TODAY: FormulaFunction = () => {
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return dateToSerial(now);
+  // Create UTC date from current UTC date components to match DATE() behavior
+  // This ensures TODAY() works the same as DATE(YEAR(now), MONTH(now), DAY(now))
+  const utcTimestamp = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const diff = utcTimestamp - EXCEL_EPOCH;
+  let serial = Math.floor(diff / MS_PER_DAY);
+  if (serial > 59) serial += 1; // Excel leap year bug
+  return serial;
 };
 
 /**
  * NOW - Current date and time
  */
 export const NOW: FormulaFunction = () => {
-  return dateToSerial(new Date());
+  const now = new Date();
+  // Create UTC timestamp from current UTC components to match DATE() + TIME() behavior
+  const utcTimestamp = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours(),
+    now.getUTCMinutes(),
+    now.getUTCSeconds(),
+    now.getUTCMilliseconds()
+  );
+  const diff = utcTimestamp - EXCEL_EPOCH;
+  let serial = diff / MS_PER_DAY;
+  if (Math.floor(serial) > 59) serial += 1; // Excel leap year bug
+  return serial;
 };
 
 /**
@@ -159,14 +182,14 @@ export const YEAR: FormulaFunction = (date) => {
   if (typeof date === 'string') {
     const parsed = new Date(date);
     if (isNaN(parsed.getTime())) return new Error('#VALUE!');
-    return parsed.getFullYear();
+    return parsed.getUTCFullYear();
   }
 
   const num = toNumber(date);
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  return d.getFullYear();
+  return d.getUTCFullYear();
 };
 
 /**
@@ -176,14 +199,14 @@ export const MONTH: FormulaFunction = (date) => {
   if (typeof date === 'string') {
     const parsed = new Date(date);
     if (isNaN(parsed.getTime())) return new Error('#VALUE!');
-    return parsed.getMonth() + 1;
+    return parsed.getUTCMonth() + 1;
   }
 
   const num = toNumber(date);
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  return d.getMonth() + 1;
+  return d.getUTCMonth() + 1;
 };
 
 /**
@@ -193,14 +216,14 @@ export const DAY: FormulaFunction = (date) => {
   if (typeof date === 'string') {
     const parsed = new Date(date);
     if (isNaN(parsed.getTime())) return new Error('#VALUE!');
-    return parsed.getDate();
+    return parsed.getUTCDate();
   }
 
   const num = toNumber(date);
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  return d.getDate();
+  return d.getUTCDate();
 };
 
 /**
@@ -272,7 +295,7 @@ export const WEEKNUM: FormulaFunction = (date, returnType = 1) => {
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  const startOfYear = new Date(d.getFullYear(), 0, 1);
+  const startOfYear = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const diff = d.getTime() - startOfYear.getTime();
   const dayOfYear = Math.floor(diff / MS_PER_DAY) + 1;
 
@@ -292,8 +315,8 @@ export const EOMONTH: FormulaFunction = (startDate, months) => {
 
   const d = serialToDate(num);
   
-  // Move to desired month
-  const targetDate = new Date(d.getFullYear(), d.getMonth() + m + 1, 0);
+  // Use UTC methods to get last day of target month
+  const targetDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + m + 1, 0));
   
   return dateToSerial(targetDate);
 };
@@ -310,8 +333,8 @@ export const EDATE: FormulaFunction = (startDate, months) => {
 
   const d = serialToDate(num);
   
-  // Move to desired month
-  const targetDate = new Date(d.getFullYear(), d.getMonth() + m, d.getDate());
+  // Use UTC methods to match DATE() behavior
+  const targetDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + m, d.getUTCDate()));
   
   return dateToSerial(targetDate);
 };
@@ -337,12 +360,12 @@ export const DATEDIF: FormulaFunction = (startDate, endDate, unit) => {
 
   // Years
   if (unitUpper === 'Y') {
-    return d2.getFullYear() - d1.getFullYear();
+    return d2.getUTCFullYear() - d1.getUTCFullYear();
   }
 
   // Months
   if (unitUpper === 'M') {
-    return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+    return (d2.getUTCFullYear() - d1.getUTCFullYear()) * 12 + (d2.getUTCMonth() - d1.getUTCMonth());
   }
 
   // Days
@@ -383,12 +406,12 @@ export const NETWORKDAYS: FormulaFunction = (startDate, endDate, holidays?) => {
   const current = new Date(d1);
 
   while (current <= d2) {
-    const day = current.getDay();
+    const day = current.getUTCDay();
     // Skip weekends (0=Sunday, 6=Saturday)
     if (day !== 0 && day !== 6) {
       workDays++;
     }
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
 
   return workDays;
@@ -409,8 +432,8 @@ export const WORKDAY: FormulaFunction = (startDate, days, holidays?) => {
   const direction = d >= 0 ? 1 : -1;
 
   while (workDaysLeft > 0) {
-    current.setDate(current.getDate() + direction);
-    const day = current.getDay();
+    current.setUTCDate(current.getUTCDate() + direction);
+    const day = current.getUTCDay();
     
     // Count working days (skip weekends)
     if (day !== 0 && day !== 6) {
@@ -448,9 +471,9 @@ export const TIMEVALUE: FormulaFunction = (timeText) => {
     return new Error('#VALUE!');
   }
 
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const seconds = date.getSeconds();
+  const hours = date.getUTCHours();
+  const minutes = date.getUTCMinutes();
+  const seconds = date.getUTCSeconds();
 
   return (hours * 3600 + minutes * 60 + seconds) / 86400;
 };

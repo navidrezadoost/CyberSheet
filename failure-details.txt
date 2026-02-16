@@ -1,0 +1,100 @@
+  ● Console
+
+--
+  ● NumberFormatter › Performance: Precompiled Intl Formatters › should format single value in <0.5µs (target: <1µs)
+
+--
+  ● NumberFormatter › Performance: Large Grid Fast Scroll › should handle mixed formats efficiently
+
+--
+  ● Console
+
+--
+  ● Pipeline Performance: Formatting Stack › 10k Cell Formatting (Fast Scroll Simulation) › should format 10,000 mixed cells in <3.3ms (20% frame budget)
+
+--
+  ● Pipeline Performance: Formatting Stack › 10k Cell Formatting (Fast Scroll Simulation) › should maintain <1µs per cell under mixed format load
+
+--
+  ● Pipeline Performance: Formatting Stack › Performance Regression Detection › should detect if spec-based formatter degrades to >1µs
+
+--
+  ● Financial Functions - Week 8 Day 4 › Integration Tests › Financial functions with range references
+
+--
+  ● Console
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.SKIP_ERRORS - Aggregations › Metadata: COUNT has SKIP_ERRORS strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.SKIP_ERRORS - Aggregations › Metadata: COUNTA has SKIP_ERRORS strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.SKIP_ERRORS - Aggregations › Metadata: SUMIF has SKIP_ERRORS strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.SKIP_ERRORS - Aggregations › All SKIP_ERRORS functions are aggregations
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.LAZY_EVALUATION - Conditionals › Metadata: CHOOSE has LAZY_EVALUATION strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.LAZY_EVALUATION - Conditionals › All LAZY_EVALUATION functions are conditionals
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.LOOKUP_STRICT - Lookup Functions › All 12 lookup functions have LOOKUP_STRICT strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy.PROPAGATE_FIRST - Standard Functions › PROPAGATE_FIRST is the most common strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy Distribution Consistency › LAZY_EVALUATION: All conditionals use this strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy Distribution Consistency › LOOKUP_STRICT: All lookup functions use this strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy Distribution Consistency › PROPAGATE_FIRST: Most functions use this strategy
+
+--
+  ● Wave 0 Day 3: ErrorStrategy Enforcement › ErrorStrategy Enforcement: Summary
+
+--
+  ● Financial Functions - Week 1 Day 4 (SLN, SYD, VDB, AMORDEGRC) › AMORDEGRC - French Accounting Depreciation › Oracle Test 1: First period depreciation
+
+--
+  ● Financial Functions - Week 1 Day 4 (SLN, SYD, VDB, AMORDEGRC) › AMORDEGRC - French Accounting Depreciation › Oracle Test 2: Period 0 (prorated)
+
+--
+  ● Financial Functions - Week 1 Day 4 (SLN, SYD, VDB, AMORDEGRC) › AMORDEGRC - French Accounting Depreciation › Oracle Test 3: High depreciation rate
+
+--
+  ● Financial Functions - Week 1 Day 4 (SLN, SYD, VDB, AMORDEGRC) › AMORDEGRC - French Accounting Depreciation › Oracle Test 4: Low depreciation rate
+
+--
+  ● Financial Functions - Week 1 Day 4 (SLN, SYD, VDB, AMORDEGRC) › AMORDEGRC - French Accounting Depreciation › Oracle Test 7: Later period
+
+--
+  ● Bitwise Engineering Functions › BITAND › should perform bitwise AND on simple numbers
+
+--
+  ● Bitwise Engineering Functions › BITAND › should perform bitwise AND on larger numbers
+
+--
+  ● Bitwise Engineering Functions › BITAND › should handle zero
+
+--
+  ● Bitwise Engineering Functions › BITAND › should handle same numbers
+
+--
+  ● Bitwise Engineering Functions › BITAND › should return #NUM! for negative numbers
+
+--
+  ● Bitwise Engineering Functions › BITAND › should return #NUM! for non-integer
+
+--
+  ● Bitwise Engineering Functions › BITAND › should return #NUM! for numbers exceeding 2^48-1
+
+--
+  ● Bitwise Engineering Functions › BITAND › should work with large safe numbers

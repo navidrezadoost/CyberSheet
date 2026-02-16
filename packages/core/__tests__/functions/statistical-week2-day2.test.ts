@@ -220,22 +220,22 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
   describe('F.TEST - F-Test for Equal Variances', () => {
     beforeEach(() => {
       // Set up sample data in worksheet
-      // Array 1: rows 0-8, col 0 (moderate variance)
+      // Array 1: rows 1-9 (1-based), col 1 (moderate variance)
       const data1 = [3, 4, 5, 8, 9, 1, 2, 4, 5];
       data1.forEach((val, i) => {
-        worksheet.setCellValue({ row: i, col: 0 }, val);
+        worksheet.setCellValue({ row: i + 1, col: 1 }, val);
       });
       
-      // Array 2: rows 0-8, col 1 (higher variance)
+      // Array 2: rows 1-9 (1-based), col 2 (higher variance)
       const data2 = [6, 19, 3, 2, 14, 4, 5, 17, 1];
       data2.forEach((val, i) => {
-        worksheet.setCellValue({ row: i, col: 1 }, val);
+        worksheet.setCellValue({ row: i + 1, col: 2 }, val);
       });
       
-      // Array 3: rows 0-8, col 2 (similar variance to data1)
+      // Array 3: rows 1-9 (1-based), col 3 (similar variance to data1)
       const data3 = [4, 5, 6, 7, 8, 2, 3, 5, 6];
       data3.forEach((val, i) => {
-        worksheet.setCellValue({ row: i, col: 2 }, val);
+        worksheet.setCellValue({ row: i + 1, col: 3 }, val);
       });
     });
 
@@ -283,9 +283,9 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
     });
 
     test('Oracle Test 6: Constant array (zero variance)', () => {
-      // Set constant values in column D
-      for (let i = 0; i < 9; i++) {
-        worksheet.setCellValue({ row: i, col: 3 }, 5);
+      // Set constant values in column D (col 4, 1-based)
+      for (let i = 1; i <= 9; i++) {
+        worksheet.setCellValue({ row: i, col: 4 }, 5);
       }
       const result = evaluate('=F.TEST(A1:A9, D1:D9)');
       expect(result).toBeInstanceOf(Error);
@@ -293,10 +293,10 @@ describe('Statistical Functions - Week 2 Day 2 (F-Distribution)', () => {
     });
 
     test('Oracle Test 7: Large variance ratio', () => {
-      // Create array with very high variance
+      // Create array with very high variance in column E (col 5, 1-based)
       const highVar = [1, 100, 1, 100, 1, 100, 1, 100, 1];
       highVar.forEach((val, i) => {
-        worksheet.setCellValue({ row: i, col: 4 }, val);
+        worksheet.setCellValue({ row: i + 1, col: 5 }, val);
       });
       
       const result = evaluate('=F.TEST(A1:A9, E1:E9)');

@@ -8,7 +8,7 @@
 import { FunctionRegistry } from '../../src/registry/FunctionRegistry';
 import { FormulaAutocomplete } from '../../src/autocomplete/FormulaAutocomplete';
 import { FunctionCategory } from '../../src/types/formula-types';
-import { registerBuiltInFunctions } from '../../src/functions/function-initializer';
+import { ALL_FUNCTION_METADATA } from '../../src/functions/metadata';
 
 describe('FormulaAutocomplete', () => {
   let registry: FunctionRegistry;
@@ -16,7 +16,7 @@ describe('FormulaAutocomplete', () => {
 
   beforeEach(() => {
     registry = new FunctionRegistry();
-    registerBuiltInFunctions(registry);
+    registry.registerBatch(ALL_FUNCTION_METADATA);
     autocomplete = new FormulaAutocomplete(registry);
   });
 
@@ -260,7 +260,7 @@ describe('FormulaAutocomplete', () => {
 
   describe('Category Browsing', () => {
     test('getSuggestionsByCategory returns functions in category', () => {
-      const suggestions = autocomplete.getSuggestionsByCategory(FunctionCategory.FINANCIAL);
+      const suggestions = autocomplete.getSuggestionsByCategory(FunctionCategory.FINANCIAL, 50);
       
       expect(suggestions.length).toBeGreaterThan(0);
       
@@ -348,7 +348,7 @@ describe('FormulaAutocomplete', () => {
     test('all 13 financial functions are available', () => {
       const financialFunctions = autocomplete.getSuggestionsByCategory(
         FunctionCategory.FINANCIAL,
-        20
+        50  // Increased to include all financial functions
       );
       
       const names = financialFunctions.map(s => s.name);

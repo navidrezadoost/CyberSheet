@@ -23,7 +23,7 @@ describe('Exotic Functions - Complete Excel Parity', () => {
   const evaluate = (formula: string) => {
     const context = {
       worksheet,
-      currentCell: { row: 0, col: 0 },
+      currentCell: { row: 1, col: 1 },
       getCellValue: (addr: any) => worksheet.getCell(addr)?.value
     };
     return engine.evaluate(formula, context);
@@ -33,13 +33,13 @@ describe('Exotic Functions - Complete Excel Parity', () => {
     it('should return formula text from cell containing formula (direct call)', () => {
       // Note: FORMULATEXT currently needs to be tested with direct calls
       // because the formula engine evaluates cell references before passing to the function
-      const addr = { row: 0, col: 0 };
+      const addr = { row: 1, col: 1 };
       const cell = { value: '=SUM(B1:B10)', formula: '=SUM(B1:B10)' };
-      (worksheet as any).cells.set('0:0', cell);
+      (worksheet as any).cells.set('1:1', cell);
       
       const context = {
         worksheet,
-        currentCell: { row: 0, col: 0 },
+        currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
       
@@ -49,16 +49,16 @@ describe('Exotic Functions - Complete Excel Parity', () => {
     });
 
     it('should return #N/A for cell without formula', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 42);
+      worksheet.setCellValue({ row: 1, col: 1 }, 42);
       
       const context = {
         worksheet,
-        currentCell: { row: 0, col: 0 },
+        currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
       
       const funcInfo = engine.functions.getMetadata('FORMULATEXT');
-      const result = (funcInfo?.handler as any)(context, { row: 0, col: 0 });
+      const result = (funcInfo?.handler as any)(context, { row: 1, col: 1 });
       expect(result).toBeInstanceOf(Error);
       expect(String(result)).toContain('#N/A');
     });
@@ -66,24 +66,24 @@ describe('Exotic Functions - Complete Excel Parity', () => {
     it('should return #N/A for empty cell', () => {
       const context = {
         worksheet,
-        currentCell: { row: 0, col: 0 },
+        currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
       
       const funcInfo = engine.functions.getMetadata('FORMULATEXT');
-      const result = (funcInfo?.handler as any)(context, { row: 0, col: 0 });
+      const result = (funcInfo?.handler as any)(context, { row: 1, col: 1 });
       expect(result).toBeInstanceOf(Error);
       expect(String(result)).toContain('#N/A');
     });
 
     it('should work with complex formulas', () => {
-      const addr = { row: 1, col: 1 };
+      const addr = { row: 2, col: 2 };
       const cell = { value: '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))', formula: '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))' };
-      (worksheet as any).cells.set('1:1', cell);
+      (worksheet as any).cells.set('2:2', cell);
       
       const context = {
         worksheet,
-        currentCell: { row: 0, col: 0 },
+        currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
       
@@ -94,16 +94,16 @@ describe('Exotic Functions - Complete Excel Parity', () => {
 
     it('should distinguish between formula and string starting with =', () => {
       // String value (starts with '=')
-      worksheet.setCellValue({ row: 2, col: 2 }, '=A1+A2');
+      worksheet.setCellValue({ row: 3, col: 3 }, '=A1+A2');
       
       const context = {
         worksheet,
-        currentCell: { row: 0, col: 0 },
+        currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
       
       const funcInfo = engine.functions.getMetadata('FORMULATEXT');
-      const result = (funcInfo?.handler as any)(context, { row: 2, col: 2 });
+      const result = (funcInfo?.handler as any)(context, { row: 3, col: 3 });
       // Should return the formula text since value starts with '='
       expect(result).toBe('=A1+A2');
     });
@@ -138,7 +138,7 @@ describe('Exotic Functions - Complete Excel Parity', () => {
 
   describe('GETPIVOTDATA - Pivot Table Extraction', () => {
     it('should return #REF! for pivot tables not supported', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'SalesData');
+      worksheet.setCellValue({ row: 1, col: 1 }, 'SalesData');
       const result = evaluate('=GETPIVOTDATA("Sales", A1)');
       expect(result).toBeInstanceOf(Error);
       expect(String(result)).toContain('#REF!');
@@ -217,13 +217,13 @@ describe('Exotic Functions - Complete Excel Parity', () => {
 
   describe('Integration - Exotic Functions in Formulas', () => {
     it('should use FORMULATEXT in error checking (direct call)', () => {
-      const addr = { row: 0, col: 0 };
+      const addr = { row: 1, col: 1 };
       const cell = { value: '=SUM(A1:A10)', formula: '=SUM(A1:A10)' };
-      (worksheet as any).cells.set('0:0', cell);
+      (worksheet as any).cells.set('1:1', cell);
       
       const context = {
         worksheet,
-        currentCell: { row: 0, col: 0 },
+        currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
       

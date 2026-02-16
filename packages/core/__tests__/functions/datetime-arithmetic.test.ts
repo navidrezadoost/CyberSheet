@@ -378,9 +378,13 @@ describe('Date Arithmetic Functions', () => {
 
     test('days until year end', () => {
       const result = evaluate('=DAYS(DATE(2026, 12, 31), TODAY())');
-      // From Jan 29 to Dec 31 is about 336 days
-      expect(result).toBeGreaterThanOrEqual(330);
-      expect(result).toBeLessThanOrEqual(340);
+      // Dynamic calculation based on current UTC date
+      const today = new Date();
+      const yearEnd = new Date(Date.UTC(2026, 11, 31)); // December 31, 2026 UTC
+      const expectedDays = Math.floor((yearEnd.getTime() - Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())) / (24 * 60 * 60 * 1000));
+      // Allow ±2 days tolerance for timezone/computation differences
+      expect(result).toBeGreaterThanOrEqual(expectedDays - 2);
+      expect(result).toBeLessThanOrEqual(expectedDays + 2);
     });
 
     test('add 3 months then get month end', () => {

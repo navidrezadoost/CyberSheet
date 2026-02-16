@@ -17,7 +17,7 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     worksheet = new Worksheet('Sheet1', 100, 26);
     context = {
       worksheet,
-      currentCell: { row: 0, col: 0 },
+      currentCell: { row: 1, col: 1 },
       namedLambdas: new Map()
     } as FormulaContext;
   });
@@ -49,13 +49,13 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     });
 
     test('returns FALSE for empty/null', () => {
-      worksheet.setCellValue({ row: 5, col: 0 }, null);
+      worksheet.setCellValue({ row: 6, col: 1 }, null);
       expect(engine.evaluate('=ISNUMBER(A6)', context)).toBe(false);
     });
 
     test('works with cell references', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 42);
-      worksheet.setCellValue({ row: 1, col: 0 }, 'text');
+      worksheet.setCellValue({ row: 1, col: 1 }, 42);
+      worksheet.setCellValue({ row: 2, col: 1 }, 'text');
       
       expect(engine.evaluate('=ISNUMBER(A1)', context)).toBe(true);
       expect(engine.evaluate('=ISNUMBER(A2)', context)).toBe(false);
@@ -84,8 +84,8 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     });
 
     test('works with cell references', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'text');
-      worksheet.setCellValue({ row: 1, col: 0 }, 42);
+      worksheet.setCellValue({ row: 1, col: 1 }, 'text');
+      worksheet.setCellValue({ row: 2, col: 1 }, 42);
       
       expect(engine.evaluate('=ISTEXT(A1)', context)).toBe(true);
       expect(engine.evaluate('=ISTEXT(A2)', context)).toBe(false);
@@ -101,16 +101,17 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
   // ISBLANK Tests
   // ============================================================================
   describe('ISBLANK Function', () => {
-    test('returns TRUE for empty string', () => {
-      expect(engine.evaluate('=ISBLANK("")', context)).toBe(true);
+    test('returns FALSE for empty string (Excel behavior)', () => {
+      // Excel ISBLANK returns FALSE for empty string - only TRUE for unset cells
+      expect(engine.evaluate('=ISBLANK("")', context)).toBe(false);
     });
 
-    test('returns TRUE for empty cells', () => {
-      worksheet.setCellValue({ row: 5, col: 0 }, null);
-      worksheet.setCellValue({ row: 7, col: 0 }, '');
+    test('returns TRUE for empty cells (null/undefined)', () => {
+      worksheet.setCellValue({ row: 6, col: 1 }, null);
+      worksheet.setCellValue({ row: 8, col: 1 }, '');
       
-      expect(engine.evaluate('=ISBLANK(A6)', context)).toBe(true);
-      expect(engine.evaluate('=ISBLANK(A8)', context)).toBe(true);
+      expect(engine.evaluate('=ISBLANK(A6)', context)).toBe(true);  // null is blank
+      expect(engine.evaluate('=ISBLANK(A8)', context)).toBe(false); // empty string is NOT blank in Excel
       // Row 7 (A7) not set, should also be blank
       expect(engine.evaluate('=ISBLANK(A7)', context)).toBe(true);
     });
@@ -161,9 +162,9 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     });
 
     test('works with cell references', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, true);
-      worksheet.setCellValue({ row: 1, col: 0 }, false);
-      worksheet.setCellValue({ row: 2, col: 0 }, 1);
+      worksheet.setCellValue({ row: 1, col: 1 }, true);
+      worksheet.setCellValue({ row: 2, col: 1 }, false);
+      worksheet.setCellValue({ row: 3, col: 1 }, 1);
       
       expect(engine.evaluate('=ISLOGICAL(A1)', context)).toBe(true);
       expect(engine.evaluate('=ISLOGICAL(A2)', context)).toBe(true);
@@ -229,8 +230,8 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
 
     test('returns 16 for errors', () => {
       // Direct error construction not easy in formula, test with function result
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
-      worksheet.setCellValue({ row: 1, col: 0 }, 0);
+      worksheet.setCellValue({ row: 1, col: 1 }, 1);
+      worksheet.setCellValue({ row: 2, col: 1 }, 0);
       
       // Division by zero creates #DIV/0! error
       const result = engine.evaluate('=TYPE(A1/A2)', context);
@@ -242,7 +243,7 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
       // For our test, we can verify TYPE returns 64 by checking directly
       const arr = [1, 2, 3];
       // Create a formula that references an array-returning function
-      worksheet.setCellValue({ row: 0, col: 0 }, '=SEQUENCE(3)');
+      worksheet.setCellValue({ row: 1, col: 1 }, '=SEQUENCE(3)');
       
       // Note: In our implementation, arrays may be spilled to cells
       // This test verifies TYPE handles array detection properly
@@ -254,9 +255,9 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     });
 
     test('works with cell references', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 42);
-      worksheet.setCellValue({ row: 1, col: 0 }, 'text');
-      worksheet.setCellValue({ row: 2, col: 0 }, true);
+      worksheet.setCellValue({ row: 1, col: 1 }, 42);
+      worksheet.setCellValue({ row: 2, col: 1 }, 'text');
+      worksheet.setCellValue({ row: 3, col: 1 }, true);
       
       expect(engine.evaluate('=TYPE(A1)', context)).toBe(1);
       expect(engine.evaluate('=TYPE(A2)', context)).toBe(2);
@@ -290,18 +291,18 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     });
 
     test('passes errors through', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
-      worksheet.setCellValue({ row: 1, col: 0 }, 0);
+      worksheet.setCellValue({ row: 1, col: 1 }, 1);
+      worksheet.setCellValue({ row: 2, col: 1 }, 0);
       
       const result = engine.evaluate('=N(A1/A2)', context);
       expect(result).toBeInstanceOf(Error);
     });
 
     test('works with cell references', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 42);
-      worksheet.setCellValue({ row: 1, col: 0 }, true);
-      worksheet.setCellValue({ row: 2, col: 0 }, false);
-      worksheet.setCellValue({ row: 3, col: 0 }, 'text');
+      worksheet.setCellValue({ row: 1, col: 1 }, 42);
+      worksheet.setCellValue({ row: 2, col: 1 }, true);
+      worksheet.setCellValue({ row: 3, col: 1 }, false);
+      worksheet.setCellValue({ row: 4, col: 1 }, 'text');
       
       expect(engine.evaluate('=N(A1)', context)).toBe(42);
       expect(engine.evaluate('=N(A2)', context)).toBe(1);
@@ -338,9 +339,9 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     });
 
     test('works with cell references', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'text');
-      worksheet.setCellValue({ row: 1, col: 0 }, 42);
-      worksheet.setCellValue({ row: 2, col: 0 }, true);
+      worksheet.setCellValue({ row: 1, col: 1 }, 'text');
+      worksheet.setCellValue({ row: 2, col: 1 }, 42);
+      worksheet.setCellValue({ row: 3, col: 1 }, true);
       
       expect(engine.evaluate('=T(A1)', context)).toBe('text');
       expect(engine.evaluate('=T(A2)', context)).toBe('');
@@ -360,12 +361,13 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     test('combining type checks with IF', () => {
       expect(engine.evaluate('=IF(ISNUMBER(100), "num", "other")', context)).toBe('num');
       expect(engine.evaluate('=IF(ISTEXT("hello"), "text", "other")', context)).toBe('text');
-      expect(engine.evaluate('=IF(ISBLANK(""), "empty", "filled")', context)).toBe('empty');
+      // Excel ISBLANK("") returns FALSE - empty string is not blank
+      expect(engine.evaluate('=IF(ISBLANK(""), "empty", "filled")', context)).toBe('filled');
     });
 
     test('type checking with data validation', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 42);
-      worksheet.setCellValue({ row: 1, col: 0 }, 'invalid');
+      worksheet.setCellValue({ row: 1, col: 1 }, 42);
+      worksheet.setCellValue({ row: 2, col: 1 }, 'invalid');
       
       // Validate numeric input
       expect(engine.evaluate('=IF(ISNUMBER(A1), A1*2, "ERROR")', context)).toBe(84);
@@ -386,30 +388,30 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
       expect(engine.evaluate('=N(TRUE) * 100', context)).toBe(100);
       
       // T extracts text only
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Label:');
-      worksheet.setCellValue({ row: 1, col: 0 }, 42);
+      worksheet.setCellValue({ row: 1, col: 1 }, 'Label:');
+      worksheet.setCellValue({ row: 2, col: 1 }, 42);
       
       expect(engine.evaluate('=T(A1) & "Value"', context)).toBe('Label:Value');
       expect(engine.evaluate('=T(A2) & "Value"', context)).toBe('Value'); // Number becomes empty
     });
 
     test('ISBLANK for conditional formatting logic', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 100);
-      worksheet.setCellValue({ row: 1, col: 0 }, '');
-      worksheet.setCellValue({ row: 2, col: 0 }, 200);
+      worksheet.setCellValue({ row: 1, col: 1 }, 100);
+      worksheet.setCellValue({ row: 2, col: 1 }, '');  // Empty string is NOT blank in Excel
+      worksheet.setCellValue({ row: 3, col: 1 }, 200);
       
-      // Count non-blank cells manually
+      // Count non-blank cells manually - empty string IS considered non-blank in Excel
       const countNonBlank = engine.evaluate(
         '=N(NOT(ISBLANK(A1))) + N(NOT(ISBLANK(A2))) + N(NOT(ISBLANK(A3)))',
         context
       );
-      expect(countNonBlank).toBe(2);
+      expect(countNonBlank).toBe(3);  // All 3 cells are non-blank (including empty string)
     });
 
     test('ISNONTEXT for filtering numeric data', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 100);
-      worksheet.setCellValue({ row: 1, col: 0 }, 'skip');
-      worksheet.setCellValue({ row: 2, col: 0 }, 200);
+      worksheet.setCellValue({ row: 1, col: 1 }, 100);
+      worksheet.setCellValue({ row: 2, col: 1 }, 'skip');
+      worksheet.setCellValue({ row: 3, col: 1 }, 200);
       
       // Sum only if numeric (using ISNONTEXT since blanks won't add to sum anyway)
       expect(engine.evaluate('=IF(ISNONTEXT(A1), A1, 0)', context)).toBe(100);
@@ -432,7 +434,7 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     });
 
     test('all functions handle null input', () => {
-      worksheet.setCellValue({ row: 10, col: 0 }, null);
+      worksheet.setCellValue({ row: 11, col: 1 }, null);
       
       expect(engine.evaluate('=ISNUMBER(A11)', context)).toBe(false);
       expect(engine.evaluate('=ISTEXT(A11)', context)).toBe(false);

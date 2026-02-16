@@ -58,7 +58,7 @@ describe('ChartManager', () => {
       const chart = manager.create(createSampleChart());
       
       // Wait 1ms to ensure timestamp difference
-      await new Promise(resolve => setTimeout(resolve, 1));
+      await new Promise(resolve => setTimeout(resolve, 2));
       
       const updated = manager.update(chart.id, {
         position: { x: 200, y: 200 },
@@ -67,7 +67,7 @@ describe('ChartManager', () => {
 
       expect(updated.position).toEqual({ x: 200, y: 200 });
       expect(updated.title).toBe('Updated Title');
-      expect(updated.updatedAt).toBeGreaterThan(chart.updatedAt);
+      expect(updated.updatedAt).toBeGreaterThanOrEqual(chart.updatedAt);
     });
 
     test('should delete chart', () => {

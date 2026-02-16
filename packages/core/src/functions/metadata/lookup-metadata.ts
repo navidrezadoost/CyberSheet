@@ -46,7 +46,7 @@ import * as LookupFunctions from '../lookup/lookup-functions';
 
 const { O_1, O_N } = ComplexityClass;
 const { EXACT } = PrecisionClass;
-const { LOOKUP_STRICT, PROPAGATE_FIRST } = ErrorStrategy;
+const { LOOKUP_STRICT, PROPAGATE_FIRST, LAZY_EVALUATION } = ErrorStrategy;
 
 /**
  * VLOOKUP - Vertical Lookup
@@ -247,7 +247,7 @@ export const CHOOSE: StrictFunctionMetadata = {
   volatile: false,
   complexityClass: O_1,
   precisionClass: EXACT,
-  errorStrategy: PROPAGATE_FIRST,
+  errorStrategy: LAZY_EVALUATION,  // Only evaluates selected branch
   iterationPolicy: null,
 };
 

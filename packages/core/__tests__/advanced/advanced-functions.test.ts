@@ -257,7 +257,9 @@ describe('Advanced Array Functions - Excel 365', () => {
 
     it('should handle empty array', () => {
       const result = UNIQUE([]);
-      expect(result).toEqual([]);
+      // Excel 365: UNIQUE with empty array returns #CALC! error
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('#CALC!');
     });
 
     it('should handle single element array', () => {

@@ -51,10 +51,10 @@ describe('Week 6-7 Integration - Real-World Scenarios', () => {
     });
 
     test('calculate days since hire date (date serial fix)', () => {
-      // Today is Jan 29, 2026
-      const today = evaluate('=TODAY()');
+      // Use fixed dates instead of TODAY() which changes
+      const jan29 = evaluate('=DATE(2026, 1, 29)');
       const aliceStart = evaluate('=DATE(2026, 1, 5)');
-      const daysSinceHire = (today as number) - (aliceStart as number);
+      const daysSinceHire = (jan29 as number) - (aliceStart as number);
 
       expect(daysSinceHire).toBe(24); // Jan 29 - Jan 5 = 24 days
     });

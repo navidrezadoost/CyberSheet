@@ -881,7 +881,7 @@ export const MEDIAN_METADATA: StrictFunctionMetadata = {
   name: 'MEDIAN',
   handler: StatisticalFunctions.MEDIAN,
   category: FunctionCategory.STATISTICAL,
-  minArgs: 1,
+  minArgs: 0,
   maxArgs: 255,
   isSpecial: false,
   needsContext: false,

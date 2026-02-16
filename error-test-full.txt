@@ -1,0 +1,9 @@
+
+> cyber-sheet-excel-monorepo@0.1.0 test
+> jest --passWithNoTests --config jest.config.js error-strategy-enforcement.test.ts
+
+----------|---------|----------|---------|---------|-------------------
+File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+----------|---------|----------|---------|---------|-------------------
+All files |       0 |        0 |       0 |       0 |                   
+----------|---------|----------|---------|---------|-------------------

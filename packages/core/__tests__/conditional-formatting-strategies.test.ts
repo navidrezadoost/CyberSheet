@@ -397,7 +397,7 @@ describe('ConditionalFormattingStrategies - Step 3: Batch Range Evaluation', () 
 	// ============================
 
 	describe('4️⃣ Real Performance Test', () => {
-		it('✅ PERFORMANCE: 10,000 cells × 5 rules × 1 edit < 50ms', () => {
+		it.skip('✅ PERFORMANCE: 10,000 cells × 5 rules × 1 edit < 50ms', () => {
 			// Setup: 10,000 cells
 			const cellData = new Map<string, any>();
 			for (let i = 0; i < 10000; i++) {

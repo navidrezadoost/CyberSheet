@@ -33,14 +33,14 @@ describe('Week 10 Day 1-2: Advanced Statistical Functions', () => {
 
   const evaluate = (formula: string) => engine.evaluate(formula, context);
 
-  // Helper function to set up data in cells and return range reference
-  const setupData = (values: number[], startRow = 0, startCol = 0): string => {
+  // Helper function to set up data in cells and return range reference (1-based addressing)
+  const setupData = (values: number[], startRow = 1, startCol = 1): string => {
     values.forEach((val, idx) => {
       worksheet.setCellValue({ row: startRow + idx, col: startCol }, val);
     });
     const endRow = startRow + values.length - 1;
-    const colLetter = String.fromCharCode(65 + startCol); // A, B, C, etc.
-    return `${colLetter}${startRow + 1}:${colLetter}${endRow + 1}`;
+    const colLetter = String.fromCharCode(65 + startCol - 1); // A, B, C, etc. (col is 1-based)
+    return `${colLetter}${startRow}:${colLetter}${endRow}`;
   };
 
   // ============================================

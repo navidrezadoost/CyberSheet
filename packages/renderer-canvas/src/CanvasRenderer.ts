@@ -1,4 +1,4 @@
-import { Worksheet, Address, CellStyle, CellEvent, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset } from '@cyber-sheet/core';
 import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
@@ -141,7 +141,7 @@ export class CanvasRenderer {
     }
     this.setupEventListeners();
     // Invalidate distinct value cache on relevant sheet events
-    this.sheet.on((ev) => {
+    this.sheet.on((ev: SheetEvents) => {
       const t = (ev as any).type;
       if (t === 'cell-changed') this.clearValueCacheForColumn((ev as any).address.col);
       else if (t === 'sheet-mutated' || t === 'filter-changed') this.clearValueCacheForColumn();
@@ -201,7 +201,7 @@ export class CanvasRenderer {
    * This is the proper way for adapters to listen to scroll changes instead of polling.
    */
   onScrollChange(listener: (event: { x: number; y: number; maxX: number; maxY: number }) => void): { dispose: () => void } {
-    return this.scrollEmitter.on((event) => {
+    return this.scrollEmitter.on((event: any) => {
       if (event.type === 'scroll') {
         listener(event.scroll);
       }

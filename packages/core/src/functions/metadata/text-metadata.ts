@@ -499,6 +499,51 @@ export const UNICODE: StrictFunctionMetadata = {
   iterationPolicy: null,
 };
 
+export const FIXED: StrictFunctionMetadata = {
+  name: 'FIXED',
+  handler: TextFunctions.FIXED,
+  category: FunctionCategory.TEXT,
+  minArgs: 1,
+  maxArgs: 3,
+  isSpecial: false,
+  needsContext: false,
+  volatile: false,
+  complexityClass: O_1, // Number formatting, O(1)
+  precisionClass: EXACT_PRECISION,
+  errorStrategy: PROPAGATE_FIRST,
+  iterationPolicy: null,
+};
+
+export const TEXTBEFORE: StrictFunctionMetadata = {
+  name: 'TEXTBEFORE',
+  handler: TextFunctions.TEXTBEFORE,
+  category: FunctionCategory.TEXT,
+  minArgs: 2,
+  maxArgs: 6,
+  isSpecial: false,
+  needsContext: false,
+  volatile: false,
+  complexityClass: O_1, // String search, O(1) for bounded strings
+  precisionClass: EXACT_PRECISION,
+  errorStrategy: PROPAGATE_FIRST,
+  iterationPolicy: null,
+};
+
+export const TEXTAFTER: StrictFunctionMetadata = {
+  name: 'TEXTAFTER',
+  handler: TextFunctions.TEXTAFTER,
+  category: FunctionCategory.TEXT,
+  minArgs: 2,
+  maxArgs: 6,
+  isSpecial: false,
+  needsContext: false,
+  volatile: false,
+  complexityClass: O_1, // String search, O(1) for bounded strings
+  precisionClass: EXACT_PRECISION,
+  errorStrategy: PROPAGATE_FIRST,
+  iterationPolicy: null,
+};
+
 export const DOLLAR: StrictFunctionMetadata = {
   name: 'DOLLAR',
   handler: TextFunctions.DOLLAR,
@@ -613,6 +658,9 @@ export const TEXT_METADATA: StrictFunctionMetadata[] = [
   UNICHAR,
   UNICODE,
   DOLLAR,
+  FIXED,
+  TEXTBEFORE,
+  TEXTAFTER,
   
   // Array operations (O(n))
   TEXTJOIN,

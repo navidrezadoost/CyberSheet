@@ -570,11 +570,12 @@ export class ExcelRenderer {
     h: number,
     icon: IconRender
   ) {
-    const palette = icon.iconSet === 'traffic-lights'
+    const iconSetStr = String(icon.iconSet);
+    const palette = iconSetStr.includes('traffic-lights')
       ? ['#d32f2f', '#fbc02d', '#388e3c']
-      : icon.iconSet === 'flags'
+      : iconSetStr.includes('flags')
         ? ['#d32f2f', '#1976d2', '#388e3c']
-        : icon.iconSet === 'stars'
+        : iconSetStr.includes('stars')
           ? ['#c0c0c0', '#c0c0c0', '#fbc02d']
           : ['#d32f2f', '#fbc02d', '#388e3c'];
 

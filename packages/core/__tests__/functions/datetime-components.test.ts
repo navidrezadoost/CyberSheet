@@ -147,12 +147,14 @@ describe('Date & Time Component Extraction', () => {
 
     test('extracts month from TODAY', () => {
       const result = evaluate('=MONTH(TODAY())');
-      expect(result).toBe(1); // January
+      const expectedMonth = new Date().getUTCMonth() + 1;
+      expect(result).toBe(expectedMonth);
     });
 
     test('extracts month from NOW', () => {
       const result = evaluate('=MONTH(NOW())');
-      expect(result).toBe(1); // January
+      const expectedMonth = new Date().getUTCMonth() + 1;
+      expect(result).toBe(expectedMonth);
     });
 
     test('returns error for invalid date string', () => {
@@ -228,15 +230,14 @@ describe('Date & Time Component Extraction', () => {
 
     test('extracts day from TODAY', () => {
       const result = evaluate('=DAY(TODAY())');
-      // Should be around 28-29 for January 29, 2026
-      expect(result).toBeGreaterThanOrEqual(27);
-      expect(result).toBeLessThanOrEqual(30);
+      const expectedDay = new Date().getUTCDate();
+      expect(result).toBe(expectedDay);
     });
 
     test('extracts day from NOW', () => {
       const result = evaluate('=DAY(NOW())');
-      expect(result).toBeGreaterThanOrEqual(27);
-      expect(result).toBeLessThanOrEqual(30);
+      const expectedDay = new Date().getUTCDate();
+      expect(result).toBe(expectedDay);
     });
 
     test('returns error for invalid input', () => {
@@ -449,10 +450,10 @@ describe('Date & Time Component Extraction', () => {
       const minute = evaluate('=MINUTE(NOW())');
       const second = evaluate('=SECOND(NOW())');
       
-      expect(year).toBe(2026);
-      expect(month).toBe(1);
-      expect(day).toBeGreaterThanOrEqual(27);
-      expect(day).toBeLessThanOrEqual(30);
+      const now = new Date();
+      expect(year).toBe(now.getUTCFullYear());
+      expect(month).toBe(now.getUTCMonth() + 1);
+      expect(day).toBe(now.getUTCDate());
       expect(hour).toBeGreaterThanOrEqual(0);
       expect(hour).toBeLessThan(24);
       expect(minute).toBeGreaterThanOrEqual(0);
