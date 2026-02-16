@@ -214,16 +214,16 @@ describe('Statistical Functions - Week 2 Day 1 (T-Distribution)', () => {
   describe('T.TEST - Student\'s T-Test', () => {
     beforeEach(() => {
       // Set up sample data in worksheet
-      // Array 1: rows 0-8, col 0
+      // Array 1: rows 1-9 (1-based), col 1
       const data1 = [3, 4, 5, 8, 9, 1, 2, 4, 5];
       data1.forEach((val, i) => {
-        worksheet.setCellValue({ row: i, col: 0 }, val);
+        worksheet.setCellValue({ row: i + 1, col: 1 }, val);
       });
       
-      // Array 2: rows 0-8, col 1
+      // Array 2: rows 1-9 (1-based), col 2
       const data2 = [6, 19, 3, 2, 14, 4, 5, 17, 1];
       data2.forEach((val, i) => {
-        worksheet.setCellValue({ row: i, col: 1 }, val);
+        worksheet.setCellValue({ row: i + 1, col: 2 }, val);
       });
     });
 
