@@ -919,7 +919,7 @@ export const TEXTSPLIT: FormulaFunction = (
     }
   };
 
-  // If no row delimiter, split by column delimiter only (returns 1D array)
+  // If no row delimiter, split by column delimiter only (returns 1D horizontal array as 2D)
   if (rowDelim === null) {
     let parts = splitByDelimiter(str, colDelim);
 
@@ -928,9 +928,9 @@ export const TEXTSPLIT: FormulaFunction = (
       parts = parts.filter(p => p !== '');
     }
 
-    // Return as 1D array (single row, multiple columns)
-    // Excel TEXTSPLIT with only column delimiter returns horizontal 1D array
-    return parts;
+    // Return as 2D array (single row, multiple columns)
+    // Excel TEXTSPLIT always returns 2D arrays for spill behavior
+    return [parts];
   }
 
   // Split by row delimiter first
