@@ -70,7 +70,7 @@ export const MATH_METADATA: StrictFunctionMetadata[] = [
     name: 'AVERAGEA',
     handler: MathFunctions.AVERAGEA,
     category: FunctionCategory.MATH,
-    minArgs: 1,
+    minArgs: 0,
     maxArgs: 255,
     isSpecial: false,
     needsContext: false,

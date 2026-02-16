@@ -259,9 +259,9 @@ export class FormulaEngine {
       return this.evaluateCellReference(expr, context);
     }
 
-    // Range references shouldn't be evaluated standalone; treated only inside functions.
+    // Range references - evaluate to arrays for use in operations
     if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(expr)) {
-      return new Error('#VALUE!');
+      return this.evaluateRangeReference(expr, context);
     }
 
     // Unary minus (e.g., -5, -val, -A1)

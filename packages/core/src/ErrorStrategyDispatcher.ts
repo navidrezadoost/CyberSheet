@@ -127,8 +127,13 @@ export class ErrorStrategyDispatcher {
       if (isCountFunction) {
         return 0 as T; // COUNT special case: COUNT(errors) = 0
       }
-      // Return first error (left-to-right)
-      return errors[0] as T;
+      // If there are actual errors, return first error (left-to-right)
+      if (errors.length > 0) {
+        return errors[0] as T;
+      }
+      // If there are NO args at all (empty call), let handler decide
+      // This allows functions like AVERAGEA() and MEDIAN() to return their appropriate errors
+      return handler(...nonErrors);
     }
     
     // Aggregate non-error values
