@@ -501,7 +501,7 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
 
     test('rejects NaN argument', () => {
       // PV(NaN, 10, -100) → #VALUE!
-      worksheet.setCellValue({ row: 1, col: 1 }, NaN);
+      worksheet.setCellValue({ row: 2, col: 2 }, NaN); // B2 in 1-based addressing
       const result = engine.evaluate('=PV(B2, 10, -100)', context);
       
       expect(result).toBeInstanceOf(Error);
@@ -510,7 +510,7 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
 
     test('rejects Infinity argument', () => {
       // PV(Infinity, 10, -100) → #DIV/0!
-      worksheet.setCellValue({ row: 1, col: 1 }, Infinity);
+      worksheet.setCellValue({ row: 2, col: 2 }, Infinity); // B2 in 1-based addressing
       const result = engine.evaluate('=PV(B2, 10, -100)', context);
       
       expect(result).toBeInstanceOf(Error);
@@ -560,7 +560,7 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
 
     test('rejects NaN in cash flows', () => {
       // NPV(0.1, 100, NaN, 300) → #VALUE!
-      worksheet.setCellValue({ row: 1, col: 1 }, NaN);
+      worksheet.setCellValue({ row: 2, col: 2 }, NaN); // B2 in 1-based addressing
       const result = engine.evaluate('=NPV(0.1, 100, B2, 300)', context);
       
       expect(result).toBeInstanceOf(Error);
@@ -569,7 +569,7 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
 
     test('rejects Infinity in rate', () => {
       // NPV(Infinity, 100, 200) → #DIV/0!
-      worksheet.setCellValue({ row: 1, col: 1 }, Infinity);
+      worksheet.setCellValue({ row: 2, col: 2 }, Infinity); // B2 in 1-based addressing
       const result = engine.evaluate('=NPV(B2, 100, 200)', context);
       
       expect(result).toBeInstanceOf(Error);
