@@ -69,7 +69,7 @@ describe('Financial Functions - Week 8 Day 5 (IRR/XIRR)', () => {
       // Cash flows: -1000, 250, 250, 250, 250, 250
       worksheet.setCellValue({ row: 1, col: 4 }, -1000);
       for (let i = 1; i <= 5; i++) {
-        worksheet.setCellValue({ row: i, col: 3 }, 250);
+        worksheet.setCellValue({ row: i + 1, col: 4 }, 250);
       }
       
       const result = evaluate('=IRR(D1:D6)');

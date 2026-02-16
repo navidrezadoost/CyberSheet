@@ -360,9 +360,9 @@ describe('Financial Functions - Week 8 Day 4', () => {
     });
 
     test('Financial functions with range references', () => {
-      // Set up cash flows in range
+      // Set up cash flows in range (1-based: A1=row1, A5=row5)
       for (let i = 0; i < 5; i++) {
-        worksheet.setCellValue({ row: i, col: 0 }, 1000 * (i + 1));
+        worksheet.setCellValue({ row: i + 1, col: 1 }, 1000 * (i + 1));
       }
       
       const npv = evaluate('=NPV(0.10, A1:A5)');
