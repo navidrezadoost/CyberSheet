@@ -72,15 +72,34 @@ function dateToSerial(date: Date): number {
  */
 export const TODAY: FormulaFunction = () => {
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return dateToSerial(now);
+  // Create UTC date from local date components to match DATE() behavior
+  // This ensures TODAY() works the same as DATE(YEAR(now), MONTH(now), DAY(now))
+  const utcTimestamp = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = utcTimestamp - EXCEL_EPOCH;
+  let serial = Math.floor(diff / MS_PER_DAY);
+  if (serial > 59) serial += 1; // Excel leap year bug
+  return serial;
 };
 
 /**
  * NOW - Current date and time
  */
 export const NOW: FormulaFunction = () => {
-  return dateToSerial(new Date());
+  const now = new Date();
+  // Create UTC timestamp from local components to match DATE() + TIME() behavior
+  const utcTimestamp = Date.UTC(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+  const diff = utcTimestamp - EXCEL_EPOCH;
+  let serial = diff / MS_PER_DAY;
+  if (Math.floor(serial) > 59) serial += 1; // Excel leap year bug
+  return serial;
 };
 
 /**
@@ -166,7 +185,7 @@ export const YEAR: FormulaFunction = (date) => {
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  return d.getFullYear();
+  return d.getUTCFullYear();
 };
 
 /**
@@ -183,7 +202,7 @@ export const MONTH: FormulaFunction = (date) => {
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  return d.getMonth() + 1;
+  return d.getUTCMonth() + 1;
 };
 
 /**
@@ -200,7 +219,7 @@ export const DAY: FormulaFunction = (date) => {
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  return d.getDate();
+  return d.getUTCDate();
 };
 
 /**
@@ -272,7 +291,7 @@ export const WEEKNUM: FormulaFunction = (date, returnType = 1) => {
   if (num instanceof Error) return num;
 
   const d = serialToDate(num);
-  const startOfYear = new Date(d.getFullYear(), 0, 1);
+  const startOfYear = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const diff = d.getTime() - startOfYear.getTime();
   const dayOfYear = Math.floor(diff / MS_PER_DAY) + 1;
 
@@ -292,8 +311,8 @@ export const EOMONTH: FormulaFunction = (startDate, months) => {
 
   const d = serialToDate(num);
   
-  // Move to desired month
-  const targetDate = new Date(d.getFullYear(), d.getMonth() + m + 1, 0);
+  // Use UTC methods to get last day of target month
+  const targetDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + m + 1, 0));
   
   return dateToSerial(targetDate);
 };
@@ -310,8 +329,8 @@ export const EDATE: FormulaFunction = (startDate, months) => {
 
   const d = serialToDate(num);
   
-  // Move to desired month
-  const targetDate = new Date(d.getFullYear(), d.getMonth() + m, d.getDate());
+  // Use UTC methods to match DATE() behavior
+  const targetDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + m, d.getUTCDate()));
   
   return dateToSerial(targetDate);
 };
@@ -337,12 +356,12 @@ export const DATEDIF: FormulaFunction = (startDate, endDate, unit) => {
 
   // Years
   if (unitUpper === 'Y') {
-    return d2.getFullYear() - d1.getFullYear();
+    return d2.getUTCFullYear() - d1.getUTCFullYear();
   }
 
   // Months
   if (unitUpper === 'M') {
-    return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+    return (d2.getUTCFullYear() - d1.getUTCFullYear()) * 12 + (d2.getUTCMonth() - d1.getUTCMonth());
   }
 
   // Days
