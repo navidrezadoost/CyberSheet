@@ -125,9 +125,9 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
   describe('AGGREGATE', () => {
     beforeEach(() => {
       // Setup test data: A1:A10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      // Note: Worksheet uses 0-based indexing (A1 = row:0, col:0)
+      // Note: Worksheet uses 1-based indexing (A1 = row:1, col:1)
       for (let i = 1; i <= 10; i++) {
-        worksheet.setCellValue({ row: i - 1, col: 0 }, i);
+        worksheet.setCellValue({ row: i, col: 1 }, i);
       }
       
       // B1:B5 = [100, 200, 300, 400, 500]
@@ -175,7 +175,7 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
 
     test('function 7: STDEV.S (sample standard deviation)', () => {
       // Simplified data for predictable stdev
-      // C1:C8 = [2, 4, 4, 4, 5, 5, 7, 9] (col: 2, 0-based)
+      // C1:C8 = [2, 4, 4, 4, 5, 5, 7, 9] (col: 3, 1-based)
       worksheet.setCellValue({ row: 1, col: 3 }, 2);
       worksheet.setCellValue({ row: 2, col: 3 }, 4);
       worksheet.setCellValue({ row: 3, col: 3 }, 4);
@@ -196,9 +196,9 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
   describe('SUBTOTAL', () => {
     beforeEach(() => {
       // Setup test data: A1:A10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      // Note: Worksheet uses 0-based indexing (A1 = row:0, col:0)
+      // Note: Worksheet uses 1-based indexing (A1 = row:1, col:1)
       for (let i = 1; i <= 10; i++) {
-        worksheet.setCellValue({ row: i - 1, col: 0 }, i);
+        worksheet.setCellValue({ row: i, col: 1 }, i);
       }
     });
 
@@ -247,9 +247,9 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
 
     test('AGGREGATE vs SUBTOTAL for basic SUM', () => {
       // Setup data: A1:A5 = [10, 20, 30, 40, 50]
-      // Note: Worksheet uses 0-based indexing
+      // Note: Worksheet uses 1-based indexing
       for (let i = 1; i <= 5; i++) {
-        worksheet.setCellValue({ row: i - 1, col: 0 }, i * 10);
+        worksheet.setCellValue({ row: i, col: 1 }, i * 10);
       }
       
       const aggregate = engine.evaluate('=AGGREGATE(9, 0, A1:A5)', context);
@@ -261,8 +261,8 @@ describe('Week 2 Day 6: Math Aggregation & Rounding', () => {
 
     test('AGGREGATE median on rounded values', () => {
       // Create data using CEILING.MATH
-      // Column A (col: 0) has raw values, Column B (col: 1) has rounded
-      // Note: Worksheet uses 0-based indexing (A1 = row:0, col:0)
+      // Column A (col: 1) has raw values, Column B (col: 2) has rounded
+      // Note: Worksheet uses 1-based indexing (A1 = row:1, col:1)
       worksheet.setCellValue({ row: 1, col: 1 }, 1.2);
       worksheet.setCellValue({ row: 2, col: 1 }, 2.7);
       worksheet.setCellValue({ row: 3, col: 1 }, 3.1);
