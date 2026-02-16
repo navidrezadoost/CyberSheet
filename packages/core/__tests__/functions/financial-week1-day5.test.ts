@@ -17,7 +17,7 @@ describe('Financial Functions - Week 1 Day 5 (AMORLINC, ACCRINT, ACCRINTM, PRICE
     worksheet = new Worksheet('Sheet1', 100, 26);
     context = {
       worksheet,
-      currentCell: { row: 10, col: 0 },
+      currentCell: { row: 10, col: 1 },
     };
   });
 

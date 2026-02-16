@@ -35,7 +35,7 @@ describe('Exotic Functions - Complete Excel Parity', () => {
       // because the formula engine evaluates cell references before passing to the function
       const addr = { row: 1, col: 1 };
       const cell = { value: '=SUM(B1:B10)', formula: '=SUM(B1:B10)' };
-      (worksheet as any).cells.set('0:0', cell);
+      (worksheet as any).cells.set('1:1', cell);
       
       const context = {
         worksheet,
@@ -79,7 +79,7 @@ describe('Exotic Functions - Complete Excel Parity', () => {
     it('should work with complex formulas', () => {
       const addr = { row: 2, col: 2 };
       const cell = { value: '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))', formula: '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))' };
-      (worksheet as any).cells.set('1:1', cell);
+      (worksheet as any).cells.set('2:2', cell);
       
       const context = {
         worksheet,
@@ -219,7 +219,7 @@ describe('Exotic Functions - Complete Excel Parity', () => {
     it('should use FORMULATEXT in error checking (direct call)', () => {
       const addr = { row: 1, col: 1 };
       const cell = { value: '=SUM(A1:A10)', formula: '=SUM(A1:A10)' };
-      (worksheet as any).cells.set('0:0', cell);
+      (worksheet as any).cells.set('1:1', cell);
       
       const context = {
         worksheet,

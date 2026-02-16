@@ -101,16 +101,17 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
   // ISBLANK Tests
   // ============================================================================
   describe('ISBLANK Function', () => {
-    test('returns TRUE for empty string', () => {
-      expect(engine.evaluate('=ISBLANK("")', context)).toBe(true);
+    test('returns FALSE for empty string (Excel behavior)', () => {
+      // Excel ISBLANK returns FALSE for empty string - only TRUE for unset cells
+      expect(engine.evaluate('=ISBLANK("")', context)).toBe(false);
     });
 
-    test('returns TRUE for empty cells', () => {
+    test('returns TRUE for empty cells (null/undefined)', () => {
       worksheet.setCellValue({ row: 6, col: 1 }, null);
       worksheet.setCellValue({ row: 8, col: 1 }, '');
       
-      expect(engine.evaluate('=ISBLANK(A6)', context)).toBe(true);
-      expect(engine.evaluate('=ISBLANK(A8)', context)).toBe(true);
+      expect(engine.evaluate('=ISBLANK(A6)', context)).toBe(true);  // null is blank
+      expect(engine.evaluate('=ISBLANK(A8)', context)).toBe(false); // empty string is NOT blank in Excel
       // Row 7 (A7) not set, should also be blank
       expect(engine.evaluate('=ISBLANK(A7)', context)).toBe(true);
     });
@@ -360,7 +361,8 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
     test('combining type checks with IF', () => {
       expect(engine.evaluate('=IF(ISNUMBER(100), "num", "other")', context)).toBe('num');
       expect(engine.evaluate('=IF(ISTEXT("hello"), "text", "other")', context)).toBe('text');
-      expect(engine.evaluate('=IF(ISBLANK(""), "empty", "filled")', context)).toBe('empty');
+      // Excel ISBLANK("") returns FALSE - empty string is not blank
+      expect(engine.evaluate('=IF(ISBLANK(""), "empty", "filled")', context)).toBe('filled');
     });
 
     test('type checking with data validation', () => {
@@ -395,15 +397,15 @@ describe('Week 11 Day 1: Information & Type Checking Functions', () => {
 
     test('ISBLANK for conditional formatting logic', () => {
       worksheet.setCellValue({ row: 1, col: 1 }, 100);
-      worksheet.setCellValue({ row: 2, col: 1 }, '');
+      worksheet.setCellValue({ row: 2, col: 1 }, '');  // Empty string is NOT blank in Excel
       worksheet.setCellValue({ row: 3, col: 1 }, 200);
       
-      // Count non-blank cells manually
+      // Count non-blank cells manually - empty string IS considered non-blank in Excel
       const countNonBlank = engine.evaluate(
         '=N(NOT(ISBLANK(A1))) + N(NOT(ISBLANK(A2))) + N(NOT(ISBLANK(A3)))',
         context
       );
-      expect(countNonBlank).toBe(2);
+      expect(countNonBlank).toBe(3);  // All 3 cells are non-blank (including empty string)
     });
 
     test('ISNONTEXT for filtering numeric data', () => {

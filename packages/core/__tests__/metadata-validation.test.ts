@@ -78,14 +78,14 @@ const EXPECTED_TOTALS = {
   LOGICAL: 17,
   DATETIME: 20,
   LOOKUP: 12,
-  TEXT: 31,
+  TEXT: 34,          // Updated: 31 + FIXED, TEXTBEFORE, TEXTAFTER
   ARRAY: 20,
   INFORMATION: 14,   // Updated from 15
   STATISTICAL: 94,
   ENGINEERING: 43,   // Added: all engineering functions
   EXOTIC: 10,        // Added: FORMULATEXT, SHEET, SHEETS, CUBE*
   FUNCTIONAL: 8,     // Added: LAMBDA, LET, MAP, REDUCE, etc.
-  TOTAL: 346,        // Actual count from array
+  TOTAL: 349,        // Updated: 346 + 3 text functions
 };
 
 /**
@@ -121,7 +121,7 @@ describe('Wave 0 Day 3: Metadata Completeness Validation', () => {
     expect(LOOKUP_METADATA.length).toBe(EXPECTED_TOTALS.LOOKUP);
   });
   
-  test('1.6: Text metadata count = 31', () => {
+  test('1.6: Text metadata count = 34', () => {
     expect(TEXT_METADATA.length).toBe(EXPECTED_TOTALS.TEXT);
   });
   
@@ -137,7 +137,7 @@ describe('Wave 0 Day 3: Metadata Completeness Validation', () => {
     expect(STATISTICAL_METADATA.length).toBe(EXPECTED_TOTALS.STATISTICAL);
   });
   
-  test('1.10: TOTAL metadata count = 346 (100% coverage)', () => {
+  test('1.10: TOTAL metadata count = 349 (100% coverage)', () => {
     expect(ALL_METADATA.length).toBe(EXPECTED_TOTALS.TOTAL);
     console.log(`✅ ${EXPECTED_TOTALS.TOTAL} functions with complete metadata`);
   });
