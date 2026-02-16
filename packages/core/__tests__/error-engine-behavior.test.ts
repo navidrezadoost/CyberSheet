@@ -276,8 +276,8 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
     test('filters multiple errors, returns sum of remaining values', () => {
       // SUM(#VALUE!, 5, #REF!, 10) → 15
       // Both errors skipped, numeric values aggregated
-      worksheet.setCellValue({ row: 1, col: 1 }, 5);
-      worksheet.setCellValue({ row: 1, col: 2 }, 10);
+      worksheet.setCellValue({ row: 2, col: 2}, 5); // B2 in 1-based
+      worksheet.setCellValue({ row: 2, col: 3 }, 10); // C2 in 1-based
       const result = engine.evaluate('=SUM(1/0, B2, 1/"text", C2)', context);
       
       expect(result).toBe(15);
@@ -304,9 +304,9 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
     test('handles mixed numeric, null, and error values', () => {
       // SUM(5, null, #VALUE!, 10) → 15
       // Null treated as 0 (standard Excel behavior), errors filtered
-      worksheet.setCellValue({ row: 1, col: 1 }, 5);
-      worksheet.setCellValue({ row: 1, col: 2 }, null);
-      worksheet.setCellValue({ row: 1, col: 3 }, 10);
+      worksheet.setCellValue({ row: 2, col: 2 }, 5); // B2 in 1-based
+      worksheet.setCellValue({ row: 2, col: 3 }, null); // C2 in 1-based
+      worksheet.setCellValue({ row: 2, col: 4 }, 10); // D2 in 1-based
       const result = engine.evaluate('=SUM(B2, C2, 1/0, D2)', context);
       
       expect(result).toBe(15);
@@ -439,7 +439,7 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
     test('does not mutate original arguments', () => {
       // Filtering should not permanently modify arg array
       // This test verifies wrapper doesn't have side effects
-      worksheet.setCellValue({ row: 1, col: 1 }, 5);
+      worksheet.setCellValue({ row: 2, col: 2 }, 5); // B2 in 1-based
       engine.evaluate('=SUM(B2, 1/0, 10)', context);
       const result = engine.evaluate('=SUM(B2, 1/0, 10)', context);
       
@@ -678,7 +678,7 @@ describe('Wave 0 Day 4 - Phase 3: SKIP_ERRORS Behavioral Validation', () => {
     test('INDEX passes through #N/A when handler returns it', () => {
       // INDEX typically doesn't return #N/A, but if it does, pass through
       // This tests wrapper doesn't accidentally filter #N/A
-      worksheet.setCellValue({ row: 1, col: 1 }, 'data');
+      worksheet.setCellValue({ row: 2, col: 2 }, 'data'); // B2 in 1-based
       
       // Valid INDEX call (as baseline)
       const result = engine.evaluate('=INDEX(B2:B3, 1, 1)', context);
