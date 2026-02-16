@@ -15,7 +15,7 @@ describe('Week 11 Day 3: Text Enhancement Functions', () => {
     worksheet = new Worksheet('Test', 100, 26);
     context = {
       worksheet,
-      currentCell: { row: 0, col: 0 },
+      currentCell: { row: 1, col: 1 },
       namedLambdas: new Map()
     } as FormulaContext;
   });
@@ -26,8 +26,8 @@ describe('Week 11 Day 3: Text Enhancement Functions', () => {
   const setCellValue = (cell: string, value: any) => {
     const match = cell.match(/^([A-Z]+)(\d+)$/);
     if (!match) throw new Error(`Invalid cell reference: ${cell}`);
-    const col = match[1].charCodeAt(0) - 65;
-    const row = parseInt(match[2]) - 1;
+    const col = match[1].charCodeAt(0) - 64; // A=1, B=2, etc. (1-based)
+    const row = parseInt(match[2]); // Keep row as-is (1-based)
     worksheet.setCellValue({ row, col }, value);
   };
 
