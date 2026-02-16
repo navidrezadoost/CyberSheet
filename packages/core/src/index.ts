@@ -16,3 +16,4 @@ export * from './formatting/NumberFormatSpec';
 export * from './StyleCache';
 export * from './CommandManager';
 export * from './CellLayout';
+export * from './ConditionalFormattingEngine';
