@@ -27,7 +27,7 @@
     "@angular/common": "^19.0.0",
     "@angular/platform-browser-dynamic": "^19.0.0",
     "@angular/core/testing": "^19.0.0",
-    "jest-axe": "^8.0.0",
+    "jest-axe": "^10.0.0",
     "zone.js": "^0.14.0"
   },
   "dependencies": {

@@ -22,7 +22,7 @@
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.9.1",
-    "jest-axe": "^8.0.0"
+    "jest-axe": "^10.0.0"
   },
   "dependencies": {
     "@cyber-sheet/cf-ui-core": "*"
