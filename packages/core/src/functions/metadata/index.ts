@@ -22,7 +22,7 @@
 
 import type { StrictFunctionMetadata } from '../../types/formula-types';
 
-// Import all metadata from 10 categories
+// Import all metadata from 11 categories
 import { MATH_METADATA } from './math-metadata';
 import { FINANCIAL_METADATA } from './financial-metadata';
 import { LOGICAL_METADATA } from './logical-metadata';
@@ -33,6 +33,7 @@ import { ARRAY_METADATA } from './array-metadata';
 import { INFORMATION_METADATA } from './information-metadata';
 import { STATISTICAL_METADATA } from './statistical-metadata';
 import { ENGINEERING_METADATA } from './engineering-metadata';
+import { EXOTIC_METADATA } from './exotic-metadata';
 
 /**
  * ALL_FUNCTION_METADATA
@@ -77,15 +78,16 @@ export const ALL_FUNCTION_METADATA: StrictFunctionMetadata[] = [
   ...INFORMATION_METADATA,
   ...STATISTICAL_METADATA,
   ...ENGINEERING_METADATA,
+  ...EXOTIC_METADATA,
 ];
 
 /**
  * Total function count validation
  * 
- * Expected: 322 functions (279 original + 43 engineering)
+ * Expected: 332 functions (322 + 10 exotic)
  * If this assertion fails at runtime, metadata files are incomplete.
  */
-const EXPECTED_FUNCTION_COUNT = 322;
+const EXPECTED_FUNCTION_COUNT = 332;
 
 if (ALL_FUNCTION_METADATA.length !== EXPECTED_FUNCTION_COUNT) {
   console.warn(
