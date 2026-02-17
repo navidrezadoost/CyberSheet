@@ -7,37 +7,220 @@ export type CellValue = string | number | boolean | null;
 // Import Excel color types
 import type { ExcelColorSpec } from './ExcelColor';
 
+// ============================================================================
+// BORDER STYLES (Complete Excel parity)
+// ============================================================================
+
+/**
+ * Excel border line styles - all 13 Excel border variants
+ */
+export type BorderLineStyle =
+  | 'thin'           // Default thin line (1px)
+  | 'medium'         // Medium weight (2px)
+  | 'thick'          // Thick weight (3px)
+  | 'hairline'       // Ultra-thin line (0.5px, Excel specialty)
+  | 'dotted'         // Dotted line
+  | 'dashed'         // Dashed line
+  | 'dashDot'        // Dash-dot pattern
+  | 'dashDotDot'     // Dash-dot-dot pattern
+  | 'double'         // Double line
+  | 'mediumDashed'   // Medium dashed
+  | 'mediumDashDot'  // Medium dash-dot
+  | 'mediumDashDotDot' // Medium dash-dot-dot
+  | 'slantDashDot';  // Slanted dash-dot
+
+/**
+ * Border edge definition with color and style
+ */
+export interface BorderEdge {
+  color?: string | ExcelColorSpec;
+  style?: BorderLineStyle;
+}
+
+/**
+ * Complete border specification with all edges and diagonals
+ */
+export interface BorderSpec {
+  top?: BorderEdge | string | ExcelColorSpec;
+  right?: BorderEdge | string | ExcelColorSpec;
+  bottom?: BorderEdge | string | ExcelColorSpec;
+  left?: BorderEdge | string | ExcelColorSpec;
+  diagonalUp?: BorderEdge | string | ExcelColorSpec;
+  diagonalDown?: BorderEdge | string | ExcelColorSpec;
+}
+
+// ============================================================================
+// FILL PATTERNS (18 Excel patterns + gradients)
+// ============================================================================
+
+/**
+ * Excel fill pattern types - all 18 Excel patterns
+ */
+export type FillPatternType =
+  | 'solid'           // Solid fill (default)
+  | 'none'            // No fill
+  | 'gray125'         // 12.5% gray
+  | 'gray0625'        // 6.25% gray
+  | 'darkGray'        // 75% gray
+  | 'mediumGray'      // 50% gray
+  | 'lightGray'       // 25% gray
+  | 'darkHorizontal'  // Horizontal lines (dark)
+  | 'darkVertical'    // Vertical lines (dark)
+  | 'darkDown'        // Diagonal down lines (dark)
+  | 'darkUp'          // Diagonal up lines (dark)
+  | 'darkGrid'        // Grid (dark)
+  | 'darkTrellis'     // Trellis (dark)
+  | 'lightHorizontal' // Horizontal lines (light)
+  | 'lightVertical'   // Vertical lines (light)
+  | 'lightDown'       // Diagonal down lines (light)
+  | 'lightUp'         // Diagonal up lines (light)
+  | 'lightGrid'       // Grid (light)
+  | 'lightTrellis';   // Trellis (light)
+
+/**
+ * Pattern fill with foreground and background colors
+ */
+export interface PatternFill {
+  type: 'pattern';
+  pattern: FillPatternType;
+  fgColor?: string | ExcelColorSpec;
+  bgColor?: string | ExcelColorSpec;
+}
+
+/**
+ * Gradient stop for gradient fills
+ */
+export interface GradientStop {
+  position: number; // 0-1 (fraction of gradient range)
+  color: string | ExcelColorSpec;
+}
+
+/**
+ * Gradient fill specification (linear or path)
+ */
+export interface GradientFill {
+  type: 'gradient';
+  gradientType: 'linear' | 'path';
+  /** Angle in degrees for linear gradient (0 = left-to-right) */
+  degree?: number;
+  /** Gradient stops (minimum 2 required) */
+  stops: GradientStop[];
+  /** Center coordinates for path gradient (0-1 range) */
+  left?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
+}
+
+/**
+ * Union type for all fill specifications
+ */
+export type FillSpec = string | ExcelColorSpec | PatternFill | GradientFill;
+
+// ============================================================================
+// RICH TEXT (per-character formatting)
+// ============================================================================
+
+/**
+ * Rich text run - a segment of text with its own formatting
+ * Enables per-character formatting like "Bold normal italic"
+ */
+export interface RichTextRun {
+  /** Text content for this run */
+  text: string;
+  /** Style override for this run (font properties only) */
+  style?: {
+    fontFamily?: string;
+    fontSize?: number;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean | 'single' | 'double' | 'singleAccounting' | 'doubleAccounting';
+    strikethrough?: boolean;
+    superscript?: boolean;
+    subscript?: boolean;
+    color?: string | ExcelColorSpec;
+  };
+}
+
+/**
+ * Rich text value - text with multiple formatting runs
+ */
+export interface RichTextValue {
+  /** Array of text runs with their styles */
+  runs: RichTextRun[];
+}
+
+/**
+ * Extended cell value supporting rich text
+ */
+export type ExtendedCellValue = CellValue | RichTextValue;
+
+// ============================================================================
+// EXTENDED CELL STYLE (100% Excel parity)
+// ============================================================================
+
 export type CellStyle = {
+  // === Font Properties ===
   fontFamily?: string;
   fontSize?: number; // px
   bold?: boolean;
   italic?: boolean;
-  underline?: boolean;
-  color?: string | ExcelColorSpec; // CSS color or Excel color spec
-  fill?: string | ExcelColorSpec; // CSS background color or Excel color spec
-  align?: 'left' | 'center' | 'right';
-  valign?: 'top' | 'middle' | 'bottom';
-  wrap?: boolean;
-  // How to handle overflow when wrap is false
-  textOverflow?: 'clip' | 'ellipsis' | 'overflow';
-  // Text rotation in degrees (-90 to 90 typical in Excel)
-  rotation?: number;
-  // Shrink text to fit within cell width without wrapping
-  shrinkToFit?: boolean;
-  // Phase 1 UI: Structural text formatting
+  underline?: boolean | 'single' | 'double' | 'singleAccounting' | 'doubleAccounting';
+  color?: string | ExcelColorSpec;
   strikethrough?: boolean;
-  superscript?: boolean; // Mutually exclusive with subscript
-  subscript?: boolean;   // Mutually exclusive with superscript
-  indent?: number;       // 0-250 (Excel limit), undefined normalizes to 0
-  numberFormat?: string; // e.g., "#,##0.00"
-  border?: {
-    top?: string | ExcelColorSpec;
-    right?: string | ExcelColorSpec;
-    bottom?: string | ExcelColorSpec;
-    left?: string | ExcelColorSpec;
-    diagonalUp?: string | ExcelColorSpec;
-    diagonalDown?: string | ExcelColorSpec;
-  };
+  superscript?: boolean;
+  subscript?: boolean;
+  /** Font scheme for theme fonts */
+  fontScheme?: 'major' | 'minor' | 'none';
+  /** Font outline (Mac Excel) */
+  outline?: boolean;
+  /** Font shadow (Mac Excel) */
+  shadow?: boolean;
+
+  // === Alignment Properties ===
+  align?: 'left' | 'center' | 'right' | 'fill' | 'justify' | 'centerContinuous' | 'distributed';
+  valign?: 'top' | 'middle' | 'bottom' | 'justify' | 'distributed';
+  wrap?: boolean;
+  textOverflow?: 'clip' | 'ellipsis' | 'overflow';
+  rotation?: number; // -90 to 90, or 255 for vertical
+  shrinkToFit?: boolean;
+  indent?: number; // 0-250 (Excel limit)
+  /** Reading order / text direction */
+  readingOrder?: 'context' | 'ltr' | 'rtl';
+  /** Justify last line (for justify/distributed alignment) */
+  justifyLastLine?: boolean;
+
+  // === Fill Properties ===
+  /** 
+   * Cell fill/background
+   * - string: CSS color (simple solid fill)
+   * - ExcelColorSpec: Excel color with theme/indexed support
+   * - PatternFill: Pattern fill with fg/bg colors
+   * - GradientFill: Linear or path gradient
+   */
+  fill?: FillSpec;
+
+  // === Border Properties ===
+  /**
+   * Cell borders with full style support
+   * - string/ExcelColorSpec: thin border with that color
+   * - BorderSpec: Full specification with style per edge
+   */
+  border?: BorderSpec;
+
+  // === Number Format ===
+  /**
+   * Number format string (full Excel grammar supported)
+   * Supports: 4-section, conditional, color tags, fractions, etc.
+   */
+  numberFormat?: string;
+
+  // === Protection ===
+  locked?: boolean;
+  hidden?: boolean;
+
+  // === Quote Prefix ===
+  quotePrefix?: boolean;
 };
 
 /**
@@ -83,7 +266,12 @@ export type CellIcon = {
 };
 
 export type Cell = {
-  value: CellValue;
+  /** 
+   * Cell value - supports plain values and rich text
+   * - string/number/boolean/null: Plain value
+   * - RichTextValue: Per-character formatted text
+   */
+  value: ExtendedCellValue;
   formula?: string; // e.g., "=SUM(A1:B2)"
   style?: CellStyle;
   /** Array of comments (threaded support) */

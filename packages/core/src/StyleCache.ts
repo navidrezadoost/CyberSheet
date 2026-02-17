@@ -165,14 +165,42 @@ export function hashStyle(style: CellStyle): number {
   
   // === Alignment (Enum → Number with mixing) ===
   if (style.align) {
-    const alignValue = { left: 1, center: 2, right: 3 }[style.align] || 0;
+    const alignValue = { 
+      left: 1, 
+      center: 2, 
+      right: 3, 
+      fill: 4, 
+      justify: 5, 
+      centerContinuous: 6, 
+      distributed: 7 
+    }[style.align] || 0;
     hash ^= (alignValue * 43) | 0;
     hash = Math.imul(hash, 0x01000193);
   }
   
   if (style.valign) {
-    const valignValue = { top: 1, middle: 2, bottom: 3 }[style.valign] || 0;
+    const valignValue = { 
+      top: 1, 
+      middle: 2, 
+      bottom: 3, 
+      justify: 4, 
+      distributed: 5 
+    }[style.valign] || 0;
     hash ^= (valignValue * 47) | 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  
+  // === Reading Order ===
+  if (style.readingOrder) {
+    const readingValue = { context: 1, ltr: 2, rtl: 3 }[style.readingOrder] || 0;
+    hash ^= (readingValue * 59) | 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  
+  // === Font Scheme ===
+  if (style.fontScheme) {
+    const schemeValue = { none: 1, major: 2, minor: 3 }[style.fontScheme] || 0;
+    hash ^= (schemeValue * 61) | 0;
     hash = Math.imul(hash, 0x01000193);
   }
   

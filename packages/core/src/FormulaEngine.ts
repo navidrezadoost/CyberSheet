@@ -5,7 +5,7 @@
  * Supports dependency tracking, auto-recalculation, and Web Worker execution.
  */
 
-import type { Address, Cell, CellValue } from './types';
+import type { Address, Cell, CellValue, RichTextValue } from './types';
 import type { Worksheet } from './worksheet';
 
 import type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext } from './types/formula-types';
@@ -101,6 +101,22 @@ class DependencyGraph {
 
     return result;
   }
+}
+
+/**
+ * Helper: Convert ExtendedCellValue (which includes RichTextValue) to FormulaValue
+ */
+function cellValueToFormulaValue(value: CellValue | RichTextValue | undefined): FormulaValue {
+  if (value === undefined || value === null) return null;
+  
+  // Check if it's a RichTextValue (has 'runs' property)
+  if (typeof value === 'object' && 'runs' in value) {
+    // Extract plain text from rich text runs
+    return value.runs.map(run => run.text).join('');
+  }
+  
+  // Otherwise it's already a valid FormulaValue (string | number | boolean | null)
+  return value;
 }
 
 /**
@@ -540,7 +556,7 @@ export class FormulaEngine {
       return this.evaluate(cell.formula, { ...context, currentCell: addr });
     }
     
-    return cell.value;
+    return cellValueToFormulaValue(cell.value);
   }
 
   /**
@@ -564,7 +580,8 @@ export class FormulaEngine {
           if (cell.formula) {
             values.push(this.evaluate(cell.formula, { ...context, currentCell: addr }));
           } else {
-            values.push(cell.value);
+            // Convert ExtendedCellValue to FormulaValue (handles RichTextValue)
+            values.push(cellValueToFormulaValue(cell.value));
           }
         } else {
           values.push(null);
