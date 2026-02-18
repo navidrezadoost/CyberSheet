@@ -348,8 +348,9 @@ export class FormulaEngine {
       if (char === '(') depth++;
       if (char === ')') depth--;
       
-      // Only extract at top level (depth 0)
-      if (depth === 0 && !inString) {
+      // Extract chains at any depth (not just top level)
+      // This allows chains inside parentheses: (A1.Price * 100)
+      if (!inString) {
         const match = this.tryMatchChainAt(expr, i);
         if (match) {
           chains.push(match);
@@ -600,21 +601,15 @@ export class FormulaEngine {
     // Step 1: Extract all member chain substrings at top level
     const chains = this.extractMemberChains(expr);
     
-    console.log('[evaluateWithTokens] Chains extracted:', chains);
-    
     // If no chains found (shouldn't happen if detection worked), fall back to cascade
     if (chains.length === 0) {
-      console.log('[evaluateWithTokens] No chains, using cascade');
       return this.evaluateExpression(expr, context);
     }
-    
-    console.log('[evaluateWithTokens] Processing', chains.length, 'chains');
     
     // Step 2: Evaluate each chain sequentially
     // CRITICAL: Short-circuit on first error (Excel semantics)
     const evaluatedChains: Array<{ match: MemberChainMatch; value: FormulaValue }> = [];
     for (const chain of chains) {
-      console.log('[evaluateWithTokens] Evaluating chain:', chain);
       const result = this.evaluateChain(chain.parsed, context);
       
       // If chain evaluation produces error, short-circuit immediately
@@ -641,9 +636,6 @@ export class FormulaEngine {
       // Convert value to formula string representation
       const replacement = this.valueToFormulaString(value);
       
-      // DEBUG: Log substitution for debugging null coercion
-      // console.log(`[Tokenization] Replacing "${expr.slice(match.startIndex, match.endIndex)}" → "${replacement}"`);
-      
       // Replace by index (handles duplicate chains correctly)
       simplified =
         simplified.slice(0, match.startIndex) +
@@ -651,13 +643,9 @@ export class FormulaEngine {
         simplified.slice(match.endIndex);
     }
     
-    // DEBUG: Log final simplified formula before cascade
-    // console.log(`[Tokenization] Simplified formula: "${simplified}"`);
-    
     // Step 4: Pass simplified expression to cascade
     // Cascade handles operators, functions, precedence
     const cascadeResult = this.evaluateExpression(simplified, context);
-    // console.log(`[Tokenization] Cascade result: ${JSON.stringify(cascadeResult)}, type: ${typeof cascadeResult}`);
     return cascadeResult;
   }
 
@@ -731,9 +719,27 @@ export class FormulaEngine {
       }
     }
 
-    // String literal
-    if (expr.startsWith('"') && expr.endsWith('"')) {
-      return expr.slice(1, -1);
+    // String literal - properly parse to handle operators outside quotes
+    // Must check if the entire expression is a single string, not just starts/ends with quotes
+    if (expr.startsWith('"')) {
+      let i = 1;
+      while (i < expr.length) {
+        if (expr[i] === '"') {
+          // Check if this is an escaped quote (doubled: "")
+          if (i + 1 < expr.length && expr[i + 1] === '"') {
+            i += 2; // Skip escaped quote pair
+            continue;
+          }
+          // Found closing quote - check if it's at the end
+          if (i === expr.length - 1) {
+            // This is a complete string literal
+            return expr.slice(1, -1).replace(/""/g, '"'); // Unescape doubled quotes
+          }
+          // Closing quote not at end - not a simple string literal, has operators
+          break;
+        }
+        i++;
+      }
     }
 
     // Error literal (#DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #NULL!, #GETTING_DATA)
@@ -841,16 +847,19 @@ export class FormulaEngine {
     // Week 2: Member access detection (field dereference on entities)
     // Checked AFTER unary, BEFORE binary operators (postfix operator with high precedence)
     // Phase 1: Pattern detection only (stub implementation)
+    // IMPORTANT: Only check if there are periods/brackets outside of string literals
+    
+    const hasMemberAccessOutsideStrings = this.hasMemberAccessMarkers(expr);
     
     // Chained member access (future-proofing for Week 3+)
     // Example: A1.Stock.Price (Week 2: not supported, returns #VALUE!)
-    if (this.looksLikeChainedMemberExpression(expr)) {
+    if (hasMemberAccessOutsideStrings && this.looksLikeChainedMemberExpression(expr)) {
       return this.evaluateChainedMemberExpressionStub(expr, context);
     }
 
     // Dot notation member access
     // Example: A1.Price, B2.Ticker
-    if (this.looksLikeDotMemberExpression(expr)) {
+    if (hasMemberAccessOutsideStrings && this.looksLikeDotMemberExpression(expr)) {
       return this.evaluateDotMemberExpressionStub(expr, context);
     }
 
@@ -988,20 +997,34 @@ export class FormulaEngine {
   }
 
   /**
-   * Splits expression by operator (respecting parentheses)
+   * Splits expression by operator (respecting parentheses and string literals)
    */
   private splitByOperator(expr: string, op: string): string[] {
     let depth = 0;
+    let inString = false;
     let lastSplit = 0;
     const parts: string[] = [];
 
     for (let i = 0; i < expr.length; i++) {
-      if (expr[i] === '(') depth++;
-      if (expr[i] === ')') depth--;
+      // Track string literal boundaries
+      if (expr[i] === '"') {
+        // Check if this is an escaped quote
+        if (inString && i + 1 < expr.length && expr[i + 1] === '"') {
+          i++; // Skip the escaped quote pair
+          continue;
+        }
+        inString = !inString;
+      }
       
-      if (depth === 0 && expr.slice(i, i + op.length) === op) {
-        parts.push(expr.slice(lastSplit, i).trim());
-        lastSplit = i + op.length;
+      // Only track depth and split outside of string literals
+      if (!inString) {
+        if (expr[i] === '(') depth++;
+        if (expr[i] === ')') depth--;
+        
+        if (depth === 0 && expr.slice(i, i + op.length) === op) {
+          parts.push(expr.slice(lastSplit, i).trim());
+          lastSplit = i + op.length;
+        }
       }
     }
 
@@ -1176,6 +1199,30 @@ export class FormulaEngine {
    * Phase 1: Structural insertion only (returns stub errors)
    * Phase 2+: Will implement actual field dereference logic
    */
+
+  /**
+   * Check if expression has member access markers (. or [) outside of string literals
+   * Used to avoid false positives when strings contain periods (e.g., "D.C.")
+   */
+  private hasMemberAccessMarkers(expr: string): boolean {
+    let inString = false;
+    for (let i = 0; i < expr.length; i++) {
+      if (expr[i] === '"') {
+        // Check if this is an escaped quote
+        if (inString && i + 1 < expr.length && expr[i + 1] === '"') {
+          i++; // Skip the escaped quote pair
+          continue;
+        }
+        inString = !inString;
+      }
+      
+      // Check for member access markers outside strings
+      if (!inString && (expr[i] === '.' || expr[i] === '[')) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /**
    * Detects chained member access pattern (A1.Stock.Price)
