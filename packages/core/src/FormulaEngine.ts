@@ -24,6 +24,9 @@ import { ErrorStrategyDispatcher } from './ErrorStrategyDispatcher';
 // Import unified metadata (single source of truth)
 import { ALL_FUNCTION_METADATA } from './functions/metadata';
 
+// Week 3 Phase 2: External data type providers
+import { ProviderRegistry } from './providers/ProviderRegistry';
+
 // Re-export types for backward compatibility
 export type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext };
 
@@ -165,6 +168,9 @@ export class FormulaEngine {
   private calculating = new Set<string>();
   private errorDispatcher = new ErrorStrategyDispatcher();
   
+  // Week 3 Phase 2: External data type provider registry
+  private providerRegistry = new ProviderRegistry();
+  
   // Week 3: Hybrid tokenization feature flag
   // Phase 1: Testing with flag ON for validation
   private readonly ENABLE_ENTITY_TOKENIZATION = true;
@@ -184,10 +190,20 @@ export class FormulaEngine {
   }
 
   /**
+   * Week 3 Phase 2: Get provider registry for external data types
+   */
+  get providers() {
+    return this.providerRegistry;
+  }
+
+  /**
    * Parses and evaluates a formula
    */
   evaluate(formula: string, context: FormulaContext): FormulaValue {
     const cellKey = `${context.currentCell.row}:${context.currentCell.col}`;
+    
+    // Week 3 Phase 2: Clear provider cache for fresh data each evaluation
+    this.providerRegistry.clearCache();
     
     // Detect circular reference
     if (this.calculating.has(cellKey)) {
@@ -399,9 +415,10 @@ export class FormulaEngine {
       break;
     }
     
-    // Only return if 2+ accesses OR this chain used bracket notation
-    // CRITICAL: hasBracket tracks local usage, not formula-wide
-    if (accessCount >= 2 || hasBracket) {
+    // Week 3 Phase 2: Extract all chains (including single-level) for provider support
+    // Previous: Only extracted 2+ accesses OR bracket notation
+    // Now: Extract any chain with at least 1 access
+    if (accessCount >= 1) {
       const chainStr = remaining.slice(0, chainLength);
       return {
         original: chainStr,
@@ -514,17 +531,40 @@ export class FormulaEngine {
       
       const entity = current as EntityValue;
       
-      // Check if field exists
-      if (!entity.fields || typeof entity.fields !== 'object') {
-        return new Error('#VALUE!'); // Malformed entity
-      }
+      // Week 3 Phase 2: Check external provider first
+      // Providers supply data for known entity types (stock, geography, etc.)
+      let fieldValue: FormulaValue;
       
-      if (!(property in entity.fields)) {
-        return new Error('#FIELD!');
+      if (entity.type && this.providerRegistry.hasProvider(entity.type)) {
+        // Get value from external provider (cache-backed, synchronous)
+        // Entity may have dynamic properties (id, symbol, code) not in EntityValue type
+        const entityId = (entity as any).id || (entity as any).symbol || (entity as any).code;
+        fieldValue = this.providerRegistry.getValue(
+          entity.type,
+          entityId,
+          property,
+          entity,
+          context
+        );
+        
+        // If provider returns error, propagate it
+        if (fieldValue instanceof Error) {
+          return fieldValue;
+        }
+      } else {
+        // Fallback: Use local entity.fields (static data)
+        // Check if field exists
+        if (!entity.fields || typeof entity.fields !== 'object') {
+          return new Error('#VALUE!'); // Malformed entity
+        }
+        
+        if (!(property in entity.fields)) {
+          return new Error('#FIELD!');
+        }
+        
+        // Get field value from local data
+        fieldValue = entity.fields[property];
       }
-      
-      // Get field value
-      const fieldValue = entity.fields[property];
       
       // CRITICAL: NULL SHORT-CIRCUIT
       // If field is null, return null immediately, don't continue chain
@@ -560,15 +600,21 @@ export class FormulaEngine {
     // Step 1: Extract all member chain substrings at top level
     const chains = this.extractMemberChains(expr);
     
+    console.log('[evaluateWithTokens] Chains extracted:', chains);
+    
     // If no chains found (shouldn't happen if detection worked), fall back to cascade
     if (chains.length === 0) {
+      console.log('[evaluateWithTokens] No chains, using cascade');
       return this.evaluateExpression(expr, context);
     }
+    
+    console.log('[evaluateWithTokens] Processing', chains.length, 'chains');
     
     // Step 2: Evaluate each chain sequentially
     // CRITICAL: Short-circuit on first error (Excel semantics)
     const evaluatedChains: Array<{ match: MemberChainMatch; value: FormulaValue }> = [];
     for (const chain of chains) {
+      console.log('[evaluateWithTokens] Evaluating chain:', chain);
       const result = this.evaluateChain(chain.parsed, context);
       
       // If chain evaluation produces error, short-circuit immediately
