@@ -8,6 +8,10 @@
 import type { Address, Cell, CellValue, RichTextValue } from './types';
 import type { Worksheet } from './worksheet';
 
+// Week 1: Entity types for structured data
+import type { EntityValue } from './types/entity-types';
+import { isEntityValue, getDisplayValue } from './types/entity-types';
+
 import type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext } from './types/formula-types';
 import { ErrorStrategy } from './types/formula-types';
 
@@ -104,15 +108,32 @@ class DependencyGraph {
 }
 
 /**
- * Helper: Convert ExtendedCellValue (which includes RichTextValue) to FormulaValue
+ * Helper: Convert ExtendedCellValue to FormulaValue
+ * 
+ * Handles three extended value types:
+ * - RichTextValue → plain text (concatenate runs)
+ * - EntityValue → display value (Week 1: entities behave like their display)
+ * - Others → pass through
+ * 
+ * Week 1: Core semantics
+ * - Entity in arithmetic uses display value
+ * - Entity in comparison uses display value
+ * - Entity in text concat uses display value
+ * - No field access support yet (Week 2+)
  */
-function cellValueToFormulaValue(value: CellValue | RichTextValue | undefined): FormulaValue {
+function cellValueToFormulaValue(value: CellValue | RichTextValue | EntityValue | undefined): FormulaValue {
   if (value === undefined || value === null) return null;
   
   // Check if it's a RichTextValue (has 'runs' property)
   if (typeof value === 'object' && 'runs' in value) {
     // Extract plain text from rich text runs
     return value.runs.map(run => run.text).join('');
+  }
+  
+  // Check if it's an EntityValue (has 'kind' === 'entity')
+  // Week 1: Use display value for all formula operations
+  if (isEntityValue(value)) {
+    return value.display;
   }
   
   // Otherwise it's already a valid FormulaValue (string | number | boolean | null)
@@ -302,6 +323,28 @@ export class FormulaEngine {
     // Unary plus (e.g., +5, +val) - just return the value
     if (expr.startsWith('+') && expr.length > 1) {
       return this.evaluateExpression(expr.substring(1), context);
+    }
+
+    // Week 2: Member access detection (field dereference on entities)
+    // Checked AFTER unary, BEFORE binary operators (postfix operator with high precedence)
+    // Phase 1: Pattern detection only (stub implementation)
+    
+    // Chained member access (future-proofing for Week 3+)
+    // Example: A1.Stock.Price (Week 2: not supported, returns #VALUE!)
+    if (this.looksLikeChainedMemberExpression(expr)) {
+      return this.evaluateChainedMemberExpressionStub(expr, context);
+    }
+
+    // Dot notation member access
+    // Example: A1.Price, B2.Ticker
+    if (this.looksLikeDotMemberExpression(expr)) {
+      return this.evaluateDotMemberExpressionStub(expr, context);
+    }
+
+    // Bracket notation member access
+    // Example: A1["Market Cap"], B2['Price']
+    if (this.looksLikeBracketMemberExpression(expr)) {
+      return this.evaluateBracketMemberExpressionStub(expr, context);
     }
 
     // Binary operations (check AFTER unary to handle expressions correctly)
@@ -611,6 +654,263 @@ export class FormulaEngine {
     const row = parseInt(rowStr, 10);
 
     return { row, col };
+  }
+
+  /**
+   * Week 2 - Phase 1: Member expression pattern detection
+   * 
+   * These methods detect member access patterns but do NOT implement evaluation.
+   * Phase 1: Structural insertion only (returns stub errors)
+   * Phase 2+: Will implement actual field dereference logic
+   */
+
+  /**
+   * Detects chained member access pattern (A1.Stock.Price)
+   * Week 2: Not supported, returns #VALUE! to indicate recognized but unsupported syntax
+   */
+  private looksLikeChainedMemberExpression(expr: string): boolean {
+    // Pattern: base.field.moreFields
+    // Example: A1.Stock.Price, B1.Geography.Population.Total
+    return /^(.+)\.([A-Z_][A-Z0-9_]*)\.(.+)$/i.test(expr);
+  }
+
+  /**
+   * Detects dot notation member access pattern (A1.Price)
+   */
+  private looksLikeDotMemberExpression(expr: string): boolean {
+    // Pattern: base.field
+    // Example: A1.Price, SUM(A1:A5).Value
+    // Anchored with $ to avoid matching A1.Price+5
+    // Use NON-GREEDY match to avoid capturing operators
+    const match = expr.match(/^(.+?)\.([A-Z_][A-Z0-9_]*)$/i);
+    if (!match) return false;
+    
+    const [, base, field] = match;
+    
+    // Additional validation: Check if base contains operators at depth 0
+    // If it does, this is a complex expression, not a simple member access
+    // The binary operator cascade should handle it first
+    const hasOperatorAtDepth0 = this.hasOperatorAtTopLevel(base);
+    
+    return !hasOperatorAtDepth0;
+  }
+
+  /**
+   * Check if expression contains binary operators at depth 0 (not in parens/brackets)
+   */
+  private hasOperatorAtTopLevel(expr: string): boolean {
+    let depth = 0;
+    const operators = ['+', '-', '*', '/', '^', '=', '<', '>', '&'];
+    
+    for (let i = 0; i < expr.length; i++) {
+      if (expr[i] === '(' || expr[i] === '[') depth++;
+      if (expr[i] === ')' || expr[i] === ']') depth--;
+      
+      if (depth === 0) {
+        // Check for multi-char operators
+        if (expr.slice(i, i + 2) === '<>' || expr.slice(i, i + 2) === '<=' || expr.slice(i, i + 2) === '>=') {
+          return true;
+        }
+        // Check for single-char operators
+        if (operators.includes(expr[i])) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Detects bracket notation member access pattern (A1["Market Cap"])
+   */
+  private looksLikeBracketMemberExpression(expr: string): boolean {
+    // Pattern: base["field"] or base['field']
+    // Example: A1["Market Cap"], B2['Price']
+    // Supports spaces in field names
+    // Use NON-GREEDY match to avoid capturing operators
+    const match = expr.match(/^(.+?)\[\s*['"](.+)['"]\s*\]$/);
+    if (!match) return false;
+    
+    const [, base] = match;
+    
+    // Check if base contains operators at depth 0
+    const hasOperatorAtDepth0 = this.hasOperatorAtTopLevel(base);
+    
+    return !hasOperatorAtDepth0;
+  }
+
+  /**
+   * Stub: Evaluates chained member expression (not supported in Week 2)
+   * Phase 1: Returns #VALUE! error
+   * Phase 2+: Will implement nested entity support
+   */
+  private evaluateChainedMemberExpressionStub(expr: string, context: FormulaContext): FormulaValue {
+    // Week 2 Phase 1: Chained member access not supported
+    // Returning #VALUE! (not #NAME?) indicates recognized but unsupported syntax
+    return new Error('#VALUE!');
+  }
+
+  /**
+   * Stub: Evaluates dot notation member expression
+   * Phase 1: Returns #NAME? error (stub)
+   * Phase 2: Will implement field dereference logic
+   */
+  private evaluateDotMemberExpressionStub(expr: string, context: FormulaContext): FormulaValue {
+    // Week 2 Phase 2: Implement dot notation field access
+    // Pattern: base.field (e.g., A1.Price)
+    // Trim whitespace from expr first (from splitByOperator)
+    expr = expr.trim();
+    
+    const match = expr.match(/^(.+)\.([A-Z_][A-Z0-9_]*)$/i);
+    
+    if (!match) {
+      // Pattern should have matched (called from detection), but safety check
+      return new Error('#NAME?');
+    }
+    
+    const [, baseExpr, fieldName] = match;
+    
+    // Step 1: Get base value - CRITICAL: Need raw value, not unwrapped
+    // For cell references, we need the actual EntityValue, not its display
+    let base: FormulaValue;
+    
+    // Check if base is a simple cell reference
+    if (/^[A-Z]+\d+$/i.test(baseExpr)) {
+      // Direct cell reference - get raw value to preserve EntityValue
+      const addr = this.parseCellReference(baseExpr);
+      this.dependencyGraph.addDependency(context.currentCell, addr);
+      const cell = context.worksheet.getCell(addr);
+      
+      if (!cell) {
+        base = null;
+      } else if (cell.formula) {
+        // If cell has formula, evaluate it
+        base = this.evaluate(cell.formula, { ...context, currentCell: addr });
+      } else {
+        // Get raw value WITHOUT cellValueToFormulaValue unwrapping
+        // This preserves EntityValue for member access
+        base = cell.value as FormulaValue;
+      }
+    } else {
+      // Complex expression - evaluate recursively
+      base = this.evaluateExpression(baseExpr, context);
+    }
+    
+    // Step 2: Error propagation - if base is error, propagate immediately
+    if (base instanceof Error) {
+      return base;
+    }
+    
+    // Step 3: Null check - #REF! error
+    if (base === null || base === undefined) {
+      return new Error('#REF!');
+    }
+    
+    // Step 4: Entity type check - #VALUE! if not entity
+    if (!isEntityValue(base)) {
+      return new Error('#VALUE!');
+    }
+    
+    // Step 5: Field existence check - #FIELD! if missing
+    const entity = base as EntityValue;
+    if (!entity.fields || typeof entity.fields !== 'object') {
+      return new Error('#VALUE!'); // Malformed entity
+    }
+    
+    // Check if field exists (case-sensitive)
+    if (!(fieldName in entity.fields)) {
+      return new Error('#FIELD!');
+    }
+    
+    // Step 6: Return field value (primitives only: number | string | boolean | null)
+    // CRITICAL: Must return field value, NOT EntityValue
+    const fieldValue = entity.fields[fieldName];
+    
+    // Field value should be CellValue (number | string | boolean | null)
+    // Never return EntityValue in Week 2
+    return fieldValue as FormulaValue;
+  }
+
+  /**
+   * Stub: Evaluates bracket notation member expression
+   * Phase 1: Returns #NAME? error (stub)
+   * Phase 2: Will implement field dereference logic
+   */
+  private evaluateBracketMemberExpressionStub(expr: string, context: FormulaContext): FormulaValue {
+    // Week 2 Phase 2 Step D: Implement bracket notation field access
+    // Pattern: base["field"] or base['field']
+    // Trim whitespace from expr first (from splitByOperator)
+    expr = expr.trim();
+    
+    const match = expr.match(/^(.+?)\[\s*['"](.+)['"]\s*\]$/);
+    
+    if (!match) {
+      // Pattern should have matched (called from detection), but safety check
+      return new Error('#NAME?');
+    }
+    
+    const [, baseExpr, fieldName] = match;
+    
+    // Step 1: Get base value - CRITICAL: Need raw value, not unwrapped
+    // For cell references, we need the actual EntityValue, not its display
+    let base: FormulaValue;
+    
+    // Check if base is a simple cell reference
+    if (/^[A-Z]+\d+$/i.test(baseExpr)) {
+      // Direct cell reference - get raw value to preserve EntityValue
+      const addr = this.parseCellReference(baseExpr);
+      this.dependencyGraph.addDependency(context.currentCell, addr);
+      const cell = context.worksheet.getCell(addr);
+      
+      if (!cell) {
+        base = null;
+      } else if (cell.formula) {
+        // If cell has formula, evaluate it
+        base = this.evaluate(cell.formula, { ...context, currentCell: addr });
+      } else {
+        // Get raw value WITHOUT cellValueToFormulaValue unwrapping
+        // This preserves EntityValue for member access
+        base = cell.value as FormulaValue;
+      }
+    } else {
+      // Complex expression - evaluate recursively
+      base = this.evaluateExpression(baseExpr, context);
+    }
+    
+    // Step 2: Error propagation - if base is error, propagate immediately
+    if (base instanceof Error) {
+      return base;
+    }
+    
+    // Step 3: Null check - #REF! error
+    if (base === null || base === undefined) {
+      return new Error('#REF!');
+    }
+    
+    // Step 4: Entity type check - #VALUE! if not entity
+    if (!isEntityValue(base)) {
+      return new Error('#VALUE!');
+    }
+    
+    // Step 5: Field existence check - #FIELD! if missing
+    const entity = base as EntityValue;
+    if (!entity.fields || typeof entity.fields !== 'object') {
+      return new Error('#VALUE!'); // Malformed entity
+    }
+    
+    // Check if field exists (case-sensitive)
+    if (!(fieldName in entity.fields)) {
+      return new Error('#FIELD!');
+    }
+    
+    // Step 6: Return field value (primitives only: number | string | boolean | null)
+    // CRITICAL: Must return field value, NOT EntityValue
+    const fieldValue = entity.fields[fieldName];
+    
+    // Field value should be CellValue (number | string | boolean | null)
+    // Never return EntityValue in Week 2
+    return fieldValue as FormulaValue;
   }
 
   /**

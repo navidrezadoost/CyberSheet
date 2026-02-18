@@ -12,7 +12,7 @@
  * This is not UX plumbing. This is the final identity stress test.
  */
 
-import type { Address, CellValue, CellStyle } from './types';
+import type { Address, CellValue, ExtendedCellValue, CellStyle } from './types';
 import type { Worksheet } from './worksheet';
 
 /**
@@ -48,7 +48,7 @@ export interface Command {
  */
 interface CellSnapshot {
   addr: Address;
-  value: CellValue;
+  value: ExtendedCellValue;
   style: CellStyle | undefined;  // Canonical pointer (frozen, interned)
 }
 
@@ -58,10 +58,10 @@ interface CellSnapshot {
 export class SetValueCommand implements Command {
   private worksheet: Worksheet;
   private addr: Address;
-  private previousValue: CellValue;
-  private newValue: CellValue;
+  private previousValue: ExtendedCellValue;
+  private newValue: ExtendedCellValue;
   
-  constructor(worksheet: Worksheet, addr: Address, newValue: CellValue) {
+  constructor(worksheet: Worksheet, addr: Address, newValue: ExtendedCellValue) {
     this.worksheet = worksheet;
     this.addr = addr;
     this.previousValue = worksheet.getCellValue(addr);

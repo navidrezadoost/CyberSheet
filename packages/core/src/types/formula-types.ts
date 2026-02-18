@@ -6,18 +6,20 @@
  */
 
 import type { Address, Cell, CellValue } from '../types';
+import type { EntityValue } from '../types/entity-types';
 import type { Worksheet } from '../worksheet';
 
 /**
  * FormulaValue represents any value that can be computed or stored in a formula
- * Supports scalars, arrays (1D/2D for Excel 365 dynamic arrays), errors, and thunks (Phase 6: LAZY_EVALUATION)
+ * Supports scalars, arrays (1D/2D for Excel 365 dynamic arrays), errors, thunks (Phase 6: LAZY_EVALUATION), and entities (Week 1: DATA_TYPES)
  */
 export type FormulaValue = 
   | number 
   | string 
   | boolean 
   | null 
-  | Error 
+  | Error
+  | EntityValue  // Week 1: Entity values
   | FormulaValue[] 
   | FormulaValue[][]
   | (() => FormulaValue); // Thunk for lazy evaluation (Phase 6)

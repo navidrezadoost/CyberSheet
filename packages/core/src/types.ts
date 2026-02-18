@@ -7,6 +7,9 @@ export type CellValue = string | number | boolean | null;
 // Import Excel color types
 import type { ExcelColorSpec } from './ExcelColor';
 
+// Import entity types (Week 1: Data Types Entity Framework)
+import type { EntityValue } from './types/entity-types';
+
 // ============================================================================
 // BORDER STYLES (Complete Excel parity)
 // ============================================================================
@@ -151,9 +154,14 @@ export interface RichTextValue {
 }
 
 /**
- * Extended cell value supporting rich text
+ * Extended cell value supporting rich text and entities
+ * 
+ * Week 1 (Feb 2026): Added EntityValue for structured data types
+ * - Entities have display value (shown in cell)
+ * - Entities have named fields (accessible via dot notation in Week 2+)
+ * - Backward compatible: existing code sees display value in formulas
  */
-export type ExtendedCellValue = CellValue | RichTextValue;
+export type ExtendedCellValue = CellValue | RichTextValue | EntityValue;
 
 // ============================================================================
 // EXTENDED CELL STYLE (100% Excel parity)

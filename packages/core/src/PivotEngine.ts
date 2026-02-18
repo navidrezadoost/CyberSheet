@@ -4,7 +4,7 @@
  * Zero-dependency pivot table engine with aggregation and grouping
  */
 
-import type { Address, CellValue } from './types';
+import type { Address, CellValue, ExtendedCellValue } from './types';
 import type { Worksheet } from './worksheet';
 
 export type AggregationType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'median' | 'stdev';
@@ -77,11 +77,11 @@ export class PivotEngine {
   /**
    * Extract data from source range
    */
-  private extractSourceData(range: { start: Address; end: Address }): CellValue[][] {
-    const data: CellValue[][] = [];
+  private extractSourceData(range: { start: Address; end: Address }): ExtendedCellValue[][] {
+    const data: ExtendedCellValue[][] = [];
     
     for (let row = range.start.row; row <= range.end.row; row++) {
-      const rowData: CellValue[] = [];
+      const rowData: ExtendedCellValue[] = [];
       for (let col = range.start.col; col <= range.end.col; col++) {
         const cell = this.worksheet.getCell({ row, col });
         rowData.push(cell?.value ?? null);
@@ -95,8 +95,8 @@ export class PivotEngine {
   /**
    * Build dimension keys for grouping
    */
-  private buildDimensions(data: CellValue[][], fields: PivotField[]): Map<string, CellValue[][]> {
-    const dimensions = new Map<string, CellValue[][]>();
+  private buildDimensions(data: ExtendedCellValue[][], fields: PivotField[]): Map<string, ExtendedCellValue[][]> {
+    const dimensions = new Map<string, ExtendedCellValue[][]>();
     
     // Skip header row
     for (let i = 1; i < data.length; i++) {
@@ -115,7 +115,7 @@ export class PivotEngine {
   /**
    * Build headers from dimension keys
    */
-  private buildHeaders(dimensions: Map<string, CellValue[][]>): string[][] {
+  private buildHeaders(dimensions: Map<string, ExtendedCellValue[][]>): string[][] {
     const keys = Array.from(dimensions.keys());
     return keys.map(key => key.split('|'));
   }
@@ -124,9 +124,9 @@ export class PivotEngine {
    * Aggregate data into pivot cells
    */
   private aggregateData(
-    sourceData: CellValue[][],
-    rowDimensions: Map<string, CellValue[][]>,
-    colDimensions: Map<string, CellValue[][]>,
+    sourceData: ExtendedCellValue[][],
+    rowDimensions: Map<string, ExtendedCellValue[][]>,
+    colDimensions: Map<string, ExtendedCellValue[][]>,
     valueFields: PivotConfig['values']
   ): PivotCell[][] {
     const result: PivotCell[][] = [];
@@ -166,7 +166,7 @@ export class PivotEngine {
   /**
    * Find intersection of two data sets
    */
-  private findIntersection(data1: CellValue[][], data2: CellValue[][]): CellValue[][] {
+  private findIntersection(data1: ExtendedCellValue[][], data2: ExtendedCellValue[][]): ExtendedCellValue[][] {
     return data1.filter(row1 => 
       data2.some(row2 => this.rowsEqual(row1, row2))
     );
@@ -175,7 +175,7 @@ export class PivotEngine {
   /**
    * Check if two rows are equal
    */
-  private rowsEqual(row1: CellValue[], row2: CellValue[]): boolean {
+  private rowsEqual(row1: ExtendedCellValue[], row2: ExtendedCellValue[]): boolean {
     if (row1.length !== row2.length) return false;
     return row1.every((val, idx) => val === row2[idx]);
   }
