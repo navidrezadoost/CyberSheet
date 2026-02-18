@@ -644,6 +644,102 @@ describe('Week 2: Additional Precedence Validation (10 Cases)', () => {
   });
 });
 
+describe('Week 3: Null Coercion in Mixed Expressions', () => {
+  let engine: FormulaEngine;
+  let sheet: Worksheet;
+
+  beforeEach(() => {
+    engine = new FormulaEngine();
+    sheet = new Worksheet('TestSheet', 100, 26);
+
+    // Set up entity with null fields for all tests
+    const stockEntity = createEntityValue('stock', 150, {
+      Price: 150,
+      Ticker: 'AAPL',
+      Name: 'Apple Inc.',
+      'PE Ratio': null, // Null field for coercion tests
+      Volume: 1000000,
+    });
+    sheet.setCellValue({ row: 1, col: 1 }, stockEntity);
+  });
+
+  const evalFormula = (formula: string) => {
+    return engine.evaluate(formula, { worksheet: sheet, currentCell: { row: 1, col: 2 } });
+  };
+
+  // Concatenation context: null → 0 (displays as "0")
+  test('[NC1] Null field concatenated with string (suffix)', () => {
+    const result = evalFormula('=A1["PE Ratio"] & "x"');
+    expect(result).toBe('0x'); // 0 & "x" → "0x" (Excel semantics)
+  });
+
+  test('[NC2] Null field concatenated with string (prefix)', () => {
+    const result = evalFormula('="x" & A1["PE Ratio"]');
+    expect(result).toBe('x0'); // "x" & 0 → "x0" (Excel semantics)
+  });
+
+  test('[NC3] Null field concatenated with null field', () => {
+    const stockEntity2 = createEntityValue('stock', 200, {
+      Price: 200,
+      'PE Ratio': null,
+    });
+    sheet.setCellValue({ row: 1, col: 2 }, stockEntity2);
+    
+    const result = evalFormula('=A1["PE Ratio"] & B1["PE Ratio"]');
+    expect(result).toBe('00'); // 0 & 0 → "00" (Excel semantics)
+  });
+
+  // Arithmetic context: null → 0
+  test('[NC4] Null field in addition (suffix)', () => {
+    const result = evalFormula('=A1["PE Ratio"] + 10');
+    expect(result).toBe(10); // 0 + 10 → 10
+  });
+
+  test('[NC5] Null field in addition (prefix)', () => {
+    const result = evalFormula('=10 + A1["PE Ratio"]');
+    expect(result).toBe(10); // 10 + 0 → 10
+  });
+
+  test('[NC6] Null field in multiplication', () => {
+    const result = evalFormula('=A1["PE Ratio"] * 5');
+    expect(result).toBe(0); // 0 * 5 → 0
+  });
+
+  test('[NC7] Null field in subtraction', () => {
+    const result = evalFormula('=100 - A1["PE Ratio"]');
+    expect(result).toBe(100); // 100 - 0 → 100
+  });
+
+  test('[NC8] Null field in division (as numerator)', () => {
+    const result = evalFormula('=A1["PE Ratio"] / 10');
+    expect(result).toBe(0); // 0 / 10 → 0
+  });
+
+  // Comparison context: null → 0 for numeric, "" for string
+  test('[NC9] Null field compared to zero', () => {
+    const result = evalFormula('=A1["PE Ratio"] = 0');
+    expect(result).toBe(true); // null coerced to 0 in comparison
+  });
+
+  test('[NC10] Null field compared to empty string', () => {
+    const result = evalFormula('=A1["PE Ratio"] = ""');
+    // Excel behavior: 0 <> "" (different types), so FALSE
+    // In Excel, numbers and strings are distinct types in comparisons
+    expect(result).toBe(false);
+  });
+
+  // Mixed expression: verify tokenization preserves cascade coercion
+  test('[NC11] Null field in complex expression', () => {
+    const result = evalFormula('=A1.Price + A1["PE Ratio"] * 2');
+    expect(result).toBe(150); // 150 + (0 * 2) → 150
+  });
+
+  test('[NC12] Null field concatenated with numeric result', () => {
+    const result = evalFormula('=A1["PE Ratio"] & (A1.Price + 10)');
+    expect(result).toBe('0160'); // 0 & "160" → "0160" (Excel semantics)
+  });
+});
+
 /**
  * UNSUPPORTED SCENARIOS (Week 2 Constraints)
  * 

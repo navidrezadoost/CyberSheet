@@ -209,32 +209,32 @@ export function compareValues(a: FormulaValue, b: FormulaValue): number | Error 
   if (a instanceof Error) return a;
   if (b instanceof Error) return b;
 
-  // Handle null
-  const aNum = a === null ? 0 : a;
-  const bNum = b === null ? 0 : b;
+  // Handle null - Excel treats null as 0  
+  const aVal = a === null ? 0 : a;
+  const bVal = b === null ? 0 : b;
 
   // Both numbers
-  if (typeof aNum === 'number' && typeof bNum === 'number') {
-    if (isNaN(aNum as number) || isNaN(bNum as number)) {
+  if (typeof aVal === 'number' && typeof bVal === 'number') {
+    if (isNaN(aVal as number) || isNaN(bVal as number)) {
       return new Error('#VALUE!');
     }
-    return (aNum as number) < (bNum as number) ? -1 : (aNum as number) > (bNum as number) ? 1 : 0;
+    return (aVal as number) < (bVal as number) ? -1 : (aVal as number) > (bVal as number) ? 1 : 0;
   }
 
   // Both strings (case-insensitive)
-  if (typeof a === 'string' && typeof b === 'string') {
-    const aUpper = a.toUpperCase();
-    const bUpper = b.toUpperCase();
+  if (typeof aVal === 'string' && typeof bVal === 'string') {
+    const aUpper = aVal.toUpperCase();
+    const bUpper = bVal.toUpperCase();
     return aUpper < bUpper ? -1 : aUpper > bUpper ? 1 : 0;
   }
 
   // Both booleans
-  if (typeof a === 'boolean' && typeof b === 'boolean') {
-    return (a ? 1 : 0) - (b ? 1 : 0);
+  if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+    return (aVal ? 1 : 0) - (bVal ? 1 : 0);
   }
 
   // Mixed types: numbers < strings < booleans
-  const aType = typeof a === 'number' ? 0 : typeof a === 'string' ? 1 : 2;
-  const bType = typeof b === 'number' ? 0 : typeof b === 'string' ? 1 : 2;
+  const aType = typeof aVal === 'number' ? 0 : typeof aVal === 'string' ? 1 : 2;
+  const bType = typeof bVal === 'number' ? 0 : typeof bVal === 'string' ? 1 : 2;
   return aType < bType ? -1 : aType > bType ? 1 : 0;
 }
