@@ -8,3 +8,6 @@ export { IDataTypeProvider } from './IDataTypeProvider';
 export { ProviderRegistry } from './ProviderRegistry';
 export { StockProvider } from './StockProvider';
 export { GeographyProvider } from './GeographyProvider';
+
+// Async provider resolution primitives (PR #1)
+export { ProviderResolutionContext, ProviderRef, ProviderError, MockBatchResolver, BatchResolver } from './ProviderResolution';
