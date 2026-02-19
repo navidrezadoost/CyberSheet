@@ -11,6 +11,7 @@
  */
 
 import type { ContextAwareFormulaFunction, FormulaFunction, FormulaContext } from '../../types/formula-types';
+import type { RichTextValue } from '../../types';
 
 /**
  * ISFORMULA - Checks if a reference is to a cell containing a formula
@@ -160,7 +161,13 @@ export const CELL: ContextAwareFormulaFunction = (context: FormulaContext, infoT
         if (!cell) return '';
         
         // Return the actual value, not the formula
-        const value = cell.value;
+        let value = cell.value;
+        
+        // Convert RichTextValue to plain text
+        if (value && typeof value === 'object' && 'runs' in value) {
+          value = (value as RichTextValue).runs.map(run => run.text).join('');
+        }
+        
         if (typeof value === 'string' && value.startsWith('=')) {
           // This is a formula - we'd need to evaluate it
           // For now, return the formula string
@@ -177,6 +184,12 @@ export const CELL: ContextAwareFormulaFunction = (context: FormulaContext, infoT
         if (!cell || cell.value === undefined || cell.value === null || cell.value === '') {
           return 'b'; // blank
         }
+        
+        // Check for RichTextValue (always text)
+        if (typeof cell.value === 'object' && 'runs' in cell.value) {
+          return 'l'; // label (text)
+        }
+        
         if (typeof cell.value === 'number') {
           return 'v'; // value
         }

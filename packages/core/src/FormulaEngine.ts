@@ -5,8 +5,12 @@
  * Supports dependency tracking, auto-recalculation, and Web Worker execution.
  */
 
-import type { Address, Cell, CellValue } from './types';
+import type { Address, Cell, CellValue, RichTextValue } from './types';
 import type { Worksheet } from './worksheet';
+
+// Week 1: Entity types for structured data
+import type { EntityValue } from './types/entity-types';
+import { isEntityValue, getDisplayValue } from './types/entity-types';
 
 import type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext } from './types/formula-types';
 import { ErrorStrategy } from './types/formula-types';
@@ -20,8 +24,27 @@ import { ErrorStrategyDispatcher } from './ErrorStrategyDispatcher';
 // Import unified metadata (single source of truth)
 import { ALL_FUNCTION_METADATA } from './functions/metadata';
 
+// Week 3 Phase 2: External data type providers
+import { ProviderRegistry } from './providers/ProviderRegistry';
+import { ProviderResolutionContext, ProviderRef, BatchResolver, ProviderError, BatchResolverOptions } from './providers';
+
 // Re-export types for backward compatibility
 export type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext };
+
+/**
+ * Week 3 Phase 1B: Token structures for member chain extraction
+ */
+interface MemberChain {
+  base: string;           // Cell reference: "A1"
+  properties: string[];   // Property path: ["Price", "Currency"]
+}
+
+interface MemberChainMatch {
+  original: string;        // Original text: "A1.Price.Currency"
+  startIndex: number;      // Position in formula
+  endIndex: number;        // End position (exclusive)
+  parsed: MemberChain;     // Tokenized structure
+}
 
 /**
  * Dependency graph for tracking cell dependencies
@@ -104,6 +127,39 @@ class DependencyGraph {
 }
 
 /**
+ * Helper: Convert ExtendedCellValue to FormulaValue
+ * 
+ * Handles three extended value types:
+ * - RichTextValue → plain text (concatenate runs)
+ * - EntityValue → display value (Week 1: entities behave like their display)
+ * - Others → pass through
+ * 
+ * Week 1: Core semantics
+ * - Entity in arithmetic uses display value
+ * - Entity in comparison uses display value
+ * - Entity in text concat uses display value
+ * - No field access support yet (Week 2+)
+ */
+function cellValueToFormulaValue(value: CellValue | RichTextValue | EntityValue | undefined): FormulaValue {
+  if (value === undefined || value === null) return null;
+  
+  // Check if it's a RichTextValue (has 'runs' property)
+  if (typeof value === 'object' && 'runs' in value) {
+    // Extract plain text from rich text runs
+    return value.runs.map(run => run.text).join('');
+  }
+  
+  // Check if it's an EntityValue (has 'kind' === 'entity')
+  // Week 1: Use display value for all formula operations
+  if (isEntityValue(value)) {
+    return value.display;
+  }
+  
+  // Otherwise it's already a valid FormulaValue (string | number | boolean | null)
+  return value;
+}
+
+/**
  * Formula parser and evaluator
  */
 export class FormulaEngine {
@@ -112,6 +168,13 @@ export class FormulaEngine {
   private dependencyGraph = new DependencyGraph();
   private calculating = new Set<string>();
   private errorDispatcher = new ErrorStrategyDispatcher();
+  
+  // Week 3 Phase 2: External data type provider registry
+  private providerRegistry = new ProviderRegistry();
+  
+  // Week 3: Hybrid tokenization feature flag
+  // Phase 1: Testing with flag ON for validation
+  private readonly ENABLE_ENTITY_TOKENIZATION = true;
 
   constructor() {
     // Wave 0 Day 4 - Phase 2.6: Registration Unification
@@ -128,11 +191,32 @@ export class FormulaEngine {
   }
 
   /**
+   * Week 3 Phase 2: Get provider registry for external data types
+   */
+  get providers() {
+    return this.providerRegistry;
+  }
+
+  /**
    * Parses and evaluates a formula
    */
   evaluate(formula: string, context: FormulaContext): FormulaValue {
     const cellKey = `${context.currentCell.row}:${context.currentCell.col}`;
     
+    // Week 3 Phase 2: Clear provider cache for fresh data each evaluation
+    this.providerRegistry.clearCache();
+    
+    // Delegate to internal evaluator (keeps a stable entry point for evaluateWithProviders)
+    return this.evaluateInternal(formula, context);
+  }
+
+  /**
+   * Internal synchronous evaluator that assumes provider cache is already prepared.
+   * Used by `evaluate` and `evaluateWithProviders` to avoid double-clearing provider cache.
+   */
+  private evaluateInternal(formula: string, context: FormulaContext): FormulaValue {
+    const cellKey = `${context.currentCell.row}:${context.currentCell.col}`;
+
     // Detect circular reference
     if (this.calculating.has(cellKey)) {
       return new Error('#CIRC!');
@@ -143,6 +227,13 @@ export class FormulaEngine {
     try {
       // Remove leading '='
       const expr = formula.startsWith('=') ? formula.slice(1) : formula;
+      
+      // Week 3 Phase 1D+1E: Full tokenization integration
+      // Check if formula needs tokenization (feature-flagged)
+      if (this.ENABLE_ENTITY_TOKENIZATION && this.needsTokenization(expr)) {
+        return this.evaluateWithTokens(expr, context);
+      }
+      
       const result = this.evaluateExpression(expr, context);
       return result;
     } catch (error) {
@@ -150,6 +241,584 @@ export class FormulaEngine {
     } finally {
       this.calculating.delete(cellKey);
     }
+  }
+
+  /**
+   * Week 3 Phase 1A: State-aware detection for member access chains
+   * 
+   * Returns true if formula contains member access chains that need tokenization.
+   * Uses state tracking to avoid false positives from string literals and nested expressions.
+   * 
+   * Detection rules:
+   * - Matches: A1.Price, A1.Stock.Price, SUM(A1:A5).Total
+   * - Ignores: String literals ("A1.Price"), content inside strings
+   * - State-aware: Tracks parentheses depth and string literal boundaries
+   * 
+   * @param expr Formula expression (without leading '=')
+   * @returns true if tokenization needed, false otherwise
+   */
+  private needsTokenization(expr: string): boolean {
+    let inString = false;
+    let depth = 0;
+    
+    for (let i = 0; i < expr.length; i++) {
+      const char = expr[i];
+      
+      // Track string literal boundaries
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      // Inside string literal - skip all characters
+      if (inString) {
+        continue;
+      }
+      
+      // Track parentheses depth
+      if (char === '(') {
+        depth++;
+      } else if (char === ')') {
+        depth--;
+      }
+      
+      // Look for member access pattern: .identifier or ["field"]
+      if (char === '.') {
+        // Check if followed by identifier character
+        if (i + 1 < expr.length && /[A-Z_]/i.test(expr[i + 1])) {
+          // Found pattern like .Price or .Stock
+          // Check if there's a valid base before the dot
+          if (i > 0) {
+            const prevChar = expr[i - 1];
+            // Valid if preceded by alphanumeric, ), or ]
+            if (/[A-Z0-9)\]]/i.test(prevChar)) {
+              return true;
+            }
+          }
+        }
+      } else if (char === '[') {
+        // Check if bracket notation member access: identifier["field"]
+        // Look backward to see if preceded by valid identifier or )
+        if (i > 0) {
+          const prevChar = expr[i - 1];
+          if (/[A-Z0-9)]/i.test(prevChar)) {
+            // Check if bracket contains string literal (quoted field name)
+            let j = i + 1;
+            // Skip whitespace
+            while (j < expr.length && /\s/.test(expr[j])) j++;
+            // Check for opening quote
+            if (j < expr.length && (expr[j] === '"' || expr[j] === "'")) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Week 3 Phase 1B: Extract member access chains from formula
+   * 
+   * Scans formula and extracts all member access chains at top level (depth 0).
+   * Handles both dot notation (A1.Price) and bracket notation (A1["Price"]).
+   * Only extracts chains with 2+ accesses OR using bracket notation.
+   * 
+   * @param expr Formula expression (without leading '=')
+   * @returns Array of matched chains with positions and parsed structure
+   */
+  private extractMemberChains(expr: string): MemberChainMatch[] {
+    const chains: MemberChainMatch[] = [];
+    
+    let depth = 0;
+    let inString = false;
+    let stringChar = '';
+    let i = 0;
+    
+    while (i < expr.length) {
+      const char = expr[i];
+      
+      // Track string state
+      if (!inString && (char === '"' || char === "'")) {
+        inString = true;
+        stringChar = char;
+        i++;
+        continue;
+      }
+      if (inString && char === stringChar) {
+        inString = false;
+        i++;
+        continue;
+      }
+      if (inString) {
+        i++;
+        continue;
+      }
+      
+      // Track parentheses depth
+      if (char === '(') depth++;
+      if (char === ')') depth--;
+      
+      // Extract chains at any depth (not just top level)
+      // This allows chains inside parentheses: (A1.Price * 100)
+      if (!inString) {
+        const match = this.tryMatchChainAt(expr, i);
+        if (match) {
+          chains.push(match);
+          i = match.endIndex;
+          continue;
+        }
+      }
+      
+      i++;
+    }
+    
+    return chains;
+  }
+
+  /**
+   * Week 3 Phase 1B: Try to match a member access chain at given position
+   * 
+   * Checks if position starts a cell reference followed by member accesses.
+   * Returns match only if:
+   * - 2+ consecutive accesses (chained: A1.Price.Currency), OR
+   * - Uses bracket notation (A1["Price"])
+   * 
+   * Single-level dot notation (A1.Price) stays in cascade (Week 2 stable path).
+   * 
+   * @param formula Full formula string
+   * @param start Position to check
+   * @returns Match object if chain found, null otherwise
+   */
+  private tryMatchChainAt(formula: string, start: number): MemberChainMatch | null {
+    const remaining = formula.slice(start);
+    
+    // Must start with cell reference
+    const cellMatch = remaining.match(/^([A-Z]+\d+)/i);
+    if (!cellMatch) return null;
+    
+    let pos = cellMatch[0].length;
+    let chainLength = pos;
+    let accessCount = 0;
+    let hasBracket = false;  // Track if THIS chain uses bracket notation
+    
+    // Count consecutive member accesses
+    while (pos < remaining.length) {
+      // Try dot notation
+      const dotMatch = remaining.slice(pos).match(/^\.([A-Z_][A-Z0-9_]*)/i);
+      if (dotMatch) {
+        pos += dotMatch[0].length;
+        chainLength = pos;
+        accessCount++;
+        continue;
+      }
+      
+      // Try bracket notation
+      const bracketMatch = remaining.slice(pos).match(/^\[["']([^"']+)["']\]/);
+      if (bracketMatch) {
+        pos += bracketMatch[0].length;
+        chainLength = pos;
+        accessCount++;
+        hasBracket = true;  // THIS chain uses bracket notation
+        continue;
+      }
+      
+      // No more member access
+      break;
+    }
+    
+    // Week 3 Phase 2: Extract all chains (including single-level) for provider support
+    // Previous: Only extracted 2+ accesses OR bracket notation
+    // Now: Extract any chain with at least 1 access
+    if (accessCount >= 1) {
+      const chainStr = remaining.slice(0, chainLength);
+      return {
+        original: chainStr,
+        startIndex: start,
+        endIndex: start + chainLength,
+        parsed: this.tokenizeMemberChain(chainStr)
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * Week 3 Phase 1B: Parse member access chain into token structure
+   * 
+   * Converts string like "A1.Price.Currency" or "A1["Price"]["Currency"]"
+   * into normalized structure: { base: "A1", properties: ["Price", "Currency"] }
+   * 
+   * Both dot and bracket notation produce identical tokens.
+   * 
+   * @param chain Member access chain string
+   * @returns Parsed token structure
+   */
+  private tokenizeMemberChain(chain: string): MemberChain {
+    // Extract base (cell reference)
+    const baseMatch = chain.match(/^([A-Z]+\d+)/i);
+    if (!baseMatch) {
+      throw new Error(`Invalid chain: ${chain}`);
+    }
+    
+    const base = baseMatch[0];
+    const properties: string[] = [];
+    
+    let pos = base.length;
+    
+    // Extract all properties (dot or bracket notation)
+    while (pos < chain.length) {
+      // Try dot notation
+      const dotMatch = chain.slice(pos).match(/^\.([A-Z_][A-Z0-9_]*)/i);
+      if (dotMatch) {
+        properties.push(dotMatch[1]);
+        pos += dotMatch[0].length;
+        continue;
+      }
+      
+      // Try bracket notation
+      const bracketMatch = chain.slice(pos).match(/^\[["']([^"']+)["']\]/);
+      if (bracketMatch) {
+        properties.push(bracketMatch[1]);
+        pos += bracketMatch[0].length;
+        continue;
+      }
+      
+      // Unexpected character
+      throw new Error(`Failed to parse chain at position ${pos}: ${chain}`);
+    }
+    
+    return { base, properties };
+  }
+
+  /**
+   * Week 3 Phase 1C: Evaluate member access chain sequentially
+   * 
+   * Resolves base cell reference, then traverses property chain left-to-right.
+   * Implements strict short-circuit semantics:
+   * - Base error → propagate immediately
+   * - Base null → #REF! (cannot start chain on null)
+   * - Missing field → #FIELD!
+   * - Field null → return null, stop chain (short-circuit)
+   * - Non-entity mid-chain → #VALUE!
+   * 
+   * @param chain Parsed member chain token
+   * @param context Formula evaluation context
+   * @returns Resolved value or error
+   */
+  private evaluateChain(chain: MemberChain, context: FormulaContext): FormulaValue {
+    // Step 1: Resolve base (cell reference)
+    const baseAddr = this.parseCellReference(chain.base);
+    this.dependencyGraph.addDependency(context.currentCell, baseAddr);
+    const cell = context.worksheet.getCell(baseAddr);
+    
+    // Get raw value (preserve EntityValue, don't unwrap)
+    let current: FormulaValue;
+    if (!cell) {
+      current = null;
+    } else if (cell.formula) {
+      // Evaluate formula recursively
+      current = this.evaluate(cell.formula, { ...context, currentCell: baseAddr });
+    } else {
+      // Get raw value (as FormulaValue, includes EntityValue)
+      current = cell.value as FormulaValue;
+    }
+    
+    // Step 2: Base error → propagate immediately (short-circuit)
+    if (current instanceof Error) {
+      return current;
+    }
+    
+    // Step 3: Base null → error (cannot traverse null)
+    if (current === null || current === undefined) {
+      return new Error('#REF!');
+    }
+    
+    // Step 4: Traverse property chain sequentially
+    for (const property of chain.properties) {
+      // Must be entity to access fields
+      if (!isEntityValue(current)) {
+        return new Error('#VALUE!');
+      }
+      
+      const entity = current as EntityValue;
+      
+      // Week 3 Phase 2: Check external provider first
+      // Providers supply data for known entity types (stock, geography, etc.)
+      let fieldValue: FormulaValue;
+      
+      if (entity.type && this.providerRegistry.hasProvider(entity.type)) {
+        // Get value from external provider (cache-backed, synchronous)
+        // Entity may have dynamic properties (id, symbol, code) not in EntityValue type
+        const entityId = (entity as any).id || (entity as any).symbol || (entity as any).code;
+        fieldValue = this.providerRegistry.getValue(
+          entity.type,
+          entityId,
+          property,
+          entity,
+          context
+        );
+        
+        // If provider returns error, propagate it
+        if (fieldValue instanceof Error) {
+          return fieldValue;
+        }
+      } else {
+        // Fallback: Use local entity.fields (static data)
+        // Check if field exists
+        if (!entity.fields || typeof entity.fields !== 'object') {
+          return new Error('#VALUE!'); // Malformed entity
+        }
+        
+        if (!(property in entity.fields)) {
+          return new Error('#FIELD!');
+        }
+        
+        // Get field value from local data
+        fieldValue = entity.fields[property];
+      }
+      
+      // CRITICAL: NULL SHORT-CIRCUIT
+      // If field is null, return null immediately, don't continue chain
+      if (fieldValue === null || fieldValue === undefined) {
+        return null;
+      }
+      
+      // Continue traversal with field value
+      current = fieldValue as FormulaValue;
+    }
+    
+    // Step 5: Return final value (primitive or entity)
+    return current;
+  }
+
+  /**
+   * Week 3 Phase 1D+1E: Hybrid evaluation with tokenization
+   * 
+   * Extracts member chains from formula, evaluates them sequentially, substitutes
+   * their values back into formula (index-based descending order), then passes
+   * simplified expression to cascade for operator/function evaluation.
+   * 
+   * Implements:
+   * - Error short-circuit (if any chain produces error, return immediately)
+   * - Index-based substitution (descending order to prevent corruption)
+   * - Selective extraction (Model B: embedded chains)
+   * 
+   * @param expr Formula expression (without leading '=')
+   * @param context Formula evaluation context
+   * @returns Final evaluated value or error
+   */
+  /**
+   * Orchestrator entrypoint for async provider resolution.
+   *
+   * - Extracts ProviderRefs from the formula (via member chain tokens)
+   * - Uses provided BatchResolver to resolve refs into a ProviderResolutionContext
+   * - Seeds ProviderRegistry cache with resolved values
+   * - Invokes synchronous evaluation (evaluateInternal)
+   *
+   * This method preserves the synchronous semantics of the engine by performing
+   * async provider resolution before running the existing synchronous evaluator.
+   */
+  async evaluateWithProviders(formula: string, context: FormulaContext, resolver?: BatchResolver, opts?: BatchResolverOptions): Promise<FormulaValue> {
+    // Short-circuit: if no resolver provided, fallback to synchronous evaluate()
+    if (!resolver) {
+      return this.evaluate(formula, context);
+    }
+
+    const expr = formula.startsWith('=') ? formula.slice(1) : formula;
+
+    // 1) Extract member chains (tokenization)
+    const chains = this.extractMemberChains(expr);
+
+    // 2) Build ProviderRef list by inspecting the base cell values
+    const refs: ProviderRef[] = [];
+    const seen = new Set<string>();
+
+    for (const chain of chains) {
+      const base = chain.parsed.base;
+      const property = chain.parsed.properties[0];
+      // Only support simple single-level access for provider resolution (A1.Price)
+      if (!/^[A-Z]+\d+$/i.test(base)) continue;
+
+      // Get raw base value (preserve EntityValue) — mirror evaluateDotMemberExpressionStub logic
+      let baseValue: FormulaValue;
+      if (/^[A-Z]+\d+$/i.test(base)) {
+        const addr = this.parseCellReference(base);
+        this.dependencyGraph.addDependency(context.currentCell, addr);
+        const cell = context.worksheet.getCell(addr);
+
+        if (!cell) {
+          baseValue = null;
+        } else if (cell.formula) {
+          baseValue = this.evaluate(cell.formula, { ...context, currentCell: addr });
+        } else {
+          baseValue = cell.value as FormulaValue; // raw value, may be EntityValue
+        }
+      } else {
+        baseValue = this.evaluateExpression(base, context);
+      }
+
+      if (!isEntityValue(baseValue)) continue;
+      if (!(baseValue as any).type) continue;
+
+      const entityId = (baseValue as any).id || (baseValue as any).symbol || (baseValue as any).code;
+      if (!entityId) continue;
+
+      const key = `${(baseValue as any).type}|${entityId}|${property}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      refs.push({ type: (baseValue as any).type, id: entityId, field: property });
+    }
+
+    // DEBUG: log extracted chains & refs
+    // If no provider refs, just run the synchronous evaluation path
+    if (refs.length === 0) {
+      return this.evaluate(formula, context);
+    }
+
+    // 3) Resolve via BatchResolver
+    const ctx = new (require('./providers').ProviderResolutionContext)();
+    ctx.addPendingMany(refs);
+
+    try {
+      await resolver.resolve(refs, ctx, opts as any);
+    } catch (err) {
+      // Treat unexpected resolver failure as network error
+      return new Error('#CONNECT!');
+    }
+
+    // 4) If there are provider errors, short-circuit with mapped spreadsheet error
+    if (ctx.errors.size > 0) {
+      // Map first error to spreadsheet token
+      const firstErr = ctx.errors.values().next().value as ProviderError;
+      return new Error(this.mapProviderErrorToSpreadsheetError(firstErr));
+    }
+
+    // 5) Seed ProviderRegistry cache with resolved values
+    for (const [k, entry] of ctx.resolved.entries()) {
+      // keys are of form `${type}|${id}|${field}`
+      const [type, id, field] = k.split('|');
+      try {
+        this.providerRegistry.setCachedValue(type, id, field, entry.value);
+      } catch (e) {
+        // ignore cache injection errors; evaluation will fall back to local fields
+      }
+    }
+
+    // 6) Run synchronous evaluator (provider cache is now seeded)
+    return this.evaluateInternal(formula, context);
+  }
+
+  private mapProviderErrorToSpreadsheetError(err: ProviderError): string {
+    switch (err.kind) {
+      case 'NOT_FOUND':
+        return '#REF!';
+      case 'UNKNOWN_FIELD':
+        return '#FIELD!';
+      case 'RATE_LIMIT':
+        return '#BUSY!';
+      case 'NETWORK':
+      case 'TIMEOUT':
+        return '#CONNECT!';
+      case 'API_ERROR':
+      default:
+        return '#GETTING_DATA';
+    }
+  }
+
+  private evaluateWithTokens(expr: string, context: FormulaContext): FormulaValue {
+    // Step 1: Extract all member chain substrings at top level
+    const chains = this.extractMemberChains(expr);
+    
+    // If no chains found (shouldn't happen if detection worked), fall back to cascade
+    if (chains.length === 0) {
+      return this.evaluateExpression(expr, context);
+    }
+    
+    // Step 2: Evaluate each chain sequentially
+    // CRITICAL: Short-circuit on first error (Excel semantics)
+    const evaluatedChains: Array<{ match: MemberChainMatch; value: FormulaValue }> = [];
+    for (const chain of chains) {
+      const result = this.evaluateChain(chain.parsed, context);
+      
+      // If chain evaluation produces error, short-circuit immediately
+      // Do not continue evaluating remaining chains or pass to cascade
+      if (result instanceof Error) {
+        return result;
+      }
+      
+      // CRITICAL: If result is null and this is the only chain (single chain formula),
+      // return null directly without substitution
+      if (result === null && chains.length === 1 && chains[0].original === expr) {
+        return null;
+      }
+      
+      evaluatedChains.push({ match: chain, value: result });
+    }
+    
+    // Step 3: Replace chain substrings with evaluated values
+    // CRITICAL: Sort descending by startIndex to prevent index shift during replacement
+    evaluatedChains.sort((a, b) => b.match.startIndex - a.match.startIndex);
+    
+    let simplified = expr;
+    for (const { match, value } of evaluatedChains) {
+      // Convert value to formula string representation
+      const replacement = this.valueToFormulaString(value);
+      
+      // Replace by index (handles duplicate chains correctly)
+      simplified =
+        simplified.slice(0, match.startIndex) +
+        replacement +
+        simplified.slice(match.endIndex);
+    }
+    
+    // Step 4: Pass simplified expression to cascade
+    // Cascade handles operators, functions, precedence
+    const cascadeResult = this.evaluateExpression(simplified, context);
+    return cascadeResult;
+  }
+
+  /**
+   * Week 3 Phase 1D: Convert FormulaValue to string for formula substitution
+   * 
+   * Used when replacing member chains with their evaluated values in formula text.
+   * 
+   * CRITICAL: Null handling - Excel treats null as 0 in all operator contexts
+   * - Arithmetic: 0 + 10 → 10
+   * - Concatenation: 0 & "x" → "0x" (displayed as string)  
+   * - Comparison: 0 = "" → TRUE (empty string coerces to 0 in compareValues)
+   * 
+   * @param value Formula value to convert
+   * @returns String representation for formula context
+   */
+  private valueToFormulaString(value: FormulaValue): string {
+    if (value === null || value === undefined) {
+      // Substitute as 0 (Excel canonical null value)
+      // Cascade coerces correctly: arithmetic uses 0, concatenation displays "0"
+      return '0';
+    }
+    
+    if (typeof value === 'string') {
+      // Escape quotes and wrap in quotes
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    
+    if (typeof value === 'boolean') {
+      return value ? 'TRUE' : 'FALSE';
+    }
+    
+    if (typeof value === 'number') {
+      return value.toString();
+    }
+    
+    if (value instanceof Error) {
+      return value.message; // Error literal
+    }
+    
+    // EntityValue or unexpected type
+    return '#VALUE!';
   }
 
   /**
@@ -181,9 +850,27 @@ export class FormulaEngine {
       }
     }
 
-    // String literal
-    if (expr.startsWith('"') && expr.endsWith('"')) {
-      return expr.slice(1, -1);
+    // String literal - properly parse to handle operators outside quotes
+    // Must check if the entire expression is a single string, not just starts/ends with quotes
+    if (expr.startsWith('"')) {
+      let i = 1;
+      while (i < expr.length) {
+        if (expr[i] === '"') {
+          // Check if this is an escaped quote (doubled: "")
+          if (i + 1 < expr.length && expr[i + 1] === '"') {
+            i += 2; // Skip escaped quote pair
+            continue;
+          }
+          // Found closing quote - check if it's at the end
+          if (i === expr.length - 1) {
+            // This is a complete string literal
+            return expr.slice(1, -1).replace(/""/g, '"'); // Unescape doubled quotes
+          }
+          // Closing quote not at end - not a simple string literal, has operators
+          break;
+        }
+        i++;
+      }
     }
 
     // Error literal (#DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #NULL!, #GETTING_DATA)
@@ -286,6 +973,31 @@ export class FormulaEngine {
     // Unary plus (e.g., +5, +val) - just return the value
     if (expr.startsWith('+') && expr.length > 1) {
       return this.evaluateExpression(expr.substring(1), context);
+    }
+
+    // Week 2: Member access detection (field dereference on entities)
+    // Checked AFTER unary, BEFORE binary operators (postfix operator with high precedence)
+    // Phase 1: Pattern detection only (stub implementation)
+    // IMPORTANT: Only check if there are periods/brackets outside of string literals
+    
+    const hasMemberAccessOutsideStrings = this.hasMemberAccessMarkers(expr);
+    
+    // Chained member access (future-proofing for Week 3+)
+    // Example: A1.Stock.Price (Week 2: not supported, returns #VALUE!)
+    if (hasMemberAccessOutsideStrings && this.looksLikeChainedMemberExpression(expr)) {
+      return this.evaluateChainedMemberExpressionStub(expr, context);
+    }
+
+    // Dot notation member access
+    // Example: A1.Price, B2.Ticker
+    if (hasMemberAccessOutsideStrings && this.looksLikeDotMemberExpression(expr)) {
+      return this.evaluateDotMemberExpressionStub(expr, context);
+    }
+
+    // Bracket notation member access
+    // Example: A1["Market Cap"], B2['Price']
+    if (this.looksLikeBracketMemberExpression(expr)) {
+      return this.evaluateBracketMemberExpressionStub(expr, context);
     }
 
     // Binary operations (check AFTER unary to handle expressions correctly)
@@ -416,20 +1128,34 @@ export class FormulaEngine {
   }
 
   /**
-   * Splits expression by operator (respecting parentheses)
+   * Splits expression by operator (respecting parentheses and string literals)
    */
   private splitByOperator(expr: string, op: string): string[] {
     let depth = 0;
+    let inString = false;
     let lastSplit = 0;
     const parts: string[] = [];
 
     for (let i = 0; i < expr.length; i++) {
-      if (expr[i] === '(') depth++;
-      if (expr[i] === ')') depth--;
+      // Track string literal boundaries
+      if (expr[i] === '"') {
+        // Check if this is an escaped quote
+        if (inString && i + 1 < expr.length && expr[i + 1] === '"') {
+          i++; // Skip the escaped quote pair
+          continue;
+        }
+        inString = !inString;
+      }
       
-      if (depth === 0 && expr.slice(i, i + op.length) === op) {
-        parts.push(expr.slice(lastSplit, i).trim());
-        lastSplit = i + op.length;
+      // Only track depth and split outside of string literals
+      if (!inString) {
+        if (expr[i] === '(') depth++;
+        if (expr[i] === ')') depth--;
+        
+        if (depth === 0 && expr.slice(i, i + op.length) === op) {
+          parts.push(expr.slice(lastSplit, i).trim());
+          lastSplit = i + op.length;
+        }
       }
     }
 
@@ -540,7 +1266,7 @@ export class FormulaEngine {
       return this.evaluate(cell.formula, { ...context, currentCell: addr });
     }
     
-    return cell.value;
+    return cellValueToFormulaValue(cell.value);
   }
 
   /**
@@ -564,7 +1290,8 @@ export class FormulaEngine {
           if (cell.formula) {
             values.push(this.evaluate(cell.formula, { ...context, currentCell: addr }));
           } else {
-            values.push(cell.value);
+            // Convert ExtendedCellValue to FormulaValue (handles RichTextValue)
+            values.push(cellValueToFormulaValue(cell.value));
           }
         } else {
           values.push(null);
@@ -594,6 +1321,287 @@ export class FormulaEngine {
     const row = parseInt(rowStr, 10);
 
     return { row, col };
+  }
+
+  /**
+   * Week 2 - Phase 1: Member expression pattern detection
+   * 
+   * These methods detect member access patterns but do NOT implement evaluation.
+   * Phase 1: Structural insertion only (returns stub errors)
+   * Phase 2+: Will implement actual field dereference logic
+   */
+
+  /**
+   * Check if expression has member access markers (. or [) outside of string literals
+   * Used to avoid false positives when strings contain periods (e.g., "D.C.")
+   */
+  private hasMemberAccessMarkers(expr: string): boolean {
+    let inString = false;
+    for (let i = 0; i < expr.length; i++) {
+      if (expr[i] === '"') {
+        // Check if this is an escaped quote
+        if (inString && i + 1 < expr.length && expr[i + 1] === '"') {
+          i++; // Skip the escaped quote pair
+          continue;
+        }
+        inString = !inString;
+      }
+      
+      // Check for member access markers outside strings
+      if (!inString && (expr[i] === '.' || expr[i] === '[')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Detects chained member access pattern (A1.Stock.Price)
+   * Week 2: Not supported, returns #VALUE! to indicate recognized but unsupported syntax
+   */
+  private looksLikeChainedMemberExpression(expr: string): boolean {
+    // Pattern: base.field.moreFields
+    // Example: A1.Stock.Price, B1.Geography.Population.Total
+    return /^(.+)\.([A-Z_][A-Z0-9_]*)\.(.+)$/i.test(expr);
+  }
+
+  /**
+   * Detects dot notation member access pattern (A1.Price)
+   */
+  private looksLikeDotMemberExpression(expr: string): boolean {
+    // Pattern: base.field
+    // Example: A1.Price, SUM(A1:A5).Value
+    // Anchored with $ to avoid matching A1.Price+5
+    // Use NON-GREEDY match to avoid capturing operators
+    const match = expr.match(/^(.+?)\.([A-Z_][A-Z0-9_]*)$/i);
+    if (!match) return false;
+    
+    const [, base, field] = match;
+    
+    // Additional validation: Check if base contains operators at depth 0
+    // If it does, this is a complex expression, not a simple member access
+    // The binary operator cascade should handle it first
+    const hasOperatorAtDepth0 = this.hasOperatorAtTopLevel(base);
+    
+    return !hasOperatorAtDepth0;
+  }
+
+  /**
+   * Check if expression contains binary operators at depth 0 (not in parens/brackets)
+   */
+  private hasOperatorAtTopLevel(expr: string): boolean {
+    let depth = 0;
+    const operators = ['+', '-', '*', '/', '^', '=', '<', '>', '&'];
+    
+    for (let i = 0; i < expr.length; i++) {
+      if (expr[i] === '(' || expr[i] === '[') depth++;
+      if (expr[i] === ')' || expr[i] === ']') depth--;
+      
+      if (depth === 0) {
+        // Check for multi-char operators
+        if (expr.slice(i, i + 2) === '<>' || expr.slice(i, i + 2) === '<=' || expr.slice(i, i + 2) === '>=') {
+          return true;
+        }
+        // Check for single-char operators
+        if (operators.includes(expr[i])) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Detects bracket notation member access pattern (A1["Market Cap"])
+   */
+  private looksLikeBracketMemberExpression(expr: string): boolean {
+    // Pattern: base["field"] or base['field']
+    // Example: A1["Market Cap"], B2['Price']
+    // Supports spaces in field names
+    // Use NON-GREEDY match to avoid capturing operators
+    const match = expr.match(/^(.+?)\[\s*['"](.+)['"]\s*\]$/);
+    if (!match) return false;
+    
+    const [, base] = match;
+    
+    // Check if base contains operators at depth 0
+    const hasOperatorAtDepth0 = this.hasOperatorAtTopLevel(base);
+    
+    return !hasOperatorAtDepth0;
+  }
+
+  /**
+   * Stub: Evaluates chained member expression (not supported in Week 2)
+   * Phase 1: Returns #VALUE! error
+   * Phase 2+: Will implement nested entity support
+   */
+  private evaluateChainedMemberExpressionStub(expr: string, context: FormulaContext): FormulaValue {
+    // Week 2 Phase 1: Chained member access not supported
+    // Returning #VALUE! (not #NAME?) indicates recognized but unsupported syntax
+    return new Error('#VALUE!');
+  }
+
+  /**
+   * Stub: Evaluates dot notation member expression
+   * Phase 1: Returns #NAME? error (stub)
+   * Phase 2: Will implement field dereference logic
+   */
+  private evaluateDotMemberExpressionStub(expr: string, context: FormulaContext): FormulaValue {
+    // Week 2 Phase 2: Implement dot notation field access
+    // Pattern: base.field (e.g., A1.Price)
+    // Trim whitespace from expr first (from splitByOperator)
+    expr = expr.trim();
+    
+    const match = expr.match(/^(.+)\.([A-Z_][A-Z0-9_]*)$/i);
+    
+    if (!match) {
+      // Pattern should have matched (called from detection), but safety check
+      return new Error('#NAME?');
+    }
+    
+    const [, baseExpr, fieldName] = match;
+    
+    // Step 1: Get base value - CRITICAL: Need raw value, not unwrapped
+    // For cell references, we need the actual EntityValue, not its display
+    let base: FormulaValue;
+    
+    // Check if base is a simple cell reference
+    if (/^[A-Z]+\d+$/i.test(baseExpr)) {
+      // Direct cell reference - get raw value to preserve EntityValue
+      const addr = this.parseCellReference(baseExpr);
+      this.dependencyGraph.addDependency(context.currentCell, addr);
+      const cell = context.worksheet.getCell(addr);
+      
+      if (!cell) {
+        base = null;
+      } else if (cell.formula) {
+        // If cell has formula, evaluate it
+        base = this.evaluate(cell.formula, { ...context, currentCell: addr });
+      } else {
+        // Get raw value WITHOUT cellValueToFormulaValue unwrapping
+        // This preserves EntityValue for member access
+        base = cell.value as FormulaValue;
+      }
+    } else {
+      // Complex expression - evaluate recursively
+      base = this.evaluateExpression(baseExpr, context);
+    }
+    
+    // Step 2: Error propagation - if base is error, propagate immediately
+    if (base instanceof Error) {
+      return base;
+    }
+    
+    // Step 3: Null check - #REF! error
+    if (base === null || base === undefined) {
+      return new Error('#REF!');
+    }
+    
+    // Step 4: Entity type check - #VALUE! if not entity
+    if (!isEntityValue(base)) {
+      return new Error('#VALUE!');
+    }
+    
+    // Step 5: Field existence check - #FIELD! if missing
+    const entity = base as EntityValue;
+    if (!entity.fields || typeof entity.fields !== 'object') {
+      return new Error('#VALUE!'); // Malformed entity
+    }
+    
+    // Check if field exists (case-sensitive)
+    if (!(fieldName in entity.fields)) {
+      return new Error('#FIELD!');
+    }
+    
+    // Step 6: Return field value (primitives only: number | string | boolean | null)
+    // CRITICAL: Must return field value, NOT EntityValue
+    const fieldValue = entity.fields[fieldName];
+    
+    // Field value should be CellValue (number | string | boolean | null)
+    // Never return EntityValue in Week 2
+    return fieldValue as FormulaValue;
+  }
+
+  /**
+   * Stub: Evaluates bracket notation member expression
+   * Phase 1: Returns #NAME? error (stub)
+   * Phase 2: Will implement field dereference logic
+   */
+  private evaluateBracketMemberExpressionStub(expr: string, context: FormulaContext): FormulaValue {
+    // Week 2 Phase 2 Step D: Implement bracket notation field access
+    // Pattern: base["field"] or base['field']
+    // Trim whitespace from expr first (from splitByOperator)
+    expr = expr.trim();
+    
+    const match = expr.match(/^(.+?)\[\s*['"](.+)['"]\s*\]$/);
+    
+    if (!match) {
+      // Pattern should have matched (called from detection), but safety check
+      return new Error('#NAME?');
+    }
+    
+    const [, baseExpr, fieldName] = match;
+    
+    // Step 1: Get base value - CRITICAL: Need raw value, not unwrapped
+    // For cell references, we need the actual EntityValue, not its display
+    let base: FormulaValue;
+    
+    // Check if base is a simple cell reference
+    if (/^[A-Z]+\d+$/i.test(baseExpr)) {
+      // Direct cell reference - get raw value to preserve EntityValue
+      const addr = this.parseCellReference(baseExpr);
+      this.dependencyGraph.addDependency(context.currentCell, addr);
+      const cell = context.worksheet.getCell(addr);
+      
+      if (!cell) {
+        base = null;
+      } else if (cell.formula) {
+        // If cell has formula, evaluate it
+        base = this.evaluate(cell.formula, { ...context, currentCell: addr });
+      } else {
+        // Get raw value WITHOUT cellValueToFormulaValue unwrapping
+        // This preserves EntityValue for member access
+        base = cell.value as FormulaValue;
+      }
+    } else {
+      // Complex expression - evaluate recursively
+      base = this.evaluateExpression(baseExpr, context);
+    }
+    
+    // Step 2: Error propagation - if base is error, propagate immediately
+    if (base instanceof Error) {
+      return base;
+    }
+    
+    // Step 3: Null check - #REF! error
+    if (base === null || base === undefined) {
+      return new Error('#REF!');
+    }
+    
+    // Step 4: Entity type check - #VALUE! if not entity
+    if (!isEntityValue(base)) {
+      return new Error('#VALUE!');
+    }
+    
+    // Step 5: Field existence check - #FIELD! if missing
+    const entity = base as EntityValue;
+    if (!entity.fields || typeof entity.fields !== 'object') {
+      return new Error('#VALUE!'); // Malformed entity
+    }
+    
+    // Check if field exists (case-sensitive)
+    if (!(fieldName in entity.fields)) {
+      return new Error('#FIELD!');
+    }
+    
+    // Step 6: Return field value (primitives only: number | string | boolean | null)
+    // CRITICAL: Must return field value, NOT EntityValue
+    const fieldValue = entity.fields[fieldName];
+    
+    // Field value should be CellValue (number | string | boolean | null)
+    // Never return EntityValue in Week 2
+    return fieldValue as FormulaValue;
   }
 
   /**

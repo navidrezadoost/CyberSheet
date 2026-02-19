@@ -5,7 +5,7 @@
  * Provides a controlled interface for React components to interact with formulas.
  */
 
-import { Address, Cell, CellValue } from './types';
+import { Address, Cell, CellValue, ExtendedCellValue } from './types';
 import { Worksheet } from './worksheet';
 import { FormulaEngine, FormulaValue } from './FormulaEngine';
 
@@ -156,8 +156,8 @@ export class FormulaController {
   /**
    * Get all cells with formulas
    */
-  getAllFormulas(): Array<{ address: Address; formula: string; value: CellValue }> {
-    const result: Array<{ address: Address; formula: string; value: CellValue }> = [];
+  getAllFormulas(): Array<{ address: Address; formula: string; value: ExtendedCellValue }> {
+    const result: Array<{ address: Address; formula: string; value: ExtendedCellValue }> = [];
     
     // Iterate through all cells in worksheet
     for (let row = 1; row <= this.worksheet.rowCount; row++) {

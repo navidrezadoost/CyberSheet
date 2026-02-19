@@ -5,7 +5,7 @@
  * Inspired by Yjs but optimized for spreadsheets with no external dependencies
  */
 
-import type { Address, CellValue } from './types';
+import type { Address, CellValue, ExtendedCellValue } from './types';
 import type { Worksheet } from './worksheet';
 
 export type OperationType = 'set' | 'delete' | 'style' | 'insert-row' | 'delete-row' | 'insert-col' | 'delete-col';
@@ -16,7 +16,7 @@ export interface Operation {
   timestamp: number;
   type: OperationType;
   address?: Address;
-  value?: CellValue;
+  value?: ExtendedCellValue;
   data?: unknown;
   // Vector clock for causal ordering
   vectorClock: Map<string, number>;

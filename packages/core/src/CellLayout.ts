@@ -172,7 +172,12 @@ export function computeLayout(
   const fontSize = style.fontSize ?? 12;
   const bold = style.bold ?? false;
   const italic = style.italic ?? false;
-  const valign = style.valign;
+  
+  // Map valign to supported values (justify/distributed → middle for now)
+  const valign: 'top' | 'middle' | 'bottom' | undefined = 
+    style.valign === 'justify' || style.valign === 'distributed' 
+      ? 'middle' 
+      : style.valign;
   
   // Measure the full text
   const metrics = measurer.measure(value, fontSize, bold, italic);
