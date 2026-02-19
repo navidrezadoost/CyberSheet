@@ -88,6 +88,15 @@ export class ProviderRegistry {
   }
 
   /**
+   * Set a cached value directly (used by orchestrator to seed resolved values)
+   * @internal
+   */
+  setCachedValue(entityType: string, entityId: string, field: string, value: FormulaValue): void {
+    const cacheKey = `${entityType}:${entityId}.${field}`;
+    this.cache.set(cacheKey, value);
+  }
+
+  /**
    * Optional: Prefetch data for multiple entities
    */
   async prefetch(entityRefs: string[], context: FormulaContext): Promise<void> {

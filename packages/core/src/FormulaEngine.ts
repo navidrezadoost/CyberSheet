@@ -26,6 +26,7 @@ import { ALL_FUNCTION_METADATA } from './functions/metadata';
 
 // Week 3 Phase 2: External data type providers
 import { ProviderRegistry } from './providers/ProviderRegistry';
+import { ProviderResolutionContext, ProviderRef, BatchResolver, ProviderError, BatchResolverOptions } from './providers';
 
 // Re-export types for backward compatibility
 export type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext };
@@ -205,6 +206,17 @@ export class FormulaEngine {
     // Week 3 Phase 2: Clear provider cache for fresh data each evaluation
     this.providerRegistry.clearCache();
     
+    // Delegate to internal evaluator (keeps a stable entry point for evaluateWithProviders)
+    return this.evaluateInternal(formula, context);
+  }
+
+  /**
+   * Internal synchronous evaluator that assumes provider cache is already prepared.
+   * Used by `evaluate` and `evaluateWithProviders` to avoid double-clearing provider cache.
+   */
+  private evaluateInternal(formula: string, context: FormulaContext): FormulaValue {
+    const cellKey = `${context.currentCell.row}:${context.currentCell.col}`;
+
     // Detect circular reference
     if (this.calculating.has(cellKey)) {
       return new Error('#CIRC!');
@@ -597,6 +609,125 @@ export class FormulaEngine {
    * @param context Formula evaluation context
    * @returns Final evaluated value or error
    */
+  /**
+   * Orchestrator entrypoint for async provider resolution.
+   *
+   * - Extracts ProviderRefs from the formula (via member chain tokens)
+   * - Uses provided BatchResolver to resolve refs into a ProviderResolutionContext
+   * - Seeds ProviderRegistry cache with resolved values
+   * - Invokes synchronous evaluation (evaluateInternal)
+   *
+   * This method preserves the synchronous semantics of the engine by performing
+   * async provider resolution before running the existing synchronous evaluator.
+   */
+  async evaluateWithProviders(formula: string, context: FormulaContext, resolver?: BatchResolver, opts?: BatchResolverOptions): Promise<FormulaValue> {
+    // Short-circuit: if no resolver provided, fallback to synchronous evaluate()
+    if (!resolver) {
+      return this.evaluate(formula, context);
+    }
+
+    const expr = formula.startsWith('=') ? formula.slice(1) : formula;
+
+    // 1) Extract member chains (tokenization)
+    const chains = this.extractMemberChains(expr);
+
+    // 2) Build ProviderRef list by inspecting the base cell values
+    const refs: ProviderRef[] = [];
+    const seen = new Set<string>();
+
+    for (const chain of chains) {
+      const base = chain.parsed.base;
+      const property = chain.parsed.properties[0];
+      // Only support simple single-level access for provider resolution (A1.Price)
+      if (!/^[A-Z]+\d+$/i.test(base)) continue;
+
+      // Get raw base value (preserve EntityValue) — mirror evaluateDotMemberExpressionStub logic
+      let baseValue: FormulaValue;
+      if (/^[A-Z]+\d+$/i.test(base)) {
+        const addr = this.parseCellReference(base);
+        this.dependencyGraph.addDependency(context.currentCell, addr);
+        const cell = context.worksheet.getCell(addr);
+
+        if (!cell) {
+          baseValue = null;
+        } else if (cell.formula) {
+          baseValue = this.evaluate(cell.formula, { ...context, currentCell: addr });
+        } else {
+          baseValue = cell.value as FormulaValue; // raw value, may be EntityValue
+        }
+      } else {
+        baseValue = this.evaluateExpression(base, context);
+      }
+
+      if (!isEntityValue(baseValue)) continue;
+      if (!(baseValue as any).type) continue;
+
+      const entityId = (baseValue as any).id || (baseValue as any).symbol || (baseValue as any).code;
+      if (!entityId) continue;
+
+      const key = `${(baseValue as any).type}|${entityId}|${property}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      refs.push({ type: (baseValue as any).type, id: entityId, field: property });
+    }
+
+    // DEBUG: log extracted chains & refs
+    // If no provider refs, just run the synchronous evaluation path
+    if (refs.length === 0) {
+      return this.evaluate(formula, context);
+    }
+
+    // 3) Resolve via BatchResolver
+    const ctx = new (require('./providers').ProviderResolutionContext)();
+    ctx.addPendingMany(refs);
+
+    try {
+      await resolver.resolve(refs, ctx, opts as any);
+    } catch (err) {
+      // Treat unexpected resolver failure as network error
+      return new Error('#CONNECT!');
+    }
+
+    // 4) If there are provider errors, short-circuit with mapped spreadsheet error
+    if (ctx.errors.size > 0) {
+      // Map first error to spreadsheet token
+      const firstErr = ctx.errors.values().next().value as ProviderError;
+      return new Error(this.mapProviderErrorToSpreadsheetError(firstErr));
+    }
+
+    // 5) Seed ProviderRegistry cache with resolved values
+    for (const [k, entry] of ctx.resolved.entries()) {
+      // keys are of form `${type}|${id}|${field}`
+      const [type, id, field] = k.split('|');
+      try {
+        this.providerRegistry.setCachedValue(type, id, field, entry.value);
+      } catch (e) {
+        // ignore cache injection errors; evaluation will fall back to local fields
+      }
+    }
+
+    // 6) Run synchronous evaluator (provider cache is now seeded)
+    return this.evaluateInternal(formula, context);
+  }
+
+  private mapProviderErrorToSpreadsheetError(err: ProviderError): string {
+    switch (err.kind) {
+      case 'NOT_FOUND':
+        return '#REF!';
+      case 'UNKNOWN_FIELD':
+        return '#FIELD!';
+      case 'RATE_LIMIT':
+        return '#BUSY!';
+      case 'NETWORK':
+      case 'TIMEOUT':
+        return '#CONNECT!';
+      case 'API_ERROR':
+      default:
+        return '#GETTING_DATA';
+    }
+  }
+
   private evaluateWithTokens(expr: string, context: FormulaContext): FormulaValue {
     // Step 1: Extract all member chain substrings at top level
     const chains = this.extractMemberChains(expr);
