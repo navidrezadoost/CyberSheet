@@ -20,3 +20,11 @@ export * from './CellLayout';
 export * from './ConditionalFormattingEngine';
 export * from './models/ChartObject';
 export * from './models/AdvancedChartOptions';
+
+// Provider infrastructure (PR #3, PR #4)
+export { BatchResolver } from './providers/BatchResolver';
+export { ThrottlePolicy, WindowThrottle } from './providers/ThrottlePolicy';
+export { QuotaManager } from './providers/QuotaManager';
+export { HttpObservability } from './providers/HttpObservability';
+export { AlphaVantageDriver } from './providers/AlphaVantageDriver';
+export { MetricsCollector, MetricsReport, formatMetricsReport } from './providers/MetricsCollector';

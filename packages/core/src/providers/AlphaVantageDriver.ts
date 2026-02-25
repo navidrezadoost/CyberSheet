@@ -150,6 +150,11 @@ export class AlphaVantageDriver implements IDataTypeProvider {
       } catch (error) {
         // Cache error for deduplication (DETERMINISM CONTRACT)
         this.cacheError(symbol, error);
+        
+        // Track failure for metrics
+        if (this.observability && 'recordFailure' in this.observability) {
+          (this.observability as any).recordFailure(error);
+        }
       }
     }
   }
@@ -279,6 +284,19 @@ export class AlphaVantageDriver implements IDataTypeProvider {
     if (errorValue.message === '#QUOTA!') {
       this.observability?.quotaHit?.(this.quota.getUsed(), this.quota.limit);
     }
+  }
+
+  /**
+   * Get metrics report for observation phase
+   * 
+   * Requires that the observability instance is a MetricsCollector.
+   * Returns null if no metrics collector is configured.
+   */
+  getMetricsReport(): any | null {
+    if (this.observability && 'getReport' in this.observability) {
+      return (this.observability as any).getReport(this.quota.getUsed(), this.quota.limit);
+    }
+    return null;
   }
 }
 

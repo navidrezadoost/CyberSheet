@@ -2,18 +2,30 @@ import { FormulaEngine } from '../src/FormulaEngine';
 import { Worksheet } from '../src/worksheet';
 import { MockBatchResolver } from '../src/providers/ProviderResolution';
 import { StockProvider, GeographyProvider } from '../src/providers';
+import { HttpProviderAdapter } from '../src/providers/HttpProviderAdapter';
+import { ProviderRegistry } from '../src/providers/ProviderRegistry';
 
 describe('FormulaEngine.evaluateWithProviders (orchestrator) — PR #2', () => {
   let engine: FormulaEngine;
   let sheet: Worksheet;
+  let mockHttpAdapter: HttpProviderAdapter;
+  let registry: ProviderRegistry;
 
   beforeEach(() => {
     engine = new FormulaEngine();
     sheet = new Worksheet('TestSheet', 100, 26);
+    
+    // Create mock HTTP adapter
+    mockHttpAdapter = {
+      fetchJson: jest.fn().mockResolvedValue({ data: {} })
+    } as any;
+    
+    // Create registry
+    registry = new ProviderRegistry();
 
     // Register providers so engine will recognize entity types
-    engine.providers.register(new StockProvider());
-    engine.providers.register(new GeographyProvider());
+    engine.providers.register(new StockProvider(mockHttpAdapter, registry));
+    engine.providers.register(new GeographyProvider(mockHttpAdapter, registry));
   });
 
   const createStockEntity = (symbol: string) => ({
