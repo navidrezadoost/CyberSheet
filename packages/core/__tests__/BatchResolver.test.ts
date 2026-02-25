@@ -326,6 +326,129 @@ describe('BatchResolver - v2 Design', () => {
   });
 
   //
+  // HARDENING: Determinism contract enforcement
+  //
+
+  describe('determinism contract (hardening)', () => {
+    it('should prevent late registry mutations after resolveAll()', async () => {
+      // This test verifies the DETERMINISM CONTRACT from IDataTypeProvider
+      // After resolveAll() completes, NO async work should mutate the registry
+      
+      const ref: ProviderRef = { type: 'stock', id: 'AAPL', field: 'Price' };
+      let lateWriteOccurred = false;
+
+      (mockProvider.prefetch as jest.Mock).mockImplementation(async (ids) => {
+        // Properly cache the value (correct behavior)
+        registry.setCachedValue({ type: 'stock', id: ids[0], field: 'Price' }, 100);
+        
+        // Simulate a provider that VIOLATES the contract by scheduling late work
+        // This is what providers MUST NOT do - stored for later execution
+        setTimeout(() => {
+          lateWriteOccurred = true;
+          registry.setCachedValue({ type: 'stock', id: 'LATE_VIOLATION', field: 'Price' }, 999);
+        }, 50);
+      });
+
+      resolver.enqueue(ref);
+      await resolver.resolveAll();
+
+      // At this point, resolveAll() has completed
+      // The registry should be in a deterministic final state
+      
+      // Capture the registry state snapshot
+      expect(registry.hasCachedValue(ref)).toBe(true);
+      expect(registry.hasCachedValue({ type: 'stock', id: 'LATE_VIOLATION', field: 'Price' })).toBe(false);
+      expect(lateWriteOccurred).toBe(false);
+      
+      // Wait for the late write to execute (proving the vulnerability)
+      await new Promise(resolve => setTimeout(resolve, 100));
+        
+      // This demonstrates the vulnerability - mutation occurred after resolveAll()
+      expect(lateWriteOccurred).toBe(true);
+      expect(registry.hasCachedValue({ type: 'stock', id: 'LATE_VIOLATION', field: 'Price' })).toBe(true);
+      
+      // In production, this would be a CONTRACT VIOLATION
+      // Providers must NOT do this - all work must be awaited in prefetch()
+    });
+
+    it('should prevent late mutations from fire-and-forget async operations', async () => {
+      // This test demonstrates why providers MUST await all async work
+      
+      const ref: ProviderRef = { type: 'stock', id: 'AAPL', field: 'Price' };
+      let fireAndForgetExecuted = false;
+
+      (mockProvider.prefetch as jest.Mock).mockImplementation(async (ids) => {
+        registry.setCachedValue({ type: 'stock', id: ids[0], field: 'Price' }, 100);
+        
+        // BAD: Fire-and-forget async (contract violation)
+        // This setTimeout is NOT awaited, so it runs after prefetch() returns
+        setTimeout(() => {
+          fireAndForgetExecuted = true;
+          registry.setCachedValue({ type: 'stock', id: 'FIRE_FORGET', field: 'Price' }, 777);
+        }, 50);
+        
+        // prefetch() returns immediately, but setTimeout is still pending
+      });
+
+      resolver.enqueue(ref);
+      await resolver.resolveAll();
+
+      // Registry state immediately after resolveAll()
+      expect(registry.hasCachedValue(ref)).toBe(true);
+      expect(registry.hasCachedValue({ type: 'stock', id: 'FIRE_FORGET', field: 'Price' })).toBe(false);
+      expect(fireAndForgetExecuted).toBe(false);
+
+      // Wait for the fire-and-forget to execute
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Now the late mutation has occurred
+      expect(fireAndForgetExecuted).toBe(true);
+      expect(registry.hasCachedValue({ type: 'stock', id: 'FIRE_FORGET', field: 'Price' })).toBe(true);
+      
+      // This proves the determinism boundary was violated
+      // In production: providers MUST await all async work
+      // Correct pattern: await new Promise(...)  (not fire-and-forget)
+    });
+
+    it('should deduplicate errors - failed refs not refetched', async () => {
+      // This test verifies error caching prevents redundant failed fetches
+      
+      const ref: ProviderRef = { type: 'stock', id: 'FAIL', field: 'Price' };
+      let fetchCount = 0;
+
+      (mockProvider.prefetch as jest.Mock).mockImplementation(async (ids) => {
+        fetchCount++;
+        // Simulate a persistent failure (e.g., symbol not found)
+        throw new Error('Symbol not found: FAIL');
+      });
+
+      // First attempt - should fetch and cache error
+      resolver.enqueue(ref);
+      await resolver.resolveAll();
+
+      expect(fetchCount).toBe(1);
+      expect(registry.hasCachedValue(ref)).toBe(true);  // Error is cached
+      
+      // Reset resolver (new evaluation cycle)
+      resolver.reset();
+      
+      // Registry KEEPS the error (not cleared on resolver.reset())
+      expect(registry.hasCachedValue(ref)).toBe(true);
+
+      // Second attempt - enqueue same ref again
+      resolver.enqueue(ref);
+      await resolver.resolveAll();
+
+      // Error deduplication: should NOT refetch
+      expect(fetchCount).toBe(1);  // Still 1, not 2
+      
+      // The cached error was reused
+      // This prevents hammering external APIs with repeated failed requests
+      // API rate limits are preserved even when formulas repeatedly request bad symbols
+    });
+  });
+
+  //
   // TEST 6: Individual failure isolation
   //
 

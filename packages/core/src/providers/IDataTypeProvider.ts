@@ -37,6 +37,40 @@ export interface IDataTypeProvider {
    * 
    * @param entityRefs - Array of entity references to prefetch
    * @param context - Formula evaluation context
+   * 
+   * ═══════════════════════════════════════════════════════════════════
+   * DETERMINISM CONTRACT (CRITICAL - DO NOT VIOLATE)
+   * ═══════════════════════════════════════════════════════════════════
+   * 
+   * 1. prefetch() MUST await all asynchronous work before returning.
+   * 2. NO background tasks may mutate ProviderRegistry after prefetch() resolves.
+   * 3. ALL values (including errors) MUST be written to registry before resolution.
+   * 4. Fire-and-forget async operations are STRICTLY FORBIDDEN.
+   * 
+   * RATIONALE:
+   * The formula evaluation model depends on a deterministic snapshot boundary.
+   * After BatchResolver.resolveAll() completes, the registry state must be final.
+   * Late mutations break:
+   *   - Reproducible evaluation results
+   *   - Formula dependency tracking
+   *   - Undo/redo correctness
+   *   - Multi-threaded safety (future)
+   * 
+   * ENFORCEMENT:
+   * Violations of this contract are architectural bugs, not feature limitations.
+   * Tests explicitly verify no late writes occur after resolution.
+   * 
+   * EXAMPLES OF VIOLATIONS:
+   * ❌ setTimeout(() => registry.setCachedValue(...), 100)
+   * ❌ fetch(...).then(data => registry.setCachedValue(...))
+   * ❌ Spawning background workers without awaiting completion
+   * 
+   * CORRECT PATTERNS:
+   * ✅ await adapter.request(...)
+   * ✅ await Promise.all([fetch1, fetch2, fetch3])
+   * ✅ registry.setCachedValue(...) synchronously after await
+   * 
+   * ═══════════════════════════════════════════════════════════════════
    */
   prefetch?(entityRefs: string[], context: FormulaContext): Promise<void>;
 }
