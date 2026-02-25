@@ -1,5 +1,8 @@
 import { FormulaValue, FormulaContext } from '../types/formula-types';
 import { IDataTypeProvider } from './IDataTypeProvider';
+import { ProviderRegistry } from './ProviderRegistry';
+import { HttpProviderAdapter } from './HttpProviderAdapter';
+import { ProviderErrorKind } from './ProviderResolution';
 
 /**
  * Mock geography data provider for testing and demonstration.
@@ -9,11 +12,6 @@ import { IDataTypeProvider } from './IDataTypeProvider';
  * 
  * Week 3 Phase 2 (v2.3-provider-layer)
  */
-import { FormulaValue, FormulaContext } from '../types/formula-types';
-import { IDataTypeProvider } from './IDataTypeProvider';
-import { ProviderRegistry } from './ProviderRegistry';
-import { HttpProviderAdapter } from './HttpProviderAdapter';
-import { ProviderErrorKind } from './ProviderResolution';
 
 export class GeographyProvider implements IDataTypeProvider {
   id = 'geography-provider';

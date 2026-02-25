@@ -17,12 +17,19 @@ export type ProviderErrorKind =
   | 'NETWORK'
   | 'TIMEOUT'
   | 'RATE_LIMIT'
-  | 'API_ERROR';
+  | 'API_ERROR'
+  | 'AUTH'
+  | 'SERVER'
+  | 'PARSE'
+  | 'UNKNOWN';
 
 export interface ProviderError {
   kind: ProviderErrorKind;
+  retryable?: boolean;
   message?: string;
   statusCode?: number;
+  // optional Retry-After header value (seconds)
+  retryAfter?: string;
 }
 
 export interface BatchResolverOptions {
