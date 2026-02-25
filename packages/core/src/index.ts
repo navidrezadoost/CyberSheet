@@ -28,3 +28,6 @@ export { QuotaManager } from './providers/QuotaManager';
 export { HttpObservability } from './providers/HttpObservability';
 export { AlphaVantageDriver } from './providers/AlphaVantageDriver';
 export { MetricsCollector, MetricsReport, formatMetricsReport } from './providers/MetricsCollector';
+
+// General Search API (Phase 1: Core Search)
+export { SearchOptions, SearchRange, SearchResult, SearchLookIn, SearchLookAt, SearchOrder, SearchDirection } from './types/search-types';

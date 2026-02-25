@@ -1,6 +1,7 @@
 import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, Range, SheetEvents, IFormulaEngine } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
+import { SearchOptions, SearchRange, SearchResult } from './types/search-types';
 
 function key(addr: Address): string {
   return `${addr.row}:${addr.col}`;
@@ -497,6 +498,148 @@ export class Worksheet {
     }
     
     return result;
+  }
+
+  // ==================== General Search API (Phase 1) ====================
+
+  /**
+   * Find iterator - lazy search with generator pattern
+   * 
+   * **Excel Parity**: ✅ Range.Find() with findNext loop pattern
+   * 
+   * **Complexity**: O(n) where n = cells in range
+   * **Memory**: O(1) - yields addresses one at a time
+   * **Precision**: ±0 (exact text match)
+   * **Error Strategy**: SKIP_ERRORS (silently skip malformed cells)
+   * **Volatility**: Non-volatile (deterministic for given worksheet state)
+   * 
+   * **Phase 1 Implementation Status**: 🚧 STUB - Returns empty generator
+   * 
+   * @param options - Search configuration (what, lookIn, lookAt, matchCase, etc.)
+   * @param range - Optional range to search (default: entire worksheet)
+   * @yields Address of each matching cell
+   * 
+   * @example
+   * ```ts
+   * // Find all cells containing "Apple"
+   * for (const addr of sheet.findIterator({ what: "Apple" })) {
+   *   console.log(addr); // { row: 5, col: 2 }
+   * }
+   * 
+   * // Case-sensitive search in formulas
+   * for (const addr of sheet.findIterator({ 
+   *   what: "SUM", 
+   *   lookIn: "formulas", 
+   *   matchCase: true 
+   * })) {
+   *   console.log(sheet.getCell(addr)?.formula);
+   * }
+   * ```
+   */
+  *findIterator(
+    options: SearchOptions,
+    range?: SearchRange
+  ): Generator<Address, void, undefined> {
+    // TODO: Phase 1 implementation
+    // 1. Determine iteration order (rows vs columns)
+    // 2. Apply matchCase transformation
+    // 3. Handle wildcards (*, ?, ~)
+    // 4. Check lookIn (values, formulas, comments)
+    // 5. Apply lookAt (part vs whole)
+    // 6. Yield matching addresses
+    
+    // STUB: Return empty generator for now
+    return;
+  }
+
+  /**
+   * Find single match (convenience wrapper)
+   * 
+   * **Excel Parity**: ✅ Range.Find(what, after)
+   * 
+   * **Complexity**: O(n) worst case, but returns first match
+   * **Memory**: O(1)
+   * **Precision**: ±0
+   * **Error Strategy**: SKIP_ERRORS
+   * **Volatility**: Non-volatile
+   * 
+   * **Phase 1 Implementation Status**: 🚧 STUB - Returns null
+   * 
+   * @param options - Search configuration
+   * @param after - Start search after this address (default: top-left)
+   * @param range - Optional range to search
+   * @returns First matching address or null if no match
+   * 
+   * @example
+   * ```ts
+   * const addr = sheet.find({ what: "Apple", matchCase: false });
+   * if (addr) {
+   *   console.log(`Found at ${addr.row}, ${addr.col}`);
+   * }
+   * 
+   * // Find next occurrence after A5
+   * const nextAddr = sheet.find({ what: "Apple" }, { row: 4, col: 0 });
+   * ```
+   */
+  find(
+    options: SearchOptions,
+    after?: Address,
+    range?: SearchRange
+  ): Address | null {
+    // TODO: Phase 1 implementation
+    // 1. Determine start position (after address or range.start)
+    // 2. Use findIterator internally
+    // 3. Return first yielded address
+    // 4. Handle searchDirection (next vs previous)
+    
+    // STUB: Return null for now
+    return null;
+  }
+
+  /**
+   * Find all matches (eager collection)
+   * 
+   * **Excel Parity**: ✅ Range.FindAll() pattern (loop + collect)
+   * 
+   * **Complexity**: O(n) where n = cells in range
+   * **Memory**: O(m) where m = number of matches (eager allocation)
+   * **Precision**: ±0
+   * **Error Strategy**: SKIP_ERRORS
+   * **Volatility**: Non-volatile
+   * 
+   * **Phase 1 Implementation Status**: 🚧 STUB - Returns empty array
+   * 
+   * **Warning**: Use sparingly for large worksheets. Prefer `findIterator()` for
+   * memory-efficient streaming. This method allocates an array upfront.
+   * 
+   * @param options - Search configuration
+   * @param range - Optional range to search
+   * @returns Array of all matching addresses (empty if no matches)
+   * 
+   * @example
+   * ```ts
+   * // Find all "Apple" occurrences
+   * const matches = sheet.findAll({ what: "Apple" });
+   * console.log(`Found ${matches.length} matches`);
+   * 
+   * // Search in specific range
+   * const rangeMatches = sheet.findAll(
+   *   { what: "error", matchCase: false },
+   *   { start: { row: 0, col: 0 }, end: { row: 100, col: 10 } }
+   * );
+   * ```
+   */
+  findAll(
+    options: SearchOptions,
+    range?: SearchRange
+  ): Address[] {
+    // TODO: Phase 1 implementation
+    // 1. Use findIterator internally
+    // 2. Collect all yields into array
+    // 3. Return complete result set
+    
+    // STUB: Return empty array for now
+    return [];
   }
 
   // ==================== Private Helpers ====================
