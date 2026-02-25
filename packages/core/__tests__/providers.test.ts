@@ -257,7 +257,7 @@ describe('Provider System', () => {
     expect(fakeFetch).toHaveBeenCalled();
   });
 
-  test('[P32] StockProvider.prefetch handles RATE_LIMIT error', async () => {
+  test('[P32] StockProvider.prefetch handles RATE_LIMIT error gracefully', async () => {
     const stockProvider = getStockProvider();
     fakeFetch.mockResolvedValue({
       ok: false,
@@ -267,9 +267,14 @@ describe('Provider System', () => {
     });
 
     await stockProvider.prefetch(['GOOG'], { worksheet: sheet, currentCell: { row: 1, col: 1 } });
-    const err = engine.providers.getValue('stock', 'GOOG', 'Price', { symbol: 'GOOG' }, { worksheet: sheet, currentCell: { row: 1, col: 1 } });
-    expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toBe('#REF!');
+    // fetch was attempted, but existing cache entry should remain unchanged
+    expect(fakeFetch).toHaveBeenCalled();
+    expect((stockProvider as any).cache['GOOG']).toEqual({
+      Price: 1350,
+      Volume: 25000000,
+      MarketCap: 1700000000000,
+      Change: -1.2
+    });
   });
 
   test('[P15] Unknown geography field returns #REF!', () => {
