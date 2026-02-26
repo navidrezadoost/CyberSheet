@@ -14,6 +14,8 @@ import type { ICellStore } from './storage/ICellStore';
 import { CellStoreV1 } from './storage/CellStoreV1';
 import type { IMergeStore } from './storage/MergeStore';
 import { MergeStoreV1, MergeConflictError } from './storage/MergeStore';
+import type { IVisibilityStore } from './storage/VisibilityStore';
+import { VisibilityStoreV1 } from './storage/VisibilityStore';
 
 export class Worksheet {
   readonly name: string;
@@ -29,6 +31,13 @@ export class Worksheet {
    * To rollback: replace MergeStoreV1 with MergeStoreLegacy (same interface, O(n) ops).
    */
   private mergeStore: IMergeStore = new MergeStoreV1();
+  /**
+   * Visibility store — IVisibilityStore boundary.
+   * Stores hidden rows and columns as Set<number> — all queries O(1).
+   * To rollback: replace VisibilityStoreV1 with VisibilityStoreLegacy (same interface, O(n) ops).
+   * Hidden state is NEVER written into CellRecord — this is an invariant.
+   */
+  private visibilityStore: IVisibilityStore = new VisibilityStoreV1();
   private conditionalRules: ConditionalFormattingRule[] = [];
   private workbook?: any; // Reference to parent Workbook (for StyleCache access)
   rowCount: number;
@@ -465,7 +474,87 @@ export class Worksheet {
   getMergeAnchorFor(addr: Address): Address | null {
     return this.mergeStore.getAnchor(addr.row, addr.col);
   }
+  // ==================== Visibility API (Phase 3) ====================
+  //
+  // Behavioral contract:
+  //   getCell      — always returns data regardless of hidden state
+  //   find         — skips hidden cells (row or col hidden) unless includeHidden: true
+  //   iteration    — controlled via findIterator's includeHidden option
+  //   merge+hidden — orthogonal: merge is spatial, hidden is visual; no conflict
+  //   spill        — NOT blocked by hidden cells (hidden is display-only)
+  //   unhide       — Set.delete() → O(1) → traversal immediately restored
 
+  /**
+   * Hide a row. Idempotent. O(1).
+   * Does NOT affect cell data — cells in hidden rows are still accessible via getCell().
+   */
+  hideRow(row: number): void {
+    this.visibilityStore.hideRow(row);
+    this.events.emit({ type: 'row-hidden', row });
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  /**
+   * Restore a hidden row to visible. Idempotent. O(1).
+   * find() and findIterator() will immediately include it again.
+   */
+  showRow(row: number): void {
+    this.visibilityStore.showRow(row);
+    this.events.emit({ type: 'row-shown', row });
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  /**
+   * Hide a column. Idempotent. O(1).
+   */
+  hideCol(col: number): void {
+    this.visibilityStore.hideCol(col);
+    this.events.emit({ type: 'col-hidden', col });
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  /**
+   * Restore a hidden column to visible. Idempotent. O(1).
+   */
+  showCol(col: number): void {
+    this.visibilityStore.showCol(col);
+    this.events.emit({ type: 'col-shown', col });
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  /** Returns true if the row is currently hidden. O(1). */
+  isRowHidden(row: number): boolean {
+    return this.visibilityStore.isRowHidden(row);
+  }
+
+  /** Returns true if the column is currently hidden. O(1). */
+  isColHidden(col: number): boolean {
+    return this.visibilityStore.isColHidden(col);
+  }
+
+  /**
+   * Returns true if a cell's row OR column is hidden.
+   * Used by the formula engine and renderers — O(1).
+   */
+  isCellHidden(addr: Address): boolean {
+    return this.visibilityStore.isCellHidden(addr.row, addr.col);
+  }
+
+  /**
+   * Returns the set of all currently hidden row indices.
+   * O(1) — returns the live ReadonlySet reference.
+   */
+  getHiddenRows(): ReadonlySet<number> {
+    return this.visibilityStore.getHiddenRows();
+  }
+
+  /**
+   * Returns the set of all currently hidden column indices.
+   * O(1) — returns the live ReadonlySet reference.
+   */
+  getHiddenCols(): ReadonlySet<number> {
+    return this.visibilityStore.getHiddenCols();
+  }
   /**
    * Delete a cell: clears all its data.
    *
@@ -720,7 +809,7 @@ export class Worksheet {
     // Empty pattern matches nothing (Excel semantics).
     if (options.what === '') return;
 
-    const { lookIn = 'values', searchOrder = 'rows' } = options;
+    const { lookIn = 'values', searchOrder = 'rows', includeHidden = false } = options;
     const matcher = buildMatcher(options);
 
     // ── 1. Collect addresses of all populated cells ──────────────────────────
@@ -732,6 +821,11 @@ export class Worksheet {
       // Safety net: skip non-anchor merged cells.
       // In normal operation these are absent from ICellStore, but guard defensively.
       if (this.mergeStore.isNonAnchor(row, col)) return;
+
+      // ── Phase 3: skip hidden cells ────────────────────────────────────────
+      // Default: skip cells whose row OR column is hidden (Excel Ctrl+F parity).
+      // Pass includeHidden: true to search the raw data model.
+      if (!includeHidden && this.visibilityStore.isCellHidden(row, col)) return;
 
       // ── 2. Apply range filter ─────────────────────────────────────────────
       if (range) {

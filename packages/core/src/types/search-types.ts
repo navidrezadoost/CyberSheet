@@ -108,6 +108,17 @@ export interface SearchOptions {
   searchDirection?: SearchDirection;
 
   /**
+   * Include content in hidden rows and hidden columns.
+   *
+   * - false (default): skip cells whose row OR column is hidden — matches
+   *   Excel behaviour where Ctrl+F does not find content in hidden rows.
+   * - true: include hidden cells (equivalent to searching the raw data model).
+   *
+   * Phase 3 addition. Excel Parity: ✅
+   */
+  includeHidden?: boolean;
+
+  /**
    * Double-byte character matching (East Asian languages)
    * 
    * Excel Parity: ✅ matchByte (Phase 2)

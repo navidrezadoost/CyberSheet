@@ -346,7 +346,11 @@ export type SheetEvents =
   | { type: 'comment-deleted'; address: Address; commentId: string }
   | { type: 'icon-changed'; address: Address; icon: CellIcon | undefined }
   | { type: 'merge-added'; region: MergedRegion }
-  | { type: 'merge-removed'; region: MergedRegion };
+  | { type: 'merge-removed'; region: MergedRegion }
+  | { type: 'row-hidden'; row: number }
+  | { type: 'row-shown'; row: number }
+  | { type: 'col-hidden'; col: number }
+  | { type: 'col-shown'; col: number };
 
 export interface IFormulaEngine {
   // Evaluate value for a cell. Implementations should handle dependency tracking internally.
