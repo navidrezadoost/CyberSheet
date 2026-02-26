@@ -350,7 +350,8 @@ export type SheetEvents =
   | { type: 'row-hidden'; row: number }
   | { type: 'row-shown'; row: number }
   | { type: 'col-hidden'; col: number }
-  | { type: 'col-shown'; col: number };
+  | { type: 'col-shown'; col: number }
+  | { type: 'cycle-detected'; cycles: import('./dag/DependencyGraph').CycleDiagnostic[] };
 
 export interface IFormulaEngine {
   // Evaluate value for a cell. Implementations should handle dependency tracking internally.
