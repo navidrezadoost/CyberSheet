@@ -24,6 +24,8 @@ import {
   type IterativeRecalcResult,
   type RecalcIterationPolicy,
 } from './dag/DependencyGraph';
+import type { WorksheetSnapshot } from './persistence/SnapshotCodec';
+export type { WorksheetSnapshot } from './persistence/SnapshotCodec';
 
 export class Worksheet {
   readonly name: string;
@@ -1125,6 +1127,87 @@ export class Worksheet {
     // findAll is a thin eager wrapper over the lazy iterator.
     // PM mandate: no independent scan loop here — must go through findIterator.
     return [...this.findIterator(options, range)];
+  }
+
+  // ==================== Snapshot API (Phase 7) ====================
+
+  /**
+   * Extract all serialisable Worksheet state into a plain object.
+   *
+   * Captures: cells, merges, visibility (hidden rows/cols), DAG dependency edges,
+   * and volatile registrations.  Does NOT capture: column widths, row heights,
+   * column filters, conditional formatting rules, or formula engine reference.
+   *
+   * Typical usage:
+   * ```ts
+   * import { SnapshotCodec } from './persistence/SnapshotCodec';
+   * const buf = new SnapshotCodec().encode(ws.extractSnapshot());
+   * ```
+   *
+   * @complexity O(V + E) where V = cells + merges + visibility items, E = DAG edges.
+   */
+  extractSnapshot(): WorksheetSnapshot {
+    const cells: WorksheetSnapshot['cells'] = [];
+    this.cells.forEach((row, col, cell) => cells.push({ row, col, cell }));
+
+    const dagEdges: WorksheetSnapshot['dagEdges'] = [];
+    this.recalcCoordinator.forEachFormula((row, col, deps) => {
+      dagEdges.push({ row, col, deps });
+    });
+
+    return {
+      version:    1,
+      cells,
+      merges:     this.mergeStore.getAll(),
+      hiddenRows: [...this.visibilityStore.getHiddenRows()],
+      hiddenCols: [...this.visibilityStore.getHiddenCols()],
+      dagEdges,
+      volatiles:  this.recalcCoordinator.getVolatileAddresses(),
+    };
+  }
+
+  /**
+   * Replace all Worksheet state with the contents of a snapshot.
+   *
+   * Clears the current cell store, merge store, visibility store, and DAG,
+   * then loads each section from the snapshot.  The formula engine reference,
+   * column widths, row heights, column filters, and conditional formatting
+   * rules are NOT touched — they survive the restore.
+   *
+   * @param snapshot  Plain WorksheetSnapshot produced by extractSnapshot() or
+   *                  decoded by SnapshotCodec.decode().
+   */
+  applySnapshot(snapshot: WorksheetSnapshot): void {
+    // ── Reset all stores ──────────────────────────────────────────────────
+    this.cells          = new CellStoreV1();
+    this.mergeStore     = new MergeStoreV1();
+    this.visibilityStore = new VisibilityStoreV1();
+    this.dag.clearAll();
+
+    // ── Restore cells ────────────────────────────────────────────────────
+    for (const { row, col, cell } of snapshot.cells) {
+      this.cells.set(row, col, cell);
+    }
+
+    // ── Restore merges ───────────────────────────────────────────────────
+    for (const region of snapshot.merges) {
+      this.mergeStore.add(region);
+    }
+
+    // ── Restore visibility ───────────────────────────────────────────────
+    for (const row of snapshot.hiddenRows) this.visibilityStore.hideRow(row);
+    for (const col of snapshot.hiddenCols) this.visibilityStore.hideCol(col);
+
+    // ── Restore DAG ──────────────────────────────────────────────────────
+    for (const { row, col, deps } of snapshot.dagEdges) {
+      this.recalcCoordinator.registerFormula(row, col, deps);
+    }
+
+    // ── Restore volatiles ────────────────────────────────────────────────
+    for (const { row, col } of snapshot.volatiles) {
+      // Re-register with empty local deps list; the DAG edges carry structural deps.
+      this.recalcCoordinator.registerVolatile(row, col, []);
+    }
   }
 
   // ==================== Private Helpers ====================

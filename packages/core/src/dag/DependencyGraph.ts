@@ -675,6 +675,45 @@ export class DependencyGraph {
     if (!sucSet) return [];
     return [...sucSet].map(unpackKey);
   }
+
+  // ── Serialisation (Phase 7) ───────────────────────────────────────────────
+
+  /**
+   * Iterate every formula cell registered in the graph, yielding its address
+   * and dependency list.  Used by snapshot serialisation.
+   *
+   * @complexity O(V + E) where V = formula cells, E = total edges.
+   */
+  forEachFormula(cb: (row: number, col: number, deps: Address[]) => void): void {
+    for (const [key, edgeList] of this.predecessors) {
+      const { row, col } = unpackKey(key);
+      const deps = [...edgeList].map(k => unpackKey(k));
+      cb(row, col, deps);
+    }
+  }
+
+  /**
+   * Return all volatile cell addresses as an array.
+   * Used by snapshot serialisation to persist volatile registrations.
+   * O(n_volatiles).
+   */
+  getVolatileAddresses(): Address[] {
+    return [...this.volatiles].map(k => unpackKey(k));
+  }
+
+  /**
+   * Reset all graph state: predecessors, successors, volatiles, dirtySet.
+   *
+   * Called by Worksheet.applySnapshot() before loading new state.
+   * Leaves the graph in the same clean state as a freshly constructed instance.
+   * O(1) — four .clear() calls.
+   */
+  clearAll(): void {
+    this.predecessors.clear();
+    this.successors.clear();
+    this.volatiles.clear();
+    this.dirtySet.clear();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -963,6 +1002,25 @@ export class RecalcCoordinator {
 
     this.graph.clearDirty();
     return { evaluated, cycles: cycleDiags, iterations, converged, maxDelta };
+  }
+
+  // ── Serialisation (Phase 7) ───────────────────────────────────────────────
+
+  /**
+   * Iterate every formula cell and its dependency list.
+   * Delegates to DependencyGraph.forEachFormula().
+   * Used by Worksheet.extractSnapshot().
+   */
+  forEachFormula(cb: (row: number, col: number, deps: Address[]) => void): void {
+    this.graph.forEachFormula(cb);
+  }
+
+  /**
+   * Return all volatile cell addresses as an array.
+   * Delegates to DependencyGraph.getVolatileAddresses().
+   */
+  getVolatileAddresses(): Address[] {
+    return this.graph.getVolatileAddresses();
   }
 
   // ── Diagnostics ───────────────────────────────────────────────────────────
