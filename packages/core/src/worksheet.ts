@@ -24,7 +24,7 @@ import {
   type IterativeRecalcResult,
   type RecalcIterationPolicy,
 } from './dag/DependencyGraph';
-import type { WorksheetSnapshot } from './persistence/SnapshotCodec';
+import { FORMAT_VERSION, type WorksheetSnapshot } from './persistence/SnapshotCodec';
 export type { WorksheetSnapshot } from './persistence/SnapshotCodec';
 
 export class Worksheet {
@@ -1156,7 +1156,7 @@ export class Worksheet {
     });
 
     return {
-      version:    1,
+      version:    FORMAT_VERSION,
       cells,
       merges:     this.mergeStore.getAll(),
       hiddenRows: [...this.visibilityStore.getHiddenRows()],
