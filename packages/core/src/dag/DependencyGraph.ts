@@ -146,6 +146,58 @@ export type RecalcResult = {
 };
 
 // ---------------------------------------------------------------------------
+// Phase 5: Volatile & Iterative recalculation types
+// ---------------------------------------------------------------------------
+
+/**
+ * Algorithm for resolving circular references during iterative recalc.
+ *
+ * gauss-seidel  — updates each cell's value immediately in-order; uses the
+ *                 freshest values as soon as they're computed. Faster convergence
+ *                 for most spreadsheet patterns (Excel default).
+ * jacobi        — evaluates all cells using the *previous* iteration's values,
+ *                 then applies all updates at once.  More stable for strongly
+ *                 coupled cycles; requires 2× memory (old + new value maps).
+ */
+export type RecalcAlgorithm = 'gauss-seidel' | 'jacobi';
+
+/**
+ * Scheduler-level policy for iterative circular-reference resolution.
+ *
+ * Separate from the formula-level IterationPolicy (newton/bisection for
+ * individual functions like IRR, YIELD).  This type controls how the
+ * RecalcCoordinator handles *sheet-wide* circular references.
+ */
+export type RecalcIterationPolicy = {
+  /** Maximum recalc passes for cycle nodes (Excel default: 100). */
+  maxIterations: number;
+  /** Stop iterating when max|Δvalue| < tolerance (Excel default: 0.001). */
+  tolerance: number;
+  /** Solver algorithm — affects convergence speed and memory usage. */
+  algorithm: RecalcAlgorithm;
+};
+
+/** Standard defaults mirroring Excel's iterative calculation settings. */
+export const DEFAULT_RECALC_ITERATION_POLICY: RecalcIterationPolicy = {
+  maxIterations: 100,
+  tolerance: 0.001,
+  algorithm: 'gauss-seidel',
+};
+
+/**
+ * Result of an iterative recalculation pass.
+ * Extends RecalcResult with convergence metadata.
+ */
+export type IterativeRecalcResult = RecalcResult & {
+  /** Total number of iteration passes performed (1 = single-pass, acyclic). */
+  iterations: number;
+  /** Whether the cycle nodes converged within the tolerance threshold. */
+  converged: boolean;
+  /** Maximum absolute delta observed on the final iteration. 0 if acyclic. */
+  maxDelta: number;
+};
+
+// ---------------------------------------------------------------------------
 // 1. Node key types
 // ---------------------------------------------------------------------------
 
@@ -246,6 +298,25 @@ export class DependencyGraph {
   setVolatile(node: NodeKey, isVolatile: boolean): void {
     if (isVolatile) this.volatiles.add(node);
     else this.volatiles.delete(node);
+  }
+
+  /** Number of cells currently registered as volatile. O(1). */
+  get volatileCount(): number {
+    return this.volatiles.size;
+  }
+
+  /**
+   * Seed all registered volatile cells into the dirty set and BFS-propagate.
+   * Call this at the start of each render tick / explicit refresh to ensure
+   * volatile cells (NOW, RAND, etc.) are re-evaluated.
+   *
+   * Equivalent to markDirty([]) — the empty-seed markDirty already picks up
+   * all volatiles, so this is a named convenience wrapper.
+   *
+   * @complexity O(V_volatile_reach + E_volatile_reach) — BFS propagation
+   */
+  flushVolatiles(): void {
+    if (this.volatiles.size > 0) this.markDirty([]);
   }
 
   // ── Dirty propagation (BFS) ───────────────────────────────────────────────
@@ -625,14 +696,183 @@ export class RecalcCoordinator {
     return { evaluated: order.length, cycles: cycleDiags };
   }
 
+  // ── Volatile registration (Phase 5) ─────────────────────────────────────
+
+  /**
+   * Register a formula cell as volatile.
+   *
+   * A volatile cell is re-evaluated on every recalc pass regardless of whether
+   * its dependencies changed.  Typical volatile functions: NOW, TODAY, RAND,
+   * RANDBETWEEN, INDIRECT, OFFSET, INFO, CELL.
+   *
+   * Internally: calls setDependencies + setVolatile(true) + markDirty.
+   */
+  registerVolatile(row: number, col: number, deps: Address[]): void {
+    const key     = packKey(row, col);
+    const depKeys = deps.map(d => packKey(d.row, d.col));
+    this.graph.setDependencies(key, depKeys);
+    this.graph.setVolatile(key, true);
+    this.graph.markDirty([key]);
+  }
+
+  /**
+   * Unregister a cell's volatile flag and remove its dependency edges.
+   * Call this when a formula containing a volatile function is deleted or
+   * replaced with a plain value.
+   */
+  clearVolatile(row: number, col: number): void {
+    const key = packKey(row, col);
+    this.graph.setVolatile(key, false);
+    this.graph.clearDependencies(key);
+  }
+
+  /**
+   * Flush all volatile cells into the dirty set and propagate dirtiness.
+   *
+   * Call this at the start of each render frame (e.g., in a 1-second timer
+   * for a live clock) to ensure NOW, RAND, etc. are recalculated.
+   *
+   * @complexity O(V_volatile_reach + E_volatile_reach)
+   */
+  flushVolatiles(): void {
+    this.graph.flushVolatiles();
+  }
+
+  /** Number of cells registered as volatile. */
+  get volatileCount(): number {
+    return this.graph.volatileCount;
+  }
+
+  // ── Iterative recalculation (Phase 5) ────────────────────────────────────
+
+  /**
+   * Execute an iterative recalculation pass that resolves circular references.
+   *
+   * Pipeline:
+   *   1. Kahn topo sort → evalOrder (acyclic nodes) + cycleNodes
+   *   2. Evaluate all acyclic nodes once in topological order (stable values)
+   *   3. If no cycle nodes → done (single pass, converged = true)
+   *   4. Otherwise:
+   *      For iter in 1..policy.maxIterations:
+   *        a. Evaluate all cycle nodes (Gauss-Seidel: in-place, or Jacobi: batch)
+   *        b. Measure max|new - prev| for numeric values
+   *        c. If maxDelta < policy.tolerance → converged, break
+   *   5. If not converged after maxIterations → build CycleDiagnostics
+   *   6. clearDirty
+   *
+   * @param evaluate  Called once per formula cell per pass.
+   *                  Must return the NEW cell value so convergence can be tracked.
+   *                  Non-numeric return values (string, boolean, null) are treated
+   *                  as always-converged for that cell.
+   *
+   * @param policy    Optional override; defaults to DEFAULT_RECALC_ITERATION_POLICY.
+   *
+   * @complexity  Acyclic pass: O(V_dirty + E_dirty).
+   *              Iterative pass: O(V_cycle × maxIterations) in the worst case.
+   */
+  recalcIterative(
+    evaluate: (key: NodeKey) => CellValue,
+    policy: RecalcIterationPolicy = DEFAULT_RECALC_ITERATION_POLICY,
+  ): IterativeRecalcResult {
+    if (this.graph.dirtySet.size === 0) {
+      return { evaluated: 0, cycles: [], iterations: 0, converged: true, maxDelta: 0 };
+    }
+
+    const { order, cycleNodes } = this.graph.getEvalOrder();
+
+    // Pass 1: evaluate all acyclic (topologically ordered) cells exactly once.
+    // These cells have stable values — their predecessors are always evaluated first.
+    for (const key of order) evaluate(key);
+    let evaluated = order.length;
+
+    // Fast path: no cycles
+    if (cycleNodes.size === 0) {
+      this.graph.clearDirty();
+      return { evaluated, cycles: [], iterations: 1, converged: true, maxDelta: 0 };
+    }
+
+    // Iterative path: cycle nodes need repeated evaluation until convergence.
+    const cycleNodeList = [...cycleNodes];
+    const prevValues = new Map<NodeKey, number>();
+    // Initialise with NaN so first iteration always contributes to maxDelta
+    for (const key of cycleNodeList) prevValues.set(key, NaN);
+
+    let iterations    = 0;
+    let converged     = false;
+    let maxDelta      = Infinity;
+
+    for (let iter = 0; iter < policy.maxIterations; iter++) {
+      iterations++;
+      maxDelta = 0;
+
+      if (policy.algorithm === 'jacobi') {
+        // Jacobi: collect NEW values using OLD state, then apply all at once.
+        const newValues = new Map<NodeKey, CellValue>();
+        for (const key of cycleNodeList) {
+          newValues.set(key, evaluate(key));
+          evaluated++;
+        }
+        for (const key of cycleNodeList) {
+          const nv = newValues.get(key);
+          if (typeof nv === 'number') {
+            const prev = prevValues.get(key)!;
+            const delta = Math.abs(nv - (isNaN(prev) ? 0 : prev));
+            if (delta > maxDelta) maxDelta = delta;
+            prevValues.set(key, nv);
+          }
+        }
+      } else {
+        // Gauss-Seidel: update in-place (default — faster convergence).
+        for (const key of cycleNodeList) {
+          const nv = evaluate(key);
+          evaluated++;
+          if (typeof nv === 'number') {
+            const prev = prevValues.get(key)!;
+            const delta = Math.abs(nv - (isNaN(prev) ? 0 : prev));
+            if (delta > maxDelta) maxDelta = delta;
+            prevValues.set(key, nv);
+          }
+        }
+      }
+
+      if (maxDelta < policy.tolerance) {
+        converged = true;
+        break;
+      }
+    }
+
+    // Build cycle diagnostics for non-converged results.
+    const cycleDiags: CycleDiagnostic[] = [];
+    if (!converged) {
+      const sccs = this.graph.findCycles();
+      for (const scc of sccs) {
+        const cells = scc.map(k => unpackKey(k));
+        cycleDiags.push({
+          cycle: scc,
+          cells,
+          message: [
+            `Circular reference (not converged after ${iterations} iteration`,
+            iterations === 1 ? '' : 's',
+            `): `,
+            cells.map(a => `R${a.row}C${a.col}`).join(' → '),
+          ].join(''),
+        });
+      }
+    }
+
+    this.graph.clearDirty();
+    return { evaluated, cycles: cycleDiags, iterations, converged, maxDelta };
+  }
+
   // ── Diagnostics ───────────────────────────────────────────────────────────
 
   /** Graph memory / topology statistics. */
-  get stats(): { nodes: number; edges: number; dirty: number } {
+  get stats(): { nodes: number; edges: number; dirty: number; volatiles: number } {
     return {
-      nodes: this.graph.nodeCount,
-      edges: this.graph.edgeCount,
-      dirty: this.graph.dirtySet.size,
+      nodes:     this.graph.nodeCount,
+      edges:     this.graph.edgeCount,
+      dirty:     this.graph.dirtySet.size,
+      volatiles: this.graph.volatileCount,
     };
   }
 }

@@ -1,4 +1,4 @@
-import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine } from './types';
+import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 import { SearchOptions, SearchRange, SearchResult } from './types/search-types';
@@ -21,6 +21,8 @@ import {
   RecalcCoordinator,
   type CycleDiagnostic,
   type RecalcResult,
+  type IterativeRecalcResult,
+  type RecalcIterationPolicy,
 } from './dag/DependencyGraph';
 
 export class Worksheet {
@@ -458,8 +460,78 @@ export class Worksheet {
   /**
    * DAG statistics for diagnostics and tests.
    */
-  get dagStats(): { nodes: number; edges: number; dirty: number } {
+  get dagStats(): { nodes: number; edges: number; dirty: number; volatiles: number } {
     return this.recalcCoordinator.stats;
+  }
+
+  // ==================== DAG / RecalcCoordinator APIs (Phase 5) ====================
+
+  /**
+   * Register a formula cell as **volatile**.
+   *
+   * Volatile cells are re-evaluated on every recalc tick regardless of whether
+   * their dependencies changed. Typical volatile functions: NOW, TODAY, RAND,
+   * RANDBETWEEN, INDIRECT, OFFSET.
+   *
+   * @param addr  The formula cell.
+   * @param deps  Cells this formula reads (may be empty for NOW/RAND).
+   */
+  registerVolatile(addr: Address, deps: Address[]): void {
+    this.recalcCoordinator.registerVolatile(addr.row, addr.col, deps);
+  }
+
+  /**
+   * Unregister a cell's volatile flag and remove its dependency edges.
+   * Call when a volatile formula is deleted or overwritten with a plain value.
+   */
+  clearVolatile(addr: Address): void {
+    this.recalcCoordinator.clearVolatile(addr.row, addr.col);
+  }
+
+  /**
+   * Re-seed all registered volatile cells as dirty and propagate.
+   *
+   * Call this at the start of each render frame (e.g., from a 1-second
+   * `setInterval`) to refresh NOW, RAND, etc.
+   *
+   * @complexity O(V_volatile_reach + E_volatile_reach)
+   */
+  flushVolatiles(): void {
+    this.recalcCoordinator.flushVolatiles();
+  }
+
+  /** Number of cells currently registered as volatile. */
+  get volatileCount(): number {
+    return this.recalcCoordinator.volatileCount;
+  }
+
+  /**
+   * Run an **iterative** recalculation pass that resolves circular references.
+   *
+   * Unlike `recalc()` (which treats cycles as hard errors), `recalcIterative()`
+   * runs up to `policy.maxIterations` passes over cycle nodes until the values
+   * converge within `policy.tolerance`.  Mirrors Excel's iterative calculation
+   * mode.
+   *
+   * @param evaluate  Called once per cell per iteration pass.  Must return the
+   *                  new `CellValue` so convergence can be tracked. Non-numeric
+   *                  values are treated as always-converged for that cell.
+   *
+   * @param policy    Optional override of `DEFAULT_RECALC_ITERATION_POLICY`
+   *                  (maxIterations=100, tolerance=0.001, algorithm='gauss-seidel').
+   *
+   * @returns         `IterativeRecalcResult` — evaluated count, cycles, iteration
+   *                  count, convergence flag, and final maxDelta.
+   */
+  recalcIterative(
+    evaluate: (key: number) => CellValue,
+    policy?: RecalcIterationPolicy,
+  ): IterativeRecalcResult {
+    const result = this.recalcCoordinator.recalcIterative(evaluate, policy);
+    if (result.cycles.length > 0) {
+      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+    }
+    return result;
   }
 
   // ==================== Merge APIs (Phase 2) ====================
