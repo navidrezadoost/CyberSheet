@@ -16,6 +16,15 @@
  *    via the postMessage transfer list.
  *
  * ==========================================================================
+ * SUPPORTED OPERATIONS (see EngineWorkerProtocol.ts for full type map)
+ * ==========================================================================
+ *
+ *  ping / reset / setCellValue / getCellValue / registerDeps
+ *  mergeCells / hideRow / showRow / hideCol / showCol
+ *  snapshot / applySnapshot
+ *  applyPatch  ← Phase 10: apply a WorksheetPatch, returns inverse patch
+ *
+ * ==========================================================================
  * USAGE — Worker entry point (e.g., engine.worker.ts)
  * ==========================================================================
  *
@@ -34,6 +43,7 @@
 
 import { Worksheet } from '../worksheet';
 import { snapshotCodec }  from '../persistence/SnapshotCodec';
+import { recordingApplyPatch } from '../patch/PatchRecorder';
 import {
   type EngineRequest,
   type EngineResponse,
@@ -177,6 +187,16 @@ export class EngineWorkerHost {
         const snap = snapshotCodec.decode(new Uint8Array(buf));
         this.ws.applySnapshot(snap);
         return;
+      }
+
+      // ── Patch ─────────────────────────────────────────────────────────
+      case 'applyPatch': {
+        const { patch } = msg.payload as RequestPayload<'applyPatch'>;
+        // Apply the patch and compute the inverse in one pass.
+        // The inverse is sent back to the main thread so the PatchUndoStack
+        // can store it without requiring a separate round-trip.
+        const inverse = recordingApplyPatch(this.ws, patch);
+        return inverse;
       }
 
       default: {

@@ -42,9 +42,11 @@
  *  hideCol / showCol Toggle column visibility.
  *  snapshot          Encode and transfer current state as ArrayBuffer.
  *  applySnapshot     Decode and apply a transferred ArrayBuffer snapshot.
+ *  applyPatch        Apply a WorksheetPatch; returns the inverse patch.
  */
 
 import type { ExtendedCellValue } from '../types';
+import type { WorksheetPatch } from '../patch/WorksheetPatch';
 
 // ---------------------------------------------------------------------------
 // Core operation map
@@ -145,6 +147,19 @@ export type EngineOpMap = {
   applySnapshot: {
     payload: { buf: ArrayBuffer };
     result:  void;
+  };
+
+  /**
+   * Apply a WorksheetPatch to the worker's Worksheet and return the inverse
+   * patch so the caller can undo the operation without an extra round-trip.
+   *
+   * The inverse is computed on the Worker thread (which owns the authoritative
+   * Worksheet state) using recordingApplyPatch.  The returned WorksheetPatch
+   * is a plain serialisable object — no transfer list required.
+   */
+  applyPatch: {
+    payload: { patch: WorksheetPatch };
+    result:  WorksheetPatch;   // inverse patch for undo
   };
 };
 

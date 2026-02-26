@@ -45,6 +45,7 @@
  */
 
 import type { ExtendedCellValue } from '../types';
+import type { WorksheetPatch } from '../patch/WorksheetPatch';
 import {
   type EngineOpName,
   type EngineRequest,
@@ -228,5 +229,32 @@ export class WorkerEngineProxy {
    */
   applySnapshot(buf: ArrayBuffer): Promise<void> {
     return this._send('applySnapshot', { buf }, [buf]);
+  }
+
+  // ── Patch (Phase 10) ──────────────────────────────────────────────────────
+
+  /**
+   * Apply a WorksheetPatch to the worker's Worksheet.
+   *
+   * The worker applies the patch atomically (single synchronous call) and
+   * returns the INVERSE patch so the caller can store it for undo/redo.
+   *
+   * This is the canonical mutation method for Phase 10+.  Rather than calling
+   * setCellValue / mergeCells / hideRow individually, callers build a compact
+   * WorksheetPatch and send it in one round-trip.
+   *
+   * @param patch  The forward patch to apply.
+   * @returns      The inverse patch (can be fed to PatchUndoStack).
+   *
+   * Example:
+   *   const inverse = await proxy.applyPatch({ seq: 0, ops: [
+   *     { op: 'setCellValue', row: 1, col: 1, before: null, after: 42 }
+   *   ]});
+   *   // ws[1,1] is now 42.
+   *   await proxy.applyPatch(inverse);
+   *   // ws[1,1] is back to null.
+   */
+  applyPatch(patch: WorksheetPatch): Promise<WorksheetPatch> {
+    return this._send('applyPatch', { patch });
   }
 }
