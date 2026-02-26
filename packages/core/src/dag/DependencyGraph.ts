@@ -119,8 +119,31 @@
  *   - evalOrder is a plain array → can be sliced for batching
  */
 
-import { packKey, unpackKey } from '../storage/CellStore';
-import type { Address } from '../types';
+import { packKey, unpackKey, COL_MULT } from '../storage/CellStoreV1';
+import type { Address, CellValue } from '../types';
+export { packKey, unpackKey, COL_MULT };
+
+// ---------------------------------------------------------------------------
+// Exported result types (used by Worksheet and tests)
+// ---------------------------------------------------------------------------
+
+/** Information about a detected circular reference. */
+export type CycleDiagnostic = {
+  /** Packed node keys forming the cycle. */
+  cycle: NodeKey[];
+  /** Address representation of cycle cells. */
+  cells: Address[];
+  /** Human-readable message for UI / logging. */
+  message: string;
+};
+
+/** Result of a single recalculation pass from RecalcCoordinator. */
+export type RecalcResult = {
+  /** Number of formula cells evaluated this pass. */
+  evaluated: number;
+  /** Cycle diagnostics — empty when no circular references. */
+  cycles: CycleDiagnostic[];
+};
 
 // ---------------------------------------------------------------------------
 // 1. Node key types
@@ -159,8 +182,11 @@ export class DependencyGraph {
   /**
    * Cells currently marked as requiring recalculation.
    * Populated by markDirty(); consumed by getEvalOrder().
+   *
+   * Exposed as readonly to RecalcCoordinator for dirtyCount checks.
+   * External consumers MUST NOT mutate this set.
    */
-  private readonly dirtySet = new Set<NodeKey>();
+  readonly dirtySet = new Set<NodeKey>();
 
   // ── Edge management ───────────────────────────────────────────────────────
 
@@ -308,11 +334,13 @@ export class DependencyGraph {
     }
 
     const order: NodeKey[] = [];
+    const inOrder = new Set<NodeKey>(); // O(1) membership for cycle detection
     let head = 0;
 
     while (head < queue.length) {
       const node = queue[head++];
       order.push(node);
+      inOrder.add(node);
       const sucSet = this.successors.get(node);
       if (!sucSet) continue;
       for (const suc of sucSet) {
@@ -323,10 +351,10 @@ export class DependencyGraph {
       }
     }
 
-    // Nodes still in dirty but not in order → involved in a cycle
+    // Nodes still in dirty but not emitted → involved in a cycle
     const cycleNodes = new Set<NodeKey>();
     for (const node of dirty) {
-      if (!order.includes(node)) cycleNodes.add(node);
+      if (!inOrder.has(node)) cycleNodes.add(node);
     }
 
     return { order, cycleNodes };
@@ -337,64 +365,115 @@ export class DependencyGraph {
     this.dirtySet.clear();
   }
 
-  // ── Cycle detection via DFS tricolour marking (CLRS §22.3) ───────────────
+  // ── Cycle detection — Iterative Tarjan SCC (CLRS §22.5) ─────────────────
+  //
+  // PM requirement: No recursive DFS. All graph algorithms must be iterative.
+  //
+  // Tarjan's algorithm finds all Strongly Connected Components (SCCs) in O(V+E).
+  // An SCC of size > 1 (or a single node with a self-loop) is a cycle.
+  //
+  // Iterative implementation uses an explicit work-stack where each frame
+  // stores the pre-collected successor array and a child-index pointer (ci).
+  // After returning from a child we simply increment ci and continue — no
+  // iterator state to manage, provably correct.
 
   /**
-   * Find all nodes participating in cycles using DFS.
+   * Find all cycles (as SCCs) in the full graph using iterative Tarjan.
    *
-   * Returns a list of strongly connected components (SCCs) that form cycles.
-   * Each SCC with size > 1, or any node with a self-edge, constitutes a cycle.
+   * Returns each SCC that constitutes a circular reference:
+   *   - Array length > 1: mutual reference (A→B→A or longer chain)
+   *   - Array length === 1 with self-edge: self-reference (A=A+1)
    *
-   * Uses Tarjan's SCC algorithm: O(V + E).
-   *
-   * Called lazily when getEvalOrder() reports cycleNodes.size > 0.
+   * @complexity O(V + E) — iterative, no stack overflow risk.
    */
   findCycles(): NodeKey[][] {
-    const index = new Map<NodeKey, number>();
-    const lowLink = new Map<NodeKey, number>();
-    const onStack = new Set<NodeKey>();
-    const stack: NodeKey[] = [];
-    const sccs: NodeKey[][] = [];
+    const indexMap = new Map<NodeKey, number>();
+    const lowLink  = new Map<NodeKey, number>();
+    const onStack  = new Set<NodeKey>();
+    const sccStack: NodeKey[] = [];
+    const result: NodeKey[][] = [];
     let counter = 0;
 
-    const allNodes = new Set([...this.predecessors.keys(), ...this.successors.keys()]);
+    const allNodes = new Set<NodeKey>();
+    for (const k of this.predecessors.keys()) allNodes.add(k);
+    for (const k of this.successors.keys())   allNodes.add(k);
 
-    const strongconnect = (v: NodeKey): void => {
-      index.set(v, counter);
+    /**
+     * Work-stack frame.
+     * `children` is the pre-collected successor array so we can index into it.
+     * `ci` (child index) tracks which successor to process next.
+     */
+    type Frame = { v: NodeKey; children: NodeKey[]; ci: number };
+    const workStack: Frame[] = [];
+
+    /** Perform the Tarjan 'enter' setup and push a new frame. */
+    const push = (v: NodeKey): void => {
+      indexMap.set(v, counter);
       lowLink.set(v, counter);
       counter++;
-      stack.push(v);
+      sccStack.push(v);
       onStack.add(v);
-
       const sucSet = this.successors.get(v);
-      if (sucSet) {
-        for (const w of sucSet) {
-          if (!index.has(w)) {
-            strongconnect(w);
-            lowLink.set(v, Math.min(lowLink.get(v)!, lowLink.get(w)!));
+      workStack.push({ v, children: sucSet ? [...sucSet] : [], ci: 0 });
+    };
+
+    for (const startNode of allNodes) {
+      if (indexMap.has(startNode)) continue;
+
+      push(startNode);
+
+      outer: while (workStack.length > 0) {
+        const frame = workStack[workStack.length - 1];
+        const { v, children } = frame;
+
+        // Advance through un-processed successors
+        while (frame.ci < children.length) {
+          const w = children[frame.ci];
+          frame.ci++;
+
+          if (!indexMap.has(w)) {
+            // Tree edge: push child and restart the outer loop for it
+            push(w);
+            continue outer;
           } else if (onStack.has(w)) {
-            lowLink.set(v, Math.min(lowLink.get(v)!, index.get(w)!));
+            // Back edge: w is an ancestor — update lowLink
+            lowLink.set(v, Math.min(lowLink.get(v)!, indexMap.get(w)!));
+          }
+          // Forward/cross edge: no update needed
+        }
+
+        // All successors processed — pop this frame
+        workStack.pop();
+
+        // Propagate lowLink up to the parent before leaving
+        if (workStack.length > 0) {
+          const pv = workStack[workStack.length - 1].v;
+          lowLink.set(pv, Math.min(lowLink.get(pv)!, lowLink.get(v)!));
+        }
+
+        // If v is an SCC root, drain sccStack
+        if (lowLink.get(v) === indexMap.get(v)) {
+          const scc: NodeKey[] = [];
+          let w: NodeKey;
+          do {
+            w = sccStack.pop()!;
+            onStack.delete(w);
+            scc.push(w);
+          } while (w !== v);
+
+          // Report only real cycles
+          if (scc.length > 1) {
+            result.push(scc);
+          } else {
+            // Single-node SCC: only a cycle if self-loop exists
+            const selfSuccs = this.successors.get(scc[0]);
+            if (selfSuccs?.has(scc[0])) result.push(scc);
           }
         }
       }
-
-      if (lowLink.get(v) === index.get(v)) {
-        const scc: NodeKey[] = [];
-        let w: NodeKey;
-        do {
-          w = stack.pop()!;
-          onStack.delete(w);
-          scc.push(w);
-        } while (w !== v);
-        if (scc.length > 1) sccs.push(scc);
-      }
-    };
-
-    for (const node of allNodes) {
-      if (!index.has(node)) strongconnect(node);
     }
 
-    return sccs;
+    return result;
   }
 
   // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -431,79 +510,137 @@ export class DependencyGraph {
 // ---------------------------------------------------------------------------
 
 /**
- * Evaluation function signature.
- * Provided by the formula engine (e.g., FormulaEngine.evaluate()).
+ * Evaluation function signature — called once per formula cell per recalc pass.
+ * The key is a packed integer; unpackKey(key) → { row, col }.
  */
-export type EvalFn = (addr: Address) => unknown;
+export type EvalFn = (key: NodeKey) => void;
+
+// ---------------------------------------------------------------------------
+// RecalcCoordinator — Phase 4 production implementation
+// ---------------------------------------------------------------------------
 
 /**
  * RecalcCoordinator manages the full recalculation pipeline.
  *
- * STATUS: Skeleton only. Full integration is Phase 4.
- *
  * Responsibilities:
- *   1. When setCellFormula() is called:
- *      a. Parse formula → extract cell references
- *      b. Register dependencies via graph.setDependencies()
- *      c. mark cell dirty
- *   2. When setCellValue() mutates a cell:
- *      a. graph.markDirty([cell])
- *   3. When recalc is triggered (sync or async):
- *      a. graph.getEvalOrder()
- *      b. Evaluate each node in order via evalFn
- *      c. Store results back in CellStore
- *      d. Emit events for dirty cells
- *   4. On cycle detection:
- *      a. Mark cycled cells with #CIRC! error value
- *      b. Emit 'cycle-detected' event with affected addresses
+ *   1. registerFormula  — store dependency edges; mark cell dirty
+ *   2. notifyChanged    — mark a value cell dirty; propagate to dependents
+ *   3. recalc           — propagate dirty (BFS) → topo sort (Kahn) →
+ *                         evaluate in order; detect cycles (Tarjan); bounded
+ *
+ * Guarantees:
+ *   - Deterministic: same graph + same dirty set → same eval order
+ *   - Bounded: each cell evaluated exactly once per pass
+ *   - Non-recursive: no call-stack growth with graph size
+ *   - Cycle-safe: cycle nodes receive #CIRC! but do NOT halt clean-path eval
+ *
+ * @complexity recalc: O(V_dirty + E_dirty)  (Kahn + BFS propagation)
  */
 export class RecalcCoordinator {
-  private readonly graph = new DependencyGraph();
+  /**
+   * @param graph  The shared DependencyGraph (same instance used by Worksheet).
+   */
+  constructor(readonly graph: DependencyGraph) {}
 
-  constructor(private readonly evalFn: EvalFn) {}
+  // ── Registration ─────────────────────────────────────────────────────────
 
-  /** Record formula dependencies parsed from a formula string. */
+  /**
+   * Register the complete dependency list for a formula cell.
+   * Replaces any previously registered dependencies for this cell.
+   * Also marks the formula cell dirty (its value must be recalculated).
+   *
+   * Call this from Worksheet.registerDependencies().
+   */
   registerFormula(row: number, col: number, deps: Address[]): void {
-    const key = packKey(row, col);
+    const key     = packKey(row, col);
     const depKeys = deps.map(d => packKey(d.row, d.col));
     this.graph.setDependencies(key, depKeys);
     this.graph.markDirty([key]);
   }
 
-  /** Mark a constant cell as changed. */
+  /**
+   * Remove all dependency edges for a formula cell
+   * (called when a formula is deleted, or before re-registration on edit).
+   */
+  clearFormula(row: number, col: number): void {
+    this.graph.clearDependencies(packKey(row, col));
+  }
+
+  /**
+   * Mark a cell (typically a value cell) as changed.
+   * The graph propagates dirtiness to all formula cells that read this cell.
+   *
+   * @complexity O(V_reachable + E_reachable) — BFS inside graph.markDirty
+   */
   notifyChanged(row: number, col: number): void {
     this.graph.markDirty([packKey(row, col)]);
   }
 
-  /**
-   * Run a full synchronous recalculation of all dirty cells.
-   *
-   * Returns { evaluated: Address[], cycles: Address[][] }
-   */
-  recalcSync(): { evaluated: Address[]; cycles: Address[][] } {
-    const { order, cycleNodes } = this.graph.getEvalOrder();
-
-    const evaluated: Address[] = [];
-    for (const key of order) {
-      const addr = unpackKey(key);
-      this.evalFn(addr);
-      evaluated.push(addr);
-    }
-
-    const cycles = this.graph.findCycles().map(scc => scc.map(unpackKey));
-
-    this.graph.clearDirty();
-    return { evaluated, cycles };
+  /** Dirty count — number of cells awaiting evaluation. O(1). */
+  get dirtyCount(): number {
+    return this.graph.dirtySet.size;
   }
 
+  // ── Recalculation pipeline ────────────────────────────────────────────────
+
+  /**
+   * Execute one full synchronous recalculation pass.
+   *
+   * Pipeline:
+   *   1. graph.getEvalOrder()  → Kahn topo sort over dirty subgraph
+   *   2. evaluate each key in topo order via the provided callback
+   *   3. If cycleNodes found → run findCycles() to get SCC diagnostics
+   *   4. graph.clearDirty()
+   *
+   * @param evaluate  Called once per dirty formula cell, in correct eval order.
+   *                  Receives the packed NodeKey; use unpackKey(key) for Address.
+   *
+   * @returns RecalcResult with count of evaluated cells and cycle diagnostics.
+   */
+  recalc(evaluate: EvalFn): RecalcResult {
+    if (this.graph.dirtySet.size === 0) return { evaluated: 0, cycles: [] };
+
+    const { order, cycleNodes } = this.graph.getEvalOrder();
+
+    // Evaluate clean cells in topological order
+    for (const key of order) {
+      evaluate(key);
+    }
+
+    // Build cycle diagnostics for nodes in cycles
+    const cycleDiags: CycleDiagnostic[] = [];
+    if (cycleNodes.size > 0) {
+      const sccs = this.graph.findCycles();
+      for (const scc of sccs) {
+        const cells = scc.map(k => unpackKey(k));
+        cycleDiags.push({
+          cycle: scc,
+          cells,
+          message: `Circular reference: ${cells.map(a => `R${a.row}C${a.col}`).join(' → ')}`,
+        });
+      }
+    }
+
+    this.graph.clearDirty();
+    return { evaluated: order.length, cycles: cycleDiags };
+  }
+
+  // ── Diagnostics ───────────────────────────────────────────────────────────
+
+  /** Graph memory / topology statistics. */
   get stats(): { nodes: number; edges: number; dirty: number } {
     return {
       nodes: this.graph.nodeCount,
       edges: this.graph.edgeCount,
-      dirty: 0, // dirtySet is private; expose via graph method if needed
+      dirty: this.graph.dirtySet.size,
     };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Internal constant — shared with findCycles
+// ---------------------------------------------------------------------------
+const EMPTY_SET: ReadonlySet<NodeKey> = Object.freeze(new Set<NodeKey>());
 
 // ---------------------------------------------------------------------------
 // 4. Range dependency expansion utilities

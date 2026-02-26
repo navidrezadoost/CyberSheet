@@ -16,6 +16,12 @@ import type { IMergeStore } from './storage/MergeStore';
 import { MergeStoreV1, MergeConflictError } from './storage/MergeStore';
 import type { IVisibilityStore } from './storage/VisibilityStore';
 import { VisibilityStoreV1 } from './storage/VisibilityStore';
+import {
+  DependencyGraph,
+  RecalcCoordinator,
+  type CycleDiagnostic,
+  type RecalcResult,
+} from './dag/DependencyGraph';
 
 export class Worksheet {
   readonly name: string;
@@ -38,6 +44,19 @@ export class Worksheet {
    * Hidden state is NEVER written into CellRecord — this is an invariant.
    */
   private visibilityStore: IVisibilityStore = new VisibilityStoreV1();
+  /**
+   * Dependency graph — Phase 4.
+   * Tracks formula dependencies as a directed graph: precedent → dependent.
+   * Provides BFS dirty propagation + Kahn topo evaluation order + Tarjan SCC cycle detection.
+   * Decoupled from ICellStore — the DAG holds only NodeKey (packed row/col keys).
+   */
+  private readonly dag = new DependencyGraph();
+  /**
+   * RecalcCoordinator — Phase 4.
+   * Owns the recalculation pipeline: register deps → notify changed → recalc(evalFn).
+   * Exposes registerDependencies() and recalc() as the public DAG API on Worksheet.
+   */
+  private readonly recalcCoordinator = new RecalcCoordinator(this.dag);
   private conditionalRules: ConditionalFormattingRule[] = [];
   private workbook?: any; // Reference to parent Workbook (for StyleCache access)
   rowCount: number;
@@ -94,6 +113,7 @@ export class Worksheet {
     const c = this.ensureCell(addr);
     c.value = value;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
+    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
     this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c } });
   }
 
@@ -113,6 +133,7 @@ export class Worksheet {
     c.formula = formula;
     if (displayValue !== undefined) c.value = displayValue;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
+    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
     this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c } });
   }
 
@@ -376,6 +397,70 @@ export class Worksheet {
   setRowHeight(row: number, px: number): void { this.rowHeights.set(row, px); this.events.emit({ type: 'sheet-mutated' }); }
 
   setFormulaEngine(engine?: IFormulaEngine) { this.formulaEngine = engine; }
+
+  // ==================== DAG / RecalcCoordinator APIs (Phase 4) ====================
+
+  /**
+   * Register (or update) the dependency list for a formula cell.
+   *
+   * Call this whenever a formula is parsed/re-parsed. The coordinator will:
+   *   1. Replace any existing edges for this cell with the new dep list.
+   *   2. Mark the cell dirty so it participates in the next recalc().
+   *
+   * @param addr  The formula cell (the dependent).
+   * @param deps  The cells this formula reads (the precedents).
+   */
+  registerDependencies(addr: Address, deps: Address[]): void {
+    this.recalcCoordinator.registerFormula(addr.row, addr.col, deps);
+  }
+
+  /**
+   * Remove a formula cell's dependency edges from the DAG (e.g. after clearing).
+   */
+  clearDependencies(addr: Address): void {
+    this.recalcCoordinator.clearFormula(addr.row, addr.col);
+  }
+
+  /**
+   * Mark a cell dirty without changing its value (e.g. volatile refresh).
+   */
+  notifyChanged(addr: Address): void {
+    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
+  }
+
+  /**
+   * Number of cells in the dirty set — useful for testing and UI indicators.
+   */
+  get dirtyCount(): number {
+    return this.recalcCoordinator.dirtyCount;
+  }
+
+  /**
+   * Run a full recalculation pass in topological order.
+   *
+   * The caller supplies an `evaluate` function that is called for each dirty
+   * cell in dependency order (precedents before dependents). After the pass:
+   *   - All dirty cells are cleared.
+   *   - Any detected cycles are emitted as a 'cycle-detected' event.
+   *
+   * @param evaluate  Called once per dirty cell (identified by packed NodeKey).
+   *                  Use `unpackKey(key)` from CellStoreV1 to get row/col.
+   * @returns         RecalcResult with `evaluated` count and `cycles` array.
+   */
+  recalc(evaluate: (key: number) => void): RecalcResult {
+    const result = this.recalcCoordinator.recalc(evaluate);
+    if (result.cycles.length > 0) {
+      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+    }
+    return result;
+  }
+
+  /**
+   * DAG statistics for diagnostics and tests.
+   */
+  get dagStats(): { nodes: number; edges: number; dirty: number } {
+    return this.recalcCoordinator.stats;
+  }
 
   // ==================== Merge APIs (Phase 2) ====================
 
