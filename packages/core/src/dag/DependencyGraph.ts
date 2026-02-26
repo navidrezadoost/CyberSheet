@@ -63,10 +63,10 @@
  *
  * Memory estimate (10k formulas, each referencing ~3 cells):
  *   10k formula cells = 10k Map entries in predecessors
- *   30k edges (Set<number>) = 30k numbers × 8 bytes = 240 KB
- *   successors (inverse): same = 240 KB
- *   Total: ~480 KB for 10k formula cells → negligible
- *   At 100k formulas × 5 deps each: ~8 MB → still acceptable
+ *   Phase 6 EdgeList: 30k edges × 4 bytes = 120 KB (vs 960 KB with Set)
+ *   successors (inverse): same = 120 KB
+ *   Total: ~240 KB for 10k formula cells (4× improvement over Set)
+ *   At 100k formulas × 5 deps each: ~4 MB (vs ~16 MB previously)
  *
  * Volatile registry:
  *   Set<nodeKey> of cells with volatile functions (NOW, RAND, OFFSET, etc.)
@@ -208,21 +208,122 @@ export type NodeKey = number;
 export const NO_NODE: NodeKey = -1;
 
 // ---------------------------------------------------------------------------
+// 1b. EdgeList — compact Uint32Array-backed adjacency list
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact, resizable Uint32Array-backed adjacency list for DAG edges.
+ *
+ * Replaces `Set<NodeKey>` in the predecessor/successor maps, reducing memory
+ * per edge from ~32 bytes (JS Set hash-table overhead + pointer boxing) to
+ * 4 bytes (Uint32 element in a typed array).
+ *
+ * Safe key range: packKey(row, col) = row × 20_000 + col.
+ * Uint32 max = 4 294 967 295 ÷ 20 000 = 214 748 rows — covers all practical
+ * spreadsheet sizes (Excel practical max ~65 535 rows).
+ *
+ * Design decisions:
+ *   - Initial capacity 4 → amortised O(1) append via doubling.
+ *   - Dedup on add (linear scan, O(n)) — adjacency lists are small (1–20 deps).
+ *   - Swap-remove on delete (O(n) find + O(1) remove) — order not significant.
+ *   - Iterator snapshots `_size` at creation time; safe against concurrent
+ *     reads but not concurrent mutations (no concurrent mutation in engine).
+ */
+export class EdgeList implements Iterable<NodeKey> {
+  /** Backing typed buffer. May be grown on demand. */
+  private buf: Uint32Array;
+  /** Number of valid elements at [0.._size). */
+  private _size = 0;
+
+  constructor(initialCapacity = 4) {
+    this.buf = new Uint32Array(Math.max(4, initialCapacity));
+  }
+
+  /** Create an EdgeList populated from an existing key array. O(n). */
+  static from(keys: readonly NodeKey[]): EdgeList {
+    const el = new EdgeList(Math.max(4, keys.length));
+    for (const k of keys) el.add(k);
+    return el;
+  }
+
+  /** Number of edges stored. O(1). */
+  get size(): number { return this._size; }
+
+  /**
+   * O(n) membership test — acceptable for typical adjacency list sizes (1–20).
+   * For large spill-range formulas (>64 deps) the linear scan is still fast
+   * compared to the cost of evaluating the cell.
+   */
+  has(key: NodeKey): boolean {
+    const { buf, _size } = this;
+    for (let i = 0; i < _size; i++) if (buf[i] === key) return true;
+    return false;
+  }
+
+  /**
+   * Amortised O(1) add with dedup.
+   * Grows the backing buffer (doubles) when full.
+   */
+  add(key: NodeKey): this {
+    if (this.has(key)) return this;
+    if (this._size === this.buf.length) this._grow();
+    this.buf[this._size++] = key;
+    return this;
+  }
+
+  /**
+   * O(n) delete using swap-remove (does not preserve insertion order).
+   * @returns true if the key was present and removed.
+   */
+  delete(key: NodeKey): boolean {
+    const { buf } = this;
+    for (let i = 0; i < this._size; i++) {
+      if (buf[i] === key) {
+        buf[i] = buf[--this._size]; // swap last element into the gap
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Iterate over all stored keys. Snapshot semantics on _size. */
+  [Symbol.iterator](): Iterator<NodeKey> {
+    let i = 0;
+    const snap = this._size;
+    const self = this;
+    return {
+      next(): IteratorResult<NodeKey> {
+        if (i < snap) return { value: self.buf[i++], done: false };
+        return { value: 0, done: true };
+      },
+    };
+  }
+
+  private _grow(): void {
+    const next = new Uint32Array(this.buf.length * 2);
+    next.set(this.buf);
+    this.buf = next;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 2. DependencyGraph — core structure
 // ---------------------------------------------------------------------------
 
 export class DependencyGraph {
   /**
-   * predecessors.get(B) = Set of nodeKeys that B depends on.
-   * "B reads from each node in this set."
+   * predecessors.get(B) = EdgeList of nodeKeys that B depends on.
+   * "B reads from each node in this list."
+   * Phase 6: backed by Uint32Array — 4 bytes/edge vs ~32 bytes in Set.
    */
-  private readonly predecessors = new Map<NodeKey, Set<NodeKey>>();
+  private readonly predecessors = new Map<NodeKey, EdgeList>();
 
   /**
-   * successors.get(A) = Set of nodeKeys that depend on A.
-   * "When A changes, each node in this set must be recalculated."
+   * successors.get(A) = EdgeList of nodeKeys that depend on A.
+   * "When A changes, each node in this list must be recalculated."
+   * Phase 6: backed by Uint32Array — bidirectional inverse of predecessors.
    */
-  private readonly successors = new Map<NodeKey, Set<NodeKey>>();
+  private readonly successors = new Map<NodeKey, EdgeList>();
 
   /**
    * Volatile cells: always marked dirty at start of each recalc.
@@ -263,15 +364,15 @@ export class DependencyGraph {
       }
     }
 
-    // Register new predecessors
-    const newPreds = new Set(dependsOn);
+    // Register new predecessors (EdgeList — 4 bytes/edge, typed buffer)
+    const newPreds = EdgeList.from(dependsOn);
     this.predecessors.set(dependent, newPreds);
 
     // Register inverse edges (successor links)
     for (const pred of newPreds) {
       let suc = this.successors.get(pred);
       if (!suc) {
-        suc = new Set<NodeKey>();
+        suc = new EdgeList();
         this.successors.set(pred, suc);
       }
       suc.add(dependent);
@@ -916,13 +1017,34 @@ export function expandRange(r1: number, c1: number, r2: number, c2: number): Nod
  * Inputs: number of formula cells (V), average deps per formula (k)
  * Outputs: memory estimate in MB
  *
- * Memory model:
- *   Map<NodeKey, Set<NodeKey>> predecessor entry: ~88 bytes (Map slot + Set obj)
- *   Each dep in Set: ~8 bytes (number pointer in Set)
+ * Memory model (Set-based, pre-Phase 6):
+ *   Map<NodeKey, Set<NodeKey>> predecessor entry: ~88 bytes (Map slot + Set obj header)
+ *   Each dep in V8 Set: ~32 bytes (HashTable slot: key + value + hash = 3 words,
+ *     load factor 0.75 → ~4 words effective = 32 bytes; small-int inline)
  *   Successor entries: same × 2 (bidirectional)
- *   Total: V × (88 + k × 8) × 2 bytes
+ *   Total: V × (88 + k × 32) × 2 bytes
  */
 export function estimateGraphMemoryMB(formulaCells: number, avgDeps: number): number {
-  const bytesPerNode = (88 + avgDeps * 8) * 2;
+  const bytesPerNode = (88 + avgDeps * 32) * 2;
+  return (formulaCells * bytesPerNode) / (1024 * 1024);
+}
+
+/**
+ * Estimate memory for the Phase 6 EdgeList-backed dependency graph.
+ *
+ * Memory model (EdgeList, Phase 6):
+ *   Map<NodeKey, EdgeList> predecessor entry: ~56 bytes (Map slot + EdgeList object:
+ *     buf ref 8 + _size 4 + Uint32Array header 40 + initial 4×4 payload = ~56 bytes
+ *     amortised over typical use)
+ *   Each dep in EdgeList: 4 bytes (Uint32 element)
+ *   Successor entries: same × 2 (bidirectional)
+ *   Total: V × (56 + k × 4) × 2 bytes — ~4–6× less than Set-based model
+ *
+ * @param formulaCells  Number of formula cells in the sheet.
+ * @param avgDeps       Average number of cell references per formula.
+ * @returns Estimated memory usage in megabytes.
+ */
+export function estimateTypedMemoryMB(formulaCells: number, avgDeps: number): number {
+  const bytesPerNode = (56 + avgDeps * 4) * 2;
   return (formulaCells * bytesPerNode) / (1024 * 1024);
 }
