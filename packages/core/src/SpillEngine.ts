@@ -101,12 +101,9 @@ export class SpillEngine {
     // Check if spill range is available
     const spillError = this.checkSpillRange(worksheet, sourceAddr, rows, cols);
     if (spillError) {
-      // Set source cell to #SPILL! error
-      const k = `${sourceAddr.row}:${sourceAddr.col}`;
-      const cell = worksheet.getCell(sourceAddr) ?? { value: null };
-      cell.value = spillError.message;
-      delete cell.spillSource;
-      (worksheet as any).cells.set(k, cell);
+      // Set source cell to #SPILL! error — use setCellValue to go through ICellStore boundary.
+      worksheet.setCellValue(sourceAddr, spillError.message);
+      worksheet.clearSpillSource(sourceAddr);
       return;
     }
 
@@ -132,23 +129,18 @@ export class SpillEngine {
           value = arrayValue[r];
         }
 
-        const k = `${cellAddr.row}:${cellAddr.col}`;
-        const cell = worksheet.getCell(cellAddr) ?? { value: null };
-        cell.value = value;
+        worksheet.setCellValue(cellAddr, value);
 
         if (r === 0 && c === 0) {
           // Source cell gets the spill metadata
-          cell.spillSource = {
+          worksheet.setSpillSource(cellAddr, {
             dimensions: [rows, cols],
             endAddress: endAddr
-          };
+          });
         } else {
           // Spilled cells get spilledFrom reference
-          cell.spilledFrom = sourceAddr;
+          worksheet.setSpilledFrom(cellAddr, sourceAddr);
         }
-
-        // Set the cell in worksheet
-        (worksheet as any).cells.set(k, cell);
       }
     }
   }
@@ -172,15 +164,15 @@ export class SpillEngine {
         const cellAddr: Address = { row: r, col: c };
         const cell = worksheet.getCell(cellAddr);
         if (cell?.spilledFrom?.row === sourceAddr.row && cell.spilledFrom.col === sourceAddr.col) {
-          // Clear the spilled cell
-          cell.value = null;
-          delete cell.spilledFrom;
+          // Clear the spilled cell — assign undefined, never delete (mono-shape)
+          worksheet.setCellValue(cellAddr, null);
+          worksheet.clearSpilledFrom(cellAddr);
         }
       }
     }
 
-    // Clear source metadata
-    delete sourceCell.spillSource;
+    // Clear source metadata — assign undefined, never delete (mono-shape)
+    worksheet.clearSpillSource(sourceAddr);
   }
 
   /**

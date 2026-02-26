@@ -34,15 +34,14 @@ describe('Exotic Functions - Complete Excel Parity', () => {
       // Note: FORMULATEXT currently needs to be tested with direct calls
       // because the formula engine evaluates cell references before passing to the function
       const addr = { row: 1, col: 1 };
-      const cell = { value: '=SUM(B1:B10)', formula: '=SUM(B1:B10)' };
-      (worksheet as any).cells.set('1:1', cell);
-      
+      worksheet.setCellFormula(addr, '=SUM(B1:B10)', '=SUM(B1:B10)');
+
       const context = {
         worksheet,
         currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
-      
+
       const funcInfo = engine.functions.getMetadata('FORMULATEXT');
       const result = (funcInfo?.handler as any)(context, addr);
       expect(result).toBe('=SUM(B1:B10)');
@@ -78,15 +77,14 @@ describe('Exotic Functions - Complete Excel Parity', () => {
 
     it('should work with complex formulas', () => {
       const addr = { row: 2, col: 2 };
-      const cell = { value: '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))', formula: '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))' };
-      (worksheet as any).cells.set('2:2', cell);
-      
+      worksheet.setCellFormula(addr, '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))', '=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))');
+
       const context = {
         worksheet,
         currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
-      
+
       const funcInfo = engine.functions.getMetadata('FORMULATEXT');
       const result = (funcInfo?.handler as any)(context, addr);
       expect(result).toBe('=IF(A1>10, SUM(B1:B5), AVERAGE(C1:C5))');
@@ -218,15 +216,14 @@ describe('Exotic Functions - Complete Excel Parity', () => {
   describe('Integration - Exotic Functions in Formulas', () => {
     it('should use FORMULATEXT in error checking (direct call)', () => {
       const addr = { row: 1, col: 1 };
-      const cell = { value: '=SUM(A1:A10)', formula: '=SUM(A1:A10)' };
-      (worksheet as any).cells.set('1:1', cell);
-      
+      worksheet.setCellFormula(addr, '=SUM(A1:A10)', '=SUM(A1:A10)');
+
       const context = {
         worksheet,
         currentCell: { row: 1, col: 1 },
         getCellValue: (addr: any) => worksheet.getCell(addr)?.value
       };
-      
+
       const funcInfo = engine.functions.getMetadata('FORMULATEXT');
       const result = (funcInfo?.handler as any)(context, addr);
       expect(typeof result).toBe('string');

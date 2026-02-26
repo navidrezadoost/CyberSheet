@@ -27,9 +27,7 @@ describe('SpillEngine - Dynamic Array Spill Behavior', () => {
     });
 
     test('checkSpillRange returns #SPILL! when cell has formula', () => {
-      const cell = worksheet.getCell({ row: 1, col: 2 }) ?? { value: null };
-      cell.formula = '=SUM(A1:A5)';
-      (worksheet as any).cells.set('1:2', cell);
+      worksheet.setCellFormula({ row: 1, col: 2 }, '=SUM(A1:A5)');
       
       const result = spillEngine.checkSpillRange(worksheet, { row: 1, col: 1 }, 1, 3);
       expect(result).toBeInstanceOf(Error);

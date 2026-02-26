@@ -306,4 +306,112 @@ describe('Storage Benchmark — Structural Hardening Sprint', () => {
     // In practice numeric is 1.5–3× faster
     expect(strMs / intMs).toBeLessThan(10);
   }, 30_000);
+
+  // ── CellStoreV1 vs CellStoreLegacy — direct delta measurement ─────────────
+  //
+  // PM Directive requirement:
+  //   "Benchmark Before/After — re-run 200k insert + 200k findAll + memory"
+  //   "If savings < 35 MB/1M → revisit."
+  //
+  // This test directly benchmarks both store implementations at 200k cells
+  // and prints the absolute delta. The "before" (Legacy) and "after" (V1)
+  // are measured in the same process to eliminate warm-up variance.
+
+  test('CellStoreV1 vs CellStoreLegacy — before/after delta @ 200k cells', () => {
+    const { CellStoreV1, CellStoreLegacy } = require('../src/storage/CellStoreV1');
+    const N = 200_000;
+
+    interface StoreResult {
+      label: string;
+      insertMs: number;
+      lookupMs: number;
+      forEachMs: number;
+      heapDeltaMB: number;
+      bytesPerCell: number;
+    }
+
+    function benchStore(label: string, store: any): StoreResult {
+      // Warm GC
+      settle();
+      const h0 = heapMB();
+
+      const t0 = performance.now();
+      for (let i = 0; i < N; i++) {
+        const row = (i % 99999) + 1;
+        const col = Math.floor(i / 99999) + 1;
+        store.getOrCreate(row, col).value = `val_${i}`;
+      }
+      const insertMs = Math.round(performance.now() - t0);
+
+      settle();
+      const h1 = heapMB();
+      const heapDelta = h1 - h0;
+
+      // 1M random lookups
+      const t1 = performance.now();
+      for (let i = 0; i < 1_000_000; i++) {
+        const row = (i % 99999) + 1;
+        const col = Math.floor(i / 99999) + 1;
+        store.get(row, col);
+      }
+      const lookupMs = Math.round(performance.now() - t1);
+
+      // Full forEach scan (equivalent to findAll)
+      const t2 = performance.now();
+      let count = 0;
+      store.forEach((_r: number, _c: number, _cell: any) => { count++; });
+      const forEachMs = Math.round(performance.now() - t2);
+
+      return {
+        label,
+        insertMs,
+        lookupMs,
+        forEachMs,
+        heapDeltaMB: heapDelta,
+        bytesPerCell: heapDelta > 0 ? Math.round((heapDelta * 1024 * 1024) / N) : 0,
+      };
+    }
+
+    const legacy = benchStore('CellStoreLegacy (Map<string,Cell>)', new CellStoreLegacy());
+    const v1     = benchStore('CellStoreV1     (Map<number,Cell>)', new CellStoreV1());
+
+    const table = (r: StoreResult) =>
+      `  ${r.label.padEnd(42)}  ` +
+      `insert:${String(r.insertMs).padStart(5)}ms  ` +
+      `lookup:${String(r.lookupMs).padStart(5)}ms  ` +
+      `forEach:${String(r.forEachMs).padStart(4)}ms  ` +
+      `heap Δ:${r.heapDeltaMB > 0 ? r.heapDeltaMB.toFixed(1) : '(GC)'}MB  ` +
+      `bytes/cell:${String(r.bytesPerCell).padStart(4)}`;
+
+    const savings1M = (legacy.bytesPerCell - v1.bytesPerCell) * 1_000_000 / 1024 / 1024;
+    const insertSpeedup = legacy.insertMs / Math.max(v1.insertMs, 1);
+    const lookupSpeedup = legacy.lookupMs / Math.max(v1.lookupMs, 1);
+
+    console.log(`\n${'─'.repeat(100)}`);
+    console.log('  CellStoreV1 Migration — Before/After Delta @ 200k cells');
+    console.log(`${'─'.repeat(100)}`);
+    console.log(table(legacy));
+    console.log(table(v1));
+    console.log(`${'─'.repeat(100)}`);
+    console.log(`  Insert speedup:           ${insertSpeedup.toFixed(2)}×`);
+    console.log(`  Lookup speedup:           ${lookupSpeedup.toFixed(2)}×`);
+    if (legacy.bytesPerCell > 0 && v1.bytesPerCell > 0) {
+      console.log(`  Memory saving @ 200k:     ${(legacy.heapDeltaMB - v1.heapDeltaMB).toFixed(1)} MB`);
+      console.log(`  Projected saving @ 1M:    ~${savings1M.toFixed(0)} MB`);
+      const assessment = savings1M >= 35
+        ? `✅ PM threshold met (≥35 MB / 1M cells) — V1 migration approved`
+        : `⚠️  PM threshold NOT met (<35 MB / 1M cells) — investigate`;
+      console.log(`  Assessment:               ${assessment}`);
+    } else {
+      console.log(`  Heap delta unreliable (GC ran mid-test) — rerun in isolation.`);
+    }
+    console.log(`${'─'.repeat(100)}\n`);
+
+    // Correctness checks
+    expect(legacy.insertMs).toBeLessThan(5_000);
+    expect(v1.insertMs).toBeLessThan(5_000);
+    // V1 should not regress significantly vs legacy
+    expect(v1.insertMs).toBeLessThan(legacy.insertMs * 2);
+    expect(v1.lookupMs).toBeLessThan(legacy.lookupMs * 2);
+  }, 120_000);
 });

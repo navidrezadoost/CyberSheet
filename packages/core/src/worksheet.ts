@@ -10,14 +10,13 @@ import {
   isStrictlyAfterRowMajor,
   isStrictlyBeforeRowMajor,
 } from './search-engine';
-
-function key(addr: Address): string {
-  return `${addr.row}:${addr.col}`;
-}
+import type { ICellStore } from './storage/ICellStore';
+import { CellStoreV1 } from './storage/CellStoreV1';
 
 export class Worksheet {
   readonly name: string;
-  private cells = new Map<string, Cell>();
+  /** Cell store — ICellStore boundary; swap implementation without touching any other Worksheet code. */
+  private cells: ICellStore = new CellStoreV1();
   private colWidths = new Map<number, number>(); // px
   private rowHeights = new Map<number, number>(); // px
   private filters = new Map<number, ColumnFilter>();
@@ -42,7 +41,7 @@ export class Worksheet {
   }
 
   getCell(addr: Address): Cell | undefined {
-    return this.cells.get(key(addr));
+    return this.cells.get(addr.row, addr.col);
   }
 
   /**
@@ -55,13 +54,7 @@ export class Worksheet {
    * must go through this method.
    */
   private ensureCell(addr: Address): Cell {
-    const k = key(addr);
-    let c = this.cells.get(k);
-    if (!c) {
-      c = { value: null };
-      this.cells.set(k, c);
-    }
-    return c;
+    return this.cells.getOrCreate(addr.row, addr.col);
   }
 
   getCellValue(addr: Address): Cell['value'] {
@@ -92,6 +85,42 @@ export class Worksheet {
     if (displayValue !== undefined) c.value = displayValue;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c } });
+  }
+
+  /**
+   * Set spill source metadata on a cell (used exclusively by SpillEngine).
+   * Does NOT fire events (spill is internal bookkeeping).
+   */
+  setSpillSource(addr: Address, source: Cell['spillSource']): void {
+    const c = this.ensureCell(addr);
+    c.spillSource = source;
+  }
+
+  /**
+   * Set spilledFrom reference on a cell (used exclusively by SpillEngine).
+   * Does NOT fire events.
+   */
+  setSpilledFrom(addr: Address, from: Cell['spilledFrom']): void {
+    const c = this.ensureCell(addr);
+    c.spilledFrom = from;
+  }
+
+  /**
+   * Clear spill metadata from a spill-source cell.
+   * Sets spillSource to undefined (preserves mono-shape — never delete).
+   */
+  clearSpillSource(addr: Address): void {
+    const c = this.cells.get(addr.row, addr.col);
+    if (c) c.spillSource = undefined;
+  }
+
+  /**
+   * Clear spilledFrom reference from a spilled cell.
+   * Sets spilledFrom to undefined (preserves mono-shape — never delete).
+   */
+  clearSpilledFrom(addr: Address): void {
+    const c = this.cells.get(addr.row, addr.col);
+    if (c) c.spilledFrom = undefined;
   }
 
   getCellStyle(addr: Address): CellStyle | undefined {
@@ -176,16 +205,12 @@ export class Worksheet {
     let minCol = Infinity;
     let maxCol = -Infinity;
 
-    for (const keyStr of this.cells.keys()) {
-      const [rowStr, colStr] = keyStr.split(':');
-      const row = Number(rowStr);
-      const col = Number(colStr);
-      if (Number.isNaN(row) || Number.isNaN(col)) continue;
+    this.cells.forEach((row, col) => {
       minRow = Math.min(minRow, row);
       maxRow = Math.max(maxRow, row);
       minCol = Math.min(minCol, col);
       maxCol = Math.max(maxCol, col);
-    }
+    });
 
     if (!Number.isFinite(minRow) || !Number.isFinite(minCol)) return null;
 
@@ -368,18 +393,16 @@ export class Worksheet {
    * Add a comment to a cell (supports threading via parentId)
    */
   addComment(addr: Address, comment: Omit<CellComment, 'id' | 'createdAt'>): CellComment {
-    const k = key(addr);
-    const c = this.cells.get(k) ?? { value: null };
+    const c = this.cells.getOrCreate(addr.row, addr.col);
     if (!c.comments) c.comments = [];
-    
+
     const newComment: CellComment = {
       id: this.generateCommentId(),
       createdAt: new Date(),
       ...comment,
     };
-    
+
     c.comments.push(newComment);
-    this.cells.set(k, c);
     this.events.emit({ type: 'comment-added', address: addr, comment: newComment });
     return newComment;
   }
@@ -395,20 +418,18 @@ export class Worksheet {
    * Update an existing comment
    */
   updateComment(addr: Address, commentId: string, updates: Partial<Omit<CellComment, 'id' | 'createdAt'>>): boolean {
-    const k = key(addr);
-    const c = this.cells.get(k);
+    const c = this.cells.get(addr.row, addr.col);
     if (!c?.comments) return false;
-    
+
     const idx = c.comments.findIndex(cm => cm.id === commentId);
     if (idx === -1) return false;
-    
+
     c.comments[idx] = {
       ...c.comments[idx],
       ...updates,
       editedAt: new Date(),
     };
-    
-    this.cells.set(k, c);
+
     this.events.emit({ type: 'comment-updated', address: addr, commentId, comment: c.comments[idx] });
     return true;
   }
@@ -417,12 +438,11 @@ export class Worksheet {
    * Delete a comment (and its threaded replies)
    */
   deleteComment(addr: Address, commentId: string, deleteReplies = true): boolean {
-    const k = key(addr);
-    const c = this.cells.get(k);
+    const c = this.cells.get(addr.row, addr.col);
     if (!c?.comments) return false;
-    
+
     const before = c.comments.length;
-    
+
     if (deleteReplies) {
       // Remove comment and all its children
       const toDelete = new Set<string>([commentId]);
@@ -440,14 +460,13 @@ export class Worksheet {
     } else {
       c.comments = c.comments.filter(cm => cm.id !== commentId);
     }
-    
+
     if (c.comments.length === before) return false;
-    
-    if (c.comments.length === 0) {
-      delete c.comments;
-    }
-    
-    this.cells.set(k, c);
+
+    // Assign undefined instead of `delete c.comments` — preserves V8 mono-shape.
+    // `delete obj.prop` changes the hidden class; `obj.prop = undefined` does not.
+    if (c.comments.length === 0) c.comments = undefined;
+
     this.events.emit({ type: 'comment-deleted', address: addr, commentId });
     return true;
   }
@@ -457,23 +476,22 @@ export class Worksheet {
    */
   getAllComments(): Array<{ address: Address; comments: CellComment[] }> {
     const result: Array<{ address: Address; comments: CellComment[] }> = [];
-    
-    for (const [k, cell] of this.cells) {
+
+    this.cells.forEach((row, col, cell) => {
       if (cell.comments && cell.comments.length > 0) {
-        const [rowStr, colStr] = k.split(':');
         result.push({
-          address: { row: parseInt(rowStr, 10), col: parseInt(colStr, 10) },
+          address: { row, col },
           comments: [...cell.comments],
         });
       }
-    }
-    
-    // Sort by row, then col for consistent navigation
+    });
+
+    // Sort by row, then col for consistent navigation.
     result.sort((a, b) => {
       if (a.address.row !== b.address.row) return a.address.row - b.address.row;
       return a.address.col - b.address.col;
     });
-    
+
     return result;
   }
 
@@ -481,25 +499,26 @@ export class Worksheet {
    * Find next/previous cell with comments (for navigation)
    */
   getNextCommentCell(fromAddr: Address, direction: 'next' | 'prev' = 'next'): Address | null {
-    const all = this.getAllComments();
+    const all = this.getAllComments(); // already sorted by (row, col) numerically
     if (all.length === 0) return null;
-    
-    const fromKey = key(fromAddr);
-    
+
     if (direction === 'next') {
       for (const item of all) {
-        const itemKey = key(item.address);
-        if (itemKey > fromKey) return item.address;
+        const { row, col } = item.address;
+        // Strict numeric comparison — string key comparison was broken for row≥10
+        if (row > fromAddr.row || (row === fromAddr.row && col > fromAddr.col)) {
+          return item.address;
+        }
       }
-      // Wrap around
-      return all[0].address;
+      return all[0].address; // wrap around
     } else {
       for (let i = all.length - 1; i >= 0; i--) {
-        const itemKey = key(all[i].address);
-        if (itemKey < fromKey) return all[i].address;
+        const { row, col } = all[i].address;
+        if (row < fromAddr.row || (row === fromAddr.row && col < fromAddr.col)) {
+          return all[i].address;
+        }
       }
-      // Wrap around
-      return all[all.length - 1].address;
+      return all[all.length - 1].address; // wrap around
     }
   }
 
@@ -509,10 +528,8 @@ export class Worksheet {
    * Set an icon for a cell
    */
   setIcon(addr: Address, icon: CellIcon | undefined): void {
-    const k = key(addr);
-    const c = this.cells.get(k) ?? { value: null };
+    const c = this.cells.getOrCreate(addr.row, addr.col);
     c.icon = icon;
-    this.cells.set(k, c);
     this.events.emit({ type: 'icon-changed', address: addr, icon });
   }
 
@@ -528,17 +545,11 @@ export class Worksheet {
    */
   getAllIcons(): Array<{ address: Address; icon: CellIcon }> {
     const result: Array<{ address: Address; icon: CellIcon }> = [];
-    
-    for (const [k, cell] of this.cells) {
-      if (cell.icon) {
-        const [rowStr, colStr] = k.split(':');
-        result.push({
-          address: { row: parseInt(rowStr, 10), col: parseInt(colStr, 10) },
-          icon: cell.icon,
-        });
-      }
-    }
-    
+
+    this.cells.forEach((row, col, cell) => {
+      if (cell.icon) result.push({ address: { row, col }, icon: cell.icon });
+    });
+
     return result;
   }
 
@@ -589,28 +600,23 @@ export class Worksheet {
     const matcher = buildMatcher(options);
 
     // ── 1. Collect addresses of all populated cells ──────────────────────────
-    // We only visit cells that exist in the sparse Map; empty slots are skipped.
+    // forEach visits only cells that exist in the store; empty slots are skipped.
     const addresses: Address[] = [];
-    for (const k of this.cells.keys()) {
-      const colonIdx = k.indexOf(':');
-      const row = parseInt(k.slice(0, colonIdx), 10);
-      const col = parseInt(k.slice(colonIdx + 1), 10);
-
-      // ── 2. Apply range filter ───────────────────────────────────────────────
+    this.cells.forEach((row, col) => {
+      // ── 2. Apply range filter ─────────────────────────────────────────────
       if (range) {
-        if (row < range.start.row || row > range.end.row) continue;
-        if (col < range.start.col || col > range.end.col) continue;
+        if (row < range.start.row || row > range.end.row) return;
+        if (col < range.start.col || col > range.end.col) return;
       }
-
       addresses.push({ row, col });
-    }
+    });
 
     // ── 3. Sort by search order ─────────────────────────────────────────────
     addresses.sort(searchOrder === 'columns' ? compareColMajor : compareRowMajor);
 
     // ── 4. Yield matches ─────────────────────────────────────────────────────
     for (const addr of addresses) {
-      const cell = this.cells.get(key(addr));
+      const cell = this.cells.get(addr.row, addr.col);
       if (!cell) continue;
 
       let text: string | null = null;
