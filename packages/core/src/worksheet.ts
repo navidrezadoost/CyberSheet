@@ -45,15 +45,51 @@ export class Worksheet {
     return this.cells.get(key(addr));
   }
 
+  /**
+   * Get-or-create a cell entry in the sparse Map.
+   *
+   * Eliminates the `getCell() ?? { value: null }` anti-pattern that produced
+   * detached phantom objects (Infrastructure Risk logged Day 2).
+   *
+   * All mutation helpers (setCellValue, setCellFormula, setCellStyle, etc.)
+   * must go through this method.
+   */
+  private ensureCell(addr: Address): Cell {
+    const k = key(addr);
+    let c = this.cells.get(k);
+    if (!c) {
+      c = { value: null };
+      this.cells.set(k, c);
+    }
+    return c;
+  }
+
   getCellValue(addr: Address): Cell['value'] {
     return this.getCell(addr)?.value ?? null;
   }
 
   setCellValue(addr: Address, value: Cell['value']): void {
-    const k = key(addr);
-    const c = this.cells.get(k) ?? { value: null };
+    const c = this.ensureCell(addr);
     c.value = value;
-    this.cells.set(k, c);
+    if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
+    this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c } });
+  }
+
+  /**
+   * Set a formula (and optionally its pre-computed display value) on a cell.
+   *
+   * Uses ensureCell() to guarantee the cell object is registered in the Map
+   * before the formula is attached — preventing the detached-object phantom
+   * that affected lookIn:'formulas' search.
+   *
+   * @param addr          Cell address
+   * @param formula       Formula string, e.g. '=SUM(A1:A10)'
+   * @param displayValue  Optional pre-evaluated result (for read-only display)
+   */
+  setCellFormula(addr: Address, formula: string, displayValue?: Cell['value']): void {
+    const c = this.ensureCell(addr);
+    c.formula = formula;
+    if (displayValue !== undefined) c.value = displayValue;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c } });
   }
@@ -63,18 +99,16 @@ export class Worksheet {
   }
 
   setCellStyle(addr: Address, style: CellStyle | undefined): void {
-    const k = key(addr);
-    const c = this.cells.get(k) ?? { value: null };
-    
+    const c = this.ensureCell(addr);
+
     // Auto-intern through workbook StyleCache (entropy-resistant boundary)
     // Protects against XLSX import, UI mutations, and spread operators
     let internedStyle = style;
     if (style && this.workbook?.getStyleCache) {
       internedStyle = this.workbook.getStyleCache().intern(style);
     }
-    
+
     c.style = internedStyle; // Reference to canonical style (not a copy)
-    this.cells.set(k, c);
     this.events.emit({ type: 'style-changed', address: addr, style: internedStyle });
   }
 
