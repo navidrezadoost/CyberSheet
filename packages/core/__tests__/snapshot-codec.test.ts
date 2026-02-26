@@ -46,8 +46,8 @@ function emptySnap(): WorksheetSnapshot {
 // ---------------------------------------------------------------------------
 
 describe('SnapshotCodec — module constants', () => {
-  it('FORMAT_VERSION is 1', () => {
-    expect(FORMAT_VERSION).toBe(1);
+  it('FORMAT_VERSION is 2', () => {
+    expect(FORMAT_VERSION).toBe(2);
   });
 
   it('snapshotCodec singleton is a SnapshotCodec instance', () => {
@@ -73,16 +73,16 @@ describe('SnapshotCodec — binary structure', () => {
     expect(buf[3]).toBe(0x58); // X
   });
 
-  it('encoded version field is 1 (u16 LE at offset 4)', () => {
+  it('encoded version field is 2 (u16 LE at offset 4)', () => {
     const buf  = snapshotCodec.encode(emptySnap());
     const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-    expect(view.getUint16(4, true)).toBe(1);
+    expect(view.getUint16(4, true)).toBe(2);
   });
 
-  it('encoded section count field is 5 (u16 LE at offset 6)', () => {
+  it('encoded section count field is 5 (u16 LE at offset 12)', () => {
     const buf  = snapshotCodec.encode(emptySnap());
     const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-    expect(view.getUint16(6, true)).toBe(5);
+    expect(view.getUint16(12, true)).toBe(5);
   });
 
   it('encode then decode produces the same version', () => {
@@ -381,9 +381,9 @@ describe('SnapshotCodec — full snapshot round-trip', () => {
 // ---------------------------------------------------------------------------
 
 describe('Worksheet — extractSnapshot / applySnapshot', () => {
-  it('extractSnapshot returns version 1', () => {
+  it('extractSnapshot returns FORMAT_VERSION', () => {
     const ws = new Worksheet('Sheet1');
-    expect(ws.extractSnapshot().version).toBe(1);
+    expect(ws.extractSnapshot().version).toBe(FORMAT_VERSION);
   });
 
   it('fresh sheet produces empty snapshot', () => {

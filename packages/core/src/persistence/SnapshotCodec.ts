@@ -125,6 +125,90 @@ export type WorksheetSnapshot = {
 };
 
 // ---------------------------------------------------------------------------
+// Snapshot versioning & upgrade pipeline (Phase 8)
+// ---------------------------------------------------------------------------
+
+/**
+ * A single-step snapshot upgrader from one binary format version to the next.
+ * Upgraders operate on *decoded* WorksheetSnapshot objects — not raw binary.
+ * Snapshots are immutable: upgrade() must return a new object.
+ */
+export interface SnapshotUpgrader {
+  /** Source format version this upgrader handles. */
+  readonly fromVersion: number;
+  /** Target format version this upgrader produces. */
+  readonly toVersion:   number;
+  /**
+   * Transform a snapshot from `fromVersion` to `toVersion`.
+   * Must return a **new** object (do not mutate the input).
+   */
+  upgrade(snapshot: WorksheetSnapshot): WorksheetSnapshot;
+}
+
+/**
+ * Registry of known snapshot upgraders.
+ * Chains multiple upgraders automatically to bridge arbitrary version gaps.
+ *
+ * Usage:
+ * ```ts
+ * snapshotUpgraderRegistry.register({ fromVersion: 2, toVersion: 3, upgrade(s) { ... } });
+ * const upgraded = snapshotUpgraderRegistry.apply(snapshot, FORMAT_VERSION);
+ * ```
+ */
+export class SnapshotUpgraderRegistry {
+  private readonly map = new Map<number, SnapshotUpgrader>();
+
+  /**
+   * Register an upgrader.
+   * @throws if another upgrader is already registered for the same `fromVersion`.
+   */
+  register(upgrader: SnapshotUpgrader): void {
+    if (this.map.has(upgrader.fromVersion)) {
+      throw new Error(
+        `SnapshotUpgraderRegistry: upgrader for fromVersion=${upgrader.fromVersion} already registered.`,
+      );
+    }
+    this.map.set(upgrader.fromVersion, upgrader);
+  }
+
+  /**
+   * Walk the upgrade chain from `snapshot.version` up to `targetVersion`.
+   * Returns the snapshot unchanged when already at target.
+   * @throws if no upgrader is registered for an intermediate version.
+   */
+  apply(snapshot: WorksheetSnapshot, targetVersion: number): WorksheetSnapshot {
+    let current = snapshot;
+    while (current.version < targetVersion) {
+      const upgrader = this.map.get(current.version);
+      if (!upgrader) {
+        throw new Error(
+          `SnapshotUpgraderRegistry: no upgrader found for v${current.version} → v${current.version + 1}.`,
+        );
+      }
+      current = upgrader.upgrade(current);
+    }
+    return current;
+  }
+}
+
+/**
+ * Module-level upgrader registry, pre-populated with all known version steps.
+ * Import and use this to register custom application-level upgraders.
+ */
+export const snapshotUpgraderRegistry = new SnapshotUpgraderRegistry();
+
+// v1 → v2: header now carries flags (u16) + CRC32 checksum (u32).
+// The WorksheetSnapshot payload shape is identical; only the binary
+// on-disk representation changed.  Upgrading just bumps the version field.
+snapshotUpgraderRegistry.register({
+  fromVersion: 1,
+  toVersion:   2,
+  upgrade(snapshot: WorksheetSnapshot): WorksheetSnapshot {
+    return { ...snapshot, version: 2 };
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Binary format constants
 // ---------------------------------------------------------------------------
 
@@ -132,10 +216,20 @@ export type WorksheetSnapshot = {
 const MAGIC = new Uint8Array([0x43, 0x53, 0x45, 0x58]);
 
 /** Current supported format version. */
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 
-const HEADER_BYTES      = 16;
+/** Total header size in bytes (v1 and v2 share the same 16-byte budget). */
+const HEADER_BYTES       = 16;
 const SECTION_DESC_BYTES = 12;
+
+/**
+ * Byte offset of the CRC32 checksum field within the v2+ header.
+ * The field is set to 0 before computing the checksum, then patched.
+ */
+const CHECKSUM_OFFSET = 8;
+
+/** Header flags field bit: CRC32 checksum is present and valid. */
+const HDR_FLAG_CRC32 = 0x0001;
 
 const SEC_CELLS      = 0x0001;
 const SEC_MERGES     = 0x0002;
@@ -156,6 +250,40 @@ const FLAG_COMMENTS  = 0x04;
 const FLAG_ICON      = 0x08;
 const FLAG_SPILLSRC  = 0x10;
 const FLAG_SPILLFROM = 0x20;
+
+// ---------------------------------------------------------------------------
+// CRC32 — integrity checksum (Phase 8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Pre-computed CRC32 lookup table.
+ * Polynomial 0xEDB88320 (reflected form) — compatible with IEEE 802.3,
+ * zlib, gzip, and the `crc32` utility.
+ */
+const CRC32_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c;
+  }
+  return t;
+})();
+
+/**
+ * Compute CRC32 checksum of a Uint8Array.
+ * Returns an unsigned 32-bit integer.
+ *
+ * Exported for downstream consumers who want to verify snapshot integrity
+ * without going through the full codec decode path.
+ */
+export function crc32(data: Uint8Array): number {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc = CRC32_TABLE[(crc ^ data[i]) & 0xFF]! ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0; // unsigned 32-bit
+}
 
 // ---------------------------------------------------------------------------
 // BinaryWriter — growable output buffer
@@ -319,11 +447,13 @@ export class SnapshotCodec {
     const dataSize   = sections.reduce((acc, s) => acc + s.data.byteLength, 0);
     const w = new BinaryWriter(headerSize + dataSize + 64);
 
-    // ── Header ──────────────────────────────────────────────────────────────
-    w.writeBytes(MAGIC);            // [0..3]  magic
-    w.writeU16(FORMAT_VERSION);     // [4..5]  version
-    w.writeU16(sections.length);    // [6..7]  section count
-    for (let i = 0; i < 8; i++) w.writeU8(0); // [8..15] reserved
+    // ── Header (v2 layout, 16 bytes) ──────────────────────────────────────────────
+    w.writeBytes(MAGIC);          // [0..3]  magic
+    w.writeU16(FORMAT_VERSION);   // [4..5]  version = 2
+    w.writeU16(HDR_FLAG_CRC32);   // [6..7]  flags   = CRC32 enabled
+    w.writeU32(0);                // [8..11] checksum placeholder (patched below)
+    w.writeU16(sections.length);  // [12..13] section count
+    w.writeU16(0);                // [14..15] reserved
 
     // ── Section table (offsets patched after data is written) ───────────────
     const tableBase = w.position;   // = HEADER_BYTES = 16
@@ -346,7 +476,12 @@ export class SnapshotCodec {
       w.patchU32At(entryBase + 8, length);
     }
 
-    return w.toBuffer();
+    // CRC32: compute over the complete buffer while checksum field is still 0,
+    // then patch the checksum into the returned copy.
+    const result = w.toBuffer();
+    const checksum = crc32(result);
+    new DataView(result.buffer, result.byteOffset).setUint32(CHECKSUM_OFFSET, checksum, true);
+    return result;
   }
 
   // ── decode ────────────────────────────────────────────────────────────────
@@ -370,12 +505,40 @@ export class SnapshotCodec {
     }
 
     const version = r.readU16();
-    if (version !== FORMAT_VERSION) {
-      throw new Error(`SnapshotCodec: unsupported format version ${version} (expected ${FORMAT_VERSION}).`);
-    }
 
-    const sectionCount = r.readU16();
-    r.seek(r.position + 8); // skip 8 reserved bytes
+    let sectionCount: number;
+
+    if (version === 1) {
+      // v1 header layout: [4..5]=version [6..7]=sectionCount [8..15]=reserved
+      // No flags, no checksum.  Section table starts at byte 16.
+      sectionCount = r.readU16();
+      r.seek(16); // skip 8 reserved bytes
+    } else if (version === FORMAT_VERSION) {
+      // v2 header layout: [4..5]=version [6..7]=flags [8..11]=checksum
+      //                   [12..13]=sectionCount [14..15]=reserved
+      const flags         = r.readU16();
+      const storedCRC     = r.readU32();
+      sectionCount        = r.readU16();
+      r.readU16(); // reserved
+
+      if (flags & HDR_FLAG_CRC32) {
+        // Verify integrity: re-compute CRC with the checksum field zeroed.
+        const copy = buf.slice();
+        new DataView(copy.buffer).setUint32(CHECKSUM_OFFSET, 0, true);
+        const computed = crc32(copy);
+        if (computed !== storedCRC) {
+          throw new Error(
+            `SnapshotCodec: checksum mismatch (stored 0x${storedCRC.toString(16).padStart(8, '0')}, ` +
+            `computed 0x${computed.toString(16).padStart(8, '0')}) — buffer may be corrupted.`,
+          );
+        }
+      }
+    } else {
+      throw new Error(
+        `SnapshotCodec: unsupported format version ${version} ` +
+        `(current: ${FORMAT_VERSION}). Register a SnapshotUpgrader to decode older formats.`,
+      );
+    }
 
     // ── Read section table ──────────────────────────────────────────────────
     type SectionMeta = { id: number; offset: number };
@@ -410,6 +573,10 @@ export class SnapshotCodec {
       }
     }
 
+    // Apply registered upgraders if the decoded snapshot pre-dates FORMAT_VERSION.
+    if (snapshot.version < FORMAT_VERSION) {
+      return snapshotUpgraderRegistry.apply(snapshot, FORMAT_VERSION);
+    }
     return snapshot;
   }
 
