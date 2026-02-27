@@ -23,7 +23,7 @@
 import { Worksheet } from '../worksheet';
 import { snapshotCodec } from '../persistence/SnapshotCodec';
 import type { WorksheetSnapshot } from '../persistence/SnapshotCodec';
-import type { Cell, ExtendedCellValue, Range } from '../types';
+import type { Cell, ExtendedCellValue, Range, Address, DataValidationRule } from '../types';
 import type { Disposable } from '../events';
 import type { WorksheetPatch } from '../patch/WorksheetPatch';
 import { SyncUndoStack } from './SyncUndoStack';
@@ -236,6 +236,16 @@ export interface SpreadsheetSDK {
   isRowHidden(row: number): boolean;
   /** Return `true` if the column is hidden. */
   isColHidden(col: number): boolean;
+
+  // ── Data Validation ───────────────────────────────────────────────────────
+  /** Attach a validation rule to the cell at (row, col). */
+  setDataValidation(row: number, col: number, rule: DataValidationRule): void;
+  /** Return the validation rule for the cell, or `undefined` if none. */
+  getDataValidation(row: number, col: number): DataValidationRule | undefined;
+  /** Remove any validation rule from the cell at (row, col). */
+  removeDataValidation(row: number, col: number): void;
+  /** Return addresses of all cells that have a data-validation rule (row-major order). */
+  getValidationCells(): Address[];
 
   // ── Events ────────────────────────────────────────────────────────────────
   /**
@@ -527,6 +537,28 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   isColHidden(col: number): boolean {
     this._guard('isColHidden');
     return this._ws.isColHidden(col);
+  }
+
+  // ── Data Validation ───────────────────────────────────────────────────────
+
+  setDataValidation(row: number, col: number, rule: DataValidationRule): void {
+    this._guard('setDataValidation');
+    this._ws.setDataValidation({ row, col }, rule);
+  }
+
+  getDataValidation(row: number, col: number): DataValidationRule | undefined {
+    this._guard('getDataValidation');
+    return this._ws.getDataValidation({ row, col });
+  }
+
+  removeDataValidation(row: number, col: number): void {
+    this._guard('removeDataValidation');
+    this._ws.removeDataValidation({ row, col });
+  }
+
+  getValidationCells(): Address[] {
+    this._guard('getValidationCells');
+    return this._ws.getValidationCells();
   }
 
   // ── Events ────────────────────────────────────────────────────────────────

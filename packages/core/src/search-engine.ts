@@ -23,7 +23,8 @@
  * @module search-engine
  */
 
-import type { SearchOptions } from './types/search-types';
+import type { SearchOptions, SearchLookIn } from './types/search-types';
+import type { CellStyle } from './types';
 
 // ---------------------------------------------------------------------------
 // 1. Regex-safety helpers
@@ -177,6 +178,42 @@ export function compareRowMajor(
  * Column-major ascending comparator for Array.sort().
  * Scans top-to-bottom within each column, then left-to-right.
  */
+/**
+ * Test whether a cell's style satisfies every field specified in `searchFormat`.
+ *
+ * Rules:
+ *  - Only keys present in `searchFormat` are checked; missing keys pass.
+ *  - Primitives (string, number, boolean) use strict equality.
+ *  - Plain objects (fill, border, etc.) use shallow key equality.
+ *  - If `cellStyle` is undefined the cell has no style; any non-undefined field
+ *    in `searchFormat` will fail to match.
+ *
+ * @param cellStyle    The cell's current style (may be undefined).
+ * @param searchFormat The format criteria to match against.
+ */
+export function styleMatchesFormat(
+  cellStyle: Partial<CellStyle> | undefined,
+  searchFormat: Partial<CellStyle>,
+): boolean {
+  for (const rawKey of Object.keys(searchFormat)) {
+    const key = rawKey as keyof CellStyle;
+    const searchVal = searchFormat[key];
+    if (searchVal === undefined) continue; // unspecified key — always passes
+
+    const cellVal = cellStyle?.[key];
+    if (typeof searchVal === 'object' && searchVal !== null) {
+      // Shallow object comparison for composite style fields.
+      if (typeof cellVal !== 'object' || cellVal === null) return false;
+      for (const k of Object.keys(searchVal)) {
+        if ((searchVal as Record<string, unknown>)[k] !== (cellVal as Record<string, unknown>)[k]) return false;
+      }
+    } else {
+      if (cellVal !== searchVal) return false;
+    }
+  }
+  return true;
+}
+
 export function compareColMajor(
   a: { row: number; col: number },
   b: { row: number; col: number }

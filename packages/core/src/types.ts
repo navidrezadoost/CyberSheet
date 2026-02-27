@@ -234,6 +234,68 @@ export type CellStyle = {
 /**
  * Cell comment metadata
  */
+/**
+ * Data validation constraint type (Excel: Data → Data Validation → Settings → Allow)
+ */
+export type DataValidationType =
+  | 'whole'       // Whole number
+  | 'decimal'     // Decimal number
+  | 'list'        // Drop-down list (formula1 = comma-separated or range ref)
+  | 'date'        // Date
+  | 'time'        // Time
+  | 'textLength'  // Text length
+  | 'custom'      // Custom formula
+  | 'any';        // No restriction (clear validation)
+
+/**
+ * Comparison operator for numeric/date/text-length validation.
+ * Not used for 'list', 'custom', or 'any' types.
+ */
+export type DataValidationOperator =
+  | 'between'
+  | 'notBetween'
+  | 'equalTo'
+  | 'notEqualTo'
+  | 'greaterThan'
+  | 'lessThan'
+  | 'greaterThanOrEqualTo'
+  | 'lessThanOrEqualTo';
+
+/**
+ * Data validation rule attached to a cell.
+ *
+ * Mirrors the Excel Data Validation dialog.
+ */
+export type DataValidationRule = {
+  /** Validation constraint type */
+  type: DataValidationType;
+  /** Comparison operator (not used for 'list', 'custom', 'any') */
+  operator?: DataValidationOperator;
+  /** Lower bound / single formula for all operators except 'between'/'notBetween'.
+   * For 'list': comma-separated values or a range reference like "=A1:A5". */
+  formula1?: string;
+  /** Upper bound — only for 'between' and 'notBetween'. */
+  formula2?: string;
+  /** Allow blank (empty) cells to bypass the rule. Default: true. */
+  allowBlank?: boolean;
+  /** Show in-cell dropdown list (for 'list' type only). Default: true. */
+  showDropdown?: boolean;
+  /** Show input message tooltip when cell is selected. */
+  showInputMessage?: boolean;
+  /** Title of the input message tooltip. */
+  inputTitle?: string;
+  /** Body of the input message tooltip. */
+  inputMessage?: string;
+  /** Show error alert when invalid data is entered. */
+  showErrorAlert?: boolean;
+  /** Error alert style (determines icon and button set). */
+  errorStyle?: 'stop' | 'warning' | 'information';
+  /** Title of the error alert dialog. */
+  errorTitle?: string;
+  /** Body of the error alert dialog. */
+  errorMessage?: string;
+};
+
 export type CellComment = {
   /** Unique identifier for the comment */
   id: string;

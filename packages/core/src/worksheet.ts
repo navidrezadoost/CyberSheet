@@ -1,4 +1,4 @@
-import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue } from './types';
+import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
@@ -9,6 +9,7 @@ import {
   compareColMajor,
   isStrictlyAfterRowMajor,
   isStrictlyBeforeRowMajor,
+  styleMatchesFormat,
 } from './search-engine';
 import type { ICellStore } from './storage/ICellStore';
 import { CellStoreV1 } from './storage/CellStoreV1';
@@ -33,6 +34,8 @@ export class Worksheet {
   private cells: ICellStore = new CellStoreV1();
   private colWidths = new Map<number, number>(); // px
   private rowHeights = new Map<number, number>(); // px
+  /** Data validation rules, keyed by "row:col". */
+  private validationStore = new Map<string, DataValidationRule>();
   private filters = new Map<number, ColumnFilter>();
   private events = new Emitter<SheetEvents>();
   private formulaEngine?: IFormulaEngine;
@@ -246,6 +249,31 @@ export class Worksheet {
 
   getConditionalFormattingRules(): ConditionalFormattingRule[] {
     return this.conditionalRules.slice();
+  }
+
+  // ── Data Validation ──────────────────────────────────────────────────────
+
+  setDataValidation(addr: Address, rule: DataValidationRule): void {
+    this.validationStore.set(`${addr.row}:${addr.col}`, rule);
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  getDataValidation(addr: Address): DataValidationRule | undefined {
+    return this.validationStore.get(`${addr.row}:${addr.col}`);
+  }
+
+  removeDataValidation(addr: Address): void {
+    this.validationStore.delete(`${addr.row}:${addr.col}`);
+    this.events.emit({ type: 'sheet-mutated' });
+  }
+
+  getValidationCells(): Address[] {
+    const result: Address[] = [];
+    for (const key of this.validationStore.keys()) {
+      const [row, col] = key.split(':').map(Number);
+      result.push({ row, col });
+    }
+    return result.sort(compareRowMajor);
   }
 
   /**
@@ -1183,8 +1211,14 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'dataValidation':
-        return []; // not yet implemented in kernel
+      case 'dataValidation': {
+        const allValidation = this.getValidationCells();
+        if (!range) return allValidation;
+        return allValidation.filter(
+          a => a.row >= range.start.row && a.row <= range.end.row &&
+               a.col >= range.start.col && a.col <= range.end.col
+        );
+      }
 
       default:
         return [];
@@ -1229,11 +1263,13 @@ export class Worksheet {
     options: SearchOptions,
     range?: SearchRange
   ): Generator<Address, void, undefined> {
-    // Empty pattern matches nothing (Excel semantics).
-    if (options.what === '') return;
+    // Empty pattern + no format query → matches nothing (Excel semantics).
+    const hasTextQuery = options.what !== '';
+    const hasFormatQuery = !!(options.searchFormat && Object.keys(options.searchFormat).length > 0);
+    if (!hasTextQuery && !hasFormatQuery) return;
 
     const { lookIn = 'values', searchOrder = 'rows', includeHidden = false } = options;
-    const matcher = buildMatcher(options);
+    const matcher = hasTextQuery ? buildMatcher(options) : null;
 
     // ── 1. Collect addresses of all populated cells ──────────────────────────
     // forEach visits only cells that exist in the store; empty slots are skipped.
@@ -1279,8 +1315,16 @@ export class Worksheet {
         }
       }
 
-      if (text === null) continue;
-      if (matcher(text)) yield addr;
+      // ── Format filter ─────────────────────────────────────────────────
+      if (hasFormatQuery && !styleMatchesFormat(cell.style, options.searchFormat!)) continue;
+
+      // ── Text filter ───────────────────────────────────────────────────
+      if (hasTextQuery) {
+        if (text === null) continue;
+        if (!matcher!(text)) continue;
+      }
+
+      yield addr;
     }
   }
 
