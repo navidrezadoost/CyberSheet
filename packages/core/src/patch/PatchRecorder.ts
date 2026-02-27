@@ -247,6 +247,13 @@ export class PatchRecorder {
       case 'col-hidden':  this._ops.push({ op: 'hideCol', col: event.col }); break;
       case 'col-shown':   this._ops.push({ op: 'showCol', col: event.col }); break;
 
+      case 'sheet-protection-changed':
+        this._ops.push({ op: 'setSheetProtection', before: event.before, after: event.after });
+        break;
+      case 'freeze-panes-changed':
+        this._ops.push({ op: 'setFreezePanes', before: event.before, after: event.after });
+        break;
+
       // sheet-mutated / filter-changed / comment-* / cycle-detected — no-op
       default: break;
     }

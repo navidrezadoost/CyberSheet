@@ -68,7 +68,7 @@
  *  applyPatch(worksheet, inverse);
  */
 
-import type { Address, ExtendedCellValue, CellStyle } from '../types';
+import type { Address, ExtendedCellValue, CellStyle, SheetProtectionOptions, FreezeState } from '../types';
 
 // ---------------------------------------------------------------------------
 // Individual patch operations
@@ -142,6 +142,26 @@ export type ShowColOp = {
   col: number;
 };
 
+/**
+ * Set or remove sheet-level protection; stores before/after for undo.
+ * `after: null` means remove protection.
+ */
+export type SetSheetProtectionOp = {
+  op:     'setSheetProtection';
+  before: SheetProtectionOptions | null;
+  after:  SheetProtectionOptions | null;
+};
+
+/**
+ * Set or clear freeze-pane state; stores before/after for undo.
+ * `after: null` means clear freeze panes.
+ */
+export type SetFreezePanesOp = {
+  op:     'setFreezePanes';
+  before: FreezeState | null;
+  after:  FreezeState | null;
+};
+
 /** Union of all operation types. */
 export type PatchOp =
   | SetCellValueOp
@@ -152,7 +172,9 @@ export type PatchOp =
   | HideRowOp
   | ShowRowOp
   | HideColOp
-  | ShowColOp;
+  | ShowColOp
+  | SetSheetProtectionOp
+  | SetFreezePanesOp;
 
 // ---------------------------------------------------------------------------
 // WorksheetPatch — the top-level patch object
@@ -216,6 +238,12 @@ export function invertPatch(patch: WorksheetPatch, seq = 0): WorksheetPatch {
       case 'showRow':   ops.push({ op: 'hideRow', row: op.row }); break;
       case 'hideCol':   ops.push({ op: 'showCol', col: op.col }); break;
       case 'showCol':   ops.push({ op: 'hideCol', col: op.col }); break;
+      case 'setSheetProtection':
+        ops.push({ op: 'setSheetProtection', before: op.after, after: op.before });
+        break;
+      case 'setFreezePanes':
+        ops.push({ op: 'setFreezePanes', before: op.after, after: op.before });
+        break;
     }
   }
 
@@ -266,6 +294,14 @@ export function applyPatch(ws: Worksheet, patch: WorksheetPatch): void {
       case 'showRow':  ws.showRow(op.row); break;
       case 'hideCol':  ws.hideCol(op.col); break;
       case 'showCol':  ws.showCol(op.col); break;
+      case 'setSheetProtection':
+        if (op.after === null) ws.unprotectSheet();
+        else ws.protectSheet(op.after);
+        break;
+      case 'setFreezePanes':
+        if (op.after === null) ws.clearFreezePanes();
+        else ws.setFreezePanes(op.after.rows, op.after.cols);
+        break;
     }
   }
 }
@@ -298,4 +334,16 @@ export const PatchOps = {
   showRow(row: number): ShowRowOp { return { op: 'showRow', row }; },
   hideCol(col: number): HideColOp { return { op: 'hideCol', col }; },
   showCol(col: number): ShowColOp { return { op: 'showCol', col }; },
+  setSheetProtection(
+    before: SheetProtectionOptions | null,
+    after:  SheetProtectionOptions | null,
+  ): SetSheetProtectionOp {
+    return { op: 'setSheetProtection', before, after };
+  },
+  setFreezePanes(
+    before: FreezeState | null,
+    after:  FreezeState | null,
+  ): SetFreezePanesOp {
+    return { op: 'setFreezePanes', before, after };
+  },
 };

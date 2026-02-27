@@ -296,6 +296,55 @@ export type DataValidationRule = {
   errorMessage?: string;
 };
 
+/**
+ * Sheet-level protection settings.
+ *
+ * When `isSheetProtected()` is true, cells whose `style.locked` is not
+ * explicitly `false` (Excel default: locked = true) cannot be mutated via
+ * the public SDK. `applyPatch` bypasses this guard (undo/redo semantics).
+ */
+export type SheetProtectionOptions = {
+  /** Optional password hash (opaque string; not validated by kernel). */
+  password?: string;
+  /** Allow the user to format cells while the sheet is protected. Default: false. */
+  allowFormatCells?: boolean;
+  /** Allow the user to format columns. Default: false. */
+  allowFormatColumns?: boolean;
+  /** Allow the user to format rows. Default: false. */
+  allowFormatRows?: boolean;
+  /** Allow the user to insert rows. Default: false. */
+  allowInsertRows?: boolean;
+  /** Allow the user to insert columns. Default: false. */
+  allowInsertColumns?: boolean;
+  /** Allow the user to insert hyperlinks. Default: false. */
+  allowInsertHyperlinks?: boolean;
+  /** Allow the user to delete rows. Default: false. */
+  allowDeleteRows?: boolean;
+  /** Allow the user to delete columns. Default: false. */
+  allowDeleteColumns?: boolean;
+  /** Allow the user to sort. Default: false. */
+  allowSort?: boolean;
+  /** Allow the user to use autofilter. Default: false. */
+  allowFilter?: boolean;
+  /** Allow the user to use pivot tables. Default: false. */
+  allowPivotTables?: boolean;
+};
+
+/**
+ * Freeze-pane state for the sheet view.
+ *
+ * Mirrors the Excel "Freeze Panes" concept: the top `rows` rows and left
+ * `cols` columns are pinned during scrolling.
+ *
+ * A value of 0 for either axis means no freeze on that axis.
+ */
+export type FreezeState = {
+  /** Number of rows frozen from the top (0 = none). */
+  rows: number;
+  /** Number of columns frozen from the left (0 = none). */
+  cols: number;
+};
+
 export type CellComment = {
   /** Unique identifier for the comment */
   id: string;
@@ -413,6 +462,8 @@ export type SheetEvents =
   | { type: 'row-shown'; row: number }
   | { type: 'col-hidden'; col: number }
   | { type: 'col-shown'; col: number }
+  | { type: 'sheet-protection-changed'; before: SheetProtectionOptions | null; after: SheetProtectionOptions | null }
+  | { type: 'freeze-panes-changed'; before: FreezeState | null; after: FreezeState | null }
   | { type: 'cycle-detected'; cycles: import('./dag/DependencyGraph').CycleDiagnostic[] };
 
 export interface IFormulaEngine {

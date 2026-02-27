@@ -1,4 +1,4 @@
-import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule } from './types';
+import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
@@ -36,6 +36,10 @@ export class Worksheet {
   private rowHeights = new Map<number, number>(); // px
   /** Data validation rules, keyed by "row:col". */
   private validationStore = new Map<string, DataValidationRule>();
+  /** Sheet-level protection settings, or null when not protected. */
+  private sheetProtection: SheetProtectionOptions | null = null;
+  /** Freeze-pane state, or null when no panes are frozen. */
+  private freezeState: FreezeState | null = null;
   private filters = new Map<number, ColumnFilter>();
   private events = new Emitter<SheetEvents>();
   private formulaEngine?: IFormulaEngine;
@@ -274,6 +278,68 @@ export class Worksheet {
       result.push({ row, col });
     }
     return result.sort(compareRowMajor);
+  }
+
+  // ── Sheet Protection ──────────────────────────────────────────────────────
+
+  /**
+   * Enable sheet protection with optional capability flags.
+   *
+   * When the sheet is protected, any cell whose `style.locked` is not
+   * explicitly `false` (Excel default: locked = true) is considered protected.
+   * The kernel stores the protection state for query by SDK-level guards.
+   */
+  protectSheet(options: SheetProtectionOptions = {}): void {
+    const before = this.sheetProtection;
+    this.sheetProtection = options;
+    this.events.emit({ type: 'sheet-protection-changed', before, after: options });
+  }
+
+  /** Remove sheet protection. */
+  unprotectSheet(): void {
+    const before = this.sheetProtection;
+    this.sheetProtection = null;
+    this.events.emit({ type: 'sheet-protection-changed', before, after: null });
+  }
+
+  /** Return `true` if the sheet is currently protected. */
+  isSheetProtected(): boolean {
+    return this.sheetProtection !== null;
+  }
+
+  /** Return the current protection settings, or `null` if not protected. */
+  getSheetProtection(): SheetProtectionOptions | null {
+    return this.sheetProtection === null ? null : { ...this.sheetProtection };
+  }
+
+  // ── Freeze Panes ─────────────────────────────────────────────────────────
+
+  /**
+   * Freeze the top `rows` rows and left `cols` columns.
+   * Both values must be non-negative integers; pass 0 for "no freeze" on an axis.
+   * Setting both to 0 is equivalent to calling `clearFreezePanes()`.
+   */
+  setFreezePanes(rows: number, cols: number): void {
+    if (rows < 0 || cols < 0 || !Number.isInteger(rows) || !Number.isInteger(cols)) {
+      throw new RangeError(
+        `setFreezePanes: rows and cols must be non-negative integers (got ${rows}, ${cols})`
+      );
+    }
+    const before = this.freezeState;
+    this.freezeState = (rows === 0 && cols === 0) ? null : { rows, cols };
+    this.events.emit({ type: 'freeze-panes-changed', before, after: this.freezeState });
+  }
+
+  /** Remove all frozen panes. */
+  clearFreezePanes(): void {
+    const before = this.freezeState;
+    this.freezeState = null;
+    this.events.emit({ type: 'freeze-panes-changed', before, after: null });
+  }
+
+  /** Return the current freeze-pane state, or `null` if no panes are frozen. */
+  getFreezePanes(): FreezeState | null {
+    return this.freezeState === null ? null : { ...this.freezeState };
   }
 
   /**
