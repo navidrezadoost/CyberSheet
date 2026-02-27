@@ -8,6 +8,24 @@
   "types": "dist/index.d.ts",
   "sideEffects": false,
   "files": ["dist"],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./sdk": {
+      "import": "./dist/sdk/index.js",
+      "types": "./dist/sdk/index.d.ts"
+    },
+    "./patch": {
+      "import": "./dist/patch/index.js",
+      "types": "./dist/patch/index.d.ts"
+    },
+    "./snapshot": {
+      "import": "./dist/persistence/SnapshotCodec.js",
+      "types": "./dist/persistence/SnapshotCodec.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
