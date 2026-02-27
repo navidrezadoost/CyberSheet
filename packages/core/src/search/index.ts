@@ -24,6 +24,13 @@
  *   Full-sheet search across values / formulas / comments.
  *   replaceAll batches all mutations into ONE applyPatch call → single undo entry.
  *
+ * ─── Phase 18 (Go To Special + Search Navigator) ────────────────────────────
+ *   findSpecial(sheet, options, range?) → Address[]
+ *   Implements Excel "Go To Special" for all 14 SpecialCellType variants.
+ *
+ *   new SearchCursor(sheet, options, range?) → SearchCursor
+ *   Stateful navigator: findNext() / findPrev() / reset() with wrap-around.
+ *
  * @module search
  */
 
@@ -31,13 +38,13 @@ import type { Address, ExtendedCellValue } from '../types';
 import type { SpreadsheetSDK } from '../sdk/SpreadsheetSDK';
 import { DisposedError } from '../sdk/SpreadsheetSDK';
 import type { Worksheet } from '../worksheet';
-import type { SearchOptions, SearchRange } from '../types/search-types';
+import type { SearchOptions, SearchRange, SpecialCellsOptions } from '../types/search-types';
 import type { WorksheetPatch } from '../patch/WorksheetPatch';
 import type { SyncUndoStack } from '../sdk/SyncUndoStack';
 import { compareRowMajor, escapeRegexLiteral, cellValueToString } from '../search-engine';
 
 // Re-export standard search option types so callers import from one place.
-export type { SearchOptions, SearchRange } from '../types/search-types';
+export type { SearchOptions, SearchRange, SpecialCellsOptions, SpecialCellValue } from '../types/search-types';
 
 // ---------------------------------------------------------------------------
 // Internal type cast helper
@@ -543,4 +550,206 @@ export function replaceAll(
   internal._undo.applyAndRecord(ws, patch);
 
   return ops.length;
+}
+
+// =============================================================================
+// Phase 18 — Go To Special + Search Navigator
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Phase 18A: findSpecial — Go To Special
+// ---------------------------------------------------------------------------
+
+/**
+ * Go To Special — return all cell addresses matching the given special-cell
+ * criteria, implementing Excel's "Go To Special" dialog (Ctrl+G → Special).
+ *
+ * This is a thin, stateless wrapper over `Worksheet.getSpecialCells()` that
+ * accepts a `SpreadsheetSDK` instance instead of a raw worksheet reference.
+ *
+ * ─── Supported SpecialCellType values ────────────────────────────────────
+ *   'formulas'         — cells with a formula (+ optional value/error filter)
+ *   'constants'        — non-formula cells with a value (+ optional filter)
+ *   'blanks'           — empty cells within the search range
+ *   'visible'          — cells not in hidden rows/columns
+ *   'lastCell'         — bottom-right corner of the used range
+ *   'currentRegion'    — contiguous block around `anchor` (Ctrl+*)
+ *   'currentArray'     — spill range anchored at `anchor`
+ *   'precedents'       — direct precedents of `anchor`
+ *   'allPrecedents'    — transitive closure of all precedents
+ *   'dependents'       — direct dependents of `anchor`
+ *   'allDependents'    — transitive closure of all dependents
+ *   'conditionalFormats' — cells covered by ≥1 conditional formatting rule
+ *   'dataValidation'   — always [] (not yet fully implemented)
+ *
+ * @param sheet    An active SpreadsheetSDK instance.
+ * @param options  What to find; must include `type`.  Use `value` to sub-filter
+ *                 `'formulas'` or `'constants'` results by number/text/logical/error.
+ *                 Use `anchor` for position-relative types.
+ * @param range    Optional bounding box; restricts the search.
+ * @returns        Sorted (row-major) array of addresses — empty if no match.
+ *
+ * @example
+ * ```ts
+ * import { findSpecial } from '@cyber-sheet/core/search';
+ *
+ * // All formula cells
+ * const formulaAddrs = findSpecial(sheet, { type: 'formulas' });
+ *
+ * // Error formulas only
+ * const errorAddrs = findSpecial(sheet, { type: 'formulas', value: 'errors' });
+ *
+ * // Blank cells within a range
+ * const blanks = findSpecial(sheet,
+ *   { type: 'blanks' },
+ *   { start: { row: 1, col: 1 }, end: { row: 10, col: 5 } },
+ * );
+ *
+ * // Direct precedents of A1
+ * const prec = findSpecial(sheet, { type: 'precedents', anchor: { row: 1, col: 1 } });
+ * ```
+ */
+export function findSpecial(
+  sheet: SpreadsheetSDK,
+  options: SpecialCellsOptions,
+  range?: SearchRange,
+): Address[] {
+  const ws = (sheet as InternalSheet)._ws;
+  return ws.getSpecialCells(options, range);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 18B: SearchCursor — find-next / find-previous navigator
+// ---------------------------------------------------------------------------
+
+/**
+ * A stateful search navigator that wraps `Worksheet.find()` and maintains the
+ * last-found position so successive calls to `findNext()` / `findPrev()`
+ * advance through the worksheet without the caller tracking state.
+ *
+ * ─── Design ──────────────────────────────────────────────────────────────
+ *   - Wraps `Worksheet.find(options, after, range)` which already implements
+ *     direction-aware wrap-around search.
+ *   - Stateless with respect to the worksheet — the cursor holds only the
+ *     current position and the search options; it never caches cell data.
+ *   - Safe to keep alive across mutations: every call re-scans from scratch.
+ *
+ * ─── Wrap-around behaviour ────────────────────────────────────────────────
+ *   `findNext()`  wraps from the last cell back to the first match.
+ *   `findPrev()`  wraps from the first cell back to the last match.
+ *   Both behaviours are inherited from `Worksheet.find()`.
+ *
+ * @example
+ * ```ts
+ * import { SearchCursor } from '@cyber-sheet/core/search';
+ *
+ * const cursor = new SearchCursor(sheet, { what: 'Apple' });
+ *
+ * // Navigate forward through all matching cells
+ * let addr = cursor.findNext();
+ * while (addr && cursor.visitCount < 100) {
+ *   console.log(addr);
+ *   addr = cursor.findNext();
+ * }
+ *
+ * cursor.reset(); // forget position, start over
+ * ```
+ */
+export class SearchCursor {
+  /** Last address returned by findNext() or findPrev(). `null` before first call or after reset(). */
+  private _current: Address | null = null;
+
+  /** Total number of successful finds since construction / last reset(). */
+  private _visitCount = 0;
+
+  /**
+   * Create a new SearchCursor.
+   *
+   * @param sheet    An active SpreadsheetSDK instance.
+   * @param options  Search options forwarded to `Worksheet.find()`.
+   *                 `searchDirection` inside `options` is ignored — use
+   *                 `findNext()` / `findPrev()` to control direction.
+   * @param range    Optional sub-range to confine the search.
+   */
+  constructor(
+    private readonly sheet: SpreadsheetSDK,
+    private readonly options: SearchOptions,
+    private readonly range?: SearchRange,
+  ) {}
+
+  /** The last address returned by findNext() / findPrev(), or null before first call / after reset(). */
+  get current(): Address | null { return this._current; }
+
+  /** Number of successful find calls since construction / last reset(). */
+  get visitCount(): number { return this._visitCount; }
+
+  /**
+   * Move to the next matching cell (forward / row-major order).
+   * Wraps to the first match when the end of the sheet is reached.
+   *
+   * Returns `null` when there are no matching cells at all.
+   */
+  findNext(): Address | null {
+    const ws = (this.sheet as InternalSheet)._ws;
+    const found = ws.find(
+      { ...this.options, searchDirection: 'next' },
+      this._current ?? undefined,
+      this.range,
+    );
+    if (found) { this._current = found; this._visitCount++; }
+    return found;
+  }
+
+  /**
+   * Move to the previous matching cell (backward / row-major order).
+   * Wraps to the last match when the beginning of the sheet is reached.
+   *
+   * Returns `null` when there are no matching cells at all.
+   */
+  findPrev(): Address | null {
+    const ws = (this.sheet as InternalSheet)._ws;
+    const found = ws.find(
+      { ...this.options, searchDirection: 'previous' },
+      this._current ?? undefined,
+      this.range,
+    );
+    if (found) { this._current = found; this._visitCount++; }
+    return found;
+  }
+
+  /**
+   * Reset the cursor to an unpositioned state — the next findNext() /
+   * findPrev() call will start from the beginning / end of the sheet.
+   */
+  reset(): void {
+    this._current = null;
+    this._visitCount = 0;
+  }
+
+  /**
+   * Convenience: collect all matches via repeated findNext(), walking the
+   * full result set exactly once before wrap-around.
+   *
+   * **Important**: resets the cursor first, then collects all matches in
+   * row-major order, then resets again.  The cursor position is left at `null`.
+   *
+   * Cost: O(n * m) where n = populated cells, m = number of matches.
+   * Prefer `findAll()` for bulk collection.
+   */
+  collectAll(): Address[] {
+    this.reset();
+    const all: Address[] = [];
+    const first = this.findNext();
+    if (!first) return [];
+    all.push(first);
+    while (true) {
+      const next = this.findNext();
+      if (!next) break;
+      // Stop when we've wrapped back to the first result.
+      if (next.row === first.row && next.col === first.col) break;
+      all.push(next);
+    }
+    this.reset();
+    return all;
+  }
 }

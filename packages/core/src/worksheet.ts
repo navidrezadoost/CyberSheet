@@ -1,7 +1,7 @@
 import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
-import { SearchOptions, SearchRange, SearchResult } from './types/search-types';
+import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
 import {
   buildMatcher,
   cellValueToString,
@@ -953,6 +953,242 @@ export class Worksheet {
       if (cell.formula != null) result.push({ row, col });
     });
     return result;
+  }
+
+  /**
+   * Return the addresses of cells this formula cell directly depends on
+   * (its precedents — the cells it reads).
+   *
+   * If the cell has no formula registered in the dependency graph,
+   * an empty array is returned (not an error).
+   *
+   * O(e) where e = number of edges from this node.
+   */
+  getPrecedents(addr: Address): Address[] {
+    return this.recalcCoordinator.graph.getDependencies(addr.row, addr.col);
+  }
+
+  /**
+   * Return the addresses of formula cells that directly depend on this cell
+   * (its dependents — the cells that read it).
+   *
+   * O(e) where e = number of edges into this node.
+   */
+  getDependents(addr: Address): Address[] {
+    return this.recalcCoordinator.graph.getDependents(addr.row, addr.col);
+  }
+
+  // ── Phase 18: Go To Special ──────────────────────────────────────────────
+
+  /**
+   * Go To Special — return all addresses matching the given special-cell
+   * criteria, optionally constrained to `range`.
+   *
+   * Implements the Excel "Go To Special" dialog (Ctrl+G → Special) across
+   * all 14 `SpecialCellType` variants defined in `search-types.ts`.
+   *
+   * ─── Supported types ────────────────────────────────────────────────────
+   *   formulas       — cells with a formula string (+ optional value filter)
+   *   constants      — non-formula cells with a non-null value (+ optional filter)
+   *   blanks         — empty cells within the search range
+   *   errors         — formula or value cells displaying an Excel error string
+   *   visible        — non-hidden cells (row and column both visible)
+   *   lastCell       — the bottom-right corner of the used range
+   *   currentRegion  — contiguous block around `anchor` (Ctrl+*)
+   *   currentArray   — the spill range anchored at `anchor`
+   *   precedents     — direct precedents of `anchor`
+   *   allPrecedents  — transitive closure of precedents
+   *   dependents     — direct dependents of `anchor`
+   *   allDependents  — transitive closure of dependents
+   *   conditionalFormats — populated cells covered by ≥1 CF rule range
+   *   dataValidation — always empty (not yet implemented in kernel)
+   *
+   * @param options  What to find; must include `type`.
+   * @param range    Optional bounding box to restrict the search.
+   * @returns        Sorted address array (row-major), possibly empty.
+   */
+  getSpecialCells(options: SpecialCellsOptions, range?: SearchRange): Address[] {
+    const { type, value: valueFilter, anchor } = options;
+
+    // ── helpers ─────────────────────────────────────────────────────────────
+
+    /** True if `addr` falls within range `r` (inclusive). */
+    const inRange = (addr: Address, r: { start: Address; end: Address }): boolean =>
+      addr.row >= r.start.row && addr.row <= r.end.row &&
+      addr.col >= r.start.col && addr.col <= r.end.col;
+
+    /** True if `v` is an Excel error string like "#VALUE!" */
+    const isExcelError = (v: unknown): boolean =>
+      typeof v === 'string' && /^#[A-Z/0-9!?]+$/.test(v) && v.startsWith('#');
+
+    /** True if `v` matches the optional SpecialCellValue filter. */
+    const passesFilter = (v: unknown, f: SpecialCellValue | undefined): boolean => {
+      if (!f) return true;
+      switch (f) {
+        case 'numbers':  return typeof v === 'number';
+        case 'text':     return typeof v === 'string' && !isExcelError(v);
+        case 'logicals': return typeof v === 'boolean';
+        case 'errors':   return isExcelError(v);
+      }
+    };
+
+    // ── dispatch ─────────────────────────────────────────────────────────────
+
+    switch (type) {
+      case 'formulas': {
+        const result: Address[] = [];
+        this.cells.forEach((row, col, cell) => {
+          if (cell.formula == null) return;
+          if (range && !inRange({ row, col }, range)) return;
+          if (!passesFilter(cell.value, valueFilter)) return;
+          result.push({ row, col });
+        });
+        return result.sort(compareRowMajor);
+      }
+
+      case 'constants': {
+        const result: Address[] = [];
+        this.cells.forEach((row, col, cell) => {
+          if (cell.formula != null) return;
+          if (cell.value === null || cell.value === undefined) return;
+          if (range && !inRange({ row, col }, range)) return;
+          if (!passesFilter(cell.value, valueFilter)) return;
+          result.push({ row, col });
+        });
+        return result.sort(compareRowMajor);
+      }
+
+      case 'blanks': {
+        // Blank = no cell entry, OR cell exists but value is null/'' and no formula.
+        // Requires a bounded range; fall back to used range if none supplied.
+        const searchRange = range ?? this.getUsedRange();
+        if (!searchRange) return [];
+        const { start, end } = searchRange;
+        const result: Address[] = [];
+        for (let r = start.row; r <= end.row; r++) {
+          for (let c = start.col; c <= end.col; c++) {
+            const cell = this.getCell({ row: r, col: c });
+            if (!cell || (cell.formula == null && (cell.value === null || cell.value === ''))) {
+              result.push({ row: r, col: c });
+            }
+          }
+        }
+        return result;
+      }
+
+      case 'visible': {
+        const result: Address[] = [];
+        this.cells.forEach((row, col, cell) => {
+          if (this.isRowHidden(row) || this.isColHidden(col)) return;
+          if (range && !inRange({ row, col }, range)) return;
+          if (cell.value === null && cell.formula == null) return; // blank
+          result.push({ row, col });
+        });
+        return result.sort(compareRowMajor);
+      }
+
+      case 'lastCell': {
+        const ur = this.getUsedRange();
+        return ur ? [ur.end] : [];
+      }
+
+      case 'currentRegion': {
+        if (!anchor) return [];
+        const region = this.getContiguousRange(anchor);
+        if (!region) return this.getCell(anchor) ? [anchor] : [];
+        const result: Address[] = [];
+        this.cells.forEach((row, col) => {
+          if (inRange({ row, col }, region)) result.push({ row, col });
+        });
+        return result.sort(compareRowMajor);
+      }
+
+      case 'currentArray': {
+        if (!anchor) return [];
+        const cell = this.getCell(anchor);
+        if (!cell) return [];
+        // Anchor is the spill source
+        if (cell.spillSource) {
+          const { endAddress } = cell.spillSource;
+          const result: Address[] = [];
+          for (let r = anchor.row; r <= endAddress.row; r++)
+            for (let c = anchor.col; c <= endAddress.col; c++)
+              result.push({ row: r, col: c });
+          return result;
+        }
+        // Anchor is inside a spilled range — delegate to source
+        if (cell.spilledFrom) {
+          return this.getSpecialCells({ type: 'currentArray', anchor: cell.spilledFrom });
+        }
+        return [anchor];
+      }
+
+      case 'precedents':    return anchor ? this.getPrecedents(anchor)  : [];
+      case 'dependents':    return anchor ? this.getDependents(anchor)  : [];
+
+      case 'allPrecedents': {
+        if (!anchor) return [];
+        const visited = new Set<string>();
+        const queue: Address[] = [anchor];
+        const result: Address[] = [];
+        while (queue.length) {
+          const curr = queue.shift()!;
+          for (const p of this.getPrecedents(curr)) {
+            const k = `${p.row}:${p.col}`;
+            if (visited.has(k)) continue;
+            visited.add(k);
+            result.push(p);
+            queue.push(p);
+          }
+        }
+        return result.sort(compareRowMajor);
+      }
+
+      case 'allDependents': {
+        if (!anchor) return [];
+        const visited = new Set<string>();
+        const queue: Address[] = [anchor];
+        const result: Address[] = [];
+        while (queue.length) {
+          const curr = queue.shift()!;
+          for (const d of this.getDependents(curr)) {
+            const k = `${d.row}:${d.col}`;
+            if (visited.has(k)) continue;
+            visited.add(k);
+            result.push(d);
+            queue.push(d);
+          }
+        }
+        return result.sort(compareRowMajor);
+      }
+
+      case 'conditionalFormats': {
+        const rules = this.getConditionalFormattingRules();
+        if (rules.length === 0) return [];
+        const seen = new Set<string>();
+        const result: Address[] = [];
+        this.cells.forEach((row, col) => {
+          if (range && !inRange({ row, col }, range)) return;
+          for (const rule of rules) {
+            if (!rule.ranges || rule.ranges.length === 0) continue;
+            for (const rng of rule.ranges) {
+              if (inRange({ row, col }, rng)) {
+                const k = `${row}:${col}`;
+                if (!seen.has(k)) { seen.add(k); result.push({ row, col }); }
+                return; // don't double-count this cell
+              }
+            }
+          }
+        });
+        return result.sort(compareRowMajor);
+      }
+
+      case 'dataValidation':
+        return []; // not yet implemented in kernel
+
+      default:
+        return [];
+    }
   }
 
   /**
