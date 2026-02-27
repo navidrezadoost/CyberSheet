@@ -23,7 +23,7 @@
 import { Worksheet } from '../worksheet';
 import { snapshotCodec } from '../persistence/SnapshotCodec';
 import type { WorksheetSnapshot } from '../persistence/SnapshotCodec';
-import type { Cell, ExtendedCellValue, Range, Address, DataValidationRule } from '../types';
+import type { Cell, CellStyle, ExtendedCellValue, Range, Address, DataValidationRule, SheetProtectionOptions, FreezeState } from '../types';
 import type { Disposable } from '../events';
 import type { WorksheetPatch } from '../patch/WorksheetPatch';
 import { SyncUndoStack } from './SyncUndoStack';
@@ -84,6 +84,18 @@ export class PatchError extends SdkError {
   constructor(message: string, public readonly cause?: unknown) {
     super(`PatchError: ${message}`);
     this.name = 'PatchError';
+  }
+}
+
+/**
+ * Thrown when a mutation is attempted on a cell that is locked and the sheet
+ * is currently protected. Call `removeSheetProtection()` first, or
+ * `unlockCell(row, col)` to unlock the specific cell.
+ */
+export class ProtectedCellError extends SdkError {
+  constructor(row: number, col: number) {
+    super(`SpreadsheetSDK: cell (${row}, ${col}) is protected — call removeSheetProtection() or unlockCell(${row}, ${col}) first`);
+    this.name = 'ProtectedCellError';
   }
 }
 
@@ -247,6 +259,51 @@ export interface SpreadsheetSDK {
   /** Return addresses of all cells that have a data-validation rule (row-major order). */
   getValidationCells(): Address[];
 
+  // ── Sheet Protection ───────────────────────────────────────────────────────
+  /**
+   * Enable sheet protection. While the sheet is protected, any cell whose
+   * `style.locked` is not explicitly `false` (Excel default: locked = true)
+   * will reject `setCell` / `lockCell` mutations with `ProtectedCellError`.
+   *
+   * @param options  Optional capability overrides (e.g. `allowFormatCells`).
+   */
+  setSheetProtection(options?: SheetProtectionOptions): void;
+  /** Remove sheet protection. This is a no-op if the sheet is not protected. */
+  removeSheetProtection(): void;
+  /** Return `true` if the sheet is currently protected. */
+  isSheetProtected(): boolean;
+  /** Return the current protection settings, or `null` if not protected. */
+  getSheetProtection(): SheetProtectionOptions | null;
+  /**
+   * Return `true` if the cell at (row, col) would currently block mutation.
+   *
+   * A cell is protected when: `isSheetProtected()` is true AND
+   * `cell.style?.locked !== false` (Excel default: all cells are locked).
+   */
+  isCellProtected(row: number, col: number): boolean;
+  /**
+   * Explicitly lock a single cell (sets `style.locked = true`).
+   * This change is tracked on the undo stack.
+   */
+  lockCell(row: number, col: number): void;
+  /**
+   * Explicitly unlock a single cell (sets `style.locked = false`).
+   * This change is tracked on the undo stack.
+   */
+  unlockCell(row: number, col: number): void;
+
+  // ── Freeze Panes ──────────────────────────────────────────────────────────
+  /**
+   * Freeze the top `rows` rows and the left `cols` columns.
+   * Passing `rows=0, cols=0` is equivalent to `clearFreezePanes()`.
+   * This change is tracked on the undo stack.
+   */
+  setFreezePanes(rows: number, cols: number): void;
+  /** Remove all frozen panes. No-op if nothing is frozen. */
+  clearFreezePanes(): void;
+  /** Return the current freeze-pane state, or `null` if no panes are frozen. */
+  getFreezePanes(): FreezeState | null;
+
   // ── Events ────────────────────────────────────────────────────────────────
   /**
    * Subscribe to SDK events.
@@ -301,6 +358,8 @@ class SpreadsheetV1 implements SpreadsheetSDK {
         case 'row-shown':
         case 'col-hidden':
         case 'col-shown':
+        case 'sheet-protection-changed':
+        case 'freeze-panes-changed':
           this._emit('structure-changed', { type: 'structure-changed' });
           break;
         case 'filter-changed':
@@ -323,6 +382,16 @@ class SpreadsheetV1 implements SpreadsheetSDK {
     }
     if (!Number.isInteger(col) || col < 1 || col > this._ws.colCount) {
       throw new BoundsError(`col ${col} out of range 1..${this._ws.colCount}`);
+    }
+  }
+
+  private _guardCell(row: number, col: number, method: string): void {
+    if (this._ws.isSheetProtected()) {
+      const cell = this._ws.getCell({ row, col });
+      // Excel default: cells are locked unless explicitly set to false.
+      if (cell?.style?.locked !== false) {
+        throw new ProtectedCellError(row, col);
+      }
     }
   }
 
@@ -365,6 +434,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   setCell(row: number, col: number, value: ExtendedCellValue): void {
     this._guard('setCell');
     this._checkBounds(row, col);
+    this._guardCell(row, col, 'setCell');
     this._wrapMutation(() => {
       const patch: WorksheetPatch = {
         seq: 0,
@@ -559,6 +629,100 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   getValidationCells(): Address[] {
     this._guard('getValidationCells');
     return this._ws.getValidationCells();
+  }
+
+  // ── Sheet Protection ───────────────────────────────────────────────────────
+
+  setSheetProtection(options: SheetProtectionOptions = {}): void {
+    this._guard('setSheetProtection');
+    const before = this._ws.getSheetProtection();
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setSheetProtection' as const, before, after: options }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  removeSheetProtection(): void {
+    this._guard('removeSheetProtection');
+    const before = this._ws.getSheetProtection();
+    if (before === null) return;
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setSheetProtection' as const, before, after: null }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  isSheetProtected(): boolean {
+    this._guard('isSheetProtected');
+    return this._ws.isSheetProtected();
+  }
+
+  getSheetProtection(): SheetProtectionOptions | null {
+    this._guard('getSheetProtection');
+    return this._ws.getSheetProtection();
+  }
+
+  isCellProtected(row: number, col: number): boolean {
+    this._guard('isCellProtected');
+    this._checkBounds(row, col);
+    if (!this._ws.isSheetProtected()) return false;
+    const cell = this._ws.getCell({ row, col });
+    return cell?.style?.locked !== false;
+  }
+
+  lockCell(row: number, col: number): void {
+    this._guard('lockCell');
+    this._checkBounds(row, col);
+    const before = this._ws.getCellStyle({ row, col });
+    const after: CellStyle = { ...before, locked: true };
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setCellStyle' as const, row, col, before, after }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  unlockCell(row: number, col: number): void {
+    this._guard('unlockCell');
+    this._checkBounds(row, col);
+    const before = this._ws.getCellStyle({ row, col });
+    const after: CellStyle = { ...before, locked: false };
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setCellStyle' as const, row, col, before, after }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  // ── Freeze Panes ──────────────────────────────────────────────────────────
+
+  setFreezePanes(rows: number, cols: number): void {
+    this._guard('setFreezePanes');
+    const before = this._ws.getFreezePanes();
+    const after: FreezeState | null = (rows === 0 && cols === 0) ? null : { rows, cols };
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setFreezePanes' as const, before, after }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  clearFreezePanes(): void {
+    this._guard('clearFreezePanes');
+    const before = this._ws.getFreezePanes();
+    if (before === null) return;
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setFreezePanes' as const, before, after: null }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  getFreezePanes(): FreezeState | null {
+    this._guard('getFreezePanes');
+    return this._ws.getFreezePanes();
   }
 
   // ── Events ────────────────────────────────────────────────────────────────
