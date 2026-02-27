@@ -100,4 +100,19 @@ export class SyncUndoStack {
     this._undoStack = [];
     this._redoStack = [];
   }
+
+  /**
+   * Record a pre-built forward/inverse pair without applying anything.
+   *
+   * Use this when the mutation was already applied directly on the Worksheet
+   * (e.g. `sortRange`) and you have already computed the inverse patch.
+   * Any existing redo history is discarded.
+   */
+  recordPreBuilt(forward: WorksheetPatch, inverse: WorksheetPatch): void {
+    this._undoStack.push({ forward, inverse });
+    if (this._undoStack.length > this._maxSize) {
+      this._undoStack.shift();
+    }
+    this._redoStack = [];
+  }
 }

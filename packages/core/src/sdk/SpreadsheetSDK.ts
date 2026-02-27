@@ -23,7 +23,7 @@
 import { Worksheet } from '../worksheet';
 import { snapshotCodec } from '../persistence/SnapshotCodec';
 import type { WorksheetSnapshot } from '../persistence/SnapshotCodec';
-import type { Cell, CellStyle, ExtendedCellValue, Range, Address, DataValidationRule, SheetProtectionOptions, FreezeState } from '../types';
+import type { Cell, CellStyle, ExtendedCellValue, Range, Address, DataValidationRule, SheetProtectionOptions, FreezeState, ColumnFilter, SortKey, AutoFilterRange } from '../types';
 import type { Disposable } from '../events';
 import type { WorksheetPatch } from '../patch/WorksheetPatch';
 import { SyncUndoStack } from './SyncUndoStack';
@@ -109,6 +109,7 @@ export type SdkEventType =
   | 'style-changed'
   | 'structure-changed'
   | 'filter-changed'
+  | 'sort-applied'
   | 'cycle-detected';
 
 /**
@@ -122,6 +123,7 @@ export type SdkEvent =
   | { type: 'style-changed';   row: number; col: number }
   | { type: 'structure-changed' }
   | { type: 'filter-changed';  col: number }
+  | { type: 'sort-applied';    startRow: number; startCol: number; endRow: number; endCol: number }
   | { type: 'cycle-detected' };
 
 export type SdkEventListener = (event: SdkEvent) => void;
@@ -303,7 +305,67 @@ export interface SpreadsheetSDK {
   clearFreezePanes(): void;
   /** Return the current freeze-pane state, or `null` if no panes are frozen. */
   getFreezePanes(): FreezeState | null;
+  // ── Column Filters ─────────────────────────────────────────────────
+  /**
+   * Apply a filter to a column.  This change is tracked on the undo stack.
+   *
+   * Supported filter types: `equals`, `notEquals`, `contains`, `notContains`,
+   * `startsWith`, `endsWith`, `gt`, `gte`, `lt`, `lte`, `between`,
+   * `empty`, `notEmpty`, `in`.
+   */
+  setFilter(col: number, filter: ColumnFilter): void;
+  /** Remove the filter on a column.  No-op if no filter is active.  Undoable. */
+  clearFilter(col: number): void;
+  /**
+   * Remove all column filters at once.  No-op if no filters are active.  Undoable
+   * as a single undo entry (restores all cleared filters simultaneously).
+   */
+  clearAllFilters(): void;
+  /** Return the current filter for a column, or `undefined` if none. */
+  getFilter(col: number): ColumnFilter | undefined;
+  /**
+   * Return the row indices (1-based) that pass ALL currently active filters.
+   * Hidden rows are included — filter visibility is independent of row hide/show.
+   *
+   * @param range Optional sub-range; when omitted the full sheet row range is used.
+   */
+  getVisibleRows(range?: Range): number[];
+  /**
+   * Return distinct cell values for a column, together with their occurrence counts.
+   * Useful for building a filter dropdown.
+   *
+   * @param col         1-based column index.
+   * @param visibleOnly When `true`, only rows that pass all OTHER column filters
+   *                    are considered (Excel’s behaviour for filter dropdowns).
+   *                    Defaults to `false`.
+   */
+  getDistinctValues(col: number, visibleOnly?: boolean): { value: string; count: number }[];
 
+  // ── Auto-Filter Range ─────────────────────────────────────────────
+  /**
+   * Mark the row and columns that carry the filter dropdown arrows.
+   * This is purely a UI marker — it does not affect filter matching.
+   * The change is tracked on the undo stack.
+   */
+  setAutoFilterRange(headerRow: number, startCol: number, endCol: number): void;
+  /** Remove the auto-filter range marker.  No-op if none is set.  Undoable. */
+  clearAutoFilterRange(): void;
+  /** Return the current auto-filter range, or `null` if none is set. */
+  getAutoFilterRange(): AutoFilterRange | null;
+
+  // ── Range Sort ───────────────────────────────────────────────────────
+  /**
+   * Sort a rectangular range by one or more sort keys.
+   *
+   * - Sort is stable; equal rows preserve their original order.
+   * - Cells outside the range are unaffected.
+   * - The operation is fully undoable (pre-sort snapshot is captured).
+   * - Emits a `sort-applied` SDK event.
+   *
+   * @param range  1-based inclusive rectangle to sort.
+   * @param keys   Primary → secondary → … sort keys.
+   */
+  sortRange(range: Range, keys: SortKey[]): void;
   // ── Events ────────────────────────────────────────────────────────────────
   /**
    * Subscribe to SDK events.
@@ -360,10 +422,16 @@ class SpreadsheetV1 implements SpreadsheetSDK {
         case 'col-shown':
         case 'sheet-protection-changed':
         case 'freeze-panes-changed':
+        case 'autofilter-range-changed':
           this._emit('structure-changed', { type: 'structure-changed' });
           break;
         case 'filter-changed':
           this._emit('filter-changed', { type: 'filter-changed', col: e.col });
+          this._emit('structure-changed', { type: 'structure-changed' });
+          break;
+        case 'sort-applied':
+          this._emit('sort-applied', { type: 'sort-applied', startRow: e.startRow, startCol: e.startCol, endRow: e.endRow, endCol: e.endCol });
+          this._emit('structure-changed', { type: 'structure-changed' });
           break;
         case 'cycle-detected':
           this._emit('cycle-detected', { type: 'cycle-detected' });
@@ -723,6 +791,138 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   getFreezePanes(): FreezeState | null {
     this._guard('getFreezePanes');
     return this._ws.getFreezePanes();
+  }
+
+  // ── Column Filters ────────────────────────────────────────────────────────
+
+  setFilter(col: number, filter: ColumnFilter): void {
+    this._guard('setFilter');
+    const before = this._ws.getColumnFilter(col) ?? null;
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setColumnFilter' as const, col, before, after: filter }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  clearFilter(col: number): void {
+    this._guard('clearFilter');
+    const before = this._ws.getColumnFilter(col) ?? null;
+    if (before === null) return;
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setColumnFilter' as const, col, before, after: null }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  clearAllFilters(): void {
+    this._guard('clearAllFilters');
+    const all = this._ws.getAllFilters();
+    if (all.size === 0) return;
+    const ops = [...all.entries()].map(([col, before]) => ({
+      op: 'setColumnFilter' as const, col, before, after: null,
+    }));
+    const patch: WorksheetPatch = { seq: 0, ops };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  getFilter(col: number): ColumnFilter | undefined {
+    this._guard('getFilter');
+    return this._ws.getColumnFilter(col);
+  }
+
+  getVisibleRows(range?: Range): number[] {
+    this._guard('getVisibleRows');
+    return this._ws.getVisibleRowIndices(range);
+  }
+
+  getDistinctValues(col: number, visibleOnly = false): { value: string; count: number }[] {
+    this._guard('getDistinctValues');
+    return this._ws.getDistinctValues(col, visibleOnly);
+  }
+
+  // ── Auto-Filter Range ─────────────────────────────────────────────────────
+
+  setAutoFilterRange(headerRow: number, startCol: number, endCol: number): void {
+    this._guard('setAutoFilterRange');
+    const before = this._ws.getAutoFilterRange();
+    const after: AutoFilterRange = { headerRow, startCol, endCol };
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setAutoFilterRange' as const, before, after }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  clearAutoFilterRange(): void {
+    this._guard('clearAutoFilterRange');
+    const before = this._ws.getAutoFilterRange();
+    if (before === null) return;
+    const patch: WorksheetPatch = {
+      seq: 0,
+      ops: [{ op: 'setAutoFilterRange' as const, before, after: null }],
+    };
+    this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  getAutoFilterRange(): AutoFilterRange | null {
+    this._guard('getAutoFilterRange');
+    return this._ws.getAutoFilterRange();
+  }
+
+  // ── Range Sort ────────────────────────────────────────────────────────────
+
+  sortRange(range: Range, keys: SortKey[]): void {
+    this._guard('sortRange');
+    if (keys.length === 0) return;
+
+    const { start, end } = range;
+    const numRows = end.row - start.row + 1;
+    const numCols = end.col - start.col + 1;
+
+    // Capture pre-sort snapshot for undo.
+    const snapshot: ExtendedCellValue[][] = [];
+    for (let ri = 0; ri < numRows; ri++) {
+      const row: ExtendedCellValue[] = [];
+      for (let ci = 0; ci < numCols; ci++) {
+        row.push(this._ws.getCellValue({ row: start.row + ri, col: start.col + ci }));
+      }
+      snapshot.push(row);
+    }
+
+    // Apply sort directly on worksheet.
+    this._ws.sortRange(range, keys);
+
+    // Capture post-sort values for redo forward patch.
+    const afterSnapshot: ExtendedCellValue[][] = [];
+    for (let ri = 0; ri < numRows; ri++) {
+      const row: ExtendedCellValue[] = [];
+      for (let ci = 0; ci < numCols; ci++) {
+        row.push(this._ws.getCellValue({ row: start.row + ri, col: start.col + ci }));
+      }
+      afterSnapshot.push(row);
+    }
+
+    // Build forward + inverse patches from snapshots.
+    const makeCellOps = (from: ExtendedCellValue[][], to: ExtendedCellValue[][]): WorksheetPatch['ops'] =>
+      from.flatMap((rowVals, ri) =>
+        rowVals.map((before, ci) => ({
+          op: 'setCellValue' as const,
+          row: start.row + ri,
+          col: start.col + ci,
+          before,
+          after: to[ri]![ci] ?? null,
+        }))
+      );
+
+    const forwardOps = makeCellOps(snapshot, afterSnapshot);
+    const inverseOps = makeCellOps(afterSnapshot, snapshot);
+
+    this._undo.recordPreBuilt(
+      { seq: 0, ops: forwardOps },
+      { seq: 0, ops: inverseOps },
+    );
   }
 
   // ── Events ────────────────────────────────────────────────────────────────

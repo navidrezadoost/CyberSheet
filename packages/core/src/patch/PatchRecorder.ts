@@ -254,7 +254,17 @@ export class PatchRecorder {
         this._ops.push({ op: 'setFreezePanes', before: event.before, after: event.after });
         break;
 
-      // sheet-mutated / filter-changed / comment-* / cycle-detected — no-op
+      case 'filter-changed':
+        // Forward direction (before→after); invertPatch() will swap to produce the undo op.
+        this._ops.push({ op: 'setColumnFilter', col: event.col, before: event.before, after: event.filter });
+        break;
+      case 'autofilter-range-changed':
+        // Forward direction (before→after); invertPatch() will swap to produce the undo op.
+        this._ops.push({ op: 'setAutoFilterRange', before: event.before, after: event.after });
+        break;
+
+      // sort-applied is handled by SDK via recordPreBuilt (snapshot-based). PatchRecorder no-ops it.
+      // sheet-mutated / comment-* / cycle-detected — no-op
       default: break;
     }
   };

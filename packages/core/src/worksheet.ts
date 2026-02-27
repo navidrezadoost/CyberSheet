@@ -1,4 +1,4 @@
-import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState } from './types';
+import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState, type SortKey, type AutoFilterRange } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
@@ -40,6 +40,8 @@ export class Worksheet {
   private sheetProtection: SheetProtectionOptions | null = null;
   /** Freeze-pane state, or null when no panes are frozen. */
   private freezeState: FreezeState | null = null;
+  /** Auto-filter range marker (header row + column span), or null if not set. */
+  private autoFilterRange: AutoFilterRange | null = null;
   private filters = new Map<number, ColumnFilter>();
   private events = new Emitter<SheetEvents>();
   private formulaEngine?: IFormulaEngine;
@@ -421,13 +423,28 @@ export class Worksheet {
   }
 
   setColumnFilter(col: number, filter: ColumnFilter): void {
+    const before = this.filters.get(col) ?? null;
     this.filters.set(col, filter);
-    this.events.emit({ type: 'filter-changed', col, filter });
+    this.events.emit({ type: 'filter-changed', col, filter, before });
   }
 
   clearColumnFilter(col: number): void {
+    const before = this.filters.get(col) ?? null;
     this.filters.delete(col);
-    this.events.emit({ type: 'filter-changed', col, filter: null });
+    this.events.emit({ type: 'filter-changed', col, filter: null, before });
+  }
+
+  /** Clear all column filters at once. Emits one `filter-changed` event per cleared column. */
+  clearAllFilters(): void {
+    for (const [col, filter] of this.filters) {
+      this.filters.delete(col);
+      this.events.emit({ type: 'filter-changed', col, filter: null, before: filter });
+    }
+  }
+
+  /** Return a snapshot of all active filters keyed by column number. */
+  getAllFilters(): Map<number, ColumnFilter> {
+    return new Map(this.filters);
   }
 
   /**
@@ -460,6 +477,140 @@ export class Worksheet {
     return result;
   }
 
+  /**
+   * Return distinct cell values for a column, with counts.
+   * @param col         1-based column index.
+   * @param visibleOnly When true, only row indices that pass all OTHER column filters are
+   *                    considered (Excel behaviour for filter dropdowns).
+   * @returns           Array of `{ value, count }` sorted descending by count.
+   */
+  getDistinctValues(col: number, visibleOnly = false): { value: string; count: number }[] {
+    const rows = visibleOnly
+      ? this.getVisibleRowIndicesExcluding(col)
+      : Array.from({ length: this.rowCount }, (_, i) => i + 1);
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const v = this.getCell({ row, col })?.value ?? null;
+      const key = v === null ? '' : String(v);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // ── Auto-Filter Range ─────────────────────────────────────────────────────
+
+  /**
+   * Mark the auto-filter region (the row bearing the dropdown arrows and the
+   * columns it spans).  Purely a UI marker — does not affect filter matching.
+   */
+  setAutoFilterRange(headerRow: number, startCol: number, endCol: number): void {
+    const before = this.autoFilterRange;
+    this.autoFilterRange = { headerRow, startCol, endCol };
+    this.events.emit({ type: 'autofilter-range-changed', before, after: this.autoFilterRange });
+  }
+
+  /** Remove the auto-filter range marker. */
+  clearAutoFilterRange(): void {
+    const before = this.autoFilterRange;
+    if (before === null) return;
+    this.autoFilterRange = null;
+    this.events.emit({ type: 'autofilter-range-changed', before, after: null });
+  }
+
+  /** Return the current auto-filter range, or `null` if not set. */
+  getAutoFilterRange(): AutoFilterRange | null {
+    return this.autoFilterRange === null ? null : { ...this.autoFilterRange };
+  }
+
+  // ── Range Sort ────────────────────────────────────────────────────────────
+
+  /**
+   * Sort a rectangular range in-place by one or more sort keys.
+   *
+   * - Rows within the range (inclusive) are reordered according to the keys.
+   * - Cells OUTSIDE the range are not touched.
+   * - Sort is stable (ties preserve original row order).
+   * - Emits `sort-applied` after completion (for PatchRecorder / UI notification).
+   *
+   * @param range  The rectangular region to sort (1-based, inclusive).
+   * @param keys   Primary → secondary → … sort keys; each key references a column
+   *               that must fall within `range.start.col` … `range.end.col`.
+   */
+  sortRange(range: Range, keys: SortKey[]): void {
+    const { start, end } = range;
+    if (keys.length === 0) return;
+
+    const numCols = end.col - start.col + 1;
+
+    // Collect all data rows as value snapshots.
+    // Use Cell['value'] (CellValue | undefined) from the store directly.
+    const rows: Array<{ rowIndex: number; values: Array<Cell['value'] | null> }> = [];
+    for (let r = start.row; r <= end.row; r++) {
+      const values: Array<Cell['value'] | null> = [];
+      for (let c = start.col; c <= end.col; c++) {
+        values.push(this.cells.get(r, c)?.value ?? null);
+      }
+      rows.push({ rowIndex: r, values });
+    }
+
+    // Stable sort by keys (primary first). Nulls are always sorted last
+    // regardless of direction, so they are tested before the dir inversion.
+    rows.sort((a, b) => {
+      for (const key of keys) {
+        const ci = key.col - start.col;
+        const av = a.values[ci] ?? null;
+        const bv = b.values[ci] ?? null;
+        // Nulls last — independent of direction.
+        if (av === null && bv === null) continue;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        const cmp = this._compareValues(av, bv, key.type ?? 'text');
+        if (cmp !== 0) return key.dir === 'asc' ? cmp : -cmp;
+      }
+      return 0;
+    });
+
+    // Write sorted rows back; use direct store ops to avoid per-cell events.
+    const sortedRows = rows.map(r => r.values);
+    for (let ri = 0; ri < sortedRows.length; ri++) {
+      const destRow = start.row + ri;
+      for (let ci = 0; ci < numCols; ci++) {
+        const destCol = start.col + ci;
+        const v = sortedRows[ri]![ci] ?? null;
+        if (v === null) {
+          this.cells.delete(destRow, destCol);
+        } else {
+          const existing = this.cells.get(destRow, destCol);
+          this.cells.set(destRow, destCol, { ...(existing ?? { value: null }), value: v });
+        }
+      }
+    }
+
+    this.events.emit({
+      type: 'sort-applied',
+      startRow: start.row, startCol: start.col,
+      endRow:   end.row,   endCol:   end.col,
+      keys,
+    });
+  }
+
+  /** Compare two cell values for sorting. Nulls sort last in all directions. */
+  private _compareValues(a: Cell['value'] | null, b: Cell['value'] | null, type: 'text' | 'number' | 'date'): number {
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;  // nulls last
+    if (b === null) return -1;
+    if (type === 'number') {
+      const na = Number(a), nb = Number(b);
+      return isNaN(na) ? (isNaN(nb) ? 0 : 1) : isNaN(nb) ? -1 : na - nb;
+    }
+    // text / date: coerce to string
+    const sa = String(a).toLowerCase();
+    const sb = String(b).toLowerCase();
+    return sa < sb ? -1 : sa > sb ? 1 : 0;
+  }
+
   private rowMatchesFilters(row: number, excludeCol?: number): boolean {
     for (const [col, filter] of this.filters) {
       if (excludeCol != null && col === excludeCol) continue;
@@ -470,18 +621,26 @@ export class Worksheet {
   }
 
   private matchesFilter(v: Cell['value'], f: ColumnFilter): boolean {
-    if (f.type === 'empty') return v === null || v === '';
-    if (f.type === 'notEmpty') return !(v === null || v === '');
+    if (f.type === 'empty')      return v === null || v === '';
+    if (f.type === 'notEmpty')   return !(v === null || v === '');
     if (v === null) return false;
     if (f.type === 'in') {
       const arr = Array.isArray(f.value) ? (f.value as any[]) : [];
       return arr.some(x => String(x) === String(v));
     }
-    if (f.type === 'equals') return v === f.value;
-    if (f.type === 'contains') return String(v).toLowerCase().includes(String(f.value ?? '').toLowerCase());
+    if (f.type === 'equals')      return v === f.value;
+    if (f.type === 'notEquals')   return v !== f.value;
+    const sv = String(v).toLowerCase();
+    const fv = String(f.value ?? '').toLowerCase();
+    if (f.type === 'contains')    return sv.includes(fv);
+    if (f.type === 'notContains') return !sv.includes(fv);
+    if (f.type === 'startsWith')  return sv.startsWith(fv);
+    if (f.type === 'endsWith')    return sv.endsWith(fv);
     if (typeof v !== 'number') return false;
-    if (f.type === 'gt') return v > (f.value as number);
-    if (f.type === 'lt') return v < (f.value as number);
+    if (f.type === 'gt')  return v >  (f.value as number);
+    if (f.type === 'gte') return v >= (f.value as number);
+    if (f.type === 'lt')  return v <  (f.value as number);
+    if (f.type === 'lte') return v <= (f.value as number);
     if (f.type === 'between') {
       const [a, b] = f.value as [number, number];
       return v >= Math.min(a, b) && v <= Math.max(a, b);

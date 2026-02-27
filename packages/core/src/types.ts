@@ -425,9 +425,43 @@ export type MergedRegion = {
 };
 
 export type ColumnFilter = {
-  // simple equals/contains for MVP plus list membership
-  type: 'equals' | 'contains' | 'gt' | 'lt' | 'between' | 'empty' | 'notEmpty' | 'in';
-  value?: string | number | [number, number] | Array<string | number | boolean>;
+  /**
+   * Filter predicate.  New types added in Phase 21:
+   *   notEquals, notContains, startsWith, endsWith, gte, lte
+   * All comparisons are case-insensitive for string types.
+   */
+  type:
+    | 'equals'    | 'notEquals'
+    | 'contains'  | 'notContains'
+    | 'startsWith'| 'endsWith'
+    | 'gt' | 'gte' | 'lt' | 'lte' | 'between'
+    | 'empty'     | 'notEmpty'
+    | 'in';
+  value?: string | number | boolean | [number, number] | Array<string | number | boolean>;
+};
+
+/** Sort direction for column sorts. */
+export type SortDirection = 'asc' | 'desc';
+
+/**
+ * A single sort key specifying which column to sort by and in which direction.
+ * Multiple keys are applied left-to-right (primary, secondary, …).
+ */
+export type SortKey = {
+  col:   number;
+  dir:   SortDirection;
+  /** Coerce values to this type before comparing.  Defaults to natural ordering. */
+  type?: 'text' | 'number' | 'date';
+};
+
+/**
+ * Marks the auto-filter region on a worksheet (header row + column span).
+ * Used by UI renderers to display dropdown arrows on header cells.
+ */
+export type AutoFilterRange = {
+  headerRow: number;
+  startCol:  number;
+  endCol:    number;
 };
 
 /**
@@ -445,7 +479,9 @@ export type CellEvent = {
 export type SheetEvents =
   | { type: 'cell-changed'; address: Address; cell: Cell }
   | { type: 'style-changed'; address: Address; style: CellStyle | undefined }
-  | { type: 'filter-changed'; col: number; filter: ColumnFilter | null }
+  | { type: 'filter-changed'; col: number; filter: ColumnFilter | null; before: ColumnFilter | null }
+  | { type: 'autofilter-range-changed'; before: AutoFilterRange | null; after: AutoFilterRange | null }
+  | { type: 'sort-applied'; startRow: number; startCol: number; endRow: number; endCol: number; keys: SortKey[] }
   | { type: 'sheet-mutated' }
   | { type: 'cell-click'; event: CellEvent }
   | { type: 'cell-double-click'; event: CellEvent }

@@ -68,7 +68,7 @@
  *  applyPatch(worksheet, inverse);
  */
 
-import type { Address, ExtendedCellValue, CellStyle, SheetProtectionOptions, FreezeState } from '../types';
+import type { Address, ExtendedCellValue, CellStyle, SheetProtectionOptions, FreezeState, ColumnFilter, AutoFilterRange, SortKey } from '../types';
 
 // ---------------------------------------------------------------------------
 // Individual patch operations
@@ -162,6 +162,46 @@ export type SetFreezePanesOp = {
   after:  FreezeState | null;
 };
 
+/**
+ * Set or clear a column filter; stores before/after for undo.
+ * `after: null` means remove the filter on that column.
+ */
+export type SetColumnFilterOp = {
+  op:     'setColumnFilter';
+  col:    number;
+  before: ColumnFilter | null;
+  after:  ColumnFilter | null;
+};
+
+/**
+ * Set or clear the auto-filter range marker; stores before/after for undo.
+ * `after: null` means clear the auto-filter range.
+ */
+export type SetAutoFilterRangeOp = {
+  op:     'setAutoFilterRange';
+  before: AutoFilterRange | null;
+  after:  AutoFilterRange | null;
+};
+
+/**
+ * Sort a rectangular range by one or more keys; stores a cell-value snapshot
+ * so the operation is fully undoable.
+ *
+ * `snapshot[rowOffset][colOffset]` is the value at
+ * `(startRow + rowOffset, startCol + colOffset)` BEFORE the sort
+ * (i.e. the inverse restores these values).
+ */
+export type SortRangeOp = {
+  op:       'sortRange';
+  startRow: number;
+  startCol: number;
+  endRow:   number;
+  endCol:   number;
+  keys:     SortKey[];
+  /** Pre-sort snapshot: snapshot[r][c] = value at (startRow+r, startCol+c) before sort. */
+  snapshot: ExtendedCellValue[][];
+};
+
 /** Union of all operation types. */
 export type PatchOp =
   | SetCellValueOp
@@ -174,7 +214,10 @@ export type PatchOp =
   | HideColOp
   | ShowColOp
   | SetSheetProtectionOp
-  | SetFreezePanesOp;
+  | SetFreezePanesOp
+  | SetColumnFilterOp
+  | SetAutoFilterRangeOp
+  | SortRangeOp;
 
 // ---------------------------------------------------------------------------
 // WorksheetPatch — the top-level patch object
@@ -244,6 +287,29 @@ export function invertPatch(patch: WorksheetPatch, seq = 0): WorksheetPatch {
       case 'setFreezePanes':
         ops.push({ op: 'setFreezePanes', before: op.after, after: op.before });
         break;
+      case 'setColumnFilter':
+        ops.push({ op: 'setColumnFilter', col: op.col, before: op.after, after: op.before });
+        break;
+      case 'setAutoFilterRange':
+        ops.push({ op: 'setAutoFilterRange', before: op.after, after: op.before });
+        break;
+      case 'sortRange': {
+        // Inverse: restore each cell from the pre-sort snapshot.
+        const invOps: PatchOp[] = [];
+        for (let r = 0; r < op.snapshot.length; r++) {
+          for (let c = 0; c < (op.snapshot[r]?.length ?? 0); c++) {
+            invOps.push({
+              op: 'setCellValue',
+              row: op.startRow + r,
+              col: op.startCol + c,
+              before: null,
+              after: op.snapshot[r]![c] ?? null,
+            });
+          }
+        }
+        ops.push(...invOps);
+        break;
+      }
     }
   }
 
@@ -302,6 +368,20 @@ export function applyPatch(ws: Worksheet, patch: WorksheetPatch): void {
         if (op.after === null) ws.clearFreezePanes();
         else ws.setFreezePanes(op.after.rows, op.after.cols);
         break;
+      case 'setColumnFilter':
+        if (op.after === null) ws.clearColumnFilter(op.col);
+        else ws.setColumnFilter(op.col, op.after);
+        break;
+      case 'setAutoFilterRange':
+        if (op.after === null) ws.clearAutoFilterRange();
+        else ws.setAutoFilterRange(op.after.headerRow, op.after.startCol, op.after.endCol);
+        break;
+      case 'sortRange':
+        ws.sortRange(
+          { start: { row: op.startRow, col: op.startCol }, end: { row: op.endRow, col: op.endCol } },
+          op.keys,
+        );
+        break;
     }
   }
 }
@@ -345,5 +425,26 @@ export const PatchOps = {
     after:  FreezeState | null,
   ): SetFreezePanesOp {
     return { op: 'setFreezePanes', before, after };
+  },
+  setColumnFilter(
+    col:    number,
+    before: ColumnFilter | null,
+    after:  ColumnFilter | null,
+  ): SetColumnFilterOp {
+    return { op: 'setColumnFilter', col, before, after };
+  },
+  setAutoFilterRange(
+    before: AutoFilterRange | null,
+    after:  AutoFilterRange | null,
+  ): SetAutoFilterRangeOp {
+    return { op: 'setAutoFilterRange', before, after };
+  },
+  sortRange(
+    startRow: number, startCol: number,
+    endRow:   number, endCol:   number,
+    keys:     SortKey[],
+    snapshot: ExtendedCellValue[][],
+  ): SortRangeOp {
+    return { op: 'sortRange', startRow, startCol, endRow, endCol, keys, snapshot };
   },
 };
