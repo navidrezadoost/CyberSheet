@@ -162,6 +162,10 @@ export interface SpreadsheetSDK {
   // ── Metadata ─────────────────────────────────────────────────────────────
   /** The name of this sheet (set at creation time). */
   readonly name: string;
+  /** Total number of rows in this sheet (1-based max row index). */
+  readonly rowCount: number;
+  /** Total number of columns in this sheet (1-based max col index). */
+  readonly colCount: number;
 
   // ── Cell access (1-based row/col) ─────────────────────────────────────────
   /**
@@ -397,6 +401,9 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   private readonly _undo: SyncUndoStack;
   private readonly _listeners: ListenerMap = new Map();
   private _disposed = false;
+
+  get rowCount(): number { return this._ws.rowCount; }
+  get colCount(): number { return this._ws.colCount; }
   private readonly _unsubscribe: Disposable;
 
   constructor(name: string, options: Required<SpreadsheetOptions>) {

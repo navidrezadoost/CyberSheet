@@ -22,3 +22,12 @@ export type { WorksheetPatch, PatchOp } from '../patch/WorksheetPatch';
 
 // Snapshot type (needed for snapshot()/restore() call sites)
 export type { WorksheetSnapshot } from '../persistence/SnapshotCodec';
+
+// Keyboard shortcut manager (Phase 22)
+export type {
+  KeyboardShortcutManager,
+  KeyboardShortcutManagerOptions,
+  ShortcutHandler,
+  KeyLike,
+} from './KeyboardShortcutManager';
+export { createKeyboardManager, normaliseCombo } from './KeyboardShortcutManager';
