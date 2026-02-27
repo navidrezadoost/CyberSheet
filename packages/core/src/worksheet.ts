@@ -932,6 +932,30 @@ export class Worksheet {
   // ==================== General Search API (Phase 1) ====================
 
   /**
+   * Return the addresses of every cell that has a formula string set
+   * (`cell.formula != null`).
+   *
+   * Implementation: iterates the cell store (O(n_cells_in_store)) but skips
+   * every cell without a formula, so the effective cost is O(f) where f is the
+   * formula-cell count.  This covers all formula cells regardless of whether
+   * they were registered with the dependency graph (cells with no refs, e.g.
+   * `=NOW()`, or formula cells created without a live formula engine are still
+   * found correctly).
+   *
+   * Used by the `./search` subpath (`findInFormulas`, `replaceInFormulas`).
+   * Cells with plain values (no `.formula` field) are never included.
+   *
+   * Result order matches cell-store insertion order; callers must sort if needed.
+   */
+  getFormulaAddresses(): Address[] {
+    const result: Address[] = [];
+    this.cells.forEach((row, col, cell) => {
+      if (cell.formula != null) result.push({ row, col });
+    });
+    return result;
+  }
+
+  /**
    * Find iterator - lazy search with generator pattern
    * 
    * **Excel Parity**: ✅ Range.Find() with findNext loop pattern
