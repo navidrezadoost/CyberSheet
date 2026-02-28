@@ -26,8 +26,11 @@ import type { WorksheetSnapshot } from '../persistence/SnapshotCodec';
 import type { Cell, CellStyle, ExtendedCellValue, Range, Address, DataValidationRule, SheetProtectionOptions, FreezeState, ColumnFilter, SortKey, AutoFilterRange } from '../types';
 import type { Disposable } from '../events';
 import type { WorksheetPatch } from '../patch/WorksheetPatch';
+import { PatchOps } from '../patch/WorksheetPatch';
 import { SyncUndoStack } from './SyncUndoStack';
 import { recordingApplyPatch } from '../patch/PatchRecorder';
+import { buildPivot, pivotGridToValues } from './pivot';
+import type { PivotDefinition, PivotGrid } from './pivot';
 
 // ---------------------------------------------------------------------------
 // Typed errors — defined in errors.ts, re-exported from here for back-compat.
@@ -45,6 +48,9 @@ import {
   ValidationError,
   PatchRecorderError,
   UndoError,
+  PivotSourceError,
+  PivotFieldError,
+  EmptyPivotSourceError,
 } from './errors';
 
 export {
@@ -59,10 +65,13 @@ export {
   ValidationError,
   PatchRecorderError,
   UndoError,
+  // Phase 25 — pivot errors
+  PivotSourceError,
+  PivotFieldError,
+  EmptyPivotSourceError,
 } from './errors';
-
-// ---------------------------------------------------------------------------
-// SDK event types
+// Phase 25 — pivot types re-exported on the public surface
+export type { PivotDefinition, PivotValueSpec, PivotGrid, PivotGridRow, PivotAggregator } from './pivot';
 // ---------------------------------------------------------------------------
 
 /** All event types emitted by SpreadsheetSDK. */
@@ -382,6 +391,28 @@ export interface SpreadsheetSDK {
    * @param keys   Primary → secondary → … sort keys.
    */
   sortRange(range: Range, keys: SortKey[]): void;
+
+  // ── Pivot ─────────────────────────────────────────────────────────────────
+  /**
+   * Build and write a pivot table to the worksheet starting at `target`.
+   *
+   * The first row of `definition.source` is treated as the header row.
+   * Output is written as a plain value grid (header row + one row per group).
+   * The entire operation is a single undo/redo entry.
+   *
+   * @param definition  Serializable pivot specification.
+   * @param target      Top-left cell of the output region (1-based).
+   * @returns           The computed `PivotGrid` (pure output — also returned for
+   *                    inspection without requiring a second `buildPivot` call).
+   *
+   * @throws {PivotSourceError}      if the source range is invalid.
+   * @throws {PivotFieldError}       if a field name is absent from the source headers.
+   * @throws {EmptyPivotSourceError} if the source has no data rows.
+   * @throws {ProtectedCellError}    if a target cell is locked and the sheet is protected.
+   * @throws {DisposedError}         if called after `dispose()`.
+   */
+  createPivot(definition: PivotDefinition, target: Address): PivotGrid;
+
   // ── Events ────────────────────────────────────────────────────────────────
   /**
    * Subscribe to SDK events.
@@ -1059,6 +1090,128 @@ class SpreadsheetV1 implements SpreadsheetSDK {
       { seq: 0, ops: forwardOps },
       { seq: 0, ops: inverseOps },
     );
+    });
+  }
+
+  // ── Pivot ─────────────────────────────────────────────────────────────────
+
+  createPivot(definition: PivotDefinition, target: Address): PivotGrid {
+    this._guard('createPivot');
+
+    // ── 1. Validate source bounds ─────────────────────────────────────────
+    const { source } = definition;
+    const { start: srcStart, end: srcEnd } = source;
+    if (
+      srcStart.row < 1 || srcStart.col < 1 ||
+      srcEnd.row < srcStart.row || srcEnd.col < srcStart.col ||
+      srcEnd.row > this._ws.rowCount || srcEnd.col > this._ws.colCount
+    ) {
+      throw new PivotSourceError(
+        `source range (${srcStart.row},${srcStart.col}):(${srcEnd.row},${srcEnd.col}) is out of bounds`,
+      );
+    }
+
+    // ── 2. Extract source grid (0-indexed) ───────────────────────────────
+    const rawGrid: ExtendedCellValue[][] = [];
+    for (let r = srcStart.row; r <= srcEnd.row; r++) {
+      const row: ExtendedCellValue[] = [];
+      for (let c = srcStart.col; c <= srcEnd.col; c++) {
+        row.push(this._ws.getCellValue({ row: r, col: c }));
+      }
+      rawGrid.push(row);
+    }
+
+    // ── 3. Compute pivot (pure — may throw PivotSourceError / PivotFieldError / EmptyPivotSourceError) ──
+    const pivotGrid = buildPivot(rawGrid, definition);
+    const afterValues = pivotGridToValues(pivotGrid);
+
+    // ── 4. (Pivot creation is a structured operation — not blocked by sheet protection.) ──
+    const isProtected = this._ws.isSheetProtected();
+
+    // ── 5. Capture before-state ──────────────────────────────────────────
+    const beforeValues: ExtendedCellValue[][] = [];
+    const beforeStyles: (CellStyle | undefined)[][] = [];
+    for (let r = 0; r < afterValues.length; r++) {
+      const vRow: ExtendedCellValue[] = [];
+      const sRow: (CellStyle | undefined)[] = [];
+      for (let c = 0; c < (afterValues[r]?.length ?? 0); c++) {
+        const row = target.row + r;
+        const col = target.col + c;
+        vRow.push(this._ws.getCellValue({ row, col }));
+        sRow.push(this._ws.getCell({ row, col })?.style);
+      }
+      beforeValues.push(vRow);
+      beforeStyles.push(sRow);
+    }
+
+    return this._tracedWrite('createPivot', () => {
+      // ── 6. Write values to worksheet ────────────────────────────────────
+      for (let r = 0; r < afterValues.length; r++) {
+        for (let c = 0; c < (afterValues[r]?.length ?? 0); c++) {
+          const row = target.row + r;
+          const col = target.col + c;
+          this._ws.setCellValue({ row, col }, afterValues[r]![c] ?? null);
+        }
+      }
+
+      // ── 7. Auto-lock written cells if sheet is protected ─────────────────
+      const afterStyles: (CellStyle | undefined)[][] = [];
+      for (let r = 0; r < afterValues.length; r++) {
+        const sRow: (CellStyle | undefined)[] = [];
+        for (let c = 0; c < (afterValues[r]?.length ?? 0); c++) {
+          const row = target.row + r;
+          const col = target.col + c;
+          if (isProtected) {
+            const existing = this._ws.getCell({ row, col })?.style ?? {};
+            const locked: CellStyle = { ...existing, locked: true };
+            this._ws.setCellStyle({ row, col }, locked);
+            sRow.push(locked);
+          } else {
+            sRow.push(this._ws.getCell({ row, col })?.style);
+          }
+        }
+        afterStyles.push(sRow);
+      }
+
+      // ── 8. Build patch entry (single undo entry for the whole pivot) ─────
+      const forwardOp = PatchOps.createPivot(
+        definition as {
+          source: { start: { row: number; col: number }; end: { row: number; col: number } };
+          rows: string[];
+          values: Array<{ field: string; aggregator: 'sum' | 'count' | 'avg'; label?: string }>;
+        },
+        target.row, target.col,
+        beforeValues, afterValues,
+        beforeStyles, afterStyles,
+      );
+
+      // Inverse: restore before-state (setCellValue + setCellStyle per cell, reversed)
+      const inverseOps: WorksheetPatch['ops'] = [];
+      for (let r = afterValues.length - 1; r >= 0; r--) {
+        for (let c = (afterValues[r]?.length ?? 0) - 1; c >= 0; c--) {
+          const row = target.row + r;
+          const col = target.col + c;
+          inverseOps.push({
+            op:     'setCellStyle',
+            row, col,
+            before: afterStyles[r]?.[c],
+            after:  beforeStyles[r]?.[c],
+          });
+          inverseOps.push({
+            op:     'setCellValue',
+            row, col,
+            before: afterValues[r]![c] ?? null,
+            after:  beforeValues[r]?.[c] ?? null,
+          });
+        }
+      }
+
+      this._undo.recordPreBuilt(
+        { seq: 0, ops: [forwardOp] },
+        { seq: 0, ops: inverseOps },
+      );
+
+      return pivotGrid;
     });
   }
 

@@ -14,7 +14,13 @@ export {
   ProtectedCellError, ProtectedSheetOperationError,
   // Phase 24 — new error classes
   ValidationError, PatchRecorderError, UndoError,
+  // Phase 25 — pivot error classes
+  PivotSourceError, PivotFieldError, EmptyPivotSourceError,
 } from './SpreadsheetSDK';
+
+// Phase 25 — pivot types
+export type { PivotDefinition, PivotValueSpec, PivotGrid, PivotGridRow, PivotAggregator } from './pivot';
+export { buildPivot, pivotGridToValues } from './pivot';
 
 // Patch serialization utility
 export { PatchSerializer, PatchDeserializeError } from './PatchSerializer';

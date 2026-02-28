@@ -1,5 +1,5 @@
 /**
- * errors.ts — Phase 24: Error Handling Hardening
+ * errors.ts — Phase 24 + Phase 25: Error Handling Hardening + Pivot Kernel
  *
  * Unified, typed error hierarchy for @cyber-sheet/core.
  *
@@ -14,17 +14,20 @@
  * Hierarchy:
  *
  *   SdkError
- *   ├── DisposedError           (DISPOSED)
- *   ├── BoundsError             (OUT_OF_BOUNDS)
- *   ├── SnapshotError           (SNAPSHOT_FAILED)
- *   ├── MergeError              (MERGE_CONFLICT)
- *   ├── PatchError              (PATCH_FAILED)
- *   ├── ProtectedCellError      (CELL_PROTECTED)
- *   ├── ProtectedSheetOperationError  (SHEET_OP_BLOCKED)
- *   ├── ValidationError         (VALIDATION_FAILED)   ← Phase 24 new
- *   ├── PatchRecorderError      (RECORDER_STATE)      ← Phase 24 new
- *   └── UndoError               (NOTHING_TO_UNDO |    ← Phase 24 new
- *                                NOTHING_TO_REDO)
+ *   ├── DisposedError                   (DISPOSED)
+ *   ├── BoundsError                     (OUT_OF_BOUNDS)
+ *   ├── SnapshotError                   (SNAPSHOT_FAILED)
+ *   ├── MergeError                      (MERGE_CONFLICT)
+ *   ├── PatchError                      (PATCH_FAILED)
+ *   ├── ProtectedCellError              (CELL_PROTECTED)
+ *   ├── ProtectedSheetOperationError    (SHEET_OP_BLOCKED)
+ *   ├── ValidationError                 (VALIDATION_FAILED)   ← Phase 24
+ *   ├── PatchRecorderError              (RECORDER_STATE)      ← Phase 24
+ *   ├── UndoError                       (NOTHING_TO_UNDO |    ← Phase 24
+ *   │                                    NOTHING_TO_REDO)
+ *   ├── PivotSourceError                (INVALID_PIVOT_SOURCE) ← Phase 25
+ *   ├── PivotFieldError                 (INVALID_PIVOT_FIELD)  ← Phase 25
+ *   └── EmptyPivotSourceError           (EMPTY_PIVOT_SOURCE)   ← Phase 25
  */
 
 // ── Base class ─────────────────────────────────────────────────────────────
@@ -248,5 +251,62 @@ export class UndoError extends SdkError {
     );
     this.name   = 'UndoError';
     this.action = action;
+  }
+}
+
+// ── Pivot ─────────────────────────────────────────────────────────────────
+
+/**
+ * Thrown when the pivot source range is invalid (e.g. too small, out-of-bounds
+ * for the sheet, or has no header row).
+ * @code INVALID_PIVOT_SOURCE
+ */
+export class PivotSourceError extends SdkError {
+  /** Human-readable reason (e.g. 'source range must have at least 1 header row'). */
+  readonly detail: string;
+
+  constructor(detail: string) {
+    super(`PivotEngine: invalid source — ${detail}`, 'INVALID_PIVOT_SOURCE', 'createPivot');
+    this.name   = 'PivotSourceError';
+    this.detail = detail;
+  }
+}
+
+/**
+ * Thrown when a field name referenced in `PivotDefinition.rows` or
+ * `PivotDefinition.values[*].field` is not found in the source header row.
+ * @code INVALID_PIVOT_FIELD
+ */
+export class PivotFieldError extends SdkError {
+  /** The unresolved field name. */
+  readonly field: string;
+  /** The available header names at the time of the error. */
+  readonly available: string[];
+
+  constructor(field: string, available: string[]) {
+    super(
+      `PivotEngine: field '${field}' not found in source headers [${available.join(', ')}]`,
+      'INVALID_PIVOT_FIELD',
+      'createPivot',
+    );
+    this.name      = 'PivotFieldError';
+    this.field     = field;
+    this.available = available;
+  }
+}
+
+/**
+ * Thrown when the pivot source has a valid header row but zero data rows
+ * (i.e. the range is exactly 1 row tall, or all non-header rows are empty).
+ * @code EMPTY_PIVOT_SOURCE
+ */
+export class EmptyPivotSourceError extends SdkError {
+  constructor() {
+    super(
+      'PivotEngine: source has no data rows (only a header row was found)',
+      'EMPTY_PIVOT_SOURCE',
+      'createPivot',
+    );
+    this.name = 'EmptyPivotSourceError';
   }
 }
