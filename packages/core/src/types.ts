@@ -328,6 +328,16 @@ export type SheetProtectionOptions = {
   allowFilter?: boolean;
   /** Allow the user to use pivot tables. Default: false. */
   allowPivotTables?: boolean;
+  /**
+   * Allow the user to select locked cells while the sheet is protected.
+   * Default: true (Excel default — locked cells are selectable).
+   */
+  selectLockedCells?: boolean;
+  /**
+   * Allow the user to select unlocked cells while the sheet is protected.
+   * Default: true (Excel default — unlocked cells are selectable).
+   */
+  selectUnlockedCells?: boolean;
 };
 
 /**

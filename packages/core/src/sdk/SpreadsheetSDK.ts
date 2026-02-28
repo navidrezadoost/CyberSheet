@@ -99,6 +99,18 @@ export class ProtectedCellError extends SdkError {
   }
 }
 
+/**
+ * Thrown when a sheet-level operation is blocked by the active protection
+ * options (e.g. sorting while `allowSort` is not set).
+ * Call `removeSheetProtection()` or enable the relevant `allowX` flag.
+ */
+export class ProtectedSheetOperationError extends SdkError {
+  constructor(operation: string, flag: string) {
+    super(`SpreadsheetSDK: '${operation}' is blocked by sheet protection — set '${flag}: true' in setSheetProtection() options or call removeSheetProtection() first`);
+    this.name = 'ProtectedSheetOperationError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // SDK event types
 // ---------------------------------------------------------------------------
@@ -298,6 +310,33 @@ export interface SpreadsheetSDK {
    */
   unlockCell(row: number, col: number): void;
 
+  /**
+   * Return `true` if the cell at (row, col) has `style.locked !== false`,
+   * regardless of whether the sheet is currently protected.
+   *
+   * Use `isCellProtected()` to check whether a mutation would be blocked.
+   */
+  isCellLocked(row: number, col: number): boolean;
+
+  /**
+   * Lock all cells in `range` (sets `style.locked = true` on each).
+   * Recorded as a single undo entry.
+   */
+  lockCells(range: Range): void;
+
+  /**
+   * Unlock all cells in `range` (sets `style.locked = false` on each).
+   * Recorded as a single undo entry.
+   */
+  unlockCells(range: Range): void;
+
+  /**
+   * Return the formula string for the cell at (row, col), or `null` if the
+   * cell has no formula, has a plain value, or the formula is hidden
+   * (sheet is protected and `cell.style.hidden === true`).
+   */
+  getFormula(row: number, col: number): string | null;
+
   // ── Freeze Panes ──────────────────────────────────────────────────────────
   /**
    * Freeze the top `rows` rows and the left `cols` columns.
@@ -470,6 +509,21 @@ class SpreadsheetV1 implements SpreadsheetSDK {
     }
   }
 
+  /**
+   * Throws `ProtectedSheetOperationError` when the sheet is protected and
+   * the operation-level flag is not enabled.
+   *
+   * @param flag     The `SheetProtectionOptions` key that permits this op.
+   * @param method   Human-readable operation name for the error message.
+   */
+  private _guardSheetOp(flag: keyof SheetProtectionOptions, method: string): void {
+    if (!this._ws.isSheetProtected()) return;
+    const opts = this._ws.getSheetProtection() as SheetProtectionOptions;
+    if (!opts[flag]) {
+      throw new ProtectedSheetOperationError(method, flag);
+    }
+  }
+
   private _emit(type: SdkEventType, event: SdkEvent): void {
     const set = this._listeners.get(type);
     if (!set) return;
@@ -612,6 +666,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   mergeCells(startRow: number, startCol: number, endRow: number, endCol: number): void {
     this._guard('mergeCells');
+    this._guardSheetOp('allowFormatCells', 'mergeCells');
     this._wrapMutation(() => {
       const patch: WorksheetPatch = {
         seq: 0,
@@ -652,24 +707,28 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   hideRow(row: number): void {
     this._guard('hideRow');
+    this._guardSheetOp('allowFormatRows', 'hideRow');
     const patch: WorksheetPatch = { seq: 0, ops: [{ op: 'hideRow', row }] };
     this._undo.applyAndRecord(this._ws, patch);
   }
 
   showRow(row: number): void {
     this._guard('showRow');
+    this._guardSheetOp('allowFormatRows', 'showRow');
     const patch: WorksheetPatch = { seq: 0, ops: [{ op: 'showRow', row }] };
     this._undo.applyAndRecord(this._ws, patch);
   }
 
   hideCol(col: number): void {
     this._guard('hideCol');
+    this._guardSheetOp('allowFormatColumns', 'hideCol');
     const patch: WorksheetPatch = { seq: 0, ops: [{ op: 'hideCol', col }] };
     this._undo.applyAndRecord(this._ws, patch);
   }
 
   showCol(col: number): void {
     this._guard('showCol');
+    this._guardSheetOp('allowFormatColumns', 'showCol');
     const patch: WorksheetPatch = { seq: 0, ops: [{ op: 'showCol', col }] };
     this._undo.applyAndRecord(this._ws, patch);
   }
@@ -688,6 +747,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   setDataValidation(row: number, col: number, rule: DataValidationRule): void {
     this._guard('setDataValidation');
+    this._guardSheetOp('allowFormatCells', 'setDataValidation');
     this._ws.setDataValidation({ row, col }, rule);
   }
 
@@ -750,6 +810,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   lockCell(row: number, col: number): void {
     this._guard('lockCell');
     this._checkBounds(row, col);
+    this._guardSheetOp('allowFormatCells', 'lockCell');
     const before = this._ws.getCellStyle({ row, col });
     const after: CellStyle = { ...before, locked: true };
     const patch: WorksheetPatch = {
@@ -762,6 +823,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   unlockCell(row: number, col: number): void {
     this._guard('unlockCell');
     this._checkBounds(row, col);
+    this._guardSheetOp('allowFormatCells', 'unlockCell');
     const before = this._ws.getCellStyle({ row, col });
     const after: CellStyle = { ...before, locked: false };
     const patch: WorksheetPatch = {
@@ -769,6 +831,55 @@ class SpreadsheetV1 implements SpreadsheetSDK {
       ops: [{ op: 'setCellStyle' as const, row, col, before, after }],
     };
     this._undo.applyAndRecord(this._ws, patch);
+  }
+
+  isCellLocked(row: number, col: number): boolean {
+    this._guard('isCellLocked');
+    this._checkBounds(row, col);
+    const cell = this._ws.getCell({ row, col });
+    // Excel default: a cell is locked unless style.locked is explicitly false.
+    return cell?.style?.locked !== false;
+  }
+
+  lockCells(range: Range): void {
+    this._guard('lockCells');
+    this._guardSheetOp('allowFormatCells', 'lockCells');
+    const ops: WorksheetPatch['ops'] = [];
+    for (let r = range.start.row; r <= range.end.row; r++) {
+      for (let c = range.start.col; c <= range.end.col; c++) {
+        this._checkBounds(r, c);
+        const before = this._ws.getCellStyle({ row: r, col: c });
+        const after: CellStyle = { ...before, locked: true };
+        ops.push({ op: 'setCellStyle' as const, row: r, col: c, before, after });
+      }
+    }
+    if (ops.length > 0) this._undo.applyAndRecord(this._ws, { seq: 0, ops });
+  }
+
+  unlockCells(range: Range): void {
+    this._guard('unlockCells');
+    this._guardSheetOp('allowFormatCells', 'unlockCells');
+    const ops: WorksheetPatch['ops'] = [];
+    for (let r = range.start.row; r <= range.end.row; r++) {
+      for (let c = range.start.col; c <= range.end.col; c++) {
+        this._checkBounds(r, c);
+        const before = this._ws.getCellStyle({ row: r, col: c });
+        const after: CellStyle = { ...before, locked: false };
+        ops.push({ op: 'setCellStyle' as const, row: r, col: c, before, after });
+      }
+    }
+    if (ops.length > 0) this._undo.applyAndRecord(this._ws, { seq: 0, ops });
+  }
+
+  getFormula(row: number, col: number): string | null {
+    this._guard('getFormula');
+    this._checkBounds(row, col);
+    const cell = this._ws.getCell({ row, col });
+    if (cell == null || cell.formula == null) return null;
+    // When the sheet is protected and the cell has style.hidden=true, the
+    // formula is hidden (Excel "Hidden" protection attribute).
+    if (this._ws.isSheetProtected() && cell.style?.hidden === true) return null;
+    return cell.formula;
   }
 
   // ── Freeze Panes ──────────────────────────────────────────────────────────
@@ -804,6 +915,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   setFilter(col: number, filter: ColumnFilter): void {
     this._guard('setFilter');
+    this._guardSheetOp('allowFilter', 'setFilter');
     const before = this._ws.getColumnFilter(col) ?? null;
     const patch: WorksheetPatch = {
       seq: 0,
@@ -814,6 +926,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   clearFilter(col: number): void {
     this._guard('clearFilter');
+    this._guardSheetOp('allowFilter', 'clearFilter');
     const before = this._ws.getColumnFilter(col) ?? null;
     if (before === null) return;
     const patch: WorksheetPatch = {
@@ -825,6 +938,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   clearAllFilters(): void {
     this._guard('clearAllFilters');
+    this._guardSheetOp('allowFilter', 'clearAllFilters');
     const all = this._ws.getAllFilters();
     if (all.size === 0) return;
     const ops = [...all.entries()].map(([col, before]) => ({
@@ -853,6 +967,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   setAutoFilterRange(headerRow: number, startCol: number, endCol: number): void {
     this._guard('setAutoFilterRange');
+    this._guardSheetOp('allowFilter', 'setAutoFilterRange');
     const before = this._ws.getAutoFilterRange();
     const after: AutoFilterRange = { headerRow, startCol, endCol };
     const patch: WorksheetPatch = {
@@ -864,6 +979,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   clearAutoFilterRange(): void {
     this._guard('clearAutoFilterRange');
+    this._guardSheetOp('allowFilter', 'clearAutoFilterRange');
     const before = this._ws.getAutoFilterRange();
     if (before === null) return;
     const patch: WorksheetPatch = {
@@ -882,6 +998,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   sortRange(range: Range, keys: SortKey[]): void {
     this._guard('sortRange');
+    this._guardSheetOp('allowSort', 'sortRange');
     if (keys.length === 0) return;
 
     const { start, end } = range;
