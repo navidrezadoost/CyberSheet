@@ -18,6 +18,7 @@
 
 import type { SpreadsheetSDK } from './SpreadsheetSDK';
 import type { Range } from '../types';
+import { DisposedError } from './errors';
 
 export type KeyLike = {
   key: string;
@@ -235,7 +236,7 @@ class KeyboardShortcutManagerImpl implements KeyboardShortcutManager {
 
   private _guard(method: string): void {
     if (this._disposed)
-      throw new Error(`KeyboardShortcutManager.${method}(): called after dispose().`);
+      throw new DisposedError(method, 'KeyboardShortcutManager');
   }
 
   private _setActive(row: number, col: number, keepAnchor: boolean): void {

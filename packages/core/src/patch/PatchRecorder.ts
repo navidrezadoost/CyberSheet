@@ -125,6 +125,7 @@ import {
   applyPatch,
 } from './WorksheetPatch';
 import type { Disposable } from '../events';
+import { PatchRecorderError } from '../sdk/errors';
 
 // ---------------------------------------------------------------------------
 // Sequence counter — shared across all recorders in a thread
@@ -160,7 +161,7 @@ export class PatchRecorder {
    */
   start(): void {
     if (this._ops !== null) {
-      throw new Error('PatchRecorder: already recording — call stop() or abort() first.');
+      throw new PatchRecorderError('already recording — call stop() or abort() first.');
     }
     this._ops = [];
     this._disposable = (this.ws as unknown as { on(l: (e: SheetEvents) => void): Disposable }).on(
@@ -174,7 +175,7 @@ export class PatchRecorder {
    */
   stop(): WorksheetPatch {
     if (this._ops === null) {
-      throw new Error('PatchRecorder: not recording — call start() first.');
+      throw new PatchRecorderError('not recording — call start() first.');
     }
     const ops = this._ops;
     this._teardown();

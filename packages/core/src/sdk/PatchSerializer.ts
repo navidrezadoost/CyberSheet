@@ -14,6 +14,7 @@
 
 import type { WorksheetPatch } from '../patch/WorksheetPatch';
 import type { PatchOp } from '../patch/WorksheetPatch';
+import { SdkError } from './errors';
 
 /** A patch in "wire" format: seq is optional (assigned by PatchRecorder). */
 export type SerializedPatch = Omit<WorksheetPatch, 'seq'> & { seq?: number };
@@ -22,13 +23,13 @@ export type SerializedPatch = Omit<WorksheetPatch, 'seq'> & { seq?: number };
 // Typed error
 // ---------------------------------------------------------------------------
 
-export class PatchDeserializeError extends Error {
+export class PatchDeserializeError extends SdkError {
   constructor(
     message: string,
     /** The raw string that failed to parse (trimmed to 200 chars). */
     public readonly input: string,
   ) {
-    super(`PatchDeserializeError: ${message}`);
+    super(`PatchDeserializeError: ${message}`, 'DESERIALIZE_FAILED');
     this.name = 'PatchDeserializeError';
   }
 }

@@ -7,11 +7,13 @@
  */
 
 // Factory + interface
-export type { SpreadsheetSDK, SpreadsheetOptions, SdkEventType, SdkEvent, SdkEventListener } from './SpreadsheetSDK';
+export type { SpreadsheetSDK, SpreadsheetOptions, SdkEventType, SdkEvent, SdkEventListener, MutationTraceEvent, MutationTraceHook } from './SpreadsheetSDK';
 export {
   createSpreadsheet,
   SdkError, DisposedError, BoundsError, SnapshotError, MergeError, PatchError,
   ProtectedCellError, ProtectedSheetOperationError,
+  // Phase 24 — new error classes
+  ValidationError, PatchRecorderError, UndoError,
 } from './SpreadsheetSDK';
 
 // Patch serialization utility

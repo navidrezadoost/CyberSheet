@@ -30,86 +30,36 @@ import { SyncUndoStack } from './SyncUndoStack';
 import { recordingApplyPatch } from '../patch/PatchRecorder';
 
 // ---------------------------------------------------------------------------
-// Typed errors
+// Typed errors — defined in errors.ts, re-exported from here for back-compat.
 // ---------------------------------------------------------------------------
 
-/** Base class for all errors originating from SpreadsheetSDK. */
-export class SdkError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SdkError';
-  }
-}
+import {
+  SdkError,
+  DisposedError,
+  BoundsError,
+  SnapshotError,
+  MergeError,
+  PatchError,
+  ProtectedCellError,
+  ProtectedSheetOperationError,
+  ValidationError,
+  PatchRecorderError,
+  UndoError,
+} from './errors';
 
-/** Thrown when a method is called after `dispose()` has been invoked. */
-export class DisposedError extends SdkError {
-  constructor(method: string) {
-    super(`SpreadsheetSDK.${method}(): sheet has been disposed`);
-    this.name = 'DisposedError';
-  }
-}
-
-/** Thrown when a row or column index is out of range. */
-export class BoundsError extends SdkError {
-  constructor(detail: string) {
-    super(`SpreadsheetSDK bounds violation: ${detail}`);
-    this.name = 'BoundsError';
-  }
-}
-
-/** Thrown when a snapshot operation fails (unknown version, corrupt bytes, etc.). */
-export class SnapshotError extends SdkError {
-  constructor(message: string, public readonly cause?: unknown) {
-    super(`SnapshotError: ${message}`);
-    this.name = 'SnapshotError';
-  }
-}
-
-/**
- * Thrown when a merge operation is rejected due to a conflict with an existing
- * merged region. Wraps the internal `MergeConflictError`.
- */
-export class MergeError extends SdkError {
-  constructor(message: string, public readonly cause?: unknown) {
-    super(`MergeError: ${message}`);
-    this.name = 'MergeError';
-  }
-}
-
-/**
- * Thrown when a patch operation fails due to invalid patch structure or
- * a conflict with the current sheet state. Wraps internal errors.
- */
-export class PatchError extends SdkError {
-  constructor(message: string, public readonly cause?: unknown) {
-    super(`PatchError: ${message}`);
-    this.name = 'PatchError';
-  }
-}
-
-/**
- * Thrown when a mutation is attempted on a cell that is locked and the sheet
- * is currently protected. Call `removeSheetProtection()` first, or
- * `unlockCell(row, col)` to unlock the specific cell.
- */
-export class ProtectedCellError extends SdkError {
-  constructor(row: number, col: number) {
-    super(`SpreadsheetSDK: cell (${row}, ${col}) is protected — call removeSheetProtection() or unlockCell(${row}, ${col}) first`);
-    this.name = 'ProtectedCellError';
-  }
-}
-
-/**
- * Thrown when a sheet-level operation is blocked by the active protection
- * options (e.g. sorting while `allowSort` is not set).
- * Call `removeSheetProtection()` or enable the relevant `allowX` flag.
- */
-export class ProtectedSheetOperationError extends SdkError {
-  constructor(operation: string, flag: string) {
-    super(`SpreadsheetSDK: '${operation}' is blocked by sheet protection — set '${flag}: true' in setSheetProtection() options or call removeSheetProtection() first`);
-    this.name = 'ProtectedSheetOperationError';
-  }
-}
+export {
+  SdkError,
+  DisposedError,
+  BoundsError,
+  SnapshotError,
+  MergeError,
+  PatchError,
+  ProtectedCellError,
+  ProtectedSheetOperationError,
+  ValidationError,
+  PatchRecorderError,
+  UndoError,
+} from './errors';
 
 // ---------------------------------------------------------------------------
 // SDK event types
@@ -139,6 +89,29 @@ export type SdkEvent =
   | { type: 'cycle-detected' };
 
 export type SdkEventListener = (event: SdkEvent) => void;
+
+// ---------------------------------------------------------------------------
+// Mutation trace hook — Phase 24
+// ---------------------------------------------------------------------------
+
+/**
+ * Diagnostic payload emitted after every tracked write operation.
+ *
+ * `operation` — name of the SDK method (e.g. `'setCell'`, `'undo'`).
+ * `durationMs` — wall-clock time spent inside the operation, in milliseconds.
+ * `timestamp`  — Unix epoch in milliseconds at the start of the operation.
+ */
+export type MutationTraceEvent = {
+  operation: string;
+  durationMs: number;
+  timestamp: number;
+};
+
+/**
+ * Callback invoked synchronously after every tracked write operation.
+ * The hook must not throw — exceptions are swallowed to protect callers.
+ */
+export type MutationTraceHook = (event: MutationTraceEvent) => void;
 
 // ---------------------------------------------------------------------------
 // Options
@@ -425,6 +398,18 @@ export interface SpreadsheetSDK {
    * After calling `dispose()`, all further method calls throw `DisposedError`.
    */
   dispose(): void;
+
+  // ── Diagnostics ──────────────────────────────────────────────────────────
+  /**
+   * Attach (or detach) a mutation trace hook.
+   *
+   * When set, the hook is called **synchronously** after every tracked write
+   * (`setCell`, `applyPatch`, `undo`, `redo`, `sortRange`, …).
+   * Pass `null` to remove the current hook.
+   *
+   * Useful for performance profiling and test assertions.
+   */
+  setMutationTraceHook(hook: MutationTraceHook | null): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -440,6 +425,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   private readonly _undo: SyncUndoStack;
   private readonly _listeners: ListenerMap = new Map();
   private _disposed = false;
+  private _traceHook: MutationTraceHook | null = null;
 
   get rowCount(): number { return this._ws.rowCount; }
   get colCount(): number { return this._ws.colCount; }
@@ -554,6 +540,31 @@ class SpreadsheetV1 implements SpreadsheetSDK {
     }
   }
 
+  /**
+   * Execute `fn` and fire the mutation trace hook (if set) with timing info.
+   * Guards and bounds checks should be performed BEFORE calling this.
+   */
+  private _tracedWrite<T>(operation: string, fn: () => T): T {
+    if (!this._traceHook) return fn();
+    const timestamp = Date.now();
+    const t0 = performance.now();
+    const result = fn();
+    const durationMs = performance.now() - t0;
+    try {
+      this._traceHook({ operation, durationMs, timestamp });
+    } catch {
+      // Trace hooks must not crash the SDK.
+    }
+    return result;
+  }
+
+  // ── Diagnostics ──────────────────────────────────────────────────────────
+
+  setMutationTraceHook(hook: MutationTraceHook | null): void {
+    this._guard('setMutationTraceHook');
+    this._traceHook = hook;
+  }
+
   // ── Metadata ─────────────────────────────────────────────────────────────
 
   get name(): string { return this._ws.name; }
@@ -564,7 +575,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
     this._guard('setCell');
     this._checkBounds(row, col);
     this._guardCell(row, col, 'setCell');
-    this._wrapMutation(() => {
+    this._tracedWrite('setCell', () => this._wrapMutation(() => {
       const patch: WorksheetPatch = {
         seq: 0,
         ops: [{
@@ -576,7 +587,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
         }],
       };
       this._undo.applyAndRecord(this._ws, patch);
-    }, (err) => new PatchError(`setCell(${row},${col}) failed: ${(err as Error).message ?? err}`, err));
+    }, (err) => new PatchError(`setCell(${row},${col}) failed: ${(err as Error).message ?? err}`, err)));
   }
 
   getCell(row: number, col: number): Cell | undefined {
@@ -595,10 +606,10 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   applyPatch(patch: WorksheetPatch): WorksheetPatch {
     this._guard('applyPatch');
-    return this._wrapMutation(
+    return this._tracedWrite('applyPatch', () => this._wrapMutation(
       () => recordingApplyPatch(this._ws, patch),
       (err) => new PatchError(`applyPatch failed: ${(err as Error).message ?? err}`, err),
-    );
+    ));
   }
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
@@ -645,18 +656,18 @@ class SpreadsheetV1 implements SpreadsheetSDK {
 
   undo(): boolean {
     this._guard('undo');
-    return this._wrapMutation(
+    return this._tracedWrite('undo', () => this._wrapMutation(
       () => this._undo.undo(this._ws),
       (err) => new PatchError(`undo failed: ${(err as Error).message ?? err}`, err),
-    );
+    ));
   }
 
   redo(): boolean {
     this._guard('redo');
-    return this._wrapMutation(
+    return this._tracedWrite('redo', () => this._wrapMutation(
       () => this._undo.redo(this._ws),
       (err) => new PatchError(`redo failed: ${(err as Error).message ?? err}`, err),
-    );
+    ));
   }
 
   get canUndo(): boolean { return this._undo.canUndo; }
@@ -1001,6 +1012,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
     this._guardSheetOp('allowSort', 'sortRange');
     if (keys.length === 0) return;
 
+    this._tracedWrite('sortRange', () => {
     const { start, end } = range;
     const numRows = end.row - start.row + 1;
     const numCols = end.col - start.col + 1;
@@ -1047,6 +1059,7 @@ class SpreadsheetV1 implements SpreadsheetSDK {
       { seq: 0, ops: forwardOps },
       { seq: 0, ops: inverseOps },
     );
+    });
   }
 
   // ── Events ────────────────────────────────────────────────────────────────

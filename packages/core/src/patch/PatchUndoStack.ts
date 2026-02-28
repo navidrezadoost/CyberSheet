@@ -85,6 +85,7 @@
  */
 
 import type { WorksheetPatch } from './WorksheetPatch';
+import { UndoError } from '../sdk/errors';
 
 // ---------------------------------------------------------------------------
 // IPatchProxy — minimal proxy interface needed by PatchUndoStack
@@ -249,7 +250,7 @@ export class PatchUndoStack {
   async undo(): Promise<string | undefined> {
     const entry = this.undoStack.pop();
     if (!entry) {
-      throw new Error('PatchUndoStack: nothing to undo.');
+      throw new UndoError('undo');
     }
     // Apply the inverse.  If this throws, re-push so the stacks stay consistent.
     try {
@@ -272,7 +273,7 @@ export class PatchUndoStack {
   async redo(): Promise<string | undefined> {
     const entry = this.redoStack.pop();
     if (!entry) {
-      throw new Error('PatchUndoStack: nothing to redo.');
+      throw new UndoError('redo');
     }
     // Apply the forward patch.  If this throws, re-push so stacks stay consistent.
     try {
