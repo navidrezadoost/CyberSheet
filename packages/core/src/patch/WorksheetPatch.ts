@@ -75,9 +75,11 @@ import type { Address, ExtendedCellValue, CellStyle, SheetProtectionOptions, Fre
  * Mirrors sdk/pivot.ts PivotDefinition; kept separate to avoid import cycles.
  */
 export type PivotOpDefinition = {
-  source: { start: { row: number; col: number }; end: { row: number; col: number } };
-  rows: string[];
-  values: Array<{ field: string; aggregator: 'sum' | 'count' | 'avg'; label?: string }>;
+  source:   { start: { row: number; col: number }; end: { row: number; col: number } };
+  rows:     string[];
+  values:   Array<{ field: string; aggregator: 'sum' | 'count' | 'avg'; label?: string }>;
+  /** Phase 26: optional column-axis field names for cross-tabulation. */
+  columns?: string[];
 };
 
 // ---------------------------------------------------------------------------

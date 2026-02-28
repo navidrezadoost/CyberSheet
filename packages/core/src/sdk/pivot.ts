@@ -1,5 +1,5 @@
 /**
- * pivot.ts — Phase 25: Pivot Kernel Foundation
+ * pivot.ts — Phase 25 + 26: Pivot Kernel (Row Grouping + Column-Axis Cross-Tab)
  *
  * Pure, deterministic pivot-table engine for @cyber-sheet/core.
  *
@@ -21,15 +21,16 @@
  *
  *  DETERMINISTIC — given the same arguments, `buildPivot` always returns the
  *  exact same result.  Groups appear in the order first encountered scanning
- *  top-to-bottom; values within a group are aggregated in source order.
+ *  top-to-bottom; column keys likewise appear in source-scan insertion order.
  *
  *  TYPED ERRORS — all failure modes throw a concrete subclass of `SdkError`
  *  (defined in errors.ts, zero circular imports).
  *
  * ==========================================================================
- * SCOPE (Phase 25 — kernel only)
+ * SCOPE
  * ==========================================================================
  *
+ * Phase 25 (kernel foundation):
  *  ✅  Row grouping (1+ fields)
  *  ✅  Aggregators: sum, count, avg
  *  ✅  Multiple value columns
@@ -37,17 +38,27 @@
  *  ✅  Deterministic group ordering (insertion order)
  *  ✅  Full error coverage (source, field, empty)
  *
- *  ❌  Column-axis pivoting (cross-tabulation) — Phase 26
- *  ❌  Calculated fields                        — Phase 26
- *  ❌  Slicers / filters                        — Phase 26
- *  ❌  Dynamic recalculation on source edit     — Phase 26
- *  ❌  UI                                       — Phase 26
+ * Phase 26 (column-axis cross-tabulation):
+ *  ✅  `PivotDefinition.columns` — optional column-axis field list
+ *  ✅  2-D matrix output: row-groups × col-groups
+ *  ✅  Deterministic column-key ordering (insertion order)
+ *  ✅  Multi-field composite column keys with " | " display separator
+ *  ✅  Sparse cell handling (row×col with no data → null per value spec)
+ *  ✅  Full header labelling: `"agg(field)(colKey)"`
+ *  ✅  `PivotGrid.colKeys` metadata
+ *  ✅  Backward-compatible: absent/empty `columns` → Phase 25 flat behaviour
+ *
+ * Deferred (later phases):
+ *  ❌  Calculated fields
+ *  ❌  Slicers / filters
+ *  ❌  Dynamic recalculation on source edit
+ *  ❌  UI
  *
  * ==========================================================================
  * USAGE
  * ==========================================================================
  *
- *  // Pure engine (no worksheet required):
+ *  // — Flat row-group pivot (Phase 25) —
  *  const rawGrid = [
  *    ['Region', 'Sales', 'Units'],    // header row
  *    ['North',  1000,    5],
@@ -69,8 +80,31 @@
  *  // grid.rows[0]  → { keys: ['North'], values: [1500, 2] }
  *  // grid.rows[1]  → { keys: ['South'], values: [2000, 1] }
  *
+ *  // — Cross-tab pivot (Phase 26) —
+ *  const rawGrid2 = [
+ *    ['Region', 'Product', 'Revenue'],
+ *    ['North',  'Widget',  1000],
+ *    ['South',  'Gadget',  500],
+ *    ['North',  'Gadget',  300],
+ *    ['East',   'Widget',  700],
+ *  ];
+ *
+ *  const def2: PivotDefinition = {
+ *    source:  { start: { row: 1, col: 1 }, end: { row: 5, col: 3 } },
+ *    rows:    ['Region'],
+ *    columns: ['Product'],
+ *    values:  [{ field: 'Revenue', aggregator: 'sum' }],
+ *  };
+ *
+ *  const grid2 = buildPivot(rawGrid2, def2);
+ *  // grid2.headers  → ['Region', 'sum(Revenue)(Widget)', 'sum(Revenue)(Gadget)']
+ *  // grid2.colKeys  → [['Widget'], ['Gadget']]
+ *  // grid2.rows[0]  → { keys: ['North'], values: [1000, 300] }
+ *  // grid2.rows[1]  → { keys: ['South'], values: [null, 500] }
+ *  // grid2.rows[2]  → { keys: ['East'],  values: [700,  null] }
+ *
  *  // Via SDK (writes to worksheet, single undo entry):
- *  const grid2 = sdk.createPivot(definition, { row: 6, col: 1 });
+ *  const grid3 = sdk.createPivot(definition, { row: 6, col: 1 });
  */
 
 import type { ExtendedCellValue } from '../types';
@@ -100,12 +134,15 @@ export interface PivotValueSpec {
 /**
  * Immutable, JSON-serializable definition of a pivot table.
  *
- * `source` — source cell range on the worksheet (1-based inclusive).
- *            The first row of the range is treated as the header row.
- * `rows`   — one or more field names to group rows by (order matters).
- * `values` — one or more value specifications to aggregate.
- *
- * `columns` is intentionally absent in Phase 25 (cross-tabulation is Phase 26).
+ * `source`  — source cell range on the worksheet (1-based inclusive).
+ *             The first row of the range is treated as the header row.
+ * `rows`    — one or more field names to group rows by (order matters).
+ * `values`  — one or more value specifications to aggregate.
+ * `columns` — (Phase 26) optional field names to pivot on the column axis.
+ *             When present and non-empty, `buildPivot` produces a 2-D
+ *             cross-tabulation matrix instead of a flat grouped table.
+ *             Omitting this field (or passing `[]`) gives identical output
+ *             to Phase 25 behaviour.
  */
 export interface PivotDefinition {
   /** Source range on the worksheet (1-based). */
@@ -114,6 +151,12 @@ export interface PivotDefinition {
   rows: string[];
   /** Value columns to aggregate. */
   values: PivotValueSpec[];
+  /**
+   * Phase 26 — optional column-axis field names.
+   * When provided and non-empty, enables cross-tabulation.
+   * Insertion-order deterministic (mirrors row-field ordering logic).
+   */
+  columns?: string[];
 }
 
 /**
@@ -131,20 +174,35 @@ export interface PivotGridRow {
 /**
  * The pure output of `buildPivot`.
  *
- * `headers`  — column header labels: [row-key-field-names…, value-labels…].
- * `rows`     — data rows, one per unique combination of row-group keys.
- * `rowSpan`  — total rows written when rendering: 1 (header) + rows.length.
- * `colSpan`  — total columns written: rows.length + values.length.
+ * Flat pivot (Phase 25, no `columns` field):
+ *   `headers`  = [row-key-field-names…, value-labels…]
+ *   `rows[i].values.length` = `definition.values.length`
+ *   `colKeys`  = undefined
+ *
+ * Cross-tab pivot (Phase 26, `columns` field present):
+ *   `headers`  = [row-key-field-names…, for each col-key: for each value-spec: label]
+ *   `rows[i].values.length` = `colKeys.length × definition.values.length`
+ *   `colKeys`  = distinct column-axis key combinations (insertion-order)
+ *
+ * `rowSpan` = 1 (header) + rows.length
+ * `colSpan` = total rendered column count
  */
 export interface PivotGrid {
   /** Column headers for the rendered output grid. */
   headers: string[];
-  /** Data rows (one per unique group-key combination). */
+  /** Data rows (one per unique row-group-key combination). */
   rows:    PivotGridRow[];
   /** Total row count when rendered (header row + data rows). */
   rowSpan: number;
   /** Total column count when rendered. */
   colSpan: number;
+  /**
+   * Phase 26 — present only when `PivotDefinition.columns` is non-empty.
+   * Each element is an array of key parts for one distinct column-axis group
+   * (multi-field column definitions produce arrays with length > 1).
+   * Ordered by insertion order (first occurrence in source scan).
+   */
+  colKeys?: string[][];
 }
 
 // ---------------------------------------------------------------------------
@@ -189,13 +247,23 @@ export function buildPivot(
     throw new EmptyPivotSourceError();
   }
 
-  // ── 2. Field resolution ────────────────────────────────────────────────
+  // ── 2. Field validation ────────────────────────────────────────────────
   if (definition.rows.length === 0) {
     throw new PivotSourceError('PivotDefinition.rows must contain at least one field');
   }
   if (definition.values.length === 0) {
     throw new PivotSourceError('PivotDefinition.values must contain at least one value spec');
   }
+
+  // ── 3. Field resolution ────────────────────────────────────────────────
+  // Key separator is NUL — cannot appear in normal cell values.
+  const GROUP_SEP    = '\x00';
+  // Display separator used when rendering multi-field column keys.
+  const DISPLAY_SEP  = ' | ';
+
+  /** Convert a cell value to its string key fragment. */
+  const cellKey = (v: ExtendedCellValue): string =>
+    v === null || v === undefined ? '' : String(v);
 
   const rowFieldIndices: number[] = definition.rows.map(field => {
     const idx = headers.indexOf(field);
@@ -204,7 +272,7 @@ export function buildPivot(
   });
 
   interface ResolvedValueSpec extends PivotValueSpec {
-    colIdx: number;
+    colIdx:      number;
     outputLabel: string;
   }
   const resolvedValues: ResolvedValueSpec[] = definition.values.map(spec => {
@@ -217,19 +285,100 @@ export function buildPivot(
     };
   });
 
-  // ── 3. Group by row keys (insertion-order stable) ──────────────────────
-  // Key separator is NUL so it can't appear in normal field values.
-  const GROUP_SEP = '\x00';
-  const groupMap = new Map<string, ExtendedCellValue[][]>();
+  /** Aggregate a single (spec, rows) pair. */
+  const aggregate = (
+    spec:      ResolvedValueSpec,
+    groupRows: ExtendedCellValue[][],
+  ): number | null => {
+    if (spec.aggregator === 'count') return groupRows.length;
+    const nums = groupRows
+      .map(r => r[spec.colIdx])
+      .filter((v): v is number => typeof v === 'number');
+    if (nums.length === 0) return null;
+    const total = nums.reduce((acc, v) => acc + v, 0);
+    return spec.aggregator === 'sum' ? total : total / nums.length;
+  };
+
+  // ── 4a. Cross-tabulation path (Phase 26) ──────────────────────────────
+  const colFields = definition.columns?.filter(f => f !== '') ?? [];
+  if (colFields.length > 0) {
+    // Resolve column-axis field indices.
+    const colFieldIndices: number[] = colFields.map(field => {
+      const idx = headers.indexOf(field);
+      if (idx === -1) throw new PivotFieldError(field, headers);
+      return idx;
+    });
+
+    // Build 2-D accumulator: rowKey → colKey → dataRows[]
+    // Both key orders are insertion-order stable.
+    const accu       = new Map<string, Map<string, ExtendedCellValue[][]>>();
+    const rowKeySeq: string[] = [];
+    const colKeySeq: string[] = [];
+    const seenColKeys = new Set<string>();
+
+    for (const dataRow of dataRows) {
+      const rowKey = rowFieldIndices.map(i => cellKey(dataRow[i])).join(GROUP_SEP);
+      const colKey = colFieldIndices.map(i => cellKey(dataRow[i])).join(GROUP_SEP);
+
+      if (!accu.has(rowKey)) {
+        accu.set(rowKey, new Map());
+        rowKeySeq.push(rowKey);
+      }
+      const rowMap = accu.get(rowKey)!;
+      if (!rowMap.has(colKey)) rowMap.set(colKey, []);
+      rowMap.get(colKey)!.push(dataRow);
+
+      if (!seenColKeys.has(colKey)) {
+        seenColKeys.add(colKey);
+        colKeySeq.push(colKey);
+      }
+    }
+
+    // Build output headers:
+    //   [row-field-names…, for each col-key: for each value-spec: "agg(field)(colDisplay)"]
+    const outputHeaders = [
+      ...definition.rows,
+      ...colKeySeq.flatMap(ck => {
+        const colDisplay = ck.split(GROUP_SEP).join(DISPLAY_SEP);
+        return resolvedValues.map(vs => `${vs.outputLabel}(${colDisplay})`);
+      }),
+    ];
+
+    // Build output rows (sparse: missing cells → null per value spec).
+    const outputRows: PivotGridRow[] = rowKeySeq.map(rowKey => {
+      const rowMap = accu.get(rowKey)!;
+      const keys   = rowKey.split(GROUP_SEP);
+
+      const values: (number | null)[] = colKeySeq.flatMap(colKey => {
+        const cellRows = rowMap.get(colKey) ?? [];
+        if (cellRows.length === 0) {
+          // No data for this (row × col) combination — return null per spec.
+          return resolvedValues.map(() => null);
+        }
+        return resolvedValues.map(spec => aggregate(spec, cellRows));
+      });
+
+      return { keys, values };
+    });
+
+    // colKeys metadata: split NUL composite keys back to string arrays.
+    const colKeys = colKeySeq.map(ck => ck.split(GROUP_SEP));
+
+    return {
+      headers: outputHeaders,
+      rows:    outputRows,
+      rowSpan: 1 + outputRows.length,
+      colSpan: definition.rows.length + colKeySeq.length * resolvedValues.length,
+      colKeys,
+    };
+  }
+
+  // ── 4b. Flat pivot path (Phase 25 — unchanged) ────────────────────────
+  const groupMap     = new Map<string, ExtendedCellValue[][]>();
   const groupKeyOrder: string[] = [];
 
   for (const dataRow of dataRows) {
-    const keyParts = rowFieldIndices.map(i => {
-      const v = dataRow[i];
-      return v === null || v === undefined ? '' : String(v);
-    });
-    const compositeKey = keyParts.join(GROUP_SEP);
-
+    const compositeKey = rowFieldIndices.map(i => cellKey(dataRow[i])).join(GROUP_SEP);
     if (!groupMap.has(compositeKey)) {
       groupMap.set(compositeKey, []);
       groupKeyOrder.push(compositeKey);
@@ -237,34 +386,13 @@ export function buildPivot(
     groupMap.get(compositeKey)!.push(dataRow);
   }
 
-  // ── 4. Aggregate ──────────────────────────────────────────────────────
   const outputRows: PivotGridRow[] = groupKeyOrder.map(compositeKey => {
     const groupRows = groupMap.get(compositeKey)!;
-    const keys = compositeKey.split(GROUP_SEP);
-
-    const values: (number | null)[] = resolvedValues.map(spec => {
-      // For count: count all rows in the group regardless of value type.
-      if (spec.aggregator === 'count') {
-        return groupRows.length;
-      }
-      // For sum/avg: collect numeric values only.
-      const nums = groupRows
-        .map(r => r[spec.colIdx])
-        .filter((v): v is number => typeof v === 'number');
-
-      if (nums.length === 0) return null;
-
-      switch (spec.aggregator) {
-        case 'sum': return nums.reduce((acc, v) => acc + v, 0);
-        case 'avg': return nums.reduce((acc, v) => acc + v, 0) / nums.length;
-        default:    return null;
-      }
-    });
-
+    const keys      = compositeKey.split(GROUP_SEP);
+    const values    = resolvedValues.map(spec => aggregate(spec, groupRows));
     return { keys, values };
   });
 
-  // ── 5. Construct output ────────────────────────────────────────────────
   const outputHeaders = [
     ...definition.rows,
     ...resolvedValues.map(s => s.outputLabel),
@@ -273,8 +401,9 @@ export function buildPivot(
   return {
     headers: outputHeaders,
     rows:    outputRows,
-    rowSpan: 1 + outputRows.length,         // header row + data rows
+    rowSpan: 1 + outputRows.length,
     colSpan: definition.rows.length + definition.values.length,
+    // colKeys intentionally absent for flat pivot
   };
 }
 
