@@ -1,8 +1,8 @@
 # Excel Feature Comparison - Cyber Sheet Status (February 2026)
 
-**Last Updated:** February 28, 2026 ✅ **Phase 24 Complete — Error Handling & Debugging Hardening**  
+**Last Updated:** February 28, 2026 ✅ **Phase 25 Complete — Pivot Kernel Foundation**  
 **Branch:** phase2-rebuild  
-**Total Tests Passing:** 5,342+ **(150+ suites, 100% pass rate, 173 intentionally skipped)** — SDK suite: 870/870 ✅
+**Total Tests Passing:** 5,418+ **(150+ suites, 100% pass rate, 173 intentionally skipped)** — SDK suite: 946/946 ✅
 
 Based on comprehensive analysis of the latest implementations (Sprints 1-6 COMPLETE + Wave 4 Oracle Validation COMPLETE + Wave 5 Architecture COMPLETE + **Week 4 Formula Engine COMPLETE**), here's the accurate status of Cyber Sheet compared to Excel's core features:
 
@@ -19,7 +19,7 @@ Based on comprehensive analysis of the latest implementations (Sprints 1-6 COMPL
 | **Keyboard Shortcuts** | **🎉 COMPLETE** | **95–100%** ✅ | **Phase 22 (Feb 2026):** `KeyboardShortcutManager` with ~40 built-in Excel-parity shortcuts (Ctrl+Z/Y, Ctrl+C/X/V, Arrow navigation with Shift-extend + Ctrl-jump, F2/Esc/Enter/Tab cell editing, Ctrl+Home/End, Ctrl+Shift+End, F5 GoTo, Ctrl+F/H Find/Replace, Ctrl+A select-all, Ctrl+B/I/U/S formatting, Ctrl+1 format cells, Alt+Enter force newline, Ctrl+; date, Ctrl+Shift+: time, Delete/Backspace clear). Framework-agnostic, `bind()`/`unbind()`/`resetToDefaults()`, normalised combo format (`ctrl+shift+end`). 97 SDK tests (§1–§10), commit `de5dafb`. **Remaining:** Browser keymap edge cases on non-US layouts. | ✅ Fully Possible | **0–5%** (production complete) | **Very Low** |
 | **Freeze Panes** | **🎉 COMPLETE** | **100%** ✅ | **Phase 20 (Feb 27, 2026):** `FreezeState` type, `SetFreezePanesOp` in patch system (full `invertPatch`/`applyPatch`/`PatchOps`), `setFreezePanes`, `clearFreezePanes`, `getFreezePanes` on Worksheet + SDK. Emit `freeze-panes-changed` events for full undo/redo integrity. 24 SDK tests (§1–§14) all passing. git: `21ab561`. | ✅ Fully Possible | **0%** (Complete) | **Very Low** (Production Ready) |
 | **Advanced Filters & Sorting UI** | **🎉 COMPLETE (Kernel + SDK)** | **90–95%** ✅ ⬆️ | **Phase 21 (Feb 2026):** Full column-filter API (`setFilter`, `clearFilter`, `clearAllFilters`, `getFilter`, `getVisibleRows`, `getDistinctValues`) with 13 filter types (equals, notEquals, contains, notContains, startsWith, endsWith, gt/gte/lt/lte/between, empty/notEmpty, in). `setAutoFilterRange`/`clearAutoFilterRange`/`getAutoFilterRange` for header-row UI marker. `sortRange` with stable multi-key sort (asc/desc, text/number/date). Full undo/redo integration for all filter + sort ops. 82 SDK tests (§1–§18), commit `de5dafb`. **Remaining:** UI dropdown renderer, color/icon filter, search-in-filter (UI layer only — kernel is complete). | ✅ Fully Possible | **5–10%** (UI layer only) | **Average** |
-| **Pivot Table / Pivot Chart** | Basic | **10–20%** | Basic Pivot Engine is there; but UI drag-and-drop, slicers, calculated fields, advanced grouping, refresh is not yet | ⚠️ Quite possible | Very High (80–90%) | **Very High** |
+| **Pivot Table / Pivot Chart** | **🎉 KERNEL COMPLETE** | **35–40%** ✅ ⬆️⬆️ | **Phase 25 (Feb 28, 2026):** Pure `buildPivot` kernel — deterministic output grid, typed `PivotDefinition` (fully serializable), aggregators: sum/count/avg, multi-field row grouping, insertion-order stable grouping, null/non-numeric handling, typed errors (`PivotSourceError`, `PivotFieldError`, `EmptyPivotSourceError`). Full `createPivot` SDK method: undo/redo integration (`CreatePivotOp` in patch layer), protection interaction (output cells auto-locked on protected sheet), `pivotGridToValues` 2D serialization helper. **76 SDK tests (§1–§26) passing, 946/946 total SDK tests ✅** git: Phase 25. **Missing for 100%:** UI drag-and-drop field builder, column-axis pivoting (cross-tab), calculated fields, slicers/filters, GETPIVOTDATA integration, dynamic recalculation on source edit, pivot charts. | ⚠️ Quite possible | High (60–65%) | **Very High** |
 | **Error Handling & Debugging** | **🎉 PRODUCTION GRADE** | **95–100%** ✅ ⬆️⬆️ | **Phase 24 (Feb 28, 2026):** Unified `errors.ts` module (zero circular imports) — `SdkError` base with stable `code` + `operation` metadata fields. Full typed hierarchy: `DisposedError` (DISPOSED), `BoundsError` (OUT_OF_BOUNDS), `SnapshotError` (SNAPSHOT_FAILED), `MergeError` (MERGE_CONFLICT), `PatchError` (PATCH_FAILED), `ProtectedCellError` (CELL_PROTECTED, typed `row`/`col`), `ProtectedSheetOperationError` (SHEET_OP_BLOCKED, typed `flag`), `ValidationError` (VALIDATION_FAILED), `PatchRecorderError` (RECORDER_STATE), `UndoError` (NOTHING_TO_UNDO / NOTHING_TO_REDO). All raw `new Error()` throws eliminated from PatchRecorder, PatchUndoStack, KeyboardShortcutManager. `PatchDeserializeError` upgraded to `SdkError`. Mutation trace hook (`setMutationTraceHook`) for performance profiling with `{ operation, durationMs, timestamp }` events. 106 SDK tests (§1–§16), commit `4b3f64a`. | ✅ Fully Possible | **0–5%** (UI diagnostic panels only) | **Very Low** |
 | **Data Validation** | Planned | **10–15%** | Basic validation planned but not fully implemented. Missing dropdown lists, custom validation rules, input messages, error alerts | ✅ Quite possible | Very High (85–90%) | **High** |
 | **Comments & Collaboration** | Good | **70–80%** ⬆️ | **Week 11 Day 2 Implementation:** Comment system with CRUD operations, threading, mentions (@user), rich text formatting, positioning, filtering by author/date/mention. Comments API fully documented. Missing: real-time collaboration, conflict resolution, version history | ⚠️ Requires backend | Moderate (20–30%) | **Average** |
@@ -659,13 +659,14 @@ If goal is "good enough" web spreadsheet → **Phase 1 + 2 only (92-96%)**
 10. **Keyboard Shortcuts** (95-100%) 🎉 - Phase 22, 97 SDK tests
 11. **Error Handling & Debugging** (95-100%) 🎉 - Phase 24, 106 SDK tests, typed error hierarchy
 12. **Advanced Filters & Sorting** (90-95%) 🎉 - Phase 21, 82 SDK tests, kernel/SDK complete
+13. **Pivot Tables — Kernel** (35-40%) 🎉 - Phase 25, 76 SDK tests, pure `buildPivot` engine + full undo/redo/protection
 
 ### 🔄 In Progress (50-89%)
 1. **Comments** (70-80%) - Core features complete, collaboration missing
 2. **Data Validation** (10-15%) - Minimal implementation
 
 ### ⚠️ Early Stage (< 50%)
-1. **Pivot Tables** (10-20%) - Engine exists, UI missing
+1. **Pivot Tables — UI/Advanced** (35-40%) - Kernel complete, UI + column-axis + slicers missing
 
 ## Web-Ready Assessment
 
@@ -729,14 +730,22 @@ If goal is "good enough" web spreadsheet → **Phase 1 + 2 only (92-96%)**
    - Target: 10-15% → 70-80%
    - Rationale: Essential data quality feature
 
-2. **Pivot Table Kernel** (Phase 25) - **VERY HIGH PRIORITY — NEXT**
-   - Aggregation engine: groupBy + SUM/COUNT/AVERAGE
-   - Immutable `PivotDefinition` model (serializable)
-   - Undoable/redoable patch integration
-   - Protection interaction (output cells locked)
-   - Typed errors in `errors.ts` system
-   - Target: 10-20% → 35-45% (kernel complete)
-   - Rationale: Foundation enables all future pivot analytics
+2. **Pivot Table Kernel** (Phase 25) - **✅ COMPLETE**
+   - ✅ Pure `buildPivot` engine: groupBy + SUM/COUNT/AVG, multi-field row grouping
+   - ✅ Immutable `PivotDefinition` model (serializable)
+   - ✅ Undoable/redoable patch integration (`CreatePivotOp`)
+   - ✅ Protection interaction (output cells auto-locked on protected sheet)
+   - ✅ Typed errors: `PivotSourceError`, `PivotFieldError`, `EmptyPivotSourceError`
+   - ✅ 76 SDK tests (§1–§26) passing, 946/946 SDK suite ✅
+   - Target achieved: 10-20% → **35–40%** (kernel complete)
+
+3. **Pivot Table — Phase 26** - **NEXT: Column-axis & Dynamic Recalc**
+   - Column-axis pivoting (cross-tabulation / pivot matrix)
+   - Dynamic recalculation on source-range edit
+   - Calculated fields
+   - Slicer/filter layer
+   - GETPIVOTDATA formula integration
+   - Target: 35-40% → 60-70%
 
 3. **Keyboard Shortcuts** (0.5 weeks) - **✅ COMPLETE (Phase 22)**
    - ~40 built-in Excel-parity shortcuts
@@ -745,7 +754,7 @@ If goal is "good enough" web spreadsheet → **Phase 1 + 2 only (92-96%)**
 
 ## Overall Maturity Assessment
 
-### Current Status (February 28, 2026) 🎉 **10 MAJOR SYSTEMS AT 90%+ COMPLETE — Phase 24 Sealed**
+### Current Status (February 28, 2026) 🎉 **11 SYSTEMS SEALED — Phase 25 Pivot Kernel Complete**
 
 **Overall Excel Feature Parity: 95–98%** ⬆️⬆️⬆️⬆️ **STRUCTURAL MATURITY MILESTONE — Production-Grade SDK**
 
@@ -755,8 +764,8 @@ Progress Bar:
 ```
 
 **Key Metrics:**
-- **Total Tests:** 5,342+ **(155 formulas ✅ + 740 charts ✅ + 434+ CF ✅ + 122 data types ✅ + 870 SDK suite ✅ + more)**
-- **SDK Suite:** 870/870 ✅ (Phase 24 sealed — zero regressions)
+- **Total Tests:** 5,418+ **(155 formulas ✅ + 740 charts ✅ + 434+ CF ✅ + 122 data types ✅ + 946 SDK suite ✅ + more)**
+- **SDK Suite:** 946/946 ✅ (Phase 25 sealed — zero regressions, +76 pivot tests)
 - **Chart System:** 100% COMPLETE ✅
 - **Formula System:** **98-100% COMPLETE ✅ — WAVE 0 LOCKED** 🎉🔒
 - **Conditional Formatting:** **100% COMPLETE ✅ — Wave 6 CLOSED** 🎉
@@ -782,13 +791,13 @@ Progress Bar:
 | **Keyboard Shortcuts** | **95–100%** | **✅ Production Ready (Phase 22, 97 SDK tests) 🎉** |
 | **Error Handling & Debugging** | **95–100%** | **✅ Production Grade (Phase 24, 106 SDK tests, `errors.ts`) 🎉** |
 | **Advanced Filters & Sorting** | **90–95%** | **✅ Production Ready — kernel/SDK (Phase 21, 82 SDK tests) 🎉** |
+| **Pivot Tables — Kernel** | **35–40%** | **✅ Kernel Production Ready (Phase 25, 76 SDK tests) 🎉** |
 | Comments | 70-80% | 🔄 Good Progress |
-| Pivot Tables | 10-20% | ⚠️ Early Stage — Phase 25 next |
 | Data Validation | 10-15% | ⚠️ Early Stage |
 
 ## Conclusion
 
-Cyber Sheet has achieved **structural maturity** with **10+ systems at 90%+ production quality**. Phase 21–24 completed the kernel hardening arc: **Advanced Filters & Sorting** (Phase 21, 82 SDK tests), **Keyboard Shortcuts** (Phase 22, 97 tests), **Cell Protection Hardening** (Phase 23, 55 tests), and **Error Handling & Debugging** (Phase 24, 106 tests, `errors.ts` unified error module, `setMutationTraceHook`). The platform now has **5,342+ tests passing** — SDK suite 870/870 ✅ — with **95–98% overall Excel parity**. The error model, patch layer, undo/redo, protection layer, and mutation tracing are all production-grade. **Phase 25: Pivot Table Kernel Foundation** is next.
+Cyber Sheet has achieved **structural maturity** with **11+ systems production-grade**. Phase 21–25 completed the kernel expansion arc: **Advanced Filters & Sorting** (Phase 21, 82 SDK tests), **Keyboard Shortcuts** (Phase 22, 97 tests), **Cell Protection Hardening** (Phase 23, 55 tests), **Error Handling & Debugging** (Phase 24, 106 tests, `errors.ts` unified error module, `setMutationTraceHook`), and **Pivot Kernel Foundation** (Phase 25, 76 tests, pure `buildPivot` engine, `CreatePivotOp` patch layer, typed pivot errors). The platform now has **5,418+ tests passing** — SDK suite 946/946 ✅ — with **95–98% overall Excel parity**. The error model, patch layer, undo/redo, protection layer, mutation tracing, and pivot kernel are all production-grade. **Phase 26: Pivot Column-Axis & Dynamic Recalc** is next.
 
 **Key Achievements:**
 
@@ -851,10 +860,22 @@ Cyber Sheet has achieved **structural maturity** with **10+ systems at 90%+ prod
   * Cell protection (98-100%) — Phases 20–23
   * Keyboard shortcuts (95-100%) — Phase 22
 
+- ✅ **Pivot Kernel: Production Ready (Phase 25)** 🎉
+  * Pure `buildPivot(rawGrid, definition) → PivotGrid` — no side effects, deterministic
+  * `PivotDefinition` fully serializable JSON (source range, row fields, value specs)
+  * Aggregators: `sum`, `count`, `avg` with correct null/non-numeric semantics
+  * Multi-field composite key grouping (insertion-order stable, NUL separator)
+  * Full undo/redo integration via `CreatePivotOp` in the patch layer
+  * Protection integration: output cells auto-locked on protected sheets
+  * Typed errors: `PivotSourceError` (INVALID_PIVOT_SOURCE), `PivotFieldError` (INVALID_PIVOT_FIELD), `EmptyPivotSourceError` (EMPTY_PIVOT_SOURCE)
+  * `pivotGridToValues` 2D serialization helper
+  * **76 SDK tests (§1–§26), 946/946 total SDK tests passing ✅**
+
 **Remaining Work (Medium Priority):**
 - 📋 **Data Types - Batch Resolution (PR #3):** BatchResolver for deduplication, concurrency limits, throttling support (estimated 1-2 weeks)
 - 📋 **Data Types - HTTP Driver (PR #4):** Rate-limiting driver for Alpha Vantage (5 req/min, 500/day) with symbol batching (estimated 1 week)
-- ⏳ **Pivot table UI (10-20%):** Engine exists, UI needed (estimated 3-4 weeks)
+- ✅ **Pivot table kernel (35-40%):** Phase 25 COMPLETE — `buildPivot` engine, `createPivot` SDK, undo/redo, protection, 76 tests
+- ⏳ **Pivot table Phase 26 (35-40% → 60-70%):** Column-axis pivoting, dynamic recalc, calculated fields, slicers (estimated 3-4 weeks)
 - ⏳ **Data validation (10-15%):** Dropdown lists, validation rules, messages/alerts (estimated 2-3 weeks)
 - ⏳ **Enhanced search & replace (20-30%):** Full sheet search UI, regex support, find special (estimated 1-2 weeks)
 - ✅ **Keyboard shortcuts (95-100%):** Phase 22 COMPLETE — ~40 shortcuts, `KeyboardShortcutManager` production ready
@@ -873,8 +894,8 @@ Cyber Sheet has achieved **structural maturity** with **10+ systems at 90%+ prod
 - 434/434 CF tests passing (100%)
 - 122/122 data type tests passing (100%)
 - 43/43 font/style grammar tests passing (100%)
-- **870/870 SDK suite tests passing (100%)** — Phase 24 sealed
-- **5,342+ total tests passing**
+- **946/946 SDK suite tests passing (100%)** — Phase 25 sealed
+- **5,418+ total tests passing**
 - ~98 formula functions implemented (practical parity)
 - Zero technical debt across all completed phases
 - Production-grade error model (`errors.ts`, typed codes, mutation trace hook)

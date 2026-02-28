@@ -70,6 +70,16 @@
 
 import type { Address, ExtendedCellValue, CellStyle, SheetProtectionOptions, FreezeState, ColumnFilter, AutoFilterRange, SortKey } from '../types';
 
+/**
+ * Minimal pivot definition stored inside a CreatePivotOp.
+ * Mirrors sdk/pivot.ts PivotDefinition; kept separate to avoid import cycles.
+ */
+export type PivotOpDefinition = {
+  source: { start: { row: number; col: number }; end: { row: number; col: number } };
+  rows: string[];
+  values: Array<{ field: string; aggregator: 'sum' | 'count' | 'avg'; label?: string }>;
+};
+
 // ---------------------------------------------------------------------------
 // Individual patch operations
 // ---------------------------------------------------------------------------
@@ -202,6 +212,29 @@ export type SortRangeOp = {
   snapshot: ExtendedCellValue[][];
 };
 
+/**
+ * Write a pivot grid to a rectangular region; stores full before/after value
+ * AND style snapshots so the operation is fully undoable and replay-safe.
+ *
+ * `beforeValues[r][c]` = value at `(targetRow+r, targetCol+c)` BEFORE the pivot.
+ * `afterValues[r][c]`  = value written (header + data rows).
+ * `beforeStyles[r][c]` = style at that cell before the pivot (may be undefined).
+ * `afterStyles[r][c]`  = style written (records any protection lock).
+ *
+ * Inversion: for each cell, emit setCellValue(before) + setCellStyle(before).
+ * Apply:     for each cell, emit setCellValue(after)  + setCellStyle(after).
+ */
+export type CreatePivotOp = {
+  op:           'createPivot';
+  definition:   PivotOpDefinition;
+  targetRow:    number;
+  targetCol:    number;
+  beforeValues: ExtendedCellValue[][];
+  afterValues:  ExtendedCellValue[][];
+  beforeStyles: (CellStyle | undefined)[][];
+  afterStyles:  (CellStyle | undefined)[][];
+};
+
 /** Union of all operation types. */
 export type PatchOp =
   | SetCellValueOp
@@ -217,7 +250,8 @@ export type PatchOp =
   | SetFreezePanesOp
   | SetColumnFilterOp
   | SetAutoFilterRangeOp
-  | SortRangeOp;
+  | SortRangeOp
+  | CreatePivotOp;
 
 // ---------------------------------------------------------------------------
 // WorksheetPatch — the top-level patch object
@@ -310,6 +344,30 @@ export function invertPatch(patch: WorksheetPatch, seq = 0): WorksheetPatch {
         ops.push(...invOps);
         break;
       }
+      case 'createPivot': {
+        // Inverse: restore before-values and before-styles for every written cell.
+        const invOps: PatchOp[] = [];
+        for (let r = 0; r < op.afterValues.length; r++) {
+          for (let c = 0; c < (op.afterValues[r]?.length ?? 0); c++) {
+            invOps.push({
+              op:     'setCellValue',
+              row:    op.targetRow + r,
+              col:    op.targetCol + c,
+              before: op.afterValues[r]![c]  ?? null,
+              after:  op.beforeValues[r]?.[c] ?? null,
+            });
+            invOps.push({
+              op:     'setCellStyle',
+              row:    op.targetRow + r,
+              col:    op.targetCol + c,
+              before: op.afterStyles[r]?.[c],
+              after:  op.beforeStyles[r]?.[c],
+            });
+          }
+        }
+        ops.push(...invOps);
+        break;
+      }
     }
   }
 
@@ -382,6 +440,19 @@ export function applyPatch(ws: Worksheet, patch: WorksheetPatch): void {
           op.keys,
         );
         break;
+      case 'createPivot': {
+        // Re-apply pivot grid: write afterValues and afterStyles.
+        for (let r = 0; r < op.afterValues.length; r++) {
+          for (let c = 0; c < (op.afterValues[r]?.length ?? 0); c++) {
+            const row = op.targetRow + r;
+            const col = op.targetCol + c;
+            ws.setCellValue({ row, col }, op.afterValues[r]![c] ?? null);
+            const style = op.afterStyles[r]?.[c];
+            if (style !== undefined) ws.setCellStyle({ row, col }, style);
+          }
+        }
+        break;
+      }
     }
   }
 }
@@ -446,5 +517,22 @@ export const PatchOps = {
     snapshot: ExtendedCellValue[][],
   ): SortRangeOp {
     return { op: 'sortRange', startRow, startCol, endRow, endCol, keys, snapshot };
+  },
+  createPivot(
+    definition:   PivotOpDefinition,
+    targetRow:    number,
+    targetCol:    number,
+    beforeValues: ExtendedCellValue[][],
+    afterValues:  ExtendedCellValue[][],
+    beforeStyles: (CellStyle | undefined)[][],
+    afterStyles:  (CellStyle | undefined)[][],
+  ): CreatePivotOp {
+    return {
+      op: 'createPivot',
+      definition,
+      targetRow, targetCol,
+      beforeValues, afterValues,
+      beforeStyles, afterStyles,
+    };
   },
 };
