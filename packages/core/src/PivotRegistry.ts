@@ -25,6 +25,7 @@ export type PivotId = string & { readonly __brand: 'PivotId' };
  * Contains NO computed data, only configuration + identity.
  * 
  * Phase 30a: Added staleness tracking (dirty flag + lastBuiltAt).
+ * Phase 31a: Added rebuilding flag for re-entrancy protection.
  * 
  * FORBIDDEN:
  * - Storing PivotTable results
@@ -40,6 +41,7 @@ export interface PivotMetadata {
   readonly createdAt: number; // Timestamp (for ordering)
   readonly dirty: boolean; // Phase 30a: Staleness flag
   readonly lastBuiltAt?: number; // Phase 30a: Last successful build timestamp
+  readonly rebuilding?: boolean; // Phase 31a: Re-entrancy guard (prevents infinite loops)
 }
 
 /**
@@ -105,6 +107,12 @@ export interface PivotRegistry {
    * Check if pivot needs rebuild.
    */
   isDirty(id: PivotId): boolean;
+
+  /**
+   * Phase 31a: Set rebuilding flag (re-entrancy protection).
+   * Called before starting rebuild to prevent recursive queries.
+   */
+  setRebuilding(id: PivotId, rebuilding: boolean): void;
 }
 
 /**
@@ -219,5 +227,19 @@ export class PivotRegistryImpl implements PivotRegistry {
   isDirty(id: PivotId): boolean {
     const pivot = this.pivots.get(id);
     return pivot?.dirty ?? true; // Unknown pivots are considered dirty
+  }
+
+  /**
+   * Phase 31a: Set rebuilding flag (re-entrancy protection).
+   * No-op if pivot doesn't exist.
+   */
+  setRebuilding(id: PivotId, rebuilding: boolean): void {
+    const pivot = this.pivots.get(id);
+    if (!pivot) return; // Graceful no-op for missing pivots
+
+    this.pivots.set(id, {
+      ...pivot,
+      rebuilding,
+    });
   }
 }

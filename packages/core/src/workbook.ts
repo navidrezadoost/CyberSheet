@@ -6,7 +6,11 @@ import type { PivotId } from './PivotRegistry';
 import { PivotSnapshotStore } from './PivotSnapshotStore';
 import { PivotDependencyIndexImpl } from './PivotDependencyIndex';
 import { PivotInvalidationEngineImpl } from './PivotInvalidationEngine';
+import { PivotRecomputeEngineImpl } from './PivotRecomputeEngine'; // Phase 31a
 import type { Range } from './types';
+import type { PivotConfig } from './PivotEngine';
+import { PivotEngine } from './PivotEngine';
+import { transformToPivotSnapshot } from './PivotSnapshotTransformer';
 
 export class Workbook {
   private sheets = new Map<string, Worksheet>();
@@ -19,6 +23,11 @@ export class Workbook {
   private pivotInvalidationEngine = new PivotInvalidationEngineImpl( // Phase 30b
     this.pivotDependencyIndex,
     this.pivotRegistry as import('./PivotRegistry').PivotRegistryImpl
+  );
+  private pivotRecomputeEngine = new PivotRecomputeEngineImpl( // Phase 31a
+    this.pivotRegistry,
+    this.pivotSnapshotStore,
+    this.buildPivot.bind(this)
   );
 
   getStyleCache(): StyleCache {
@@ -66,6 +75,42 @@ export class Workbook {
    */
   getPivotInvalidationEngine(): PivotInvalidationEngineImpl {
     return this.pivotInvalidationEngine;
+  }
+
+  /**
+   * Phase 31a: Get the recompute engine (for testing and inspection).
+   */
+  getPivotRecomputeEngine(): PivotRecomputeEngineImpl {
+    return this.pivotRecomputeEngine;
+  }
+
+  /**
+   * Phase 31a: Pivot builder function (deterministic, side-effect-free).
+   * Used by PivotRecomputeEngine to rebuild dirty pivots.
+   * 
+   * @param pivotId - Pivot identifier
+   * @param config - Pivot configuration
+   * @param worksheetId - Worksheet containing source data
+   * @returns PivotSnapshot
+   */
+  private buildPivot(pivotId: PivotId, config: PivotConfig, worksheetId: string): import('./PivotSnapshotStore').PivotSnapshot {
+    const worksheet = this.getSheet(worksheetId);
+    if (!worksheet) {
+      throw new Error(`Worksheet '${worksheetId}' not found`);
+    }
+
+    // Build pivot table using PivotEngine
+    const engine = new PivotEngine(worksheet);
+    const pivotTable = engine.generate(config);
+
+    // Transform to snapshot format
+    const snapshot = transformToPivotSnapshot(
+      pivotId,
+      pivotTable,
+      config
+    );
+
+    return snapshot;
   }
 
   addSheet(name: string, rows?: number, cols?: number): Worksheet {

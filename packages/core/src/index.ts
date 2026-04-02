@@ -15,6 +15,7 @@ export * from './PivotDataBridge'; // Phase 29 contract
 export * from './GetPivotData'; // Phase 29b
 export * from './PivotDependencyIndex'; // Phase 30b
 export * from './PivotInvalidationEngine'; // Phase 30b
+export * from './PivotRecomputeEngine'; // Phase 31a
 export * from './autocomplete';
 export * from './metadata-api';
 export * from './formatting/NumberFormatter';
