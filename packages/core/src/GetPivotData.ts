@@ -2,6 +2,8 @@
  * GetPivotData.ts
  * 
  * Phase 29b: GETPIVOTDATA Query Implementation
+ * Phase 30a: Added staleness gate (#CALC! on dirty pivots)
+ * 
  * Pure read-only query over pivot snapshots
  * 
  * Design Constraints:
@@ -22,8 +24,10 @@ import type { PivotSnapshotStore } from './PivotSnapshotStore';
 /**
  * Error types for GETPIVOTDATA.
  * Follows Excel conventions.
+ * 
+ * Phase 30a: Added #CALC! for stale/dirty pivots.
  */
-export type PivotDataError = '#REF!' | '#VALUE!' | '#N/A';
+export type PivotDataError = '#REF!' | '#VALUE!' | '#N/A' | '#CALC!';
 
 /**
  * Filter specification for GETPIVOTDATA.
@@ -44,15 +48,17 @@ export type PivotDataResult = CellValue | PivotDataError;
  * GETPIVOTDATA Query Engine
  * 
  * Pure read-only query over pivot snapshots.
- * Follows 6-step deterministic algorithm.
+ * Follows 6-step deterministic algorithm (Phase 29b).
+ * Phase 30a: Added staleness gate at Step 2.
  * 
  * Algorithm:
  * 1. Resolve pivot from registry (#REF! if not found)
- * 2. Resolve snapshot from store (#REF! if not found)
- * 3. Validate value field (#REF! if not in valueFields)
- * 4. Build predicate (strict equality)
- * 5. Filter rows (AND logic)
- * 6. Evaluate result (0=#N/A, >1=#VALUE!, 1=value)
+ * 2. Check dirty flag (#CALC! if stale) ← Phase 30a
+ * 3. Resolve snapshot from store (#REF! if not found)
+ * 4. Validate value field (#REF! if not in valueFields)
+ * 5. Build predicate (strict equality)
+ * 6. Filter rows (AND logic)
+ * 7. Evaluate result (0=#N/A, >1=#VALUE!, 1=value)
  * 
  * Edge Cases:
  * - Missing filter field in row: non-match
@@ -71,6 +77,8 @@ export class GetPivotData {
   /**
    * Execute GETPIVOTDATA query.
    * 
+   * Phase 30a: Added staleness gate - returns #CALC! for dirty pivots.
+   * 
    * @param pivotId - Pivot identifier
    * @param valueField - Value field name to retrieve
    * @param filters - Field-value filter pairs (AND logic)
@@ -78,6 +86,7 @@ export class GetPivotData {
    * 
    * Errors:
    * - #REF!: Pivot not found, snapshot missing, or invalid field
+   * - #CALC!: Pivot is dirty/stale (needs rebuild) ← Phase 30a
    * - #VALUE!: Multiple matching rows (ambiguous)
    * - #N/A: No matching rows
    */
@@ -92,18 +101,23 @@ export class GetPivotData {
       return '#REF!'; // Pivot not found
     }
 
-    // Step 2: Resolve snapshot from store
+    // Step 2: Check dirty flag (Phase 30a staleness gate)
+    if (pivotMetadata.dirty) {
+      return '#CALC!'; // Pivot is stale, needs rebuild
+    }
+
+    // Step 3: Resolve snapshot from store
     const snapshot = this.snapshotStore.get(pivotId);
     if (!snapshot) {
       return '#REF!'; // Snapshot not found (pivot not built yet)
     }
 
-    // Step 3: Validate value field
+    // Step 4: Validate value field
     if (!snapshot.valueFields.includes(valueField)) {
       return '#REF!'; // Value field not in pivot
     }
 
-    // Step 4: Build predicate
+    // Step 5: Build predicate
     // Validate all filter fields exist in snapshot
     for (const filter of filters) {
       if (!snapshot.fields.includes(filter.field)) {
@@ -111,12 +125,12 @@ export class GetPivotData {
       }
     }
 
-    // Step 5: Filter rows (strict equality, AND logic)
+    // Step 6: Filter rows (strict equality, AND logic)
     const matchingRows = snapshot.rows.filter(row => 
       this.rowMatches(row, filters)
     );
 
-    // Step 6: Evaluate result
+    // Step 7: Evaluate result
     if (matchingRows.length === 0) {
       return '#N/A'; // No matching rows
     }

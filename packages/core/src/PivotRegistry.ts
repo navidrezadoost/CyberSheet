@@ -24,6 +24,8 @@ export type PivotId = string & { readonly __brand: 'PivotId' };
  * Metadata-only registry entry.
  * Contains NO computed data, only configuration + identity.
  * 
+ * Phase 30a: Added staleness tracking (dirty flag + lastBuiltAt).
+ * 
  * FORBIDDEN:
  * - Storing PivotTable results
  * - Storing worksheet references
@@ -36,6 +38,8 @@ export interface PivotMetadata {
   readonly sourceRange: string; // e.g., "A1:D100" (for refresh)
   readonly worksheetId: string; // Which worksheet owns this pivot
   readonly createdAt: number; // Timestamp (for ordering)
+  readonly dirty: boolean; // Phase 30a: Staleness flag
+  readonly lastBuiltAt?: number; // Phase 30a: Last successful build timestamp
 }
 
 /**
@@ -81,6 +85,26 @@ export interface PivotRegistry {
    * Called during dispose().
    */
   clear(): void;
+
+  /**
+   * Phase 30a: Staleness API
+   * Mark pivot as dirty (needs rebuild).
+   * Called when source data changes or config updated.
+   */
+  markDirty(id: PivotId): void;
+
+  /**
+   * Phase 30a: Staleness API
+   * Mark pivot as clean after successful rebuild.
+   * Records timestamp for cache validation.
+   */
+  markClean(id: PivotId, builtAt: number): void;
+
+  /**
+   * Phase 30a: Staleness API
+   * Check if pivot needs rebuild.
+   */
+  isDirty(id: PivotId): boolean;
 }
 
 /**
@@ -102,13 +126,16 @@ export class PivotRegistryImpl implements PivotRegistry {
   /**
    * Register a pivot configuration.
    * Assigns sequential ID within session.
+   * Phase 30a: New pivots start clean (dirty: false) assuming immediate build.
    */
-  register(meta: Omit<PivotMetadata, 'id' | 'createdAt'>): PivotId {
+  register(meta: Omit<PivotMetadata, 'id' | 'createdAt' | 'dirty' | 'lastBuiltAt'>): PivotId {
     const id = `pivot-${++this.idCounter}` as PivotId;
     this.pivots.set(id, {
       ...meta,
       id,
       createdAt: Date.now(),
+      dirty: false, // Phase 30a: Assume immediate build on create
+      lastBuiltAt: undefined, // Phase 30a: Set by markClean after first build
     });
     return id;
   }
@@ -153,5 +180,44 @@ export class PivotRegistryImpl implements PivotRegistry {
   clear(): void {
     this.pivots.clear();
     this.idCounter = 0; // Reset counter for determinism
+  }
+
+  /**
+   * Phase 30a: Mark pivot as dirty (needs rebuild).
+   * No-op if pivot doesn't exist.
+   */
+  markDirty(id: PivotId): void {
+    const pivot = this.pivots.get(id);
+    if (!pivot) return; // Graceful no-op for missing pivots
+
+    this.pivots.set(id, {
+      ...pivot,
+      dirty: true,
+    });
+  }
+
+  /**
+   * Phase 30a: Mark pivot as clean after successful rebuild.
+   * Records timestamp for future cache validation.
+   * No-op if pivot doesn't exist.
+   */
+  markClean(id: PivotId, builtAt: number): void {
+    const pivot = this.pivots.get(id);
+    if (!pivot) return; // Graceful no-op for missing pivots
+
+    this.pivots.set(id, {
+      ...pivot,
+      dirty: false,
+      lastBuiltAt: builtAt,
+    });
+  }
+
+  /**
+   * Phase 30a: Check if pivot needs rebuild.
+   * Returns true if dirty or pivot doesn't exist (conservative).
+   */
+  isDirty(id: PivotId): boolean {
+    const pivot = this.pivots.get(id);
+    return pivot?.dirty ?? true; // Unknown pivots are considered dirty
   }
 }
