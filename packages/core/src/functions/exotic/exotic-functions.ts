@@ -184,8 +184,9 @@ export const GETPIVOTDATA: ContextAwareFormulaFunction = (context: FormulaContex
 
   const workbook = (worksheet as any).workbook;
 
-  // Resolve pivot ID from anchor cell
-  const pivotId = workbook.resolvePivotAt(pivotAddress);
+  // Resolve pivot ID from anchor cell on current sheet
+  // Phase 32 patch: Pass worksheet name as sheetId for cross-sheet safety
+  const pivotId = workbook.resolvePivotAt(pivotAddress, worksheet.name);
   if (!pivotId) {
     return new Error('#REF!'); // No pivot at reference
   }

@@ -92,8 +92,8 @@ function registerPivot(workbook: Workbook, worksheet: Worksheet, anchor: Address
   workbook.getPivotSnapshotStore().set(pivotId, snapshot);
   workbook.getPivotRegistry().markClean(pivotId, snapshot.computedAt);
 
-  // Register anchor for formula resolution
-  workbook.setPivotAnchor(pivotId, anchor);
+  // Register anchor for formula resolution (Phase 32 patch: sheet-aware)
+  workbook.setPivotAnchor(pivotId, anchor, worksheet.name);
 
   // Register dependency for auto-invalidation
   workbook.registerPivotDependency(pivotId, makeRange(1, 1, 4, 3));
@@ -366,8 +366,8 @@ describe('Phase 32: Anchor Lifecycle', () => {
   test('pivot moved → formula with new reference works', () => {
     const pivotId = registerPivot(workbook, worksheet, { row: 5, col: 2 });
 
-    // Move pivot anchor
-    workbook.setPivotAnchor(pivotId, { row: 10, col: 5 });
+    // Move pivot anchor (Phase 32 patch: sheet-aware)
+    workbook.setPivotAnchor(pivotId, { row: 10, col: 5 }, worksheet.name);
 
     // Query at new location
     const context: FormulaContext = {
@@ -386,10 +386,8 @@ describe('Phase 32: Anchor Lifecycle', () => {
   test('pivot deleted → formula returns #REF!', () => {
     const pivotId = registerPivot(workbook, worksheet, { row: 5, col: 2 });
 
-    // Delete pivot anchor
-    workbook.getPivotRegistry().unregister(pivotId);
-    workbook.getPivotDependencyIndex().unregister(pivotId);
-    (workbook as any).pivotAnchorIndex.delete(pivotId);
+    // Delete pivot using authoritative API (Phase 32 patch)
+    workbook.deletePivot(pivotId);
 
     // Query should return #REF!
     const context: FormulaContext = {
@@ -489,3 +487,173 @@ describe('Phase 32: Performance', () => {
     expect(workbook.getPivotRegistry().isDirty(pivotId)).toBe(false);
   });
 });
+
+// ============================================================================
+// Phase 32 Patch: Fix A - Anchor Lifecycle Cleanup
+// ============================================================================
+
+describe('GETPIVOTDATA - Anchor Lifecycle Cleanup', () => {
+  let workbook: Workbook;
+  let worksheet: Worksheet;
+  let engine: FormulaEngine;
+
+  beforeEach(() => {
+    workbook = new Workbook();
+    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    engine = new FormulaEngine();
+    setupTestData(worksheet);
+  });
+
+  test('deletePivot() cleans up anchor index', () => {
+    const pivotId = registerPivot(workbook, worksheet, { row: 5, col: 2 });
+
+    // Verify pivot is registered
+    expect(workbook.getPivotRegistry().has(pivotId)).toBe(true);
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, worksheet.name)).toBe(pivotId);
+
+    // Delete pivot
+    const deleted = workbook.deletePivot(pivotId);
+
+    expect(deleted).toBe(true);
+    expect(workbook.getPivotRegistry().has(pivotId)).toBe(false);
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, worksheet.name)).toBeNull();
+  });
+
+  test('deletePivot() cleans up snapshot store', () => {
+    const pivotId = registerPivot(workbook, worksheet, { row: 5, col: 2 });
+
+    // Verify snapshot exists
+    expect(workbook.getPivotSnapshotStore().has(pivotId)).toBe(true);
+
+    // Delete pivot
+    workbook.deletePivot(pivotId);
+
+    // Verify snapshot deleted
+    expect(workbook.getPivotSnapshotStore().has(pivotId)).toBe(false);
+  });
+
+  test('deletePivot() on non-existent pivot returns false', () => {
+    const deleted = workbook.deletePivot('pivot-999' as any);
+    expect(deleted).toBe(false);
+  });
+
+  test('formula returns #REF! after deletePivot()', () => {
+    const pivotId = registerPivot(workbook, worksheet, { row: 5, col: 2 });
+
+    // Delete pivot
+    workbook.deletePivot(pivotId);
+
+    // Query should return #REF!
+    const context: FormulaContext = {
+      worksheet,
+      currentCell: { row: 10, col: 1 },
+    };
+
+    const result = engine.evaluate(
+      '=GETPIVOTDATA("Revenue", B5, "Category", "A")',
+      context
+    );
+
+    expect(result).toBeInstanceOf(Error);
+    expect((result as Error).message).toBe('#REF!');
+  });
+});
+
+// ============================================================================
+// Phase 32 Patch: Fix B - Cross-Sheet Isolation
+// ============================================================================
+
+describe('GETPIVOTDATA - Cross-Sheet Isolation', () => {
+  let workbook: Workbook;
+  let sheet1: Worksheet;
+  let sheet2: Worksheet;
+  let engine: FormulaEngine;
+
+  beforeEach(() => {
+    workbook = new Workbook();
+    sheet1 = workbook.addSheet('Sheet1', 100, 26);
+    sheet2 = workbook.addSheet('Sheet2', 100, 26);
+    engine = new FormulaEngine();
+
+    // Setup data on both sheets
+    setupTestData(sheet1);
+    setupTestData(sheet2);
+  });
+
+  test('pivots on different sheets at same address do not collide', () => {
+    // Register pivot on Sheet1 at B5
+    const pivot1 = registerPivot(workbook, sheet1, { row: 5, col: 2 });
+
+    // Register pivot on Sheet2 at B5 (same address, different sheet)
+    const pivot2 = registerPivot(workbook, sheet2, { row: 5, col: 2 });
+
+    // Resolve on Sheet1 should return pivot1
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, sheet1.name)).toBe(pivot1);
+
+    // Resolve on Sheet2 should return pivot2
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, sheet2.name)).toBe(pivot2);
+  });
+
+  test('formulas on different sheets resolve to correct pivots', () => {
+    const pivot1 = registerPivot(workbook, sheet1, { row: 5, col: 2 });
+    const pivot2 = registerPivot(workbook, sheet2, { row: 5, col: 2 });
+
+    // Query on Sheet1
+    const context1: FormulaContext = {
+      worksheet: sheet1,
+      currentCell: { row: 10, col: 1 },
+    };
+
+    const result1 = engine.evaluate(
+      '=GETPIVOTDATA("Revenue", B5, "Category", "A", "Year", 2024)',
+      context1
+    );
+
+    expect(result1).toBe(100); // Sheet1 data
+
+    // Query on Sheet2
+    const context2: FormulaContext = {
+      worksheet: sheet2,
+      currentCell: { row: 10, col: 1 },
+    };
+
+    const result2 = engine.evaluate(
+      '=GETPIVOTDATA("Revenue", B5, "Category", "A", "Year", 2024)',
+      context2
+    );
+
+    expect(result2).toBe(100); // Sheet2 data (same formula, different sheet)
+  });
+
+  test('deleting pivot on one sheet does not affect other sheet', () => {
+    const pivot1 = registerPivot(workbook, sheet1, { row: 5, col: 2 });
+    const pivot2 = registerPivot(workbook, sheet2, { row: 5, col: 2 });
+
+    // Delete pivot on Sheet1
+    workbook.deletePivot(pivot1);
+
+    // Sheet1 should return null
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, sheet1.name)).toBeNull();
+
+    // Sheet2 should still return pivot2
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, sheet2.name)).toBe(pivot2);
+  });
+
+  test('moving pivot on one sheet does not affect other sheet', () => {
+    const pivot1 = registerPivot(workbook, sheet1, { row: 5, col: 2 });
+    const pivot2 = registerPivot(workbook, sheet2, { row: 5, col: 2 });
+
+    // Move pivot1 to E10 on Sheet1
+    workbook.setPivotAnchor(pivot1, { row: 10, col: 5 }, sheet1.name);
+
+    // Sheet1 B5 should be null now
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, sheet1.name)).toBeNull();
+
+    // Sheet1 E10 should return pivot1
+    expect(workbook.resolvePivotAt({ row: 10, col: 5 }, sheet1.name)).toBe(pivot1);
+
+    // Sheet2 B5 should still return pivot2
+    expect(workbook.resolvePivotAt({ row: 5, col: 2 }, sheet2.name)).toBe(pivot2);
+  });
+});
+
