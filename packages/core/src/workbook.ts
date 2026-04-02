@@ -116,25 +116,29 @@ export class Workbook {
   }
 
   /**
-   * Phase 32: Resolve pivot ID from anchor cell address.
+   * Phase 32: Resolve pivot ID from anchor cell address on specific sheet.
+   * Phase 32 patch: Sheet-aware to prevent cross-sheet collisions.
    * Used by GETPIVOTDATA formula function to find pivot at given cell.
    * 
    * @param address - Cell address (1-based)
+   * @param sheetId - Worksheet identifier
    * @returns PivotId if pivot exists at address, null otherwise
    */
-  resolvePivotAt(address: Address): PivotId | null {
-    return this.pivotAnchorIndex.get(address);
+  resolvePivotAt(address: Address, sheetId: string): PivotId | null {
+    return this.pivotAnchorIndex.get(address, sheetId);
   }
 
   /**
    * Phase 32: Register pivot anchor for formula resolution.
+   * Phase 32 patch: Sheet-aware to prevent cross-sheet collisions.
    * Called after pivot registration to enable GETPIVOTDATA lookups.
    * 
    * @param pivotId - Pivot identifier
    * @param anchor - Top-left cell of pivot (1-based)
+   * @param sheetId - Worksheet identifier
    */
-  setPivotAnchor(pivotId: PivotId, anchor: Address): void {
-    this.pivotAnchorIndex.set(anchor, pivotId);
+  setPivotAnchor(pivotId: PivotId, anchor: Address, sheetId: string): void {
+    this.pivotAnchorIndex.set(anchor, pivotId, sheetId);
   }
 
   /**
@@ -145,6 +149,29 @@ export class Workbook {
    */
   getPivotAnchor(pivotId: PivotId): Address | null {
     return this.pivotAnchorIndex.getAnchor(pivotId);
+  }
+
+  /**
+   * Phase 32 patch: Authoritative pivot deletion.
+   * Cleans up ALL subsystems to prevent stale state.
+   * 
+   * Invariant: "A pivot cannot exist in any subsystem after deletion"
+   * 
+   * @param pivotId - Pivot to delete
+   * @returns true if pivot was deleted, false if not found
+   */
+  deletePivot(pivotId: PivotId): boolean {
+    // Unregister from registry (identity)
+    const deleted = this.pivotRegistry.unregister(pivotId);
+    
+    if (!deleted) return false; // Pivot doesn't exist
+
+    // Clean up all subsystems
+    this.pivotAnchorIndex.delete(pivotId);       // Phase 32: Remove anchor
+    this.pivotDependencyIndex.delete(pivotId);  // Phase 30b: Remove dependency tracking
+    this.pivotSnapshotStore.delete(pivotId);    // Phase 29a: Remove cached snapshot
+
+    return true;
   }
 
   addSheet(name: string, rows?: number, cols?: number): Worksheet {
@@ -175,13 +202,14 @@ export class Workbook {
 
   /**
    * Phase 28/29/30b/32: Disposal safety
+   * Phase 32 patch: Authoritative cleanup path
    * Clear registry, snapshots, dependency index, anchor index, and event subscriptions
    */
   dispose(): void {
     this.pivotInvalidationEngine.dispose(); // Phase 30b: Clean up event subscriptions
     this.pivotDependencyIndex.clear();      // Phase 30b: Clear dependency index
     this.pivotAnchorIndex.clear();          // Phase 32: Clear anchor index
-    this.pivotRegistry.clear();
-    this.pivotSnapshotStore.clearAll();     // Phase 29
+    this.pivotRegistry.clear();             // Phase 28: Clear registry
+    this.pivotSnapshotStore.clearAll();     // Phase 29: Clear snapshots
   }
 }
