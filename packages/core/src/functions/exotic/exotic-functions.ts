@@ -129,30 +129,112 @@ export const SHEETS: ContextAwareFormulaFunction = (context: FormulaContext, ref
 /**
  * GETPIVOTDATA - Extracts data from a pivot table
  * 
+ * Phase 32: Full pivot integration with auto-recompute support.
+ * 
  * Syntax: GETPIVOTDATA(data_field, pivot_table, [field1, item1], ...)
  * Returns data from a pivot table based on the structure
  * 
- * Note: This is a simplified implementation. Full pivot table support
- * would require a complete pivot table engine.
+ * Implementation:
+ * 1. Resolve pivot ID from anchor cell (pivot_table reference)
+ * 2. Build filter object from field/item pairs
+ * 3. Delegate to GetPivotData.query() (Phase 29b/31a)
+ * 4. Map pivot errors to formula errors
+ * 
+ * Error codes:
+ * - #REF!: Pivot not found at reference, or field not found
+ * - #CALC!: Pivot rebuild failed (dirty state)
+ * - #N/A: No matching data
+ * - #VALUE!: Multiple matches (ambiguous)
  * 
  * @example
  * =GETPIVOTDATA("Sales", A1, "Region", "East") → sum of sales for East region
+ * =GETPIVOTDATA("Revenue", $B$5) → grand total revenue
  */
 export const GETPIVOTDATA: ContextAwareFormulaFunction = (context: FormulaContext, ...args: any[]) => {
   if (args.length < 2) {
-    return new Error('#REF!');
+    return new Error('#VALUE!'); // Insufficient arguments
   }
 
-  const [dataField, pivotTable, ...fieldItemPairs] = args;
+  const [dataField, pivotRef, ...fieldItemPairs] = args;
 
-  // In a full implementation, this would:
-  // 1. Locate the pivot table at the given reference
-  // 2. Find the data field (e.g., "Sales")
-  // 3. Filter by field/item pairs (e.g., "Region"="East")
-  // 4. Return the aggregated value
+  // Validate value field is a string
+  if (typeof dataField !== 'string') {
+    return new Error('#VALUE!'); // Value field must be string
+  }
 
-  // For now, return a placeholder error indicating pivot tables not fully supported
-  return new Error('#REF!');
+  // Parse pivot reference
+  let pivotAddress: { row: number; col: number } | null = null;
+
+  if (typeof pivotRef === 'object' && pivotRef !== null && 'row' in pivotRef && 'col' in pivotRef) {
+    // Direct address object
+    pivotAddress = pivotRef;
+  } else if (typeof pivotRef === 'string') {
+    // String reference like "A1" - would need A1 notation parser
+    // For now, return #REF! (not implemented)
+    return new Error('#REF!');
+  } else {
+    return new Error('#VALUE!'); // Invalid pivot reference
+  }
+
+  // Get workbook from context (via worksheet)
+  const worksheet = context.worksheet;
+  if (!worksheet || !(worksheet as any).workbook) {
+    return new Error('#REF!'); // No workbook context
+  }
+
+  const workbook = (worksheet as any).workbook;
+
+  // Resolve pivot ID from anchor cell
+  const pivotId = workbook.resolvePivotAt(pivotAddress);
+  if (!pivotId) {
+    return new Error('#REF!'); // No pivot at reference
+  }
+
+  // Build filters from field/item pairs
+  const filters: Array<{ field: string; value: any }> = [];
+  for (let i = 0; i < fieldItemPairs.length; i += 2) {
+    if (i + 1 >= fieldItemPairs.length) {
+      return new Error('#VALUE!'); // Odd number of filter args (missing value)
+    }
+
+    const field = fieldItemPairs[i];
+    const value = fieldItemPairs[i + 1];
+
+    if (typeof field !== 'string') {
+      return new Error('#VALUE!'); // Field name must be string
+    }
+
+    filters.push({ field, value });
+  }
+
+  // Get GetPivotData query engine from workbook
+  const registry = workbook.getPivotRegistry();
+  const snapshotStore = workbook.getPivotSnapshotStore();
+  const recomputeEngine = workbook.getPivotRecomputeEngine();
+
+  // Import GetPivotData class dynamically (to avoid circular dependency)
+  const { GetPivotData } = require('../../GetPivotData');
+  const queryEngine = new GetPivotData(registry, snapshotStore, recomputeEngine);
+
+  // Execute query (Phase 31a: ensureFresh happens here)
+  const result = queryEngine.query(pivotId, dataField, filters);
+
+  // Map pivot errors to formula errors
+  if (result === '#REF!') {
+    return new Error('#REF!'); // Pivot/field not found
+  }
+  if (result === '#CALC!') {
+    return new Error('#CALC!'); // Rebuild failed
+  }
+  if (result === '#N/A') {
+    return new Error('#N/A'); // No matching data
+  }
+  if (result === '#VALUE!') {
+    return new Error('#VALUE!'); // Multiple matches
+  }
+
+  // Return value
+  return result;
 };
 
 // ============================================================================
