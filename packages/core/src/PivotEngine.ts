@@ -3,6 +3,7 @@
  * 
  * Phase 27: Calculated Fields (row-level, deprecated)
  * Phase 33: Calculated Fields (post-aggregation, correct approach)
+ * Phase 35: Slicers (declarative filtering layer)
  * Zero-dependency pivot table engine with aggregation and calculated fields
  * 
  * Design Constraints:
@@ -19,6 +20,37 @@ import type { CalculatedField, CompiledCalculatedField, PivotEvalContext } from 
 import { PivotCalculatedFieldEngine } from './PivotCalculatedFields';
 
 export type AggregationType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'median' | 'stdev';
+
+/**
+ * Phase 35: Slicer Types
+ * Slicers are declarative filter state attached to a pivot, evaluated at build time.
+ */
+
+/** Unique identifier for a slicer */
+export type SlicerId = string;
+
+/** Valid slicer value types */
+export type SlicerValue = string | number | boolean | null;
+
+/**
+ * Storable slicer state (JSON-serializable)
+ * Stored in PivotConfig for persistence
+ */
+export interface SlicerStateStorable {
+  readonly field: string;                    // Field label (e.g., "Region")
+  readonly selectedValues: SlicerValue[];    // Empty = no filter (ALL)
+  readonly mode: 'include' | 'exclude';      // Filter mode
+}
+
+/**
+ * Runtime slicer state (optimized for O(1) lookup)
+ * Hydrated from storable state during build
+ */
+export interface SlicerStateRuntime {
+  readonly field: string;
+  readonly selectedValues: Set<SlicerValue>;
+  readonly mode: 'include' | 'exclude';
+}
 
 export interface PivotField {
   column: number;
@@ -116,6 +148,7 @@ export type PivotValueSpec = AggregateValueSpec | CalculatedValueSpec;
  * - New format: PivotValueSpec union
  * 
  * Phase 33: calculatedFields added (post-aggregation formulas)
+ * Phase 35: slicers added (declarative filtering)
  */
 export interface PivotConfig {
   rows: PivotField[];
@@ -125,6 +158,9 @@ export interface PivotConfig {
   
   // Phase 33: Post-aggregation calculated fields
   calculatedFields?: CalculatedField[];
+  
+  // Phase 35: Declarative slicers
+  slicers?: Record<SlicerId, SlicerStateStorable>;
 }
 
 export interface PivotCell {
@@ -189,7 +225,12 @@ export class PivotEngine {
     };
 
     // Extract source data
-    const sourceData = this.extractSourceData(normalizedConfig.sourceRange);
+    let sourceData = this.extractSourceData(normalizedConfig.sourceRange);
+    
+    // Phase 35: Apply slicer filtering BEFORE aggregation
+    if (normalizedConfig.slicers && Object.keys(normalizedConfig.slicers).length > 0) {
+      sourceData = this.applySlicers(sourceData, normalizedConfig.slicers, normalizedConfig);
+    }
     
     // Build dimension maps
     const rowDimensions = this.buildDimensions(sourceData, normalizedConfig.rows);
@@ -264,6 +305,91 @@ export class PivotEngine {
     }
     
     return data;
+  }
+  
+  /**
+   * Phase 35: Hydrate slicers from storable to runtime format
+   * Converts selectedValues from Array to Set for O(1) lookup
+   */
+  private hydrateSlicers(
+    slicers: Record<SlicerId, SlicerStateStorable>
+  ): Map<SlicerId, SlicerStateRuntime> {
+    const runtimeSlicers = new Map<SlicerId, SlicerStateRuntime>();
+    
+    for (const [id, slicer] of Object.entries(slicers)) {
+      runtimeSlicers.set(id, {
+        field: slicer.field,
+        selectedValues: new Set(slicer.selectedValues),
+        mode: slicer.mode
+      });
+    }
+    
+    return runtimeSlicers;
+  }
+  
+  /**
+   * Phase 35: Apply slicer filtering to source data
+   * 
+   * Filters rows based on slicer state BEFORE aggregation.
+   * All slicers are AND-composed.
+   * 
+   * @param rows - Source data rows (first row assumed to be headers)
+   * @param slicers - Slicer state (storable format)
+   * @param config - Pivot config (for field label → column mapping)
+   * @returns Filtered rows (header + matching data rows)
+   */
+  private applySlicers(
+    rows: ExtendedCellValue[][],
+    slicers: Record<SlicerId, SlicerStateStorable>,
+    config: PivotConfig
+  ): ExtendedCellValue[][] {
+    if (rows.length === 0) return rows;
+    
+    // Hydrate slicers (convert to runtime format)
+    const runtimeSlicers = this.hydrateSlicers(slicers);
+    
+    // Build field label → column index map
+    const fieldToColumn = new Map<string, number>();
+    for (const field of [...config.rows, ...config.columns]) {
+      fieldToColumn.set(field.label, field.column);
+    }
+    
+    // Extract header row (row 0)
+    const headerRow = rows[0];
+    const dataRows = rows.slice(1);
+    
+    // Filter data rows
+    const filteredDataRows = dataRows.filter(row => {
+      // Apply each slicer (AND logic)
+      for (const slicer of runtimeSlicers.values()) {
+        const columnIndex = fieldToColumn.get(slicer.field);
+        
+        // If field not found, skip this slicer (defensive: should be validated at setSlicer)
+        if (columnIndex === undefined) continue;
+        
+        // Get cell value
+        const cellValue = row[columnIndex];
+        
+        // Empty selection = no filter (permit all)
+        if (slicer.selectedValues.size === 0) continue;
+        
+        // Check if value matches slicer
+        const isInSelection = slicer.selectedValues.has(cellValue);
+        
+        // Apply mode
+        if (slicer.mode === 'include' && !isInSelection) {
+          return false; // Exclude row
+        }
+        if (slicer.mode === 'exclude' && isInSelection) {
+          return false; // Exclude row
+        }
+      }
+      
+      return true; // Row passes all slicer filters
+    });
+    
+    // Return header + filtered data
+    return [headerRow, ...filteredDataRows];
   }
 
   /**

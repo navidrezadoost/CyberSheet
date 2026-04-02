@@ -8,6 +8,7 @@ import { PivotDependencyIndexImpl } from './PivotDependencyIndex';
 import { PivotInvalidationEngineImpl } from './PivotInvalidationEngine';
 import { PivotRecomputeEngineImpl } from './PivotRecomputeEngine'; // Phase 31a
 import { PivotAnchorIndexImpl } from './PivotAnchorIndex'; // Phase 32
+import type { SlicerId, SlicerValue, SlicerStateStorable } from './PivotEngine'; // Phase 35
 import type { Range, Address } from './types';
 import type { PivotConfig } from './PivotEngine';
 import { PivotEngine } from './PivotEngine';
@@ -149,6 +150,149 @@ export class Workbook {
    */
   getPivotAnchor(pivotId: PivotId): Address | null {
     return this.pivotAnchorIndex.getAnchor(pivotId);
+  }
+
+  /**
+   * Phase 35: Set slicer state for a pivot.
+   * 
+   * Validates field exists in pivot configuration, then updates slicer state
+   * and marks pivot dirty to trigger rebuild.
+   * 
+   * @param pivotId - Pivot identifier
+   * @param slicerId - Unique slicer identifier
+   * @param field - Field label to filter on (e.g., "Region")
+   * @param selectedValues - Values to include/exclude (empty = no filter)
+   * @param mode - 'include' or 'exclude' (default: 'include')
+   * @throws Error if pivot not found or field invalid
+   */
+  setSlicer(
+    pivotId: PivotId,
+    slicerId: SlicerId,
+    field: string,
+    selectedValues: SlicerValue[],
+    mode: 'include' | 'exclude' = 'include'
+  ): void {
+    const pivot = this.pivotRegistry.get(pivotId);
+    if (!pivot) {
+      throw new Error(`Pivot '${pivotId}' not found`);
+    }
+
+    // Validate field exists in pivot config (EAGER validation)
+    const validFields = [
+      ...pivot.config.rows.map(r => r.label),
+      ...pivot.config.columns.map(c => c.label)
+    ];
+
+    if (!validFields.includes(field)) {
+      throw new Error(`Field '${field}' not found in pivot. Valid fields: ${validFields.join(', ')}`);
+    }
+
+    // Initialize slicers object if not exists
+    if (!pivot.config.slicers) {
+      pivot.config.slicers = {};
+    }
+
+    // Store slicer state
+    pivot.config.slicers[slicerId] = {
+      field,
+      selectedValues,
+      mode
+    };
+
+    // Trigger invalidation (Phase 30b integration)
+    this.pivotRegistry.markDirty(pivotId);
+  }
+
+  /**
+   * Phase 35: Clear/remove a slicer from a pivot.
+   * 
+   * @param pivotId - Pivot identifier
+   * @param slicerId - Slicer to remove
+   * @throws Error if pivot not found
+   */
+  clearSlicer(pivotId: PivotId, slicerId: SlicerId): void {
+    const pivot = this.pivotRegistry.get(pivotId);
+    if (!pivot) {
+      throw new Error(`Pivot '${pivotId}' not found`);
+    }
+
+    if (pivot.config.slicers && slicerId in pivot.config.slicers) {
+      delete pivot.config.slicers[slicerId];
+      // Trigger rebuild
+      this.pivotRegistry.markDirty(pivotId);
+    }
+  }
+
+  /**
+   * Phase 35: Get slicer state.
+   * 
+   * @param pivotId - Pivot identifier
+   * @param slicerId - Slicer identifier
+   * @returns Slicer state or undefined if not found
+   */
+  getSlicer(pivotId: PivotId, slicerId: SlicerId): SlicerStateStorable | undefined {
+    const pivot = this.pivotRegistry.get(pivotId);
+    if (!pivot) return undefined;
+
+    return pivot.config.slicers?.[slicerId];
+  }
+
+  /**
+   * Phase 35: Get all slicers for a pivot.
+   * 
+   * @param pivotId - Pivot identifier
+   * @returns Record of all slicers (empty if none)
+   */
+  getSlicers(pivotId: PivotId): Record<SlicerId, SlicerStateStorable> {
+    const pivot = this.pivotRegistry.get(pivotId);
+    if (!pivot) return {};
+
+    return pivot.config.slicers || {};
+  }
+
+  /**
+   * Phase 35: Get distinct values for a field (for slicer UI).
+   * 
+   * Returns all distinct values from the source range for the specified field.
+   * Does NOT respect other slicers (independent slicer model).
+   * 
+   * @param pivotId - Pivot identifier
+   * @param field - Field label
+   * @returns Array of distinct values
+   * @throws Error if pivot not found or field invalid
+   */
+  getSlicerDistinctValues(pivotId: PivotId, field: string): SlicerValue[] {
+    const pivot = this.pivotRegistry.get(pivotId);
+    if (!pivot) {
+      throw new Error(`Pivot '${pivotId}' not found`);
+    }
+
+    // Find field column
+    const fieldDef = [...pivot.config.rows, ...pivot.config.columns]
+      .find(f => f.label === field);
+
+    if (!fieldDef) {
+      throw new Error(`Field '${field}' not found in pivot`);
+    }
+
+    // Get source worksheet
+    const worksheet = this.getSheet(pivot.worksheetId);
+    if (!worksheet) {
+      throw new Error(`Worksheet '${pivot.worksheetId}' not found`);
+    }
+
+    // Extract distinct values from source range
+    const distinctValues = new Set<SlicerValue>();
+    const range = pivot.config.sourceRange;
+
+    // Skip header row (row 0)
+    for (let row = range.start.row + 1; row <= range.end.row; row++) {
+      const cell = worksheet.getCell({ row, col: fieldDef.column });
+      const value = cell?.value ?? null;
+      distinctValues.add(value);
+    }
+
+    return Array.from(distinctValues);
   }
 
   /**
