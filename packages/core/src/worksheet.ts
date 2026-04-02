@@ -72,6 +72,8 @@ export class Worksheet {
   private readonly recalcCoordinator = new RecalcCoordinator(this.dag);
   private conditionalRules: ConditionalFormattingRule[] = [];
   private workbook?: any; // Reference to parent Workbook (for StyleCache access)
+  /** Phase 28: Internal worksheet ID for pivot registry */
+  private worksheetId: string;
   rowCount: number;
   colCount: number;
 
@@ -81,6 +83,7 @@ export class Worksheet {
     this.colCount = cols;
     this.formulaEngine = engine;
     this.workbook = workbook;
+    this.worksheetId = `ws-${name}-${Date.now()}`; // Phase 28: Unique ID
   }
 
   on(listener: (e: SheetEvents) => void) {
@@ -654,6 +657,16 @@ export class Worksheet {
   setRowHeight(row: number, px: number): void { this.rowHeights.set(row, px); this.events.emit({ type: 'sheet-mutated' }); }
 
   setFormulaEngine(engine?: IFormulaEngine) { this.formulaEngine = engine; }
+
+  // ==================== Phase 28: Pivot Registry Integration ====================
+
+  /**
+   * Get the worksheet's unique identifier.
+   * Used by pivot registry to associate pivots with worksheets.
+   */
+  getWorksheetId(): string {
+    return this.worksheetId;
+  }
 
   // ==================== DAG / RecalcCoordinator APIs (Phase 4) ====================
 
