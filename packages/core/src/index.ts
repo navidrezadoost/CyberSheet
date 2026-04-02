@@ -17,6 +17,7 @@ export * from './PivotDependencyIndex'; // Phase 30b
 export * from './PivotInvalidationEngine'; // Phase 30b
 export * from './PivotRecomputeEngine'; // Phase 31a
 export * from './PivotAnchorIndex'; // Phase 32
+export * from './PivotCalculatedFields'; // Phase 33
 export * from './autocomplete';
 export * from './metadata-api';
 export * from './formatting/NumberFormatter';
