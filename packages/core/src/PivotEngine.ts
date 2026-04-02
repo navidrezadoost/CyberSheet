@@ -1,7 +1,8 @@
 /**
  * PivotEngine.ts
  * 
- * Phase 27: Calculated Fields
+ * Phase 27: Calculated Fields (row-level, deprecated)
+ * Phase 33: Calculated Fields (post-aggregation, correct approach)
  * Zero-dependency pivot table engine with aggregation and calculated fields
  * 
  * Design Constraints:
@@ -14,6 +15,8 @@
 
 import type { Address, CellValue, ExtendedCellValue } from './types';
 import type { Worksheet } from './worksheet';
+import type { CalculatedField, CompiledCalculatedField, PivotEvalContext } from './PivotCalculatedFields';
+import { PivotCalculatedFieldEngine } from './PivotCalculatedFields';
 
 export type AggregationType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'median' | 'stdev';
 
@@ -111,12 +114,17 @@ export type PivotValueSpec = AggregateValueSpec | CalculatedValueSpec;
  * Values can be:
  * - Legacy format: { column, aggregation, label } (auto-converted)
  * - New format: PivotValueSpec union
+ * 
+ * Phase 33: calculatedFields added (post-aggregation formulas)
  */
 export interface PivotConfig {
   rows: PivotField[];
   columns: PivotField[];
   values: PivotValueSpec[] | Array<{ column: number; aggregation: AggregationType; label: string }>;
   sourceRange: { start: Address; end: Address };
+  
+  // Phase 33: Post-aggregation calculated fields
+  calculatedFields?: CalculatedField[];
 }
 
 export interface PivotCell {
@@ -125,6 +133,9 @@ export interface PivotCell {
   colKeys: string[];
   aggregation: AggregationType | 'calculated';
   error?: string; // Internal error marker (not exposed in public API yet)
+  
+  // Phase 33: All aggregated + calculated values for this cell
+  values?: Record<string, CellValue>; // Field name → value (includes calculated fields)
 }
 
 export interface PivotTable {
@@ -139,15 +150,34 @@ export class PivotEngine {
   
   // Allocation-safe row wrapper (reused across all calculations)
   private readonly rowWrapper = new PivotSourceRow();
+  
+  // Phase 33: Calculated field engine (lazy-initialized)
+  private calcFieldEngine?: PivotCalculatedFieldEngine;
 
   constructor(worksheet: Worksheet) {
     this.worksheet = worksheet;
+  }
+  
+  /**
+   * Phase 33: Get or create calculated field engine
+   */
+  private getCalcFieldEngine(): PivotCalculatedFieldEngine {
+    if (!this.calcFieldEngine) {
+      // Get formula engine from worksheet
+      const formulaEngine = (this.worksheet as any).formulaEngine;
+      if (!formulaEngine) {
+        throw new Error('FormulaEngine required for calculated fields');
+      }
+      this.calcFieldEngine = new PivotCalculatedFieldEngine(formulaEngine);
+    }
+    return this.calcFieldEngine;
   }
 
   /**
    * Generate pivot table from configuration
    * 
-   * Phase 27: Extended with calculated field support
+   * Phase 27: Extended with calculated field support (row-level)
+   * Phase 33: Post-aggregation calculated fields
    * Guarantees: Deterministic ordering, backward compatibility
    */
   generate(config: PivotConfig): PivotTable {
@@ -171,6 +201,15 @@ export class PivotEngine {
       colDimensions,
       normalizedConfig.values as PivotValueSpec[]
     );
+    
+    // Phase 33: Evaluate post-aggregation calculated fields
+    if (normalizedConfig.calculatedFields && normalizedConfig.calculatedFields.length > 0) {
+      this.evaluateCalculatedFields(
+        aggregatedData,
+        normalizedConfig.values as PivotValueSpec[],
+        normalizedConfig.calculatedFields
+      );
+    }
     
     const normalizedValues = normalizedConfig.values as PivotValueSpec[];
     
@@ -469,6 +508,66 @@ export class PivotEngine {
     } else {
       // Calculated fields: sum by default
       return allValues.reduce((sum, v) => sum + v, 0);
+    }
+  }
+
+  /**
+   * Phase 33: Evaluate post-aggregation calculated fields for all cells.
+   * 
+   * Pipeline:
+   * 1. Compile calculated fields (parse formulas, extract dependencies)
+   * 2. Topologically sort (detect circular dependencies)
+   * 3. For each cell:
+   *    - Build evaluation context from aggregated values
+   *    - Evaluate calculated fields in order
+   *    - Attach results to cell.values
+   * 
+   * Guarantees:
+   * - Deterministic evaluation order
+   * - Error isolation (one field fails → others continue)
+   * - No external state dependencies
+   */
+  private evaluateCalculatedFields(
+    data: PivotCell[][],
+    valueSpecs: PivotValueSpec[],
+    calculatedFields: CalculatedField[]
+  ): void {
+    const engine = this.getCalcFieldEngine();
+    
+    // Compile and sort calculated fields
+    const compiled = engine.compile(calculatedFields);
+    const sorted = engine.topologicalSort(compiled);
+    
+    // Get base field labels from value specs
+    const baseFieldLabels = valueSpecs.map(spec => 
+      spec.type === 'aggregate' ? spec.label : spec.name
+    );
+    
+    // Evaluate calculated fields for each cell
+    for (const row of data) {
+      for (const cell of row) {
+        // Build evaluation context from aggregated base values
+        const baseContext: PivotEvalContext = {};
+        
+        // Map value specs to their aggregated values
+        for (let i = 0; i < valueSpecs.length; i++) {
+          const spec = valueSpecs[i];
+          const fieldLabel = baseFieldLabels[i];
+          
+          // For the primary value, use cell.value
+          if (i === 0) {
+            baseContext[fieldLabel] = typeof cell.value === 'number' ? cell.value : null;
+          }
+          // For additional values, would need to be stored separately
+          // For now, Phase 33 focuses on single-value pivots with calculated fields
+        }
+        
+        // Evaluate all calculated fields
+        const fullContext = engine.evaluateAll(sorted, baseContext);
+        
+        // Attach all values (base + calculated) to cell
+        cell.values = { ...fullContext };
+      }
     }
   }
 
