@@ -10,6 +10,7 @@ export * from './FormulaController';
 export * from './CollaborationEngine';
 export * from './PivotEngine';
 export * from './PivotRegistry'; // Phase 28
+export * from './PivotSnapshotStore'; // Phase 29
 export * from './PivotDataBridge'; // Phase 29 contract
 export * from './autocomplete';
 export * from './metadata-api';

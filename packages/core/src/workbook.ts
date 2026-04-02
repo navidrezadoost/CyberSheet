@@ -2,6 +2,7 @@ import { Worksheet } from './worksheet';
 import { IFormulaEngine } from './types';
 import { StyleCache } from './StyleCache';
 import { PivotRegistry, PivotRegistryImpl } from './PivotRegistry';
+import { PivotSnapshotStore } from './PivotSnapshotStore';
 
 export class Workbook {
   private sheets = new Map<string, Worksheet>();
@@ -9,6 +10,7 @@ export class Workbook {
   private formulaEngine?: IFormulaEngine;
   private styleCache = new StyleCache();
   private pivotRegistry: PivotRegistry = new PivotRegistryImpl();
+  private pivotSnapshotStore = new PivotSnapshotStore(); // Phase 29
 
   getStyleCache(): StyleCache {
     return this.styleCache;
@@ -19,6 +21,13 @@ export class Workbook {
    */
   getPivotRegistry(): PivotRegistry {
     return this.pivotRegistry;
+  }
+
+  /**
+   * Phase 29: Get pivot snapshot store for computed results
+   */
+  getPivotSnapshotStore(): PivotSnapshotStore {
+    return this.pivotSnapshotStore;
   }
 
   addSheet(name: string, rows?: number, cols?: number): Worksheet {
@@ -41,11 +50,12 @@ export class Workbook {
   }
 
   /**
-   * Phase 28: Disposal safety
-   * Clear registry to prevent memory leaks
+   * Phase 28/29: Disposal safety
+   * Clear registry and snapshots to prevent memory leaks
    */
   dispose(): void {
     this.pivotRegistry.clear();
+    this.pivotSnapshotStore.clearAll(); // Phase 29
     // Future: Add worksheet disposal if needed
   }
 }

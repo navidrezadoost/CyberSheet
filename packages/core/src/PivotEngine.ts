@@ -172,12 +172,14 @@ export class PivotEngine {
       normalizedConfig.values as PivotValueSpec[]
     );
     
+    const normalizedValues = normalizedConfig.values as PivotValueSpec[];
+    
     // Build pivot table structure
     return {
       rowHeaders: this.buildHeaders(rowDimensions),
       columnHeaders: this.buildHeaders(colDimensions),
       data: aggregatedData,
-      grandTotal: this.calculateGrandTotal(aggregatedData, normalizedConfig.values[0])
+      grandTotal: this.calculateGrandTotal(aggregatedData, normalizedValues[0])
     };
   }
 
