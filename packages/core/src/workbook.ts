@@ -7,7 +7,8 @@ import { PivotSnapshotStore } from './PivotSnapshotStore';
 import { PivotDependencyIndexImpl } from './PivotDependencyIndex';
 import { PivotInvalidationEngineImpl } from './PivotInvalidationEngine';
 import { PivotRecomputeEngineImpl } from './PivotRecomputeEngine'; // Phase 31a
-import type { Range } from './types';
+import { PivotAnchorIndexImpl } from './PivotAnchorIndex'; // Phase 32
+import type { Range, Address } from './types';
 import type { PivotConfig } from './PivotEngine';
 import { PivotEngine } from './PivotEngine';
 import { transformToPivotSnapshot } from './PivotSnapshotTransformer';
@@ -29,6 +30,7 @@ export class Workbook {
     this.pivotSnapshotStore,
     this.buildPivot.bind(this)
   );
+  private pivotAnchorIndex = new PivotAnchorIndexImpl(); // Phase 32
 
   getStyleCache(): StyleCache {
     return this.styleCache;
@@ -113,6 +115,38 @@ export class Workbook {
     return snapshot;
   }
 
+  /**
+   * Phase 32: Resolve pivot ID from anchor cell address.
+   * Used by GETPIVOTDATA formula function to find pivot at given cell.
+   * 
+   * @param address - Cell address (1-based)
+   * @returns PivotId if pivot exists at address, null otherwise
+   */
+  resolvePivotAt(address: Address): PivotId | null {
+    return this.pivotAnchorIndex.get(address);
+  }
+
+  /**
+   * Phase 32: Register pivot anchor for formula resolution.
+   * Called after pivot registration to enable GETPIVOTDATA lookups.
+   * 
+   * @param pivotId - Pivot identifier
+   * @param anchor - Top-left cell of pivot (1-based)
+   */
+  setPivotAnchor(pivotId: PivotId, anchor: Address): void {
+    this.pivotAnchorIndex.set(anchor, pivotId);
+  }
+
+  /**
+   * Phase 32: Get anchor address for a pivot.
+   * 
+   * @param pivotId - Pivot identifier
+   * @returns Anchor address or null if not anchored
+   */
+  getPivotAnchor(pivotId: PivotId): Address | null {
+    return this.pivotAnchorIndex.getAnchor(pivotId);
+  }
+
   addSheet(name: string, rows?: number, cols?: number): Worksheet {
     if (this.sheets.has(name)) throw new Error(`Sheet '${name}' already exists`);
     const ws = new Worksheet(name, rows, cols, this.formulaEngine, this);
@@ -140,12 +174,13 @@ export class Workbook {
   }
 
   /**
-   * Phase 28/29/30b: Disposal safety
-   * Clear registry, snapshots, dependency index, and event subscriptions
+   * Phase 28/29/30b/32: Disposal safety
+   * Clear registry, snapshots, dependency index, anchor index, and event subscriptions
    */
   dispose(): void {
     this.pivotInvalidationEngine.dispose(); // Phase 30b: Clean up event subscriptions
     this.pivotDependencyIndex.clear();      // Phase 30b: Clear dependency index
+    this.pivotAnchorIndex.clear();          // Phase 32: Clear anchor index
     this.pivotRegistry.clear();
     this.pivotSnapshotStore.clearAll();     // Phase 29
   }
