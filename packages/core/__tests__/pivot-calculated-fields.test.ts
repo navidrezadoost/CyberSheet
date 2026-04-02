@@ -241,7 +241,7 @@ describe('Calculated Fields - Missing Fields', () => {
     setupTestData(worksheet);
   });
 
-  test('reference to non-existent field returns null (error isolated)', () => {
+  test('reference to non-existent field returns #REF! error', () => {
     const calcFields: CalculatedField[] = [
       { name: 'Invalid', formula: 'Unknown - Cost' }
     ];
@@ -249,8 +249,10 @@ describe('Calculated Fields - Missing Fields', () => {
     const config = makePivotConfig(calcFields);
     const pivot = engine.generate(config);
 
-    // Should evaluate to null (error isolated)
-    expect(pivot.data[0][0].values?.['Invalid']).toBeNull();
+    // Phase 33b: Should return Error('#REF!'), not null
+    const result = pivot.data[0][0].values?.['Invalid'];
+    expect(result).toBeInstanceOf(Error);
+    expect((result as Error).message).toBe('#REF!');
   });
 });
 
@@ -287,8 +289,10 @@ describe('Calculated Fields - Error Isolation', () => {
     // Profit should succeed
     expect(pivot.data[0][0].values?.['Profit']).toBe(1000);
 
-    // Invalid should be null (error isolated)
-    expect(pivot.data[0][0].values?.['Invalid']).toBeNull();
+    // Phase 33b: Invalid should be Error('#DIV/0!'), not null
+    const invalid = pivot.data[0][0].values?.['Invalid'];
+    expect(invalid).toBeInstanceOf(Error);
+    expect((invalid as Error).message).toBe('#DIV/0!');
 
     // AvgPrice should succeed
     expect(pivot.data[0][0].values?.['AvgPrice']).toBe(100);
@@ -405,5 +409,239 @@ describe('PivotCalculatedFieldEngine - Unit Tests', () => {
 
     expect(result).toBeInstanceOf(Error);
     expect((result as Error).message).toBe('#REF!');
+  });
+});
+
+// ============================================================================
+// §8: Phase 33b - Error Propagation
+// ============================================================================
+
+describe('Phase 33b - Error Propagation', () => {
+  let workbook: Workbook;
+  let worksheet: Worksheet;
+  let engine: PivotEngine;
+
+  beforeEach(() => {
+    workbook = new Workbook();
+    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    const formulaEngine = new FormulaEngine();
+    (worksheet as any).formulaEngine = formulaEngine;
+    
+    
+    engine = new PivotEngine(worksheet);
+    setupTestData(worksheet);
+  });
+
+  test('error propagates through dependent calculations', () => {
+    const calcFields: CalculatedField[] = [
+      { name: 'A', formula: '1 / 0' },       // #DIV/0!
+      { name: 'B', formula: 'A + 1' },       // Should propagate #DIV/0!
+      { name: 'C', formula: 'B * 2' }        // Should propagate #DIV/0!
+    ];
+
+    const config = makePivotConfig(calcFields);
+    const pivot = engine.generate(config);
+
+    // All should be #DIV/0! due to propagation
+    const a = pivot.data[0][0].values?.['A'];
+    const b = pivot.data[0][0].values?.['B'];
+    const c = pivot.data[0][0].values?.['C'];
+
+    expect(a).toBeInstanceOf(Error);
+    expect((a as Error).message).toBe('#DIV/0!');
+    
+    expect(b).toBeInstanceOf(Error);
+    expect((b as Error).message).toBe('#DIV/0!');
+    
+    expect(c).toBeInstanceOf(Error);
+    expect((c as Error).message).toBe('#DIV/0!');
+  });
+
+  test('error in one branch does not poison independent branch', () => {
+    const calcFields: CalculatedField[] = [
+      { name: 'ErrorBranch', formula: '1 / 0' },  // #DIV/0!
+      { name: 'GoodBranch', formula: 'Revenue - Cost' }
+    ];
+
+    const config = makePivotConfig(calcFields);
+    const pivot = engine.generate(config);
+
+    const errorBranch = pivot.data[0][0].values?.['ErrorBranch'];
+    const goodBranch = pivot.data[0][0].values?.['GoodBranch'];
+
+    expect(errorBranch).toBeInstanceOf(Error);
+    expect((errorBranch as Error).message).toBe('#DIV/0!');
+    
+    expect(goodBranch).toBe(1000); // Independent, should succeed
+  });
+
+  test('different error types preserved correctly', () => {
+    const calcFields: CalculatedField[] = [
+      { name: 'DivError', formula: 'Revenue / 0' },     // #DIV/0!
+      { name: 'RefError', formula: 'UnknownField + 1' } // #REF!
+    ];
+
+    const config = makePivotConfig(calcFields);
+    const pivot = engine.generate(config);
+
+    const divError = pivot.data[0][0].values?.['DivError'];
+    const refError = pivot.data[0][0].values?.['RefError'];
+
+    expect(divError).toBeInstanceOf(Error);
+    expect((divError as Error).message).toBe('#DIV/0!');
+    
+    expect(refError).toBeInstanceOf(Error);
+    expect((refError as Error).message).toBe('#REF!');
+  });
+});
+
+// ============================================================================
+// §9: Phase 33b - Caching Tests
+// ============================================================================
+
+describe('Phase 33b - Caching', () => {
+  let workbook: Workbook;
+  let worksheet: Worksheet;
+  let engine: PivotEngine;
+  let formulaEngine: FormulaEngine;
+
+  beforeEach(() => {
+    workbook = new Workbook();
+    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    formulaEngine = new FormulaEngine();
+    (worksheet as any).formulaEngine = formulaEngine;
+    
+    
+    engine = new PivotEngine(worksheet);
+    setupTestData(worksheet);
+  });
+
+  test('cache hit reduces evaluation count', () => {
+    const calcFields: CalculatedField[] = [
+      { name: 'Profit', formula: 'Revenue - Cost' }
+    ];
+
+    const config = makePivotConfig(calcFields);
+    
+    // Spy on formula engine evaluate
+    const originalEvaluate = formulaEngine.evaluate.bind(formulaEngine);
+    let evaluateCount = 0;
+    formulaEngine.evaluate = function(...args: any[]) {
+      evaluateCount++;
+      return originalEvaluate(...args);
+    };
+
+    const pivot = engine.generate(config);
+
+    // With 2 categories (A, B), should evaluate Profit formula 2 times
+    // But each evaluation should be cached and not re-evaluated for same context
+    expect(pivot.data.length).toBe(2);
+    
+    // Each unique category should cause 1 evaluation
+    // (cache prevents redundant evaluations within same build)
+    expect(evaluateCount).toBeLessThanOrEqual(2);
+  });
+
+  test('cache cleared between builds', () => {
+    const calcFields: CalculatedField[] = [
+      { name: 'Profit', formula: 'Revenue - Cost' }
+    ];
+
+    const config = makePivotConfig(calcFields);
+    
+    // First build
+    const pivot1 = engine.generate(config);
+    const profit1 = pivot1.data[0][0].values?.['Profit'];
+
+    // Modify data
+    worksheet.setCellValue({ row: 2, col: 2 }, 3000); // Revenue A: 1000 → 3000
+    
+    // Second build should use fresh cache
+    const pivot2 = engine.generate(config);
+    const profit2 = pivot2.data[0][0].values?.['Profit'];
+
+    // Results should differ (cache didn't persist incorrectly)
+    expect(profit1).toBe(1000);
+    expect(profit2).not.toBe(profit1); // Should be 3900 (3000+1500 - 600-900)
+  });
+});
+
+// ============================================================================
+// §10: Phase 33b - Edge Cases
+// ============================================================================
+
+describe('Phase 33b - Edge Cases', () => {
+  let workbook: Workbook;
+  let worksheet: Worksheet;
+  let engine: PivotEngine;
+
+  beforeEach(() => {
+    workbook = new Workbook();
+    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    const formulaEngine = new FormulaEngine();
+    (worksheet as any).formulaEngine = formulaEngine;
+    
+    
+    engine = new PivotEngine(worksheet);
+    setupTestData(worksheet);
+  });
+
+  test('floating-point stability', () => {
+    // Add data with 0.1 + 0.2 = 0.30000000000000004 precision issue
+    worksheet.setCellValue({ row: 2, col: 2 }, 0.1);
+    worksheet.setCellValue({ row: 3, col: 2 }, 0.2);
+
+    const calcFields: CalculatedField[] = [
+      { name: 'Scaled', formula: 'Revenue * 10' }
+    ];
+
+    const config = makePivotConfig(calcFields);
+    const pivot = engine.generate(config);
+
+    // Category A: (0.1 + 0.2) * 10 = 3.0000000000000004
+    const scaled = pivot.data[0][0].values?.['Scaled'];
+    
+    expect(typeof scaled).toBe('number');
+    expect(scaled).toBeCloseTo(3, 10); // Allow floating-point tolerance
+  });
+
+  test('null vs missing field distinction', () => {
+    // Set Cost to null for category A
+    worksheet.setCellValue({ row: 2, col: 3 }, null);
+    worksheet.setCellValue({ row: 3, col: 3 }, null);
+
+    const calcFields: CalculatedField[] = [
+      { name: 'Profit', formula: 'Revenue - Cost' },      // null data
+      { name: 'Invalid', formula: 'Revenue - Unknown' }   // missing field
+    ];
+
+    const config = makePivotConfig(calcFields);
+    const pivot = engine.generate(config);
+
+    const profit = pivot.data[0][0].values?.['Profit'];
+    const invalid = pivot.data[0][0].values?.['Invalid'];
+
+    // Profit: null data should result in null (not error)
+    expect(profit).toBeNull();
+    
+    // Invalid: missing field should result in #REF! error
+    expect(invalid).toBeInstanceOf(Error);
+    expect((invalid as Error).message).toBe('#REF!');
+  });
+
+  test('deep dependency chain (5 levels)', () => {
+    const calcFields: CalculatedField[] = [
+      { name: 'A', formula: 'Revenue' },
+      { name: 'B', formula: 'A + 1' },
+      { name: 'C', formula: 'B + 1' },
+      { name: 'D', formula: 'C + 1' },
+      { name: 'E', formula: 'D + 1' }
+    ];
+
+    const config = makePivotConfig(calcFields);
+    const pivot = engine.generate(config);
+
+    // Category A: Revenue=2500, so E = 2500+1+1+1+1 = 2504
+    expect(pivot.data[0][0].values?.['E']).toBe(2504);
   });
 });

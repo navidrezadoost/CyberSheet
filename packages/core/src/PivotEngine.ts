@@ -135,7 +135,8 @@ export interface PivotCell {
   error?: string; // Internal error marker (not exposed in public API yet)
   
   // Phase 33: All aggregated + calculated values for this cell
-  values?: Record<string, CellValue>; // Field name → value (includes calculated fields)
+  // Phase 33b: Values can include Error objects (not just CellValue)
+  values?: Record<string, CellValue | Error>; // Field name → value (includes errors)
 }
 
 export interface PivotTable {
@@ -533,6 +534,9 @@ export class PivotEngine {
     calculatedFields: CalculatedField[]
   ): void {
     const engine = this.getCalcFieldEngine();
+    
+    // Phase 33b: Clear cache at start of build (fresh caching per pivot)
+    engine.clearCache();
     
     // Compile and sort calculated fields
     const compiled = engine.compile(calculatedFields);

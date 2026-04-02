@@ -43,12 +43,21 @@ export interface CompiledCalculatedField {
 /**
  * Evaluation context for a single pivot cell
  * Maps field names to their aggregated values
+ * 
+ * Phase 33b: Can contain Error objects (for error propagation)
  */
-export type PivotEvalContext = Record<string, number | null>;
+export type PivotEvalContext = Record<string, number | null | Error>;
 
 /**
  * Calculated field evaluation result
  * Can be a number, null (for empty aggregations), or an error
+ * 
+ * Semantic Rules:
+ * - Math error (div/0) → Error('#DIV/0!')
+ * - Invalid formula → Error('#VALUE!')
+ * - Missing field ref → Error('#REF!')
+ * - Missing data → null
+ * - Valid computation → number
  */
 export type CalculatedFieldResult = number | null | Error;
 
@@ -63,9 +72,19 @@ export type CalculatedFieldResult = number | null | Error;
  */
 export class PivotCalculatedFieldEngine {
   private formulaEngine: FormulaEngine;
+  
+  // Phase 33b: Build-scoped cache (cleared per pivot rebuild)
+  private cache = new Map<string, CalculatedFieldResult>();
 
   constructor(formulaEngine: FormulaEngine) {
     this.formulaEngine = formulaEngine;
+  }
+  
+  /**
+   * Clear cache (called at start of each pivot build)
+   */
+  clearCache(): void {
+    this.cache.clear();
   }
 
   /**
@@ -165,7 +184,19 @@ export class PivotCalculatedFieldEngine {
   }
 
   /**
+   * Phase 33b: Create stable cache key from field name and context
+   */
+  private makeCacheKey(fieldName: string, context: PivotEvalContext): string {
+    // Stable stringify: sort keys for deterministic output
+    const keys = Object.keys(context).sort();
+    const parts = keys.map(k => `${k}:${context[k]}`);
+    return `${fieldName}|${parts.join(',')}`;
+  }
+  
+  /**
    * Evaluate a calculated field using the given context.
+   * 
+   * Phase 33b: Cached, error-preserving evaluation
    * 
    * Context must contain all aggregated values and previously evaluated
    * calculated fields.
@@ -175,11 +206,19 @@ export class PivotCalculatedFieldEngine {
    * @returns Result (number, null, or error)
    */
   evaluate(field: CompiledCalculatedField, context: PivotEvalContext): CalculatedFieldResult {
+    // Phase 33b: Check cache first
+    const cacheKey = this.makeCacheKey(field.name, context);
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey)!;
+    }
+    
     try {
       // Validate dependencies exist in context
       for (const dep of field.dependsOn) {
         if (!(dep in context)) {
-          return new Error('#REF!'); // Missing field
+          const error = new Error('#REF!'); // Missing field
+          this.cache.set(cacheKey, error);
+          return error;
         }
       }
 
@@ -195,27 +234,35 @@ export class PivotCalculatedFieldEngine {
 
       // Handle result types
       if (result instanceof Error) {
+        // Phase 33b: Preserve error (don't convert to null)
+        this.cache.set(cacheKey, result);
         return result; // Propagate Excel errors (#DIV/0!, #VALUE!, etc.)
       }
 
       if (typeof result === 'number') {
         // Check for invalid numbers
         if (!isFinite(result) || isNaN(result)) {
+          this.cache.set(cacheKey, null);
           return null; // Treat as null
         }
+        this.cache.set(cacheKey, result);
         return result;
       }
 
       if (result === null || result === undefined) {
+        this.cache.set(cacheKey, null);
         return null;
       }
 
       // Convert other types to null (e.g., strings, booleans)
+      this.cache.set(cacheKey, null);
       return null;
 
     } catch (error) {
       // Catch any evaluation errors and return #VALUE!
-      return new Error('#VALUE!');
+      const valueError = new Error('#VALUE!');
+      this.cache.set(cacheKey, valueError);
+      return valueError;
     }
   }
 
@@ -248,26 +295,27 @@ export class PivotCalculatedFieldEngine {
   /**
    * Evaluate all calculated fields for a single pivot cell.
    * 
+   * Phase 33b: Error-preserving evaluation
+   * - Errors are stored AS-IS (not converted to null)
+   * - Error propagation happens automatically via FormulaEngine
+   * - Isolation: one field's error doesn't prevent others from evaluating
+   * 
    * @param fields - Topologically sorted fields
    * @param baseContext - Initial context with aggregated values
-   * @returns Extended context with calculated field results
+   * @returns Extended context with calculated field results (may include Error objects)
    */
   evaluateAll(
     fields: CompiledCalculatedField[],
     baseContext: PivotEvalContext
-  ): PivotEvalContext {
-    const context = { ...baseContext };
+  ): Record<string, number | null | Error> {
+    const context: Record<string, number | null | Error> = { ...baseContext };
 
     for (const field of fields) {
       const result = this.evaluate(field, context);
       
-      // Store result in context for subsequent fields
-      if (result instanceof Error) {
-        // Store error as null (isolate errors)
-        context[field.name] = null;
-      } else {
-        context[field.name] = result;
-      }
+      // Phase 33b: Store result as-is (preserve errors)
+      // FormulaEngine will propagate errors through dependent calculations
+      context[field.name] = result;
     }
 
     return context;
