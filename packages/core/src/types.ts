@@ -477,7 +477,7 @@ export type CellEvent = {
 };
 
 export type SheetEvents =
-  | { type: 'cell-changed'; address: Address; cell: Cell }
+  | { type: 'cell-changed'; address: Address; cell: Cell; previousValue?: Cell['value'] } // Phase 30b: previousValue for no-op detection
   | { type: 'style-changed'; address: Address; style: CellStyle | undefined }
   | { type: 'filter-changed'; col: number; filter: ColumnFilter | null; before: ColumnFilter | null }
   | { type: 'autofilter-range-changed'; before: AutoFilterRange | null; after: AutoFilterRange | null }

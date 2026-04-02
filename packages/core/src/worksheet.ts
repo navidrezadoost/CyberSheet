@@ -127,10 +127,15 @@ export class Worksheet {
 
   setCellValue(addr: Address, value: Cell['value']): void {
     const c = this.ensureCell(addr);
+    const previousValue = c.value; // Phase 30b: Capture before mutation
+    // Phase 30b: No-op guard — same value, no mutation, no event
+    if (previousValue === value) {
+      return;
+    }
     c.value = value;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c } });
+    this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c }, previousValue });
   }
 
   /**

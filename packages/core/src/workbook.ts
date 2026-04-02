@@ -2,7 +2,11 @@ import { Worksheet } from './worksheet';
 import { IFormulaEngine } from './types';
 import { StyleCache } from './StyleCache';
 import { PivotRegistry, PivotRegistryImpl } from './PivotRegistry';
+import type { PivotId } from './PivotRegistry';
 import { PivotSnapshotStore } from './PivotSnapshotStore';
+import { PivotDependencyIndexImpl } from './PivotDependencyIndex';
+import { PivotInvalidationEngineImpl } from './PivotInvalidationEngine';
+import type { Range } from './types';
 
 export class Workbook {
   private sheets = new Map<string, Worksheet>();
@@ -11,6 +15,11 @@ export class Workbook {
   private styleCache = new StyleCache();
   private pivotRegistry: PivotRegistry = new PivotRegistryImpl();
   private pivotSnapshotStore = new PivotSnapshotStore(); // Phase 29
+  private pivotDependencyIndex = new PivotDependencyIndexImpl(); // Phase 30b
+  private pivotInvalidationEngine = new PivotInvalidationEngineImpl( // Phase 30b
+    this.pivotDependencyIndex,
+    this.pivotRegistry as import('./PivotRegistry').PivotRegistryImpl
+  );
 
   getStyleCache(): StyleCache {
     return this.styleCache;
@@ -30,11 +39,47 @@ export class Workbook {
     return this.pivotSnapshotStore;
   }
 
+  /**
+   * Phase 30b: Register a pivot's source range for automatic invalidation.
+   * Call this after registry.register() to enable auto-dirty tracking.
+   */
+  registerPivotDependency(pivotId: PivotId, sourceRange: Range): void {
+    this.pivotDependencyIndex.register(pivotId, sourceRange);
+  }
+
+  /**
+   * Phase 30b: Unregister pivot dependency (call on pivot deletion).
+   */
+  unregisterPivotDependency(pivotId: PivotId): void {
+    this.pivotDependencyIndex.unregister(pivotId);
+  }
+
+  /**
+   * Phase 30b: Get the dependency index (for testing and inspection).
+   */
+  getPivotDependencyIndex(): PivotDependencyIndexImpl {
+    return this.pivotDependencyIndex;
+  }
+
+  /**
+   * Phase 30b: Get the invalidation engine (for testing and inspection).
+   */
+  getPivotInvalidationEngine(): PivotInvalidationEngineImpl {
+    return this.pivotInvalidationEngine;
+  }
+
   addSheet(name: string, rows?: number, cols?: number): Worksheet {
     if (this.sheets.has(name)) throw new Error(`Sheet '${name}' already exists`);
     const ws = new Worksheet(name, rows, cols, this.formulaEngine, this);
     this.sheets.set(name, ws);
     if (!this._active) this._active = name;
+
+    // Phase 30b: Subscribe invalidation engine to this worksheet's events
+    this.pivotInvalidationEngine.observeWorksheet(
+      ws.name,
+      (listener) => ws.on(listener)
+    );
+
     return ws;
   }
 
@@ -50,12 +95,13 @@ export class Workbook {
   }
 
   /**
-   * Phase 28/29: Disposal safety
-   * Clear registry and snapshots to prevent memory leaks
+   * Phase 28/29/30b: Disposal safety
+   * Clear registry, snapshots, dependency index, and event subscriptions
    */
   dispose(): void {
+    this.pivotInvalidationEngine.dispose(); // Phase 30b: Clean up event subscriptions
+    this.pivotDependencyIndex.clear();      // Phase 30b: Clear dependency index
     this.pivotRegistry.clear();
-    this.pivotSnapshotStore.clearAll(); // Phase 29
-    // Future: Add worksheet disposal if needed
+    this.pivotSnapshotStore.clearAll();     // Phase 29
   }
 }
