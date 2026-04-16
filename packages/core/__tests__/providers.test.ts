@@ -16,7 +16,10 @@
  * - Fallback to local entity.fields
  */
 
-import { describe, test, expect, beforeEach } from '@jest/globals';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare function beforeEach(fn: () => void | Promise<void>): void;
+declare const expect: any;
 import { FormulaEngine } from '../src/FormulaEngine';
 import { Worksheet } from '../src/worksheet';
 import { StockProvider, GeographyProvider, HttpProviderAdapter } from '../src/providers';

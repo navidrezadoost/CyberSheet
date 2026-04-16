@@ -4,6 +4,7 @@
  * Phase 27: Calculated Fields (row-level, deprecated)
  * Phase 33: Calculated Fields (post-aggregation, correct approach)
  * Phase 35: Slicers (declarative filtering layer)
+ * Phase 36a: Partial Recompute (row-level diff algorithm)
  * Zero-dependency pivot table engine with aggregation and calculated fields
  * 
  * Design Constraints:
@@ -18,6 +19,15 @@ import type { Address, CellValue, ExtendedCellValue } from './types';
 import type { Worksheet } from './worksheet';
 import type { CalculatedField, CompiledCalculatedField, PivotEvalContext } from './PivotCalculatedFields';
 import { PivotCalculatedFieldEngine } from './PivotCalculatedFields';
+import type { PivotId } from './PivotRegistry';
+import type { PivotGroupState, RowId } from './PivotGroupStateStore';
+import { 
+  groupStateStore, 
+  createAccumulator, 
+  getRelevantColumns, 
+  hashRowRelevant, 
+  makeGroupKey 
+} from './PivotGroupStateStore';
 
 export type AggregationType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'median' | 'stdev';
 
@@ -262,6 +272,119 @@ export class PivotEngine {
       data: aggregatedData,
       grandTotal: this.calculateGrandTotal(aggregatedData, normalizedValues[0])
     };
+  }
+
+  /**
+   * Phase 36a: Populate group state during full rebuild
+   * 
+   * Called after full pivot rebuild to enable partial recompute.
+   * Builds incremental state: groups, row mappings, hashes, snapshots.
+   * 
+   * CRITICAL: Only called for pivots with reversible aggregators
+   * MIN/MAX/MEDIAN/STDEV → skip state population (force full rebuild always)
+   * 
+   * @param pivotId - Pivot identifier
+   * @param config - Pivot configuration
+   * @param sourceData - Source data rows (after slicer filtering)
+   */
+  populateGroupState(pivotId: PivotId, config: PivotConfig, sourceData: ExtendedCellValue[][]): void {
+    // Check if all aggregators are reversible
+    const normalizedValues = this.normalizeValueSpecs(config.values) as PivotValueSpec[];
+    const hasNonReversible = normalizedValues.some(spec => {
+      if (spec.type === 'aggregate') {
+        const acc = createAccumulator(spec.aggregation);
+        return acc === null; // null = non-reversible
+      }
+      return false; // calculated fields are fine
+    });
+    
+    if (hasNonReversible) {
+      // Skip state population for non-reversible aggregators
+      // Partial recompute will fallback to full rebuild
+      return;
+    }
+    
+    // Get or create group state
+    let state = groupStateStore.get(pivotId);
+    if (!state) {
+      state = groupStateStore.create(pivotId);
+    } else {
+      // Reset for full rebuild
+      groupStateStore.reset(pivotId);
+      state = groupStateStore.get(pivotId)!;
+    }
+    
+    // Get relevant columns for hashing
+    const relevantColumns = getRelevantColumns(config);
+    
+    // Get dimension columns (for grouping)
+    const dimensionColumns = [
+      ...config.rows.map(r => r.column),
+      ...config.columns.map(c => c.column)
+    ];
+    
+    // Skip header row (first row is headers)
+    const dataRows = sourceData.slice(1);
+    
+    // Build group state
+    for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
+      const row = dataRows[rowIdx];
+      const rowId: RowId = rowIdx + 1; // 1-based (skipping header)
+      
+      // Extract dimension values for grouping
+      const dimensionValues = dimensionColumns.map(col => row[col]);
+      const groupKey = makeGroupKey(dimensionValues);
+      
+      // Get or create group
+      let group = state.groups.get(groupKey);
+      if (!group) {
+        // Create accumulators for this group
+        const accumulators: Record<string, any> = {};
+        for (const spec of normalizedValues) {
+          if (spec.type === 'aggregate') {
+            const acc = createAccumulator(spec.aggregation);
+            if (acc) {
+              accumulators[spec.label] = acc;
+            }
+          }
+        }
+        
+        group = {
+          values: accumulators,
+          rowCount: 0
+        };
+        state.groups.set(groupKey, group);
+      }
+      
+      // Add values to accumulators
+      for (const spec of normalizedValues) {
+        if (spec.type === 'aggregate') {
+          const acc = group.values[spec.label];
+          if (acc) {
+            const value = row[spec.column];
+            const numValue = typeof value === 'number' && isFinite(value) ? value : null;
+            acc.add(numValue);
+          }
+        }
+      }
+      
+      group.rowCount++;
+      
+      // Store row mapping
+      state.rowToGroup.set(rowId, groupKey);
+      
+      // Store row hash
+      const hash = hashRowRelevant(row, relevantColumns);
+      state.rowHashes.set(rowId, hash);
+      
+      // Store row snapshot (CRITICAL for partial recompute)
+      state.rowSnapshots.set(rowId, [...row]); // Clone row
+    }
+    
+    // Update state metadata
+    state.version = 0;
+    state.lastFullRebuildVersion = 0;
+    state.lastBuiltAt = Date.now();
   }
 
   /**

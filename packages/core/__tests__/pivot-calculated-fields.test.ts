@@ -3,7 +3,10 @@
  * Post-aggregation formula evaluation
  */
 
-import { describe, test, expect, beforeEach } from '@jest/globals';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare function beforeEach(fn: () => void | Promise<void>): void;
+declare const expect: any;
 import { Workbook } from '../src/workbook';
 import { Worksheet } from '../src/worksheet';
 import { FormulaEngine } from '../src/FormulaEngine';

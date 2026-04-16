@@ -13,7 +13,9 @@
  * §7 Integration with Phase 30b: mutation → dirty → query → auto clean
  */
 
-import { describe, test, expect, beforeEach } from '@jest/globals';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare const expect: any;
 import { PivotRegistryImpl } from '../src/PivotRegistry';
 import type { PivotId, PivotMetadata } from '../src/PivotRegistry';
 import { PivotSnapshotStore } from '../src/PivotSnapshotStore';

@@ -9,6 +9,7 @@ import { PivotInvalidationEngineImpl } from './PivotInvalidationEngine';
 import { PivotRecomputeEngineImpl } from './PivotRecomputeEngine'; // Phase 31a
 import { PivotAnchorIndexImpl } from './PivotAnchorIndex'; // Phase 32
 import type { SlicerId, SlicerValue, SlicerStateStorable } from './PivotEngine'; // Phase 35
+import { groupStateStore } from './PivotGroupStateStore'; // Phase 36a
 import type { Range, Address } from './types';
 import type { PivotConfig } from './PivotEngine';
 import { PivotEngine } from './PivotEngine';
@@ -26,10 +27,16 @@ export class Workbook {
     this.pivotDependencyIndex,
     this.pivotRegistry as import('./PivotRegistry').PivotRegistryImpl
   );
-  private pivotRecomputeEngine = new PivotRecomputeEngineImpl( // Phase 31a
+  private pivotRecomputeEngine = new PivotRecomputeEngineImpl( // Phase 31a + 36a
     this.pivotRegistry,
     this.pivotSnapshotStore,
-    this.buildPivot.bind(this)
+    this.buildPivot.bind(this),
+    // Phase 36a: Inject source data extractor for partial recompute
+    (worksheetId: string, range: Range) => {
+      const worksheet = this.getSheet(worksheetId);
+      if (!worksheet) return null;
+      return this.extractSourceData(worksheet, range);
+    }
   );
   private pivotAnchorIndex = new PivotAnchorIndexImpl(); // Phase 32
 
@@ -106,6 +113,10 @@ export class Workbook {
     const engine = new PivotEngine(worksheet);
     const pivotTable = engine.generate(config);
 
+    // Phase 36a: Populate group state for partial recompute
+    // This must happen after full rebuild to capture correct state
+    engine.populateGroupState(pivotId, config, this.extractSourceData(worksheet, config.sourceRange));
+
     // Transform to snapshot format
     const snapshot = transformToPivotSnapshot(
       pivotId,
@@ -114,6 +125,25 @@ export class Workbook {
     );
 
     return snapshot;
+  }
+
+  /**
+   * Phase 36a: Extract source data from worksheet
+   * Helper for group state population
+   */
+  private extractSourceData(worksheet: Worksheet, range: { start: import('./types').Address; end: import('./types').Address }): import('./types').ExtendedCellValue[][] {
+    const data: import('./types').ExtendedCellValue[][] = [];
+    
+    for (let row = range.start.row; row <= range.end.row; row++) {
+      const rowData: import('./types').ExtendedCellValue[] = [];
+      for (let col = range.start.col; col <= range.end.col; col++) {
+        const cell = worksheet.getCell({ row, col });
+        rowData.push(cell?.value ?? null);
+      }
+      data.push(rowData);
+    }
+    
+    return data;
   }
 
   /**
@@ -296,6 +326,54 @@ export class Workbook {
   }
 
   /**
+   * Phase 36a: Create and register a pivot.
+   * Convenience method for tests and API consumers.
+   * 
+   * @param name - Pivot name
+   * @param worksheetId - Worksheet identifier
+   * @param config - Pivot configuration
+   * @returns Pivot identifier
+   */
+  createPivot(name: string, worksheetId: string, config: PivotConfig): PivotId {
+    // Register pivot
+    const pivotId = this.pivotRegistry.register({
+      name,
+      config,
+      sourceRange: 'A1:Z100', // TODO: derive from config.sourceRange
+      worksheetId,
+      dirty: false,
+      lastBuiltAt: undefined,
+    });
+
+    // Build initial snapshot
+    const snapshot = this.buildPivot(pivotId, config, worksheetId);
+    
+    // Store snapshot
+    this.pivotSnapshotStore.set(pivotId, snapshot);
+    this.pivotRegistry.markClean(pivotId, snapshot.computedAt);
+
+    return pivotId;
+  }
+
+  /**
+   * Phase 36a: Get pivot snapshot (triggers lazy rebuild if dirty).
+   * 
+   * @param pivotId - Pivot identifier
+   * @returns Pivot snapshot or undefined if not found
+   */
+  getPivotSnapshot(pivotId: PivotId): import('./PivotSnapshotStore').PivotSnapshot | undefined {
+    const pivot = this.pivotRegistry.get(pivotId);
+    if (!pivot) return undefined;
+
+    // Trigger rebuild if dirty (Phase 31a lazy evaluation)
+    if (pivot.dirty) {
+      this.pivotRecomputeEngine.rebuild(pivotId, pivot.config, pivot.worksheetId);
+    }
+
+    return this.pivotSnapshotStore.get(pivotId);
+  }
+
+  /**
    * Phase 32 patch: Authoritative pivot deletion.
    * Cleans up ALL subsystems to prevent stale state.
    * 
@@ -314,6 +392,7 @@ export class Workbook {
     this.pivotAnchorIndex.delete(pivotId);       // Phase 32: Remove anchor
     this.pivotDependencyIndex.delete(pivotId);  // Phase 30b: Remove dependency tracking
     this.pivotSnapshotStore.delete(pivotId);    // Phase 29a: Remove cached snapshot
+    groupStateStore.delete(pivotId);            // Phase 36a: Remove group state
 
     return true;
   }

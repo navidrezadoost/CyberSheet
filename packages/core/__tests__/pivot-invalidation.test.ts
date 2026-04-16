@@ -18,7 +18,10 @@
  * - Workbook integration tests (end-to-end)
  */
 
-import { describe, test, expect, beforeEach } from '@jest/globals';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare function beforeEach(fn: () => void | Promise<void>): void;
+declare const expect: any;
 import { PivotDependencyIndexImpl, normalizeRange, colInRange } from '../src/PivotDependencyIndex';
 import { PivotInvalidationEngineImpl } from '../src/PivotInvalidationEngine';
 import { PivotRegistryImpl } from '../src/PivotRegistry';

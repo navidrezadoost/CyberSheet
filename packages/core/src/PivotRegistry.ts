@@ -12,7 +12,8 @@
  * - Deterministic IDs (explicit assignment)
  */
 
-import type { PivotConfig } from './PivotEngine';
+import type { PivotConfig, AggregationType } from './PivotEngine';
+import { createAccumulator } from './PivotGroupStateStore';
 
 /**
  * Opaque pivot identifier.
@@ -26,6 +27,7 @@ export type PivotId = string & { readonly __brand: 'PivotId' };
  * 
  * Phase 30a: Added staleness tracking (dirty flag + lastBuiltAt).
  * Phase 31a: Added rebuilding flag for re-entrancy protection.
+ * Phase 36a: Added hasNonReversibleAggregations flag.
  * 
  * FORBIDDEN:
  * - Storing PivotTable results
@@ -42,6 +44,7 @@ export interface PivotMetadata {
   readonly dirty: boolean; // Phase 30a: Staleness flag
   readonly lastBuiltAt?: number; // Phase 30a: Last successful build timestamp
   readonly rebuilding?: boolean; // Phase 31a: Re-entrancy guard (prevents infinite loops)
+  readonly hasNonReversibleAggregations?: boolean; // Phase 36a: Partial recompute eligibility
 }
 
 /**
@@ -113,6 +116,12 @@ export interface PivotRegistry {
    * Called before starting rebuild to prevent recursive queries.
    */
   setRebuilding(id: PivotId, rebuilding: boolean): void;
+
+  /**
+   * Phase 36a: Check if pivot is currently rebuilding.
+   * Used in partial recompute safety gate.
+   */
+  isRebuilding(id: PivotId): boolean;
 }
 
 /**
@@ -135,17 +144,41 @@ export class PivotRegistryImpl implements PivotRegistry {
    * Register a pivot configuration.
    * Assigns sequential ID within session.
    * Phase 30a: New pivots start clean (dirty: false) assuming immediate build.
+   * Phase 36a: Compute hasNonReversibleAggregations at registration.
    */
-  register(meta: Omit<PivotMetadata, 'id' | 'createdAt' | 'dirty' | 'lastBuiltAt'>): PivotId {
+  register(meta: Omit<PivotMetadata, 'id' | 'createdAt' | 'dirty' | 'lastBuiltAt' | 'hasNonReversibleAggregations'>): PivotId {
     const id = `pivot-${++this.idCounter}` as PivotId;
+    
+    // Phase 36a: Check if any aggregations are non-reversible
+    const hasNonReversible = this.checkNonReversibleAggregations(meta.config);
+    
     this.pivots.set(id, {
       ...meta,
       id,
       createdAt: Date.now(),
       dirty: false, // Phase 30a: Assume immediate build on create
       lastBuiltAt: undefined, // Phase 30a: Set by markClean after first build
+      hasNonReversibleAggregations: hasNonReversible, // Phase 36a
     });
     return id;
+  }
+
+  /**
+   * Phase 36a: Check if config contains non-reversible aggregations
+   * MIN/MAX/MEDIAN/STDEV → true (cannot do partial recompute)
+   * SUM/COUNT/AVG → false (can do partial recompute)
+   */
+  private checkNonReversibleAggregations(config: PivotConfig): boolean {
+    return config.values.some(spec => {
+      // Check if this is an aggregate spec
+      const type = 'type' in spec ? spec.type : 'aggregate';
+      if (type === 'aggregate') {
+        const agg = 'aggregation' in spec ? spec.aggregation : 'sum';
+        // createAccumulator returns null for non-reversible types
+        return createAccumulator(agg as AggregationType) === null;
+      }
+      return false; // Calculated fields don't block partial recompute
+    });
   }
 
   /**
@@ -242,4 +275,12 @@ export class PivotRegistryImpl implements PivotRegistry {
       rebuilding,
     });
   }
-}
+
+  /**
+   * Phase 36a: Check if pivot is currently rebuilding.
+   * Returns false if pivot doesn't exist.
+   */
+  isRebuilding(id: PivotId): boolean {
+    const pivot = this.pivots.get(id);
+    return pivot?.rebuilding ?? false;
+  }

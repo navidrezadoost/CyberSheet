@@ -9,8 +9,10 @@
  * - Deterministic IDs
  */
 
-import { describe, test, expect } from '@jest/globals';
-import { PivotRegistryImpl, type PivotMetadata, type PivotId } from '../src/PivotRegistry';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare function beforeEach(fn: () => void | Promise<void>): void;
+declare const expect: any;import { PivotRegistryImpl, type PivotMetadata, type PivotId } from '../src/PivotRegistry';
 import type { PivotConfig, AggregateValueSpec } from '../src/PivotEngine';
 
 describe('PivotRegistry - Core Operations', () => {

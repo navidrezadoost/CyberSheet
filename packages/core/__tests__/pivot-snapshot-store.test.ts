@@ -8,8 +8,10 @@
  * - Snapshot validation
  */
 
-import { describe, test, expect } from '@jest/globals';
-import { PivotSnapshotStore, type PivotSnapshot } from '../src/PivotSnapshotStore';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare function beforeEach(fn: () => void | Promise<void>): void;
+declare const expect: any;import { PivotSnapshotStore, type PivotSnapshot } from '../src/PivotSnapshotStore';
 import type { PivotId } from '../src/PivotRegistry';
 
 describe('PivotSnapshotStore - Core Operations', () => {
