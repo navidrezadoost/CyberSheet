@@ -264,6 +264,34 @@ export class PatchRecorder {
         this._ops.push({ op: 'setAutoFilterRange', before: event.before, after: event.after });
         break;
 
+      case 'spill-source-changed':
+        // Spill source metadata changes (for undo/redo)
+        // No-op for now: spill state is not in WorksheetPatch yet (future extension point)
+        break;
+
+      case 'spill-from-changed':
+        // Spilled-from reference changes (for undo/redo)
+        // No-op for now: spill state is not in WorksheetPatch yet (future extension point)
+        break;
+
+      case 'spill-batch-changed': {
+        // Batch spill operation — captures all affected cells atomically
+        const changes = event.changes.map(change => ({
+          row: change.address.row,
+          col: change.address.col,
+          before: {
+            spillSource: change.before.spillSource,
+            spilledFrom: change.before.spilledFrom,
+          },
+          after: {
+            spillSource: change.after.spillSource,
+            spilledFrom: change.after.spilledFrom,
+          },
+        }));
+        this._ops.push({ op: 'setSpill', changes });
+        break;
+      }
+
       // sort-applied is handled by SDK via recordPreBuilt (snapshot-based). PatchRecorder no-ops it.
       // sheet-mutated / comment-* / cycle-detected — no-op
       default: break;

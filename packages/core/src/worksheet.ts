@@ -77,6 +77,10 @@ export class Worksheet {
   rowCount: number;
   colCount: number;
 
+  // Transaction-level event buffering (Phase 11 enforcement)
+  private _inTransaction = false;
+  private _pendingEvents: SheetEvents[] = [];
+
   constructor(name: string, rows = 1000, cols = 26, engine?: IFormulaEngine, workbook?: any) {
     this.name = name;
     this.rowCount = rows;
@@ -88,6 +92,61 @@ export class Worksheet {
 
   on(listener: (e: SheetEvents) => void) {
     return this.events.on(listener);
+  }
+
+  /**
+   * Check if a transaction is currently active.
+   */
+  isTransactionActive(): boolean {
+    return this._inTransaction;
+  }
+
+  /**
+   * Run a batch of mutations as a single transaction.
+   * Events are buffered and emitted once after all operations complete.
+   * Re-entrant: nested calls reuse the outer transaction.
+   */
+  runTransaction<T>(fn: () => T): T {
+    if (this._inTransaction) {
+      // Re-entrant call — reuse existing transaction
+      return fn();
+    }
+
+    this._inTransaction = true;
+    try {
+      const result = fn();
+      this._inTransaction = false;
+      this._flushEvents();
+      return result;
+    } catch (e) {
+      this._inTransaction = false;
+      this._pendingEvents = [];
+      throw e;
+    }
+  }
+
+  /**
+   * Emit or buffer an event depending on transaction state.
+   */
+  private _emitOrBuffer(event: SheetEvents): void {
+    if (this._inTransaction) {
+      this._pendingEvents.push(event);
+    } else {
+      this.events.emit(event);
+    }
+  }
+
+  /**
+   * Flush pending events after transaction commit.
+   * Coalesces events into one final aggregate event.
+   */
+  private _flushEvents(): void {
+    if (this._pendingEvents.length === 0) return;
+
+    // For now, emit the last event (aggregate coalescing can be added later)
+    const lastEvent = this._pendingEvents[this._pendingEvents.length - 1];
+    this._pendingEvents = [];
+    this.events.emit(lastEvent);
   }
 
   getCell(addr: Address): Cell | undefined {
@@ -126,6 +185,10 @@ export class Worksheet {
   }
 
   setCellValue(addr: Address, value: Cell['value']): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.setCellValue(addr, value));
+    }
+
     const c = this.ensureCell(addr);
     const previousValue = c.value; // Phase 30b: Capture before mutation
     // Phase 30b: No-op guard — same value, no mutation, no event
@@ -135,7 +198,7 @@ export class Worksheet {
     c.value = value;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c }, previousValue });
+    this._emitOrBuffer({ type: 'cell-changed', address: addr, cell: { ...c }, previousValue });
   }
 
   /**
@@ -150,12 +213,16 @@ export class Worksheet {
    * @param displayValue  Optional pre-evaluated result (for read-only display)
    */
   setCellFormula(addr: Address, formula: string, displayValue?: Cell['value']): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.setCellFormula(addr, formula, displayValue));
+    }
+
     const c = this.ensureCell(addr);
     c.formula = formula;
     if (displayValue !== undefined) c.value = displayValue;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this.events.emit({ type: 'cell-changed', address: addr, cell: { ...c } });
+    this._emitOrBuffer({ type: 'cell-changed', address: addr, cell: { ...c } });
   }
 
   /**
@@ -163,8 +230,14 @@ export class Worksheet {
    * Does NOT fire events (spill is internal bookkeeping).
    */
   setSpillSource(addr: Address, source: Cell['spillSource']): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.setSpillSource(addr, source));
+    }
+
     const c = this.ensureCell(addr);
+    const before = c.spillSource;
     c.spillSource = source;
+    this._emitOrBuffer({ type: 'spill-source-changed', address: addr, before, after: source });
   }
 
   /**
@@ -172,8 +245,14 @@ export class Worksheet {
    * Does NOT fire events.
    */
   setSpilledFrom(addr: Address, from: Cell['spilledFrom']): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.setSpilledFrom(addr, from));
+    }
+
     const c = this.ensureCell(addr);
+    const before = c.spilledFrom;
     c.spilledFrom = from;
+    this._emitOrBuffer({ type: 'spill-from-changed', address: addr, before, after: from });
   }
 
   /**
@@ -181,8 +260,16 @@ export class Worksheet {
    * Sets spillSource to undefined (preserves mono-shape — never delete).
    */
   clearSpillSource(addr: Address): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.clearSpillSource(addr));
+    }
+
     const c = this.cells.get(addr.row, addr.col);
-    if (c) c.spillSource = undefined;
+    if (c) {
+      const before = c.spillSource;
+      c.spillSource = undefined;
+      this._emitOrBuffer({ type: 'spill-source-changed', address: addr, before, after: undefined });
+    }
   }
 
   /**
@@ -190,8 +277,74 @@ export class Worksheet {
    * Sets spilledFrom to undefined (preserves mono-shape — never delete).
    */
   clearSpilledFrom(addr: Address): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.clearSpilledFrom(addr));
+    }
+
     const c = this.cells.get(addr.row, addr.col);
-    if (c) c.spilledFrom = undefined;
+    if (c) {
+      const before = c.spilledFrom;
+      c.spilledFrom = undefined;
+      this._emitOrBuffer({ type: 'spill-from-changed', address: addr, before, after: undefined });
+    }
+  }
+
+  /**
+   * Batch spill operation — captures before state, applies mutations, emits one atomic event.
+   * Used by SpillEngine to ensure spill updates are reversible as a single unit.
+   */
+  applySpillBatch(
+    changes: Array<{
+      addr: Address;
+      spillSource?: Cell['spillSource'];
+      spilledFrom?: Cell['spilledFrom'];
+    }>
+  ): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.applySpillBatch(changes));
+    }
+
+    const eventChanges: Array<{
+      address: Address;
+      before: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] };
+      after: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] };
+    }> = [];
+
+    // Capture before state for all cells
+    for (const change of changes) {
+      let cell = this.cells.get(change.addr.row, change.addr.col);
+      const before = {
+        spillSource: cell?.spillSource,
+        spilledFrom: cell?.spilledFrom,
+      };
+
+      // Apply mutation - only create cell if setting metadata (not just clearing)
+      const isSet = change.spillSource !== undefined || change.spilledFrom !== undefined;
+      
+      if (isSet || cell) {
+        if (!cell && isSet) {
+          cell = this.ensureCell(change.addr);
+        }
+        if (cell) {
+          if ('spillSource' in change) {
+            cell.spillSource = change.spillSource;
+          }
+          if ('spilledFrom' in change) {
+            cell.spilledFrom = change.spilledFrom;
+          }
+        }
+      }
+
+      const after = {
+        spillSource: cell?.spillSource,
+        spilledFrom: cell?.spilledFrom,
+      };
+
+      eventChanges.push({ address: change.addr, before, after });
+    }
+
+    // Emit one batch event
+    this._emitOrBuffer({ type: 'spill-batch-changed', changes: eventChanges });
   }
 
   getCellStyle(addr: Address): CellStyle | undefined {
@@ -199,6 +352,10 @@ export class Worksheet {
   }
 
   setCellStyle(addr: Address, style: CellStyle | undefined): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.setCellStyle(addr, style));
+    }
+
     const c = this.ensureCell(addr);
 
     // Auto-intern through workbook StyleCache (entropy-resistant boundary)
@@ -209,7 +366,7 @@ export class Worksheet {
     }
 
     c.style = internedStyle; // Reference to canonical style (not a copy)
-    this.events.emit({ type: 'style-changed', address: addr, style: internedStyle });
+    this._emitOrBuffer({ type: 'style-changed', address: addr, style: internedStyle });
   }
 
   // ==================== Conditional Formatting ====================

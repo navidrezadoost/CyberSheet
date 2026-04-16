@@ -73,6 +73,12 @@ import type { Address, ExtendedCellValue, CellStyle, SheetProtectionOptions, Fre
 /**
  * Minimal pivot definition stored inside a CreatePivotOp.
  * Mirrors sdk/pivot.ts PivotDefinition; kept separate to avoid import cycles.
+ *
+ * NOTE (Phase 27): PivotCalculatedSpec contains a `compute` function and is
+ * intentionally NOT included here — functions cannot round-trip through the
+ * patch/undo system.  Calculated fields are available on the pure `buildPivot`
+ * API directly; the SDK `createPivot` method continues to accept aggregate
+ * specs only.
  */
 export type PivotOpDefinition = {
   source:   { start: { row: number; col: number }; end: { row: number; col: number } };
@@ -237,11 +243,39 @@ export type CreatePivotOp = {
   afterStyles:  (CellStyle | undefined)[][];
 };
 
+/**
+ * Spill cell change — captures before/after state for one cell in a spill region.
+ * Used as part of SetSpillOp to ensure atomic spill updates.
+ */
+export type SpillCellChange = {
+  row: number;
+  col: number;
+  before: {
+    spillSource?: { dimensions: [number, number]; endAddress: { row: number; col: number } };
+    spilledFrom?: { row: number; col: number };
+  };
+  after: {
+    spillSource?: { dimensions: [number, number]; endAddress: { row: number; col: number } };
+    spilledFrom?: { row: number; col: number };
+  };
+};
+
+/**
+ * Set spill metadata — atomic batch operation for spill regions.
+ * Captures all cells affected by a spill operation (source + spilled cells).
+ * Invertible: swap before/after for each change.
+ */
+export type SetSpillOp = {
+  op: 'setSpill';
+  changes: SpillCellChange[];
+};
+
 /** Union of all operation types. */
 export type PatchOp =
   | SetCellValueOp
   | ClearCellOp
   | SetCellStyleOp
+  | SetSpillOp
   | MergeCellsOp
   | CancelMergeOp
   | HideRowOp
@@ -306,6 +340,18 @@ export function invertPatch(patch: WorksheetPatch, seq = 0): WorksheetPatch {
         break;
       case 'setCellStyle':
         ops.push({ op: 'setCellStyle', row: op.row, col: op.col, before: op.after, after: op.before });
+        break;
+      case 'setSpill':
+        // Invert spill: swap before/after for each cell change
+        ops.push({
+          op: 'setSpill',
+          changes: op.changes.map(change => ({
+            row: change.row,
+            col: change.col,
+            before: change.after,
+            after: change.before,
+          })),
+        });
         break;
       case 'mergeCells':
         ops.push({ op: 'cancelMerge', startRow: op.startRow, startCol: op.startCol, endRow: op.endRow, endCol: op.endCol });
@@ -403,6 +449,22 @@ export function applyPatch(ws: Worksheet, patch: WorksheetPatch): void {
         break;
       case 'setCellStyle':
         ws.setCellStyle({ row: op.row, col: op.col }, op.after);
+        break;
+      case 'setSpill':
+        // Apply spill changes atomically: each change updates spillSource or spilledFrom
+        for (const change of op.changes) {
+          const addr = { row: change.row, col: change.col };
+          if (change.after.spillSource !== undefined) {
+            ws.setSpillSource(addr, change.after.spillSource);
+          } else if (change.before.spillSource !== undefined && change.after.spillSource === undefined) {
+            ws.clearSpillSource(addr);
+          }
+          if (change.after.spilledFrom !== undefined) {
+            ws.setSpilledFrom(addr, change.after.spilledFrom);
+          } else if (change.before.spilledFrom !== undefined && change.after.spilledFrom === undefined) {
+            ws.clearSpilledFrom(addr);
+          }
+        }
         break;
       case 'mergeCells':
         ws.mergeCells({

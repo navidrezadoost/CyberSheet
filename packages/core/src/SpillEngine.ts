@@ -120,6 +120,13 @@ export class SpillEngine {
       col: sourceAddr.col + cols - 1
     };
 
+    // Build batch spill metadata changes
+    const spillChanges: Array<{
+      addr: Address;
+      spillSource?: { dimensions: [number, number]; endAddress: Address };
+      spilledFrom?: Address;
+    }> = [];
+
     // Set values in spill range
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -140,16 +147,25 @@ export class SpillEngine {
 
         if (r === 0 && c === 0) {
           // Source cell gets the spill metadata
-          worksheet.setSpillSource(cellAddr, {
-            dimensions: [rows, cols],
-            endAddress: endAddr
+          spillChanges.push({
+            addr: cellAddr,
+            spillSource: {
+              dimensions: [rows, cols],
+              endAddress: endAddr
+            },
           });
         } else {
           // Spilled cells get spilledFrom reference
-          worksheet.setSpilledFrom(cellAddr, sourceAddr);
+          spillChanges.push({
+            addr: cellAddr,
+            spilledFrom: sourceAddr,
+          });
         }
       }
     }
+
+    // Apply all spill metadata as one atomic operation
+    worksheet.applySpillBatch(spillChanges);
   }
 
   /**
@@ -163,6 +179,13 @@ export class SpillEngine {
 
     const { endAddress } = sourceCell.spillSource;
 
+    // Build batch clear operations for spill metadata
+    const spillChanges: Array<{
+      addr: Address;
+      spillSource?: undefined;
+      spilledFrom?: undefined;
+    }> = [];
+
     // Clear all spilled cells
     for (let r = sourceAddr.row; r <= endAddress.row; r++) {
       for (let c = sourceAddr.col; c <= endAddress.col; c++) {
@@ -171,15 +194,19 @@ export class SpillEngine {
         const cellAddr: Address = { row: r, col: c };
         const cell = worksheet.getCell(cellAddr);
         if (cell?.spilledFrom?.row === sourceAddr.row && cell.spilledFrom.col === sourceAddr.col) {
-          // Clear the spilled cell — assign undefined, never delete (mono-shape)
+          // Clear the spilled cell value
           worksheet.setCellValue(cellAddr, null);
-          worksheet.clearSpilledFrom(cellAddr);
+          // Mark for metadata clear
+          spillChanges.push({ addr: cellAddr, spilledFrom: undefined });
         }
       }
     }
 
-    // Clear source metadata — assign undefined, never delete (mono-shape)
-    worksheet.clearSpillSource(sourceAddr);
+    // Clear source metadata
+    spillChanges.push({ addr: sourceAddr, spillSource: undefined });
+
+    // Apply all spill metadata clears as one atomic operation
+    worksheet.applySpillBatch(spillChanges);
   }
 
   /**

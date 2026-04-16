@@ -489,6 +489,9 @@ export type CellEvent = {
 export type SheetEvents =
   | { type: 'cell-changed'; address: Address; cell: Cell; previousValue?: Cell['value'] } // Phase 30b: previousValue for no-op detection
   | { type: 'style-changed'; address: Address; style: CellStyle | undefined }
+  | { type: 'spill-source-changed'; address: Address; before: Cell['spillSource']; after: Cell['spillSource'] }
+  | { type: 'spill-from-changed'; address: Address; before: Cell['spilledFrom']; after: Cell['spilledFrom'] }
+  | { type: 'spill-batch-changed'; changes: Array<{ address: Address; before: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] }; after: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] } }> }
   | { type: 'filter-changed'; col: number; filter: ColumnFilter | null; before: ColumnFilter | null }
   | { type: 'autofilter-range-changed'; before: AutoFilterRange | null; after: AutoFilterRange | null }
   | { type: 'sort-applied'; startRow: number; startCol: number; endRow: number; endCol: number; keys: SortKey[] }

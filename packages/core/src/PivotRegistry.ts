@@ -284,3 +284,4 @@ export class PivotRegistryImpl implements PivotRegistry {
     const pivot = this.pivots.get(id);
     return pivot?.rebuilding ?? false;
   }
+}

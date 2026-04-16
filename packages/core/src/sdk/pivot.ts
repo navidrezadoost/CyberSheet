@@ -1,5 +1,5 @@
 /**
- * pivot.ts — Phase 25 + 26: Pivot Kernel (Row Grouping + Column-Axis Cross-Tab)
+ * pivot.ts — Phase 25 + 26 + 27: Pivot Kernel (Row Grouping + Cross-Tab + Calculated Fields)
  *
  * Pure, deterministic pivot-table engine for @cyber-sheet/core.
  *
@@ -48,8 +48,16 @@
  *  ✅  `PivotGrid.colKeys` metadata
  *  ✅  Backward-compatible: absent/empty `columns` → Phase 25 flat behaviour
  *
+ * Phase 27 (calculated fields):
+ *  ✅  `PivotCalculatedSpec` — discriminated union variant `{ type: 'calculated' }`
+ *  ✅  `compute(row)` — pure per-row function; results summed across the group
+ *  ✅  Mixed aggregate + calculated specs in one definition
+ *  ✅  Works in both flat and cross-tab paths
+ *  ✅  Null propagation: compute() may return null; ignored in sum
+ *  ✅  Label defaults to `name` when omitted
+ *  ✅  Full backward-compatibility: old specs without `type` treated as aggregate
+ *
  * Deferred (later phases):
- *  ❌  Calculated fields
  *  ❌  Slicers / filters
  *  ❌  Dynamic recalculation on source edit
  *  ❌  UI
@@ -103,8 +111,31 @@
  *  // grid2.rows[1]  → { keys: ['South'], values: [null, 500] }
  *  // grid2.rows[2]  → { keys: ['East'],  values: [700,  null] }
  *
+ *  // — Calculated field (Phase 27) —
+ *  const def3: PivotDefinition = {
+ *    source: { start: { row: 1, col: 1 }, end: { row: 5, col: 4 } },
+ *    rows:   ['Region'],
+ *    values: [
+ *      { field: 'Revenue', aggregator: 'sum' },
+ *      {
+ *        type:    'calculated',
+ *        name:    'RevenuePerUnit',
+ *        compute: row => {
+ *          const rev   = row['Revenue'];
+ *          const units = row['Units'];
+ *          return (typeof rev === 'number' && typeof units === 'number' && units !== 0)
+ *            ? rev / units : null;
+ *        },
+ *      },
+ *    ],
+ *  };
+ *
+ *  const grid3 = buildPivot(rawGrid, def3);
+ *  // grid3.headers → ['Region', 'sum(Revenue)', 'RevenuePerUnit']
+ *  // grid3.rows[0] → { keys: ['North'], values: [1500, 250] }  (1500/6 per row summed)
+ *
  *  // Via SDK (writes to worksheet, single undo entry):
- *  const grid3 = sdk.createPivot(definition, { row: 6, col: 1 });
+ *  const grid4 = sdk.createPivot(definition, { row: 6, col: 1 });
  */
 
 import type { ExtendedCellValue } from '../types';
@@ -118,18 +149,55 @@ import { PivotSourceError, PivotFieldError, EmptyPivotSourceError } from './erro
 export type PivotAggregator = 'sum' | 'count' | 'avg';
 
 /**
- * Specifies one value column in the pivot output.
+ * Phase 25/26 — aggregation-based value spec.
  *
+ * `type`         — discriminant; may be omitted for backward compatibility
+ *                  (absence is treated as `'aggregate'`).
  * `field`        — header name of the source column to aggregate.
  * `aggregator`   — 'sum' | 'count' | 'avg'.
  * `label`        — optional output column header; defaults to
  *                  `"<aggregator>(<field>)"`, e.g. `"sum(Sales)"`.
  */
-export interface PivotValueSpec {
+export interface PivotAggregateSpec {
+  type?:      'aggregate';
   field:      string;
   aggregator: PivotAggregator;
   label?:     string;
 }
+
+/**
+ * Phase 27 — calculated-field value spec.
+ *
+ * The `compute` function receives a single **source data row** as a
+ * `Record<headerName, value>` map and should return a `number | null`.
+ * It is called once per **source row** in the group; the per-row results
+ * are summed (nulls skipped) to produce the cell value — matching Excel's
+ * calculated-field semantics.
+ *
+ * `type`    — discriminant; must be `'calculated'`.
+ * `name`    — logical name used to build the output column label.
+ * `compute` — pure function: `(row: Record<string, ExtendedCellValue>) => number | null`.
+ * `label`   — optional override for the output column header;
+ *             defaults to `name`.
+ *
+ * **Note:** This field is intentionally non-serialisable (contains a function).
+ * `buildPivot` accepts it as part of a pure API; the SDK patch layer
+ * (`PivotOpDefinition`) continues to support aggregate specs only.
+ */
+export interface PivotCalculatedSpec {
+  type:     'calculated';
+  name:     string;
+  compute:  (row: Record<string, ExtendedCellValue>) => number | null;
+  label?:   string;
+}
+
+/**
+ * Union of the two value-spec variants.
+ *
+ * Old code that creates `{ field, aggregator }` objects (without `type`)
+ * continues to work — the engine treats absent/`'aggregate'` type identically.
+ */
+export type PivotValueSpec = PivotAggregateSpec | PivotCalculatedSpec;
 
 /**
  * Immutable, JSON-serializable definition of a pivot table.
@@ -149,7 +217,10 @@ export interface PivotDefinition {
   source: { start: { row: number; col: number }; end: { row: number; col: number } };
   /** Field names (from the source header row) to group rows by. */
   rows: string[];
-  /** Value columns to aggregate. */
+  /**
+   * Value specs — each is either an aggregate spec (Phase 25/26) or a
+   * calculated field spec (Phase 27).
+   */
   values: PivotValueSpec[];
   /**
    * Phase 26 — optional column-axis field names.
@@ -261,6 +332,10 @@ export function buildPivot(
   // Display separator used when rendering multi-field column keys.
   const DISPLAY_SEP  = ' | ';
 
+  /** Type guard: is this a Phase 27 calculated spec? */
+  const isCalc = (s: PivotValueSpec): s is PivotCalculatedSpec =>
+    (s as PivotCalculatedSpec).type === 'calculated';
+
   /** Convert a cell value to its string key fragment. */
   const cellKey = (v: ExtendedCellValue): string =>
     v === null || v === undefined ? '' : String(v);
@@ -271,28 +346,68 @@ export function buildPivot(
     return idx;
   });
 
-  interface ResolvedValueSpec extends PivotValueSpec {
+  // Validate aggregate spec fields; calculated specs need no field validation.
+  for (const spec of definition.values) {
+    if (!isCalc(spec)) {
+      if (headers.indexOf(spec.field) === -1) throw new PivotFieldError(spec.field, headers);
+    }
+  }
+
+  // Resolved aggregate spec — carries the pre-looked-up column index.
+  interface ResolvedAggregateSpec extends PivotAggregateSpec {
     colIdx:      number;
     outputLabel: string;
   }
-  const resolvedValues: ResolvedValueSpec[] = definition.values.map(spec => {
+  // Resolved calculated spec — carries output label and the raw compute fn.
+  interface ResolvedCalcSpec extends PivotCalculatedSpec {
+    outputLabel: string;
+  }
+  type ResolvedSpec = ResolvedAggregateSpec | ResolvedCalcSpec;
+
+  const resolvedValues: ResolvedSpec[] = definition.values.map(spec => {
+    if (isCalc(spec)) {
+      return {
+        ...spec,
+        outputLabel: spec.label ?? spec.name,
+      } as ResolvedCalcSpec;
+    }
     const idx = headers.indexOf(spec.field);
-    if (idx === -1) throw new PivotFieldError(spec.field, headers);
+    // idx already validated above
     return {
       ...spec,
       colIdx:      idx,
       outputLabel: spec.label ?? `${spec.aggregator}(${spec.field})`,
-    };
+    } as ResolvedAggregateSpec;
   });
 
-  /** Aggregate a single (spec, rows) pair. */
-  const aggregate = (
-    spec:      ResolvedValueSpec,
+  /**
+   * Evaluate a single (resolved spec, group-rows) pair.
+   *
+   * For aggregate specs  → standard sum/count/avg over the field column.
+   * For calculated specs → call compute() per source row, then sum results.
+   */
+  const evaluate = (
+    spec:      ResolvedSpec,
     groupRows: ExtendedCellValue[][],
   ): number | null => {
+    if (isCalc(spec)) {
+      // Build a Record<headerName, value> for each source row, call compute,
+      // then accumulate (sum) non-null results.
+      const nums: number[] = [];
+      for (const dataRow of groupRows) {
+        const rowRecord: Record<string, ExtendedCellValue> = {};
+        for (let i = 0; i < headers.length; i++) {
+          rowRecord[headers[i]!] = dataRow[i] !== undefined ? dataRow[i]! : null;
+        }
+        const v = spec.compute(rowRecord);
+        if (typeof v === 'number') nums.push(v);
+      }
+      return nums.length === 0 ? null : nums.reduce((a, b) => a + b, 0);
+    }
+    // Aggregate spec
     if (spec.aggregator === 'count') return groupRows.length;
     const nums = groupRows
-      .map(r => r[spec.colIdx])
+      .map(r => r[(spec as ResolvedAggregateSpec).colIdx])
       .filter((v): v is number => typeof v === 'number');
     if (nums.length === 0) return null;
     const total = nums.reduce((acc, v) => acc + v, 0);
@@ -355,7 +470,7 @@ export function buildPivot(
           // No data for this (row × col) combination — return null per spec.
           return resolvedValues.map(() => null);
         }
-        return resolvedValues.map(spec => aggregate(spec, cellRows));
+        return resolvedValues.map(spec => evaluate(spec, cellRows));
       });
 
       return { keys, values };
@@ -389,7 +504,7 @@ export function buildPivot(
   const outputRows: PivotGridRow[] = groupKeyOrder.map(compositeKey => {
     const groupRows = groupMap.get(compositeKey)!;
     const keys      = compositeKey.split(GROUP_SEP);
-    const values    = resolvedValues.map(spec => aggregate(spec, groupRows));
+    const values    = resolvedValues.map(spec => evaluate(spec, groupRows));
     return { keys, values };
   });
 
