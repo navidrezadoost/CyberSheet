@@ -1,4 +1,7 @@
 import { ProviderResolutionContext, ProviderRef, MockBatchResolver } from '../src/providers';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare const expect: any;
 
 describe('ProviderResolutionContext & MockBatchResolver (PR #1)', () => {
   test('deduplicates pending refs and exposes keys', () => {

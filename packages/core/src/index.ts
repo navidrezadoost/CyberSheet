@@ -9,6 +9,15 @@ export * from './FormulaEngine';
 export * from './FormulaController';
 export * from './CollaborationEngine';
 export * from './PivotEngine';
+export * from './PivotRegistry'; // Phase 28
+export * from './PivotSnapshotStore'; // Phase 29
+export * from './PivotDataBridge'; // Phase 29 contract
+export * from './GetPivotData'; // Phase 29b
+export * from './PivotDependencyIndex'; // Phase 30b
+export * from './PivotInvalidationEngine'; // Phase 30b
+export * from './PivotRecomputeEngine'; // Phase 31a
+export * from './PivotAnchorIndex'; // Phase 32
+export * from './PivotCalculatedFields'; // Phase 33
 export * from './autocomplete';
 export * from './metadata-api';
 export * from './formatting/NumberFormatter';

@@ -6,6 +6,10 @@
  */
 
 import { FormulaEngine, FormulaContext, Worksheet, type FormulaValue } from '../src';
+declare function describe(name: string, fn: () => void): void;
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare function beforeEach(fn: () => void | Promise<void>): void;
+declare const expect: any;
 
 describe('RANDBETWEEN Function', () => {
   let engine: FormulaEngine;
