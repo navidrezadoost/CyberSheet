@@ -74,6 +74,8 @@ export class Worksheet {
   private workbook?: any; // Reference to parent Workbook (for StyleCache access)
   /** Phase 28: Internal worksheet ID for pivot registry */
   private worksheetId: string;
+  /** Reference to SpreadsheetEngine for E2 invariant enforcement */
+  private _engine?: { isMutating(): boolean };
   rowCount: number;
   colCount: number;
 
@@ -81,17 +83,31 @@ export class Worksheet {
   private _inTransaction = false;
   private _pendingEvents: SheetEvents[] = [];
 
-  constructor(name: string, rows = 1000, cols = 26, engine?: IFormulaEngine, workbook?: any) {
+  constructor(name: string, rows = 1000, cols = 26, engine?: IFormulaEngine, workbook?: any, spreadsheetEngine?: { isMutating(): boolean }) {
     this.name = name;
     this.rowCount = rows;
     this.colCount = cols;
     this.formulaEngine = engine;
     this.workbook = workbook;
+    this._engine = spreadsheetEngine;
     this.worksheetId = `ws-${name}-${Date.now()}`; // Phase 28: Unique ID
   }
 
   on(listener: (e: SheetEvents) => void) {
     return this.events.on(listener);
+  }
+
+  /**
+   * Assert that we're in a valid mutation state.
+   * Throws if called outside engine.run() (E2 invariant enforcement).
+   */
+  private assertMutating(operation: string): void {
+    if (this._engine && !this._engine.isMutating()) {
+      throw new Error(
+        `[E2 INVARIANT VIOLATION] ${operation} called outside engine.run(). ` +
+        'All mutations must occur within the engine.run() callback.'
+      );
+    }
   }
 
   /**
@@ -213,6 +229,7 @@ export class Worksheet {
    * @param displayValue  Optional pre-evaluated result (for read-only display)
    */
   setCellFormula(addr: Address, formula: string, displayValue?: Cell['value']): void {
+    this.assertMutating('setCellFormula');
     if (!this._inTransaction) {
       return this.runTransaction(() => this.setCellFormula(addr, formula, displayValue));
     }
@@ -230,6 +247,7 @@ export class Worksheet {
    * Does NOT fire events (spill is internal bookkeeping).
    */
   setSpillSource(addr: Address, source: Cell['spillSource']): void {
+    this.assertMutating('setSpillSource');
     if (!this._inTransaction) {
       return this.runTransaction(() => this.setSpillSource(addr, source));
     }
@@ -245,6 +263,7 @@ export class Worksheet {
    * Does NOT fire events.
    */
   setSpilledFrom(addr: Address, from: Cell['spilledFrom']): void {
+    this.assertMutating('setSpilledFrom');
     if (!this._inTransaction) {
       return this.runTransaction(() => this.setSpilledFrom(addr, from));
     }
@@ -260,6 +279,7 @@ export class Worksheet {
    * Sets spillSource to undefined (preserves mono-shape — never delete).
    */
   clearSpillSource(addr: Address): void {
+    this.assertMutating('clearSpillSource');
     if (!this._inTransaction) {
       return this.runTransaction(() => this.clearSpillSource(addr));
     }
@@ -277,6 +297,7 @@ export class Worksheet {
    * Sets spilledFrom to undefined (preserves mono-shape — never delete).
    */
   clearSpilledFrom(addr: Address): void {
+    this.assertMutating('clearSpilledFrom');
     if (!this._inTransaction) {
       return this.runTransaction(() => this.clearSpilledFrom(addr));
     }

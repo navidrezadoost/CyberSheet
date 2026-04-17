@@ -216,7 +216,7 @@ export class SpreadsheetEngine {
   private _txn: TransactionContext | null = null;
 
   constructor(name = 'Sheet1') {
-    this._ws = new Worksheet(name);
+    this._ws = new Worksheet(name, 1000, 26, undefined, undefined, this);
     this._formulaEngine = new FormulaEngine();
 
     // Scheduler is PRIVATE — external callers cannot flush() directly
@@ -322,6 +322,14 @@ export class SpreadsheetEngine {
 
       throw err;
     }
+  }
+
+  /**
+   * Check if the engine is currently in MUTATING state.
+   * Used by Worksheet to enforce E2 invariant (mutations only inside run()).
+   */
+  isMutating(): boolean {
+    return this._state === ExecutionState.MUTATING;
   }
 
   /**
