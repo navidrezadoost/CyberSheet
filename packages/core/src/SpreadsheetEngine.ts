@@ -252,10 +252,11 @@ export class SpreadsheetEngine {
    *
    * Throws:
    *   • ExecutionError(CONCURRENT_RUN) if already running
+   *   • ExecutionError(ILLEGAL_STATE) if callback is async
    *   • TransactionError if transaction fails
    *   • Any error thrown by callback (after rollback)
    */
-  async run(callback: (ws: Worksheet) => void | Promise<void>): Promise<void> {
+  async run(callback: (ws: Worksheet) => void): Promise<void> {
     // E1: Single execution thread
     if (this._state !== ExecutionState.IDLE) {
       throw new ExecutionError(
@@ -271,7 +272,16 @@ export class SpreadsheetEngine {
       this._txn = new TransactionContext(this._ws);
 
       // Execute callback (mutations allowed)
-      await callback(this._ws);
+      // CRITICAL: Reject async callbacks to prevent mutations after state transition
+      const result = callback(this._ws);
+      if (result && typeof result === 'object' && 'then' in result) {
+        throw new ExecutionError(
+          'ILLEGAL_STATE',
+          'engine.run() callback must be synchronous. Async callbacks create '
+          + 'ambiguous execution windows where mutations could occur after MUTATING '
+          + 'state ends. Use synchronous mutations only.'
+        );
+      }
 
       // Commit → get dirty set
       const { patch, inverse } = this._txn.commit();

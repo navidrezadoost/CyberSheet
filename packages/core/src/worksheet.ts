@@ -165,11 +165,25 @@ export class Worksheet {
     this.events.emit(lastEvent);
   }
 
-  getCell(addr: Address): Cell | undefined {
+  /**
+   * Get a cell object (returns IMMUTABLE view to prevent direct mutation).
+   * 
+   * CRITICAL: This returns a frozen object to enforce E2 invariant.
+   * Direct mutation of returned cells is impossible:
+   *   const cell = ws.getCell(addr);
+   *   cell.value = 10;  // ❌ TypeError: Cannot assign to read only property
+   * 
+   * All mutations must go through setCellValue(), setCellFormula(), etc.
+   */
+  getCell(addr: Address): Readonly<Cell> | undefined {
     // Redirect non-anchor merged cells to their anchor.
     const anchor = this.mergeStore.getAnchor(addr.row, addr.col);
     const { row, col } = anchor ?? addr;
-    return this.cells.get(row, col);
+    const cell = this.cells.get(row, col);
+    
+    // Return frozen copy to prevent direct mutation
+    // This closes the "read → mutate via returned object" escape hatch
+    return cell ? Object.freeze({ ...cell }) : undefined;
   }
 
   /**
@@ -191,6 +205,14 @@ export class Worksheet {
     return this.mergeStore.getAnchor(addr.row, addr.col) ?? addr;
   }
 
+  /**
+   * Internal: Get-or-create cell for mutation.
+   * 
+   * SAFETY: This is called ONLY from public mutation methods that already
+   * enforce assertMutating(). The mutation choke point is at the public API
+   * boundary, not here. This keeps internal implementation flexible while
+   * maintaining invariant enforcement at the architectural boundary.
+   */
   private ensureCell(addr: Address): Cell {
     const resolved = this.resolveAnchor(addr);
     return this.cells.getOrCreate(resolved.row, resolved.col);
