@@ -80,6 +80,10 @@
  * E5. Deterministic execution
  *     Same mutations + same topological order → same result. Always.
  *
+ * E6. Re-entrancy safety
+ *     Event handlers cannot call run() (state is COMPUTING during emission).
+ *     Attempts throw ExecutionError. Use setTimeout for sequential runs.
+ *
  * ==========================================================================
  * API SURFACE
  * ==========================================================================

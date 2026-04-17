@@ -124,6 +124,34 @@ Enables reproducible testing, undo/redo correctness, distributed sync.
 
 ---
 
+### **E6: Re-entrancy Safety**
+> Event handlers cannot call `run()` (re-entrancy blocked).
+
+**Enforcement**:  
+Events are emitted while `state = COMPUTING`. Any `run()` attempt hits the E1 guard:
+```ts
+if (this._state !== ExecutionState.IDLE) {
+  throw new ExecutionError('CONCURRENT_RUN', ...);
+}
+```
+
+**Why**:  
+Prevents infinite loops, broken determinism, and nested execution cycles.
+
+**Legal Pattern**:  
+Use `setTimeout` or `queueMicrotask` for sequential runs:
+```ts
+engine.on('cellsChanged', () => {
+  setTimeout(async () => {
+    await engine.run((ws) => { /* next mutation */ });
+  }, 0);
+});
+```
+
+**Test**: [spreadsheet-engine.test.ts](../packages/core/__tests__/spreadsheet-engine.test.ts#L280)
+
+---
+
 ## 🔄 EXECUTION PIPELINE
 
 ```
@@ -211,10 +239,11 @@ engine.run(async (ws) => {
 | E3: Scheduler encapsulation | `spreadsheet-engine.test.ts` | 119 |
 | E4: Event ordering | `spreadsheet-engine.test.ts` | 142 |
 | E5: Deterministic execution | `spreadsheet-engine.test.ts` | 206 |
-| Full pipeline | `spreadsheet-engine.test.ts` | 250 |
+| E6: Re-entrancy safety | `spreadsheet-engine.test.ts` | 280 |
+| Full pipeline | `spreadsheet-engine.test.ts` | 375 |
 
-**Total Tests**: 18  
-**Coverage**: All 5 invariants + full integration + edge cases
+**Total Tests**: 21  
+**Coverage**: All 6 invariants + full integration + edge cases
 
 ---
 
@@ -239,6 +268,7 @@ The engine enforces correctness at **three levels**:
 - ✅ Single execution thread (no interleaving)
 - ✅ Mutation isolation (controlled state transitions)
 - ✅ Event ordering (observers see consistent state)
+- ✅ Re-entrancy safety (event handlers cannot nest)
 
 **Proven by**: [spreadsheet-engine.test.ts](../packages/core/__tests__/spreadsheet-engine.test.ts)
 
@@ -356,6 +386,7 @@ The orchestration layer is **complete** when:
 - [x] Scheduler is encapsulated (E3)
 - [x] Events fire after recompute (E4)
 - [x] Execution is deterministic (E5)
+- [x] Re-entrancy is blocked (E6)
 - [x] Error recovery works (rollback + reset)
 - [x] Full pipeline integration tested
 
@@ -373,5 +404,6 @@ This is a **compiler-grade execution kernel** with:
 - Algebraic correctness (patches)
 - Temporal correctness (scheduler)
 - Compositional correctness (orchestrator)
+- **Structural safety** (impossible to use incorrectly)
 
 **This separates robust systems from fragile ones.**

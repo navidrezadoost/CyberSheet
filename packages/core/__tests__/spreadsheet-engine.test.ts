@@ -278,8 +278,109 @@ describe('Invariant E5 — Deterministic Execution', () => {
   });
 });
 
+// ---------------------------------------------------------------------------// Invariant E6: Re-entrancy Safety
 // ---------------------------------------------------------------------------
-// Integration: Full Pipeline
+
+describe('Invariant E6 — Re-entrancy Safety', () => {
+  test('event handlers cannot call run() (re-entrancy blocked)', async () => {
+    const engine = new SpreadsheetEngine();
+
+    let reentrantCallAttempted = false;
+    let reentrantCallThrew = false;
+
+    engine.on('cellsChanged', () => {
+      reentrantCallAttempted = true;
+      try {
+        // Attempt re-entrant run() — should throw
+        engine.run((ws) => {
+          ws.setCellValue({ row: 2, col: 1 }, 'illegal');
+        });
+      } catch (err) {
+        if (err instanceof ExecutionError && err.code === 'CONCURRENT_RUN') {
+          reentrantCallThrew = true;
+        }
+      }
+    });
+
+    await engine.run((ws) => {
+      ws.setCellValue({ row: 1, col: 1 }, 'trigger');
+    });
+
+    expect(reentrantCallAttempted).toBe(true);
+    expect(reentrantCallThrew).toBe(true);
+
+    // State should be IDLE after successful completion
+    expect(engine.executionState).toBe('IDLE');
+
+    // Original mutation succeeded
+    expect(engine.getCellValue({ row: 1, col: 1 })).toBe('trigger');
+
+    // Re-entrant mutation did NOT succeed
+    expect(engine.getCellValue({ row: 2, col: 1 })).toBeNull();
+  });
+
+  test('nested run() from async event handler is blocked', async () => {
+    const engine = new SpreadsheetEngine();
+
+    let asyncReentryBlocked = false;
+
+    engine.on('formulasEvaluated', async () => {
+      await new Promise(resolve => setTimeout(resolve, 0)); // yield
+
+      try {
+        await engine.run((ws) => {
+          ws.setCellValue({ row: 3, col: 1 }, 'nested');
+        });
+      } catch (err) {
+        if (err instanceof ExecutionError && err.code === 'CONCURRENT_RUN') {
+          asyncReentryBlocked = true;
+        }
+      }
+    });
+
+    await engine.run((ws) => {
+      ws.setCellValue({ row: 1, col: 1 }, 10);
+      const cell = ws.getCell({ row: 2, col: 1 });
+      if (cell) cell.formula = '=A1*2';
+    });
+
+    // Wait for async event handler to complete
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(asyncReentryBlocked).toBe(true);
+    expect(engine.getCellValue({ row: 3, col: 1 })).toBeNull();
+  });
+
+  test('sequential run() calls after event emission succeed', async () => {
+    const engine = new SpreadsheetEngine();
+
+    let secondRunCompleted = false;
+
+    engine.on('cellsChanged', () => {
+      // Don't call run() here — wait for event emission to complete
+      setTimeout(async () => {
+        // THIS is legal: sequential run() after first completes
+        await engine.run((ws) => {
+          ws.setCellValue({ row: 2, col: 1 }, 'sequential');
+        });
+        secondRunCompleted = true;
+      }, 5);
+    });
+
+    await engine.run((ws) => {
+      ws.setCellValue({ row: 1, col: 1 }, 'first');
+    });
+
+    // Wait for setTimeout callback
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(secondRunCompleted).toBe(true);
+    expect(engine.getCellValue({ row: 1, col: 1 })).toBe('first');
+    expect(engine.getCellValue({ row: 2, col: 1 })).toBe('sequential');
+  });
+});
+
+// ---------------------------------------------------------------------------// Integration: Full Pipeline
 // ---------------------------------------------------------------------------
 
 describe('Integration — Full Execution Pipeline', () => {
