@@ -1,0 +1,519 @@
+/**
+ * Excel 365 Online Ribbon UI Styles
+ * 
+ * Extracted from Excel Online using DevTools inspection
+ * Color palette, spacing, and interaction states match Excel exactly
+ */
+
+/* ==================== Ribbon Container ==================== */
+
+.ribbon {
+  height: 96px;
+  background: #f3f2f1;
+  border-bottom: 1px solid #edebe9;
+  font-family: "Segoe UI", "Segoe UI Web", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  display: flex;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.ribbon-content {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+
+/* ==================== Ribbon Group ==================== */
+
+.ribbon-group {
+  display: inline-flex;
+  flex-direction: column;
+  padding: 4px 8px;
+  gap: 4px;
+  border-right: 1px solid #e1dfdd;
+  min-height: 88px;
+}
+
+.ribbon-group:last-child {
+  border-right: none;
+}
+
+.ribbon-group-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.ribbon-group-title {
+  font-size: 11px;
+  color: #605e5c;
+  text-align: center;
+  padding-top: 2px;
+  white-space: nowrap;
+}
+
+/* ==================== Ribbon Row ==================== */
+
+.ribbon-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ==================== Ribbon Button ==================== */
+
+.ribbon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #201f1e;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  position: relative;
+}
+
+/* Small buttons (default) - 32x32px */
+.ribbon-btn-small {
+  width: 32px;
+  height: 32px;
+}
+
+/* Large buttons (for primary actions) - 48x48px */
+.ribbon-btn-large {
+  width: 48px;
+  height: 48px;
+}
+
+.ribbon-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ribbon-btn-label {
+  font-size: 10px;
+  margin-top: 2px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Hover state - matches Excel #edebe9 */
+.ribbon-btn:hover:not(:disabled) {
+  background: #edebe9;
+  border-color: #edebe9;
+}
+
+/* Active/pressed state - matches Excel #e1dfdd */
+.ribbon-btn:active:not(:disabled),
+.ribbon-btn.active {
+  background: #e1dfdd;
+  border-color: #d2d0ce;
+}
+
+/* Focus state - accessibility */
+.ribbon-btn:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: 2px;
+}
+
+/* Disabled state - matches Excel #a19f9d */
+.ribbon-btn:disabled {
+  color: #a19f9d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ribbon-btn:disabled .ribbon-btn-icon {
+  color: #a19f9d;
+}
+
+/* ==================== Ribbon Select (Dropdown) ==================== */
+
+.ribbon-select {
+  height: 24px;
+  padding: 0 24px 0 8px;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #201f1e;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url('data:image/svg+xml;charset=UTF-8,<svg width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M2 4l4 4 4-4" fill="none" stroke="%23605e5c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  transition: border-color 0.1s ease;
+}
+
+.ribbon-select:hover:not(:disabled) {
+  border-color: #323130;
+}
+
+.ribbon-select:focus {
+  outline: none;
+  border-color: #0078d4;
+  box-shadow: 0 0 0 1px #0078d4;
+}
+
+.ribbon-select:disabled {
+  background: #f3f2f1;
+  color: #a19f9d;
+  cursor: not-allowed;
+  border-color: #c8c6c4;
+}
+
+/* ==================== Color Picker Button ==================== */
+
+.ribbon-color-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 32px;
+  height: 32px;
+  position: relative;
+}
+
+.ribbon-color-icon {
+  font-size: 16px;
+  margin-bottom: 2px;
+}
+
+.ribbon-color-indicator {
+  width: 20px;
+  height: 3px;
+  border-radius: 1px;
+  position: absolute;
+  bottom: 6px;
+}
+
+/* ==================== Split Button ==================== */
+
+.ribbon-split-btn {
+  display: flex;
+  flex-direction: row;
+}
+
+.ribbon-split-btn-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.ribbon-split-btn-dropdown {
+  width: 16px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid #e1dfdd;
+}
+
+/* ==================== Tooltip Enhancement ==================== */
+
+.ribbon-btn[title]:hover::after,
+.ribbon-select[title]:hover::after {
+  /* Browser native tooltips are used - no custom styling needed */
+  /* Excel uses custom Fluent UI tooltips, but we start with native for simplicity */
+}
+
+/* ==================== Responsive Behavior ==================== */
+
+@media (max-width: 768px) {
+  .ribbon {
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .ribbon-group {
+    min-height: auto;
+  }
+
+  .ribbon-btn-label {
+    display: none;
+  }
+}
+
+/* ==================== Font Color Split Button ==================== */
+
+.cs-font-color-split-button {
+  display: flex;
+  position: relative;
+  height: 32px;
+}
+
+.cs-font-color-main-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px 0 0 2px;
+  background: transparent;
+  color: #201f1e;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background 0.1s ease;
+}
+
+.cs-font-color-main-btn:hover {
+  background: #edebe9;
+  border-color: #edebe9;
+}
+
+.cs-font-color-icon {
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.cs-font-color-bar {
+  display: block;
+  width: 20px;
+  height: 3px;
+  border-radius: 1px;
+  margin-top: 2px;
+}
+
+/* Mixed state - diagonal stripe pattern */
+.cs-font-color-bar.mixed {
+  background: repeating-linear-gradient(
+    45deg,
+    #999,
+    #999 2px,
+    #fff 2px,
+    #fff 4px
+  );
+}
+
+.cs-font-color-dropdown-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0 2px 2px 0;
+  border-left: 1px solid #e1dfdd;
+  background: transparent;
+  color: #201f1e;
+  cursor: pointer;
+  font-size: 8px;
+  transition: background 0.1s ease;
+}
+
+.cs-font-color-dropdown-btn:hover {
+  background: #edebe9;
+  border-color: #edebe9;
+  border-left-color: #d2d0ce;
+}
+
+.cs-dropdown-arrow {
+  line-height: 1;
+}
+
+/* ==================== Color Dropdown ==================== */
+
+.cs-color-dropdown {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  background: #ffffff;
+  border: 1px solid #d1d1d1;
+  border-radius: 2px;
+  padding: 8px;
+  box-shadow: 0 3.2px 7.2px rgba(0, 0, 0, 0.132), 0 0.6px 1.8px rgba(0, 0, 0, 0.108);
+  z-index: 1000;
+  min-width: 200px;
+}
+
+.cs-section {
+  margin-bottom: 8px;
+}
+
+.cs-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.cs-section-title {
+  font-size: 11px;
+  color: #605e5c;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+/* ==================== Automatic / No Fill Button ==================== */
+
+.cs-automatic-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #201f1e;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.cs-automatic-btn:hover {
+  background: #edebe9;
+  border-color: #edebe9;
+}
+
+.cs-automatic-swatch {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #d1d1d1;
+  border-radius: 2px;
+}
+
+/* ==================== Color Grid ==================== */
+
+.cs-color-grid {
+  display: flex;
+  gap: 2px;
+}
+
+.cs-color-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cs-color-cell {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid #d1d1d1;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: border-color 0.1s ease, transform 0.1s ease;
+}
+
+.cs-color-cell:hover {
+  border-color: #605e5c;
+  transform: scale(1.1);
+  z-index: 1;
+}
+
+.cs-color-cell.selected {
+  border: 2px solid #0078d4;
+  border-radius: 2px;
+}
+
+.cs-color-cell:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: 2px;
+}
+
+/* ==================== Standard Colors Row ==================== */
+
+.cs-standard-row {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+/* ==================== More Colors Button ==================== */
+
+.cs-more-colors-btn {
+  width: 100%;
+  padding: 6px 8px;
+  margin-top: 8px;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #201f1e;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.cs-more-colors-btn:hover {
+  background: #f3f2f1;
+  border-color: #605e5c;
+}
+
+/* ==================== Dark Mode Support (Future) ==================== */
+
+@media (prefers-color-scheme: dark) {
+  .ribbon {
+    background: #252423;
+    border-bottom-color: #3b3a39;
+  }
+
+  .ribbon-group {
+    border-right-color: #3b3a39;
+  }
+
+  .ribbon-group-title {
+    color: #f3f2f1;
+  }
+
+  .ribbon-btn {
+    color: #f3f2f1;
+  }
+
+  .ribbon-btn:hover:not(:disabled) {
+    background: #3b3a39;
+    border-color: #3b3a39;
+  }
+
+  .ribbon-btn:active:not(:disabled),
+  .ribbon-btn.active {
+    background: #484644;
+    border-color: #605e5c;
+  }
+
+  .ribbon-select {
+    background: #252423;
+    color: #f3f2f1;
+    border-color: #605e5c;
+  }
+
+  .ribbon-select:hover:not(:disabled) {
+    border-color: #8a8886;
+  }
+
+  .cs-color-dropdown {
+    background: #252423;
+    border-color: #3b3a39;
+  }
+
+  .cs-font-color-main-btn,
+  .cs-font-color-dropdown-btn,
+  .cs-automatic-btn,
+  .cs-more-colors-btn {
+    color: #f3f2f1;
+  }
+
+  .cs-section-title {
+    color: #f3f2f1;
+  }
+}
