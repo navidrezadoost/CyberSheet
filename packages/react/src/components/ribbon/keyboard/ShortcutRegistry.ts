@@ -24,6 +24,9 @@ import type {
  * - Browser differences (Cmd vs Ctrl on Mac)
  * - Key name normalization ('esc' → 'Escape')
  * - Modifier key detection
+ * - Dead keys (German/French keyboards)
+ * 
+ * CRITICAL: Caller must check event.isComposing before calling this
  */
 export function parseKeyboardEvent(event: KeyboardEvent): ParsedShortcut {
   // Normalize key name
@@ -34,22 +37,32 @@ export function parseKeyboardEvent(event: KeyboardEvent): ParsedShortcut {
     'Esc': 'Escape',
     'Del': 'Delete',
     ' ': 'Space',
+    'Spacebar': 'Space', // Old Safari
   };
 
   if (keyMappings[key]) {
     key = keyMappings[key];
+  }
+  
+  // EDGE CASE: Dead keys produce multi-char strings (e.g., "Dead")
+  // These are composition sequences - ignore them
+  if (key.startsWith('Dead')) {
+    key = '';
   }
 
   // For letter keys, normalize to lowercase
   if (key.length === 1) {
     key = key.toLowerCase();
   }
+  
+  // EDGE CASE: Mac uses Meta (Cmd), Windows uses Ctrl
+  // We normalize: treat Cmd as Ctrl for cross-platform shortcuts
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+  const ctrl = isMac ? event.metaKey : event.ctrlKey;
 
   return {
     key,
-    // On Mac, Cmd is the primary modifier (not Ctrl)
-    // We normalize this to 'ctrl' for cross-platform shortcuts
-    ctrl: event.ctrlKey || event.metaKey,
+    ctrl,
     shift: event.shiftKey,
     alt: event.altKey,
     meta: event.metaKey,
@@ -109,10 +122,40 @@ export function parseShortcutString(keys: string): ParsedShortcut {
 }
 
 /**
+ * Debug configuration for shortcut system
+ */
+export interface ShortcutDebugConfig {
+  enabled: boolean;
+  logMatches?: boolean;   // Log successful executions
+  logMisses?: boolean;    // Log when no shortcut matches
+  logContext?: boolean;   // Log context detection
+}
+
+/**
  * ShortcutRegistry implementation
  */
 export class ShortcutRegistry implements IShortcutRegistry {
   private shortcuts: Map<string, ShortcutDefinition[]> = new Map();
+  private debugConfig: ShortcutDebugConfig = { enabled: false };
+  
+  /**
+   * Enable debug mode for visibility into shortcut execution
+   * 
+   * CRITICAL: Use this during development to catch context misclassification
+   * 
+   * Example:
+   * ```ts
+   * shortcutRegistry.setDebugMode({
+   *   enabled: true,
+   *   logMatches: true,
+   *   logMisses: true,
+   *   logContext: true
+   * });
+   * ```
+   */
+  setDebugMode(config: ShortcutDebugConfig): void {
+    this.debugConfig = config;
+  }
 
   /**
    * Register a shortcut
@@ -160,13 +203,35 @@ export class ShortcutRegistry implements IShortcutRegistry {
    * Returns true if shortcut was handled
    */
   handleKeyDown(event: KeyboardEvent, context: ShortcutContext): boolean {
+    // CRITICAL: IME Composition Guard
+    // During IME input (Japanese, Chinese, Korean, Persian with diacritics),
+    // we must NOT intercept keys - they're part of character composition
+    if (event.isComposing || event.keyCode === 229) {
+      if (this.debugConfig.enabled && this.debugConfig.logMisses) {
+        console.log('[Shortcut] Ignored - IME composing', { key: event.key });
+      }
+      return false;
+    }
+    
     // Parse event
     const parsed = parseKeyboardEvent(event);
     const keyString = shortcutToString(parsed);
+    
+    if (this.debugConfig.enabled && this.debugConfig.logContext) {
+      console.log('[Shortcut] Context', {
+        mode: context.mode,
+        isEditing: context.isEditing,
+        key: keyString,
+        parsed,
+      });
+    }
 
     // Find matching shortcuts
     const candidates = this.shortcuts.get(keyString);
     if (!candidates || candidates.length === 0) {
+      if (this.debugConfig.enabled && this.debugConfig.logMisses) {
+        console.log('[Shortcut] No candidates', { key: keyString, parsed });
+      }
       return false;
     }
 
@@ -208,12 +273,18 @@ export class ShortcutRegistry implements IShortcutRegistry {
 
     // Execute handler
     try {
-      shortcut.handler(context);
-
-      // Debug logging
-      if (process.env.NODE_ENV === 'development') {
-        console.debug(`[ShortcutRegistry] Executed: ${shortcut.id} (${keyString}) in ${context.mode}`);
+      if (this.debugConfig.enabled && this.debugConfig.logMatches) {
+        console.log('[Shortcut] Executed', {
+          id: shortcut.id,
+          label: shortcut.label,
+          key: keyString,
+          context: context.mode,
+          prevented: shouldPrevent,
+          priority: shortcut.priority,
+        });
       }
+      
+      shortcut.handler(context);
 
       return true;
     } catch (error) {

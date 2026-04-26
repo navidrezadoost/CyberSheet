@@ -3,12 +3,14 @@
  * 
  * CRITICAL: This determines which shortcuts are active
  * 
- * Detection strategy:
- * 1. Check for modal/dialog (highest priority)
- * 2. Check for cell editing (contenteditable or input focused)
- * 3. Check for formula bar editing
- * 4. Check for ribbon focus (dropdown, button, input)
- * 5. Default to grid (cell selection)
+ * Detection strategy (PRODUCTION-GRADE):
+ * 1. Locked context (for deterministic transitions)
+ * 2. Explicit data-context attribute (NEW - prevents misclassification)
+ * 3. Custom detectors (modal/dialog components)
+ * 4. Cell editing (contenteditable or input focused)
+ * 5. Formula bar editing
+ * 6. Ribbon focus (dropdown, button, input)
+ * 7. Default to grid (cell selection)
  * 
  * ⚠️ MUST be real-time (not cached) - user can switch context mid-keystroke
  */
@@ -30,19 +32,73 @@ export class ContextResolver implements IContextResolver {
    * Example: Dialog component registers detector when mounted
    */
   private detectors: Map<string, ContextDetector> = new Map();
+  
+  /**
+   * Locked context (prevents flickering during transitions)
+   * 
+   * CRITICAL: Always pair lock() with unlock()
+   */
+  private lockedContext: InteractionContext | null = null;
+  
+  /**
+   * Lock context to prevent flickering during mode transitions
+   * 
+   * Example:
+   * ```ts
+   * // When opening dialog
+   * contextResolver.lock('dialog');
+   * // ... render dialog ...
+   * // When closing dialog
+   * contextResolver.unlock();
+   * ```
+   */
+  lock(context: InteractionContext): void {
+    this.lockedContext = context;
+  }
+  
+  /**
+   * Unlock context (return to auto-detection)
+   */
+  unlock(): void {
+    this.lockedContext = null;
+  }
 
   /**
    * Get current interaction context (real-time)
    * 
    * Priority order (first match wins):
-   * 1. Custom detectors (dialog, modal)
-   * 2. Cell editing (contenteditable, input in grid)
-   * 3. Formula bar editing
-   * 4. Ribbon focus (dropdown, button)
-   * 5. Grid (default)
+   * 1. Locked context (deterministic transitions)
+   * 2. Explicit data-context attribute (PRODUCTION-GRADE)
+   * 3. Custom detectors (dialog, modal)
+   * 4. Cell editing (contenteditable, input in grid)
+   * 5. Formula bar editing
+   * 6. Ribbon focus (dropdown, button)
+   * 7. Grid (default)
    */
   getCurrentContext(): InteractionContext {
-    // 1. Check custom detectors (highest priority)
+    // 1. Check locked context (highest priority)
+    if (this.lockedContext) {
+      return this.lockedContext;
+    }
+    
+    // 2. Check explicit context boundaries (CRITICAL for production)
+    // Components should set data-context="dialog", etc.
+    const activeElement = document.activeElement;
+    if (activeElement) {
+      // Walk up DOM tree looking for explicit context boundary
+      let element: Element | null = activeElement;
+      let depth = 0;
+      while (element && element !== document.body && depth < 10) {
+        const explicitContext = element.getAttribute('data-context');
+        if (explicitContext) {
+          return explicitContext as InteractionContext;
+        }
+        element = element.parentElement;
+        depth++;
+      }
+    }
+    
+    // 3. Check custom detectors
     for (const detector of this.detectors.values()) {
       const context = detector();
       if (context !== null) {
@@ -50,9 +106,7 @@ export class ContextResolver implements IContextResolver {
       }
     }
 
-    // 2. Check for editing context
-    const activeElement = document.activeElement;
-
+    // 4. Check for editing context
     if (!activeElement) {
       return 'grid';
     }

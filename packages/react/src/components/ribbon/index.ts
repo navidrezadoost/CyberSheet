@@ -59,7 +59,7 @@ export { useGridNavigation, useListNavigation, type UseGridNavigationOptions, ty
 export { useKeyboardShortcuts, useContextDetector, useDisableShortcut, type UseKeyboardShortcutsOptions } from './hooks/useKeyboardShortcuts';
 
 // Keyboard Shortcut System
-export { ShortcutRegistry, shortcutRegistry, parseKeyboardEvent, shortcutToString, parseShortcutString } from './keyboard/ShortcutRegistry';
+export { ShortcutRegistry, shortcutRegistry, parseKeyboardEvent, shortcutToString, parseShortcutString, type ShortcutDebugConfig } from './keyboard/ShortcutRegistry';
 export { ContextResolver, contextResolver } from './keyboard/ContextResolver';
 export { registerStandardShortcuts, STANDARD_SHORTCUTS, BOLD_SHORTCUT, ITALIC_SHORTCUT, UNDERLINE_SHORTCUT, UNDO_SHORTCUT, REDO_SHORTCUT } from './keyboard/shortcuts';
 export type { InteractionContext, ShortcutContext, ShortcutDefinition, ParsedShortcut, IShortcutRegistry, IContextResolver } from './keyboard/types';

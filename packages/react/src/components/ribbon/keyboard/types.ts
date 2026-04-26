@@ -216,4 +216,33 @@ export interface IContextResolver {
    * Example: Detect when dropdown is open
    */
   registerDetector(name: string, detector: () => InteractionContext | null): void;
+
+  /**
+   * Unregister custom detector
+   */
+  unregisterDetector(name: string): void;
+
+  /**
+   * Lock context to prevent flickering during transitions
+   * 
+   * CRITICAL: Always pair lock() with unlock()
+   * 
+   * Example:
+   * ```ts
+   * contextResolver.lock('dialog');
+   * // ... dialog open ...
+   * contextResolver.unlock();
+   * ```
+   */
+  lock(context: InteractionContext): void;
+
+  /**
+   * Unlock context (return to auto-detection)
+   */
+  unlock(): void;
+
+  /**
+   * Clear all detectors (cleanup)
+   */
+  clear(): void;
 }

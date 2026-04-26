@@ -480,6 +480,27 @@ export class ExcelRenderer {
     const ctx = this.multiCanvas.getContext('overlay');
     const { selectionColor } = this.theme;
 
+    // Draw hover border first (behind selection)
+    if (this.hoveredCell) {
+      const hoverRect = this.rectForRange(
+        this.hoveredCell.row,
+        this.hoveredCell.col,
+        this.hoveredCell.row,
+        this.hoveredCell.col
+      );
+      
+      if (hoverRect) {
+        // Figma-style hover border (blue, 1px, semi-transparent)
+        ctx.strokeStyle = 'rgba(24, 144, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(hoverRect.x + 0.5, hoverRect.y + 0.5, hoverRect.w - 1, hoverRect.h - 1);
+        
+        // Subtle background highlight
+        ctx.fillStyle = 'rgba(24, 144, 255, 0.05)';
+        ctx.fillRect(hoverRect.x + 1, hoverRect.y + 1, hoverRect.w - 2, hoverRect.h - 2);
+      }
+    }
+
     const sels = this.selections.length ? this.selections : (this.selection ? [this.selection] : []);
 
     for (const sel of sels) {
@@ -518,8 +539,73 @@ export class ExcelRenderer {
           handleSize,
           handleSize
         );
+        
+        // Figma-style dimension display
+        this.renderDimensionLabels(ctx, rect, r1, r2, c1, c2);
       }
     }
+  }
+
+  /**
+   * Render Figma-style dimension labels (width x height)
+   * Displayed near the selection with a subtle background
+   */
+  private renderDimensionLabels(
+    ctx: CanvasRenderingContext2D,
+    rect: { x: number; y: number; w: number; h: number },
+    r1: number,
+    r2: number,
+    c1: number,
+    c2: number
+  ) {
+    // Calculate dimensions
+    const widthPx = Math.round(rect.w);
+    const heightPx = Math.round(rect.h);
+    const numRows = r2 - r1 + 1;
+    const numCols = c2 - c1 + 1;
+    
+    // Format dimension text (show both pixel size and cell count)
+    let dimensionText = `${widthPx} × ${heightPx}`;
+    if (numRows > 1 || numCols > 1) {
+      dimensionText += ` (${numCols} × ${numRows})`;
+    }
+    
+    // Measure text
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const textWidth = ctx.measureText(dimensionText).width;
+    const padding = 6;
+    const labelWidth = textWidth + padding * 2;
+    const labelHeight = 20;
+    
+    // Position label above selection (or below if too close to top)
+    const spaceAbove = rect.y - this.options.headerHeight;
+    const spaceBelow = this.height - (rect.y + rect.h);
+    
+    let labelX = rect.x + rect.w / 2 - labelWidth / 2;
+    let labelY = spaceAbove > labelHeight + 8 
+      ? rect.y - labelHeight - 4
+      : rect.y + rect.h + 4;
+    
+    // Keep label within viewport
+    const maxX = this.width - labelWidth - 8;
+    const minX = this.options.headerWidth + 8;
+    labelX = Math.max(minX, Math.min(labelX, maxX));
+    
+    // Draw label background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 4);
+    ctx.fill();
+    
+    // Draw text
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(dimensionText, labelX + labelWidth / 2, labelY + labelHeight / 2);
+    
+    // Reset text alignment
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
   }
 
   // ============================================================================
