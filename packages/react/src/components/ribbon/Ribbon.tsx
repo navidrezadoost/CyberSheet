@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { HomeTab } from './HomeTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import './ribbon.css';
@@ -6,12 +6,13 @@ import './ribbon.css';
 export interface RibbonProps {
   commandManager: any;
   selection: any;
+  activeTab?: string;
 }
 
 /**
- * Ribbon - Main Ribbon container with tab navigation
+ * Ribbon - Main Ribbon content container
  * 
- * Top-level component that manages tab switching and renders the active tab content.
+ * Renders the active tab content based on the activeTab prop.
  * Currently implements Home tab only. Future tabs:
  * - Insert
  * - Page Layout
@@ -26,12 +27,11 @@ export interface RibbonProps {
  * @example
  * <Ribbon 
  *   commandManager={workbook.commandManager} 
- *   selection={getCurrentSelection()} 
+ *   selection={getCurrentSelection()}
+ *   activeTab="Home"
  * />
  */
-export const Ribbon: React.FC<RibbonProps> = ({ commandManager, selection }) => {
-  const [activeTab, setActiveTab] = useState<'home' | 'insert' | 'formulas'>('home');
-
+export const Ribbon: React.FC<RibbonProps> = ({ commandManager, selection, activeTab = 'Home' }) => {
   // Set up global keyboard shortcuts (single entry point)
   useKeyboardShortcuts({
     commandManager,
@@ -42,36 +42,23 @@ export const Ribbon: React.FC<RibbonProps> = ({ commandManager, selection }) => 
 
   return (
     <div className="ribbon">
-      {/* Tab Navigation (future enhancement) */}
-      {/* 
-      <div className="ribbon-tabs">
-        <button 
-          className={activeTab === 'home' ? 'active' : ''} 
-          onClick={() => setActiveTab('home')}
-        >
-          Home
-        </button>
-        <button 
-          className={activeTab === 'insert' ? 'active' : ''} 
-          onClick={() => setActiveTab('insert')}
-        >
-          Insert
-        </button>
-        <button 
-          className={activeTab === 'formulas' ? 'active' : ''} 
-          onClick={() => setActiveTab('formulas')}
-        >
-          Formulas
-        </button>
-      </div>
-      */}
-
       {/* Active Tab Content */}
-      {activeTab === 'home' && (
+      {activeTab === 'Home' && (
         <HomeTab commandManager={commandManager} selection={selection} />
       )}
       
       {/* Future tabs will be added here */}
+      {activeTab === 'Insert' && (
+        <div className="ribbon-placeholder">
+          <p>Insert tab coming soon...</p>
+        </div>
+      )}
+      
+      {activeTab === 'Formulas' && (
+        <div className="ribbon-placeholder">
+          <p>Formulas tab coming soon...</p>
+        </div>
+      )}
     </div>
   );
 };

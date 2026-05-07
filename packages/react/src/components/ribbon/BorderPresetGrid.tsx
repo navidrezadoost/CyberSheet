@@ -16,7 +16,6 @@ import {
   BorderRightRegular,
   BorderNoneRegular,
   BorderAllRegular,
-  BorderOuterRegular,
   BorderBottomDoubleRegular,
   BorderBottomThickRegular,
   BorderTopBottomRegular,
@@ -47,7 +46,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   BorderRightRegular,
   BorderNoneRegular,
   BorderAllRegular,
-  BorderOuterRegular,
+  BorderOuterRegular: BorderAllRegular, // Using BorderAllRegular as fallback
   BorderBottomDoubleRegular,
   BorderBottomThickRegular,
   BorderTopBottomRegular,

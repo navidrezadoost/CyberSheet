@@ -4,3 +4,8 @@ export * from './useFormulaController';
 export * from './FormulaSuggestions';
 export * from './SheetTabs';
 export * from './conditional-formatting';
+export * from './components/ExcelApp';
+export * from './components/TitleBar';
+export * from './components/RibbonTabs';
+export * from './components/StatusBar';
+export * from './components/ribbon';

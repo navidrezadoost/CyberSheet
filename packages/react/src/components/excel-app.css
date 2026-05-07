@@ -1,0 +1,352 @@
+/* Microsoft Excel Clone - CSS */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --excel-green: #217346;
+  --excel-green-dark: #185c37;
+  --ribbon-bg: #f3f3f3;
+  --ribbon-border: #d1d1d1;
+  --tab-active: #ffffff;
+  --tab-hover: #e5e5e5;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --border-light: #e0e0e0;
+  --border-medium: #c8c8c8;
+  --accent-blue: #0078d4;
+  --status-bg: #217346;
+}
+
+body {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.excel-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ===== Title Bar ===== */
+.title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  background: var(--excel-green);
+  padding: 0 4px;
+  color: white;
+  -webkit-app-region: drag;
+}
+
+.title-bar-left,
+.title-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.title-bar-center {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.file-name {
+  opacity: 0.95;
+}
+
+.title-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 2px;
+  height: 24px;
+}
+
+.title-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.quick-access-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.qat-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 2px;
+  font-size: 11px;
+}
+
+.qat-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.qat-label {
+  font-size: 11px;
+}
+
+.toggle-switch {
+  width: 28px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 7px;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s;
+}
+
+.toggle-switch.active {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.toggle-switch.active::after {
+  left: 16px;
+}
+
+.search-btn,
+.share-btn {
+  gap: 4px;
+  font-size: 11px;
+}
+
+.search-btn span,
+.share-btn span {
+  font-size: 11px;
+}
+
+.user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  margin: 0 4px;
+  cursor: pointer;
+}
+
+.user-avatar:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.window-btn {
+  width: 46px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.window-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.window-btn.close:hover {
+  background: #c42b1c;
+}
+
+/* ===== Ribbon Tabs ===== */
+.ribbon-tabs {
+  display: flex;
+  align-items: flex-end;
+  height: 28px;
+  background: var(--excel-green);
+  padding: 0 4px;
+}
+
+.ribbon-tab {
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 3px 3px 0 0;
+  transition: all 0.1s;
+}
+
+.ribbon-tab:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ribbon-tab.active {
+  background: var(--ribbon-bg);
+  color: var(--text-primary);
+}
+
+/* ===== Ribbon (imported from ribbon.css) ===== */
+/* Note: The ribbon styles are already defined in ribbon/ribbon.css */
+
+/* ===== Spreadsheet Area ===== */
+.spreadsheet-area {
+  flex: 1;
+  background: #e8e8e8;
+  display: flex;
+  overflow: hidden;
+}
+
+.spreadsheet-placeholder {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-style: italic;
+  margin: auto;
+}
+
+/* ===== Status Bar ===== */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  background: var(--status-bg);
+  padding: 0 8px;
+  color: white;
+}
+
+.status-left,
+.status-center,
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-text {
+  font-size: 11px;
+}
+
+.status-item {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.view-buttons {
+  display: flex;
+  gap: 2px;
+}
+
+.view-btn {
+  width: 24px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.view-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.view-btn.active {
+  color: white;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-btn {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: white;
+  font-size: 14px;
+  border-radius: 2px;
+}
+
+.zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.zoom-slider {
+  width: 100px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.zoom-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.zoom-level {
+  font-size: 11px;
+  min-width: 35px;
+  text-align: right;
+}

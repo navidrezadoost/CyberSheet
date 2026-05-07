@@ -25,6 +25,10 @@ export * from './formatting/NumberFormatSpec';
 // ExcelFormatGrammar is internal - used by NumberFormatter
 export * from './StyleCache';
 export * from './CommandManager';
+export * from './ClipboardService';
+export * from './SelectionManager';
+export * from './FormattingController';
+export * from './FileOperations';
 export * from './CellLayout';
 export * from './ConditionalFormattingEngine';
 export * from './ConditionalFormattingBatchEngine';

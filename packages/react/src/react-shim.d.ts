@@ -3,6 +3,8 @@ declare module 'react' {
   export type FC<P = {}> = (props: P & { children?: any }) => any;
   export const useEffect: any;
   export const useRef: any;
+  export const useCallback: any;
+  export const useMemo: any;
   export function useState<T>(initial: T): [T, (v: T) => void];
   const React: { createElement: any };
   export default React;

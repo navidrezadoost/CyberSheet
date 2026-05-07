@@ -26,6 +26,12 @@ export interface FormulaBarProps {
   onEditModeChange: (editing: boolean) => void;
   /** Optional validation error message */
   validationError?: string;
+  /** Callback when user navigates to a cell via name box */
+  onNavigateToCell?: (address: Address) => void;
+  /** Callback when user clicks function insert button */
+  onInsertFunction?: () => void;
+  /** Named ranges for name box dropdown */
+  namedRanges?: Array<{ name: string; address: Address | string }>;
   /** Custom class name */
   className?: string;
   /** Custom styles */
@@ -44,6 +50,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   isEditing,
   onEditModeChange,
   validationError,
+  onNavigateToCell,
+  onInsertFunction,
+  namedRanges = [],
   className = '',
   style = {},
 }) => {
@@ -51,7 +60,10 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   const [cursorPosition, setCursorPosition] = useState<number>(0);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
+  const [showNameBoxDropdown, setShowNameBoxDropdown] = useState<boolean>(false);
+  const [nameBoxValue, setNameBoxValue] = useState<string>('');
   const inputRef = useRef(null as HTMLInputElement | null);
+  const nameBoxRef = useRef(null as HTMLInputElement | null);
   const containerRef = useRef(null as HTMLDivElement | null);
 
   // Update input when cell selection changes
@@ -59,7 +71,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     if (!isEditing) {
       setInputValue(cellFormula || String(cellValue ?? ''));
     }
-  }, [cellFormula, cellValue, isEditing]);
+    // Update name box with current cell reference
+    setNameBoxValue(formatCellReference(selectedCell));
+  }, [cellFormula, cellValue, isEditing, selectedCell]);
 
   // Focus input when entering edit mode
   useEffect(() => {
@@ -197,6 +211,93 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     }, 200);
   };
 
+  // === Name Box Handlers ===
+  
+  const handleNameBoxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNameBoxValue(e.target.value);
+  };
+  
+  const handleNameBoxKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      navigateToNameBoxValue();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setNameBoxValue(formatCellReference(selectedCell));
+      nameBoxRef.current?.blur();
+    }
+  };
+  
+  const navigateToNameBoxValue = () => {
+    if (!onNavigateToCell) return;
+    
+    const value = nameBoxValue.trim().toUpperCase();
+    
+    // Try to parse as cell address (e.g., "A5", "B10")
+    const match = value.match(/^([A-Z]+)(\d+)$/);
+    if (match) {
+      const colLetters = match[1];
+      const rowNum = parseInt(match[2], 10);
+      
+      // Convert column letters to number
+      let col = 0;
+      for (let i = 0; i < colLetters.length; i++) {
+        col = col * 26 + (colLetters.charCodeAt(i) - 64);
+      }
+      
+      if (col > 0 && rowNum > 0) {
+        onNavigateToCell({ row: rowNum, col });
+        setShowNameBoxDropdown(false);
+        return;
+      }
+    }
+    
+    // Try to find in named ranges
+    const namedRange = namedRanges.find(nr => nr.name.toUpperCase() === value);
+    if (namedRange && typeof namedRange.address !== 'string') {
+      onNavigateToCell(namedRange.address);
+      setShowNameBoxDropdown(false);
+    }
+  };
+  
+  const handleNameBoxDropdownToggle = () => {
+    setShowNameBoxDropdown(!showNameBoxDropdown);
+  };
+  
+  const handleNamedRangeSelect = (address: Address) => {
+    if (onNavigateToCell) {
+      onNavigateToCell(address);
+      setShowNameBoxDropdown(false);
+    }
+  };
+  
+  // === Function Insert Handler ===
+  
+  const handleInsertFunction = () => {
+    if (onInsertFunction) {
+      onInsertFunction();
+    } else {
+      // Default behavior: start formula with = if not editing
+      if (!isEditing) {
+        onEditModeChange(true);
+        setInputValue('=');
+        setShowSuggestions(true);
+      }
+    }
+  };
+  
+  // === Cancel/Confirm Handlers ===
+  
+  const handleCancel = () => {
+    setInputValue(cellFormula || String(cellValue ?? ''));
+    onEditModeChange(false);
+    setShowSuggestions(false);
+  };
+  
+  const handleConfirm = () => {
+    handleSubmit();
+  };
+
   const formatCellReference = (addr: Address | null): string => {
     if (!addr) return '';
     
@@ -250,6 +351,80 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     fontSize: '12px',
     marginLeft: '8px',
   };
+  
+  const buttonStyles: React.CSSProperties = {
+    padding: '4px 8px',
+    border: '1px solid #ccc',
+    borderRadius: '4px',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 600,
+    transition: 'background-color 0.15s',
+  };
+  
+  const iconButtonStyles: React.CSSProperties = {
+    ...buttonStyles,
+    width: '28px',
+    height: '28px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0',
+  };
+  
+  const nameBoxContainerStyles: React.CSSProperties = {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  };
+  
+  const nameBoxInputStyles: React.CSSProperties = {
+    minWidth: '100px',
+    padding: '4px 24px 4px 8px',
+    border: '1px solid #ccc',
+    borderRadius: '4px',
+    backgroundColor: '#fff',
+    fontWeight: 600,
+    textAlign: 'left',
+    fontSize: '13px',
+    outline: 'none',
+  };
+  
+  const dropdownButtonStyles: React.CSSProperties = {
+    position: 'absolute',
+    right: '2px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '2px 4px',
+    fontSize: '10px',
+    color: '#666',
+  };
+  
+  const dropdownStyles: React.CSSProperties = {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    marginTop: '2px',
+    backgroundColor: '#fff',
+    border: '1px solid #ccc',
+    borderRadius: '4px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    minWidth: '150px',
+    maxHeight: '200px',
+    overflowY: 'auto',
+    zIndex: 1000,
+  };
+  
+  const dropdownItemStyles: React.CSSProperties = {
+    padding: '6px 12px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    borderBottom: '1px solid #f0f0f0',
+  };
 
   return (
     <div 
@@ -257,10 +432,106 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
       className={`formula-bar ${className}`} 
       style={{ ...defaultStyles, position: 'relative' }}
     >
-      <div style={cellRefStyles}>
-        {formatCellReference(selectedCell)}
+      {/* Name Box with Dropdown */}
+      <div style={nameBoxContainerStyles}>
+        <input
+          ref={nameBoxRef}
+          type="text"
+          value={nameBoxValue}
+          onChange={handleNameBoxChange}
+          onKeyDown={handleNameBoxKeyDown}
+          onFocus={() => nameBoxRef.current?.select()}
+          style={nameBoxInputStyles}
+          placeholder="A1"
+          title="Name Box - Type cell address or select named range"
+        />
+        <button 
+          style={dropdownButtonStyles}
+          onClick={handleNameBoxDropdownToggle}
+          type="button"
+          title="Show named ranges"
+        >
+          ▼
+        </button>
+        
+        {showNameBoxDropdown && namedRanges.length > 0 && (
+          <div style={dropdownStyles}>
+            {namedRanges.map((nr, idx) => (
+              <div
+                key={idx}
+                style={dropdownItemStyles}
+                onClick={() => {
+                  if (typeof nr.address !== 'string') {
+                    handleNamedRangeSelect(nr.address);
+                  }
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                }}
+              >
+                {nr.name}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       
+      {/* Function Insert Button */}
+      <button
+        style={iconButtonStyles}
+        onClick={handleInsertFunction}
+        type="button"
+        title="Insert Function"
+        onMouseEnter={(e) => {
+          (e.target as HTMLButtonElement).style.backgroundColor = '#f0f0f0';
+        }}
+        onMouseLeave={(e) => {
+          (e.target as HTMLButtonElement).style.backgroundColor = '#fff';
+        }}
+      >
+        ƒₓ
+      </button>
+      
+      {/* Cancel Button (shown when editing) */}
+      {isEditing && (
+        <button
+          style={{ ...iconButtonStyles, color: '#d32f2f' }}
+          onClick={handleCancel}
+          type="button"
+          title="Cancel (Esc)"
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = '#ffebee';
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = '#fff';
+          }}
+        >
+          ✖
+        </button>
+      )}
+      
+      {/* Confirm Button (shown when editing) */}
+      {isEditing && (
+        <button
+          style={{ ...iconButtonStyles, color: '#2e7d32' }}
+          onClick={handleConfirm}
+          type="button"
+          title="Confirm (Enter)"
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = '#e8f5e9';
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = '#fff';
+          }}
+        >
+          ✔
+        </button>
+      )}
+      
+      {/* Formula Input */}
       <div style={{ flex: 1, position: 'relative' }}>
         <input
           ref={inputRef}
@@ -284,6 +555,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
         />
       </div>
       
+      {/* Validation Error */}
       {validationError && (
         <span style={errorStyles}>{validationError}</span>
       )}

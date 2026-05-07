@@ -22,7 +22,7 @@
     "svelte"
   ],
   "dependencies": {
-    "@cyber-sheet/core": "workspace:*"
+    "@cyber-sheet/core": "*"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
