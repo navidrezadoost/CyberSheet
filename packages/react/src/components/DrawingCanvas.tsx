@@ -14,6 +14,11 @@ import type {
   PictureObject,
   FormControlObject,
   TextBoxObject,
+  CommandManager,
+} from '@cyber-sheet/core';
+import {
+  DeleteDrawingObjectsCommand,
+  CopyDrawingObjectsCommand,
 } from '@cyber-sheet/core';
 
 // ─── Types ────────────────────────────────────────────────
@@ -25,6 +30,7 @@ export interface DrawingCanvasProps {
   scrollLeft: number;
   scrollTop: number;
   zoom: number;
+  commandManager?: CommandManager;
   onObjectChange?: () => void;
 }
 
@@ -134,6 +140,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   scrollLeft,
   scrollTop,
   zoom,
+  commandManager,
   onObjectChange,
 }) => {
   const canvasRef = useRef(null as HTMLCanvasElement | null);
@@ -726,7 +733,18 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.length > 0) {
           e.preventDefault();
-          selectedIds.forEach(id => drawingLayer.removeObject(id));
+          const objectsToDelete = selectedIds
+            .map(id => drawingLayer.getObject(id))
+            .filter(Boolean) as DrawingObject[];
+          
+          if (commandManager) {
+            commandManager.execute(
+              new DeleteDrawingObjectsCommand(drawingLayer, objectsToDelete)
+            );
+          } else {
+            // Fallback if no command manager
+            selectedIds.forEach(id => drawingLayer.removeObject(id));
+          }
           onObjectChange?.();
         }
       }
@@ -738,7 +756,15 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           const objects = selectedIds
             .map(id => drawingLayer.getObject(id))
             .filter(Boolean) as DrawingObject[];
-          setClipboard(objects);
+          
+          if (commandManager) {
+            const command = new CopyDrawingObjectsCommand(drawingLayer, objects);
+            command.execute();
+            // Store in local clipboard for paste offset tracking
+            setClipboard(objects);
+          } else {
+            setClipboard(objects);
+          }
           setPasteCount(0);
           console.log(`Copied ${objects.length} object(s)`);
         }
@@ -782,7 +808,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             .filter(Boolean) as DrawingObject[];
           setClipboard(objects);
           setPasteCount(0);
-          selectedIds.forEach(id => drawingLayer.removeObject(id));
+          
+          if (commandManager) {
+            commandManager.execute(
+              new DeleteDrawingObjectsCommand(drawingLayer, objects)
+            );
+          } else {
+            selectedIds.forEach(id => drawingLayer.removeObject(id));
+          }
           onObjectChange?.();
           console.log(`Cut ${objects.length} object(s)`);
         }

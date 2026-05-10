@@ -204,6 +204,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           scrollLeft={scrollLeft}
           scrollTop={scrollTop}
           zoom={zoom / 100}
+          commandManager={commandManager}
           onObjectChange={() => {}}
         />
       </div>

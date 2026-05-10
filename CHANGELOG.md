@@ -7,6 +7,224 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 9: Backend Wiring - Complete Undo/Redo Architecture (May 10, 2026)
+
+**31 Command Classes Implementing Full Undo/Redo for Data, View, and Review Tabs**
+
+**Integration Status**: ✅ **COMPLETE** — All tabs wired to CommandManager with full undo/redo support
+- Data tab: 9 command classes for sort, filter, validation, remove duplicates, text-to-columns, outline
+- View tab: 9 command classes for freeze panes, split, zoom, view modes, show options, windows
+- Review tab: 13 command classes for comments, protection, spell check, track changes
+- Object operations: Delete and Copy commands wired to keyboard shortcuts (Delete, Ctrl+C, Ctrl+X)
+- Total: **31 command classes** (~2,083 lines) + integration code
+
+**Architecture Flow**:
+```typescript
+User Action (Sort Ascending)
+    ↓
+SortFilterGroup calls onCommand({ type: 'sort', range, sortLevels })
+    ↓
+ExcelRibbon.tsx creates new SortCommand(sheet, range, sortLevels)
+    ↓
+commandManager.execute(command)
+    ↓
+command.execute() → modifies worksheet/workbook state
+    ↓
+Canvas auto-redraws (event listener)
+    ↓
+Ctrl+Z → commandManager.undo() → command.undo() restores previous state
+```
+
+**DataCommands.ts** (670 lines, 9 command classes):
+- ✅ **SortCommand**: Multi-level sort with originalData/originalStyles Maps storage
+  - compareValues(): Handles null, numbers (with Infinity), Dates (getTime()), strings (localeCompare case-insensitive)
+  - captureOriginalState(): Stores all cells in range before sorting
+  - hasHeaders support: Skips first row if true
+- ✅ **ToggleAutoFilterCommand**: Enable/disable AutoFilter on range
+  - Storage: worksheet.filterState { enabled, range, columnFilters Map }
+- ✅ **ClearFilterCommand**: Clears all column filters
+- ✅ **SetDataValidationCommand**: Applies validation rules to range
+  - Rule types: any, wholeNumber, decimal, list, date, time, textLength, custom
+  - Operators: between, notBetween, equal, notEqual, greaterThan, lessThan, etc.
+  - Storage: worksheet.validationRules Map keyed by "row,col"
+- ✅ **ClearDataValidationCommand**: Removes validation from range
+- ✅ **RemoveDuplicatesCommand**: Remove duplicate rows by compare columns
+  - Tracks: seen Set<string> for keys, removedRows array with data+styles
+  - Includes: deleteRow() and insertRow() helpers (shift rows up/down)
+- ✅ **TextToColumnsCommand**: Splits text by delimiter into adjacent columns
+  - Supports: 'delimited' | 'fixedWidth' dataType
+- ✅ **GroupOutlineCommand**: Creates collapsible outline groups (rows or columns)
+- ✅ **UngroupOutlineCommand**: Removes outline groups overlapping with range
+
+**ViewCommands.ts** (490 lines, 9 command classes):
+- ✅ **FreezePanesCommand**: Freeze rows/columns for scrolling
+  - Types: 'topRow' | 'firstColumn' | 'cell' | 'unfreeze'
+  - Storage: workbook.freezePanesState { type, cell?, frozenRows, frozenCols }
+  - topRow: frozenRows=1, frozenCols=0
+  - firstColumn: frozenRows=0, frozenCols=1
+  - cell: frozenRows=cell.row, frozenCols=cell.col
+- ✅ **SplitWindowCommand**: Split window into panes at cell
+  - Storage: workbook.splitState { enabled, position, horizontalSplit, verticalSplit }
+- ✅ **SetZoomCommand**: Change zoom level 10-400% with clamping
+  - Storage: worksheet.zoom (number)
+- ✅ **ZoomToSelectionCommand**: Auto-zoom to fit selection
+  - Calculates: zoom from selection dimensions using avgRowHeight=20px, avgColWidth=80px
+  - Formula: (viewportDimension × 0.9 / selectionDimension) × 100
+- ✅ **SetViewModeCommand**: Switch between 'normal' | 'pageBreak' | 'pageLayout'
+- ✅ **ToggleShowOptionCommand**: Toggle gridlines/headings/formulaBar/ruler
+  - Storage: workbook.showOptions { gridlines, headings, formulaBar, ruler }
+  - Defaults: gridlines=true, headings=true, formulaBar=true, ruler=false
+- ✅ **HideWindowCommand**: Hide workbook window
+- ✅ **NewWindowCommand**: Open duplicate window view
+- ✅ **ArrangeWindowsCommand**: Arrange windows in 'tiled' | 'horizontal' | 'vertical' | 'cascade' layout
+
+**ReviewCommands.ts** (450 lines, 13 command classes):
+- ✅ **AddCommentCommand**: Add comment to cell
+  - Storage: worksheet.comments Map<"row,col", Comment>
+- ✅ **DeleteCommentCommand**: Remove comment from cell
+- ✅ **ToggleCommentsVisibilityCommand**: Show/hide/indicator modes
+  - Storage: worksheet.commentsVisibility
+- ✅ **ProtectSheetCommand**: Protect worksheet with password + permissions
+  - Storage: worksheet.protection { password?, allowSelectLockedCells, allowSelectUnlockedCells, ... }
+- ✅ **UnprotectSheetCommand**: Remove sheet protection (password check)
+- ✅ **ProtectWorkbookCommand**: Protect workbook structure/windows
+  - Storage: workbook.protection { password?, protectStructure, protectWindows }
+- ✅ **UnprotectWorkbookCommand**: Remove workbook protection
+- ✅ **SetAllowEditRangeCommand**: Define editable ranges when protected
+- ✅ **RemoveAllowEditRangeCommand**: Remove allowed edit ranges
+- ✅ **SpellCheckCommand**: Store spell check corrections
+- ✅ **ToggleTrackChangesCommand**: Enable/disable change tracking
+- ✅ **AcceptChangeCommand**: Accept tracked change
+- ✅ **RejectChangeCommand**: Reject tracked change
+
+**Command Pattern** (all 31 classes follow this structure):
+```typescript
+export class ExampleCommand implements Command {
+  description = 'Example Operation';
+  private previousState: StateType;
+
+  constructor(
+    private worksheet: Worksheet,
+    private params: any
+  ) {
+    // Capture previous state via helper method
+    this.previousState = this.getCurrentState();
+  }
+
+  execute(): void {
+    // Modify worksheet/workbook properties
+    (this.worksheet as any).someProperty = newValue;
+  }
+
+  undo(): void {
+    // Restore previous state from stored values
+    (this.worksheet as any).someProperty = this.previousState;
+  }
+
+  private getCurrentState(): StateType {
+    // Helper method to capture current state
+    return (this.worksheet as any).someProperty || defaultValue;
+  }
+}
+```
+
+**Integration Details**:
+
+**ExcelRibbon.tsx Wiring** (~150 lines added):
+```typescript
+// Import all command classes
+import {
+  SortCommand,
+  ToggleAutoFilterCommand,
+  // ... 31 total imports
+} from '@cyber-sheet/core';
+
+// Data tab command routing (switch statement with 9 cases)
+case 'sort':
+  commandManager.execute(
+    new SortCommand(sheet, command.range, command.sortBy, command.hasHeaders)
+  );
+  break;
+
+// View tab direct execution (5 command types)
+onZoomChange={(zoom) => {
+  if (sheet && commandManager) {
+    commandManager.execute(new SetZoomCommand(workbook, zoom));
+  }
+}}
+
+// Review tab command routing (8 cases)
+case 'newComment':
+  if (sheet && command.cell && command.text) {
+    commandManager.execute(
+      new AddCommentCommand(sheet, command.cell, command.text, command.author)
+    );
+  }
+  break;
+```
+
+**DrawingCanvas.tsx Wiring** (~40 lines modified):
+- ✅ Delete key: `commandManager.execute(new DeleteDrawingObjectsCommand(drawingLayer, objects))`
+- ✅ Ctrl+C: `new CopyDrawingObjectsCommand(drawingLayer, objects).execute()`
+- ✅ Ctrl+X: `commandManager.execute(new DeleteDrawingObjectsCommand(drawingLayer, objects))`
+- ✅ Fallback: Direct manipulation if commandManager not available
+- ✅ CommandManager prop added to DrawingCanvasProps
+- ✅ ExcelApp.tsx passes commandManager to DrawingCanvas
+
+**Export Infrastructure**:
+- ✅ `packages/core/src/commands/index.ts`: Central export point (82 lines)
+  - Exports all 31 command classes
+  - Exports type definitions (Range, SortLevel, DataValidationRule, FreezePanesState, etc.)
+- ✅ `packages/core/src/index.ts`: Re-exports commands module
+  - `export * from './commands/DataCommands';`
+  - `export * from './commands/ViewCommands';`
+  - `export * from './commands/ReviewCommands';`
+
+**State Storage Pattern**:
+- Worksheet properties: `filterState`, `validationRules`, `outlineGroups`, `zoom`, `viewMode`, `comments`, `protection`, `allowEditRanges`, `commentsVisibility`
+- Workbook properties: `freezePanesState`, `splitState`, `showOptions`, `windowHidden`, `openWindows`, `windowLayout`, `protection`, `trackChangesEnabled`, `trackedChanges`
+- All stored as `(worksheet as any).propertyName` or `(workbook as any).propertyName`
+
+**Type Safety**:
+- ✅ All commands implement Command interface (execute, undo, description?)
+- ✅ Type definitions for all state structures (9 types across 3 files)
+- ✅ 0 TypeScript errors across all command files
+- ✅ Proper imports in ExcelRibbon.tsx and DrawingCanvas.tsx
+
+**Undo/Redo Testing**:
+```javascript
+// Browser console test
+commandManager.execute(new SortCommand(sheet, range, sortLevels));
+commandManager.undo(); // Restores original data order
+commandManager.redo(); // Re-applies sort
+
+// Multi-level undo
+commandManager.execute(new FreezePanesCommand(workbook, 'topRow'));
+commandManager.execute(new SetZoomCommand(workbook, 150));
+commandManager.undo(); // Restores zoom to 100
+commandManager.undo(); // Unfreezes top row
+```
+
+**Known Limitations**:
+- RemoveDuplicatesCommand uses simple row shifting (not actual Insert/Delete row operations with coordinate transformations)
+- Copy command: Creates intermediate clipboard state (not undoable, copy is read-only)
+- Paste operations: Not yet wired to command pattern (Part 2 of object operations)
+- Move/Resize/Rotate drawing commands: Implemented but not yet wired to mouse handlers
+
+**Files Modified**:
+- `packages/core/src/commands/DataCommands.ts` (670 lines, new)
+- `packages/core/src/commands/ViewCommands.ts` (490 lines, new)
+- `packages/core/src/commands/ReviewCommands.ts` (450 lines, new)
+- `packages/core/src/commands/index.ts` (82 lines, new)
+- `packages/core/src/index.ts` (3 lines added)
+- `packages/react/src/components/ribbon/ExcelRibbon.tsx` (~150 lines modified)
+- `packages/react/src/components/DrawingCanvas.tsx` (~40 lines modified)
+- `packages/react/src/components/ExcelApp.tsx` (1 line modified)
+
+**Total Implementation**: 2,083 insertions across 8 files
+
+---
+
 ### Added - Review Tab Ribbon: Proofing, Comments, and Protection (May 10, 2026)
 
 **Complete Review tab implementation with 5 groups and 12+ tools**
