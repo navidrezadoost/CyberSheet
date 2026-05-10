@@ -16,6 +16,33 @@ import {
   PageLayoutController,
   NameManager,
   CalculationController,
+  SortCommand,
+  ToggleAutoFilterCommand,
+  ClearFilterCommand,
+  SetDataValidationCommand,
+  ClearDataValidationCommand,
+  RemoveDuplicatesCommand,
+  TextToColumnsCommand,
+  GroupOutlineCommand,
+  UngroupOutlineCommand,
+  FreezePanesCommand,
+  SplitWindowCommand,
+  SetZoomCommand,
+  ZoomToSelectionCommand,
+  SetViewModeCommand,
+  ToggleShowOptionCommand,
+  HideWindowCommand,
+  NewWindowCommand,
+  ArrangeWindowsCommand,
+  AddCommentCommand,
+  DeleteCommentCommand,
+  ToggleCommentsVisibilityCommand,
+  ProtectSheetCommand,
+  UnprotectSheetCommand,
+  ProtectWorkbookCommand,
+  UnprotectWorkbookCommand,
+  SpellCheckCommand,
+  ToggleTrackChangesCommand,
 } from '@cyber-sheet/core';
 import type {
   Address,
@@ -516,7 +543,74 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
           selectedCells={cells}
           onCommand={(command) => {
             console.log('Data tab command:', command);
-            // TODO: Wire to CommandManager for backend logic
+            
+            const sheet = worksheet || workbook?.activeSheet;
+            if (!sheet || !commandManager) return;
+
+            try {
+              switch (command.type) {
+                case 'sort':
+                  commandManager.execute(
+                    new SortCommand(sheet, command.range, command.sortBy, command.hasHeaders)
+                  );
+                  break;
+                
+                case 'toggleAutoFilter':
+                  commandManager.execute(
+                    new ToggleAutoFilterCommand(sheet, command.range, command.enabled ?? true)
+                  );
+                  break;
+                
+                case 'clearFilter':
+                  commandManager.execute(
+                    new ClearFilterCommand(sheet)
+                  );
+                  break;
+                
+                case 'setDataValidation':
+                  commandManager.execute(
+                    new SetDataValidationCommand(sheet, command.range, command.rule)
+                  );
+                  break;
+                
+                case 'clearDataValidation':
+                  commandManager.execute(
+                    new ClearDataValidationCommand(sheet, command.range)
+                  );
+                  break;
+                
+                case 'removeDuplicates':
+                  commandManager.execute(
+                    new RemoveDuplicatesCommand(sheet, command.range, command.compareColumns, command.hasHeaders)
+                  );
+                  break;
+                
+                case 'textToColumns':
+                  commandManager.execute(
+                    new TextToColumnsCommand(sheet, command.range, command.delimiter, command.dataType)
+                  );
+                  break;
+                
+                case 'group':
+                  commandManager.execute(
+                    new GroupOutlineCommand(sheet, command.range, command.axis)
+                  );
+                  break;
+                
+                case 'ungroup':
+                  commandManager.execute(
+                    new UngroupOutlineCommand(sheet, command.range, command.axis)
+                  );
+                  break;
+                
+                default:
+                  console.warn('Unknown Data command:', command.type);
+              }
+              
+              onStructureChange?.();
+            } catch (error) {
+              console.error('Data command error:', error);
+            }
           }}
         />
       ) : activeTab === 'review' ? (
@@ -525,7 +619,93 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
           selectedCells={cells}
           onCommand={(command) => {
             console.log('Review tab command:', command);
-            // TODO: Wire to CommandManager for comments/protection/proofing
+            
+            const sheet = worksheet || workbook?.activeSheet;
+            if (!commandManager) return;
+
+            try {
+              switch (command.type) {
+                case 'newComment':
+                case 'addComment':
+                  if (sheet && command.cell && command.text) {
+                    commandManager.execute(
+                      new AddCommentCommand(sheet, command.cell, command.text, command.author)
+                    );
+                  }
+                  break;
+                
+                case 'deleteComment':
+                  if (sheet && command.cell) {
+                    commandManager.execute(
+                      new DeleteCommentCommand(sheet, command.cell)
+                    );
+                  }
+                  break;
+                
+                case 'toggleComments':
+                  if (sheet && command.option) {
+                    commandManager.execute(
+                      new ToggleCommentsVisibilityCommand(sheet, command.option)
+                    );
+                  }
+                  break;
+                
+                case 'protectSheet':
+                  if (sheet && command.options) {
+                    commandManager.execute(
+                      new ProtectSheetCommand(sheet, command.options)
+                    );
+                  }
+                  break;
+                
+                case 'unprotectSheet':
+                  if (sheet) {
+                    commandManager.execute(
+                      new UnprotectSheetCommand(sheet, command.password)
+                    );
+                  }
+                  break;
+                
+                case 'protectWorkbook':
+                  if (workbook && command.options) {
+                    commandManager.execute(
+                      new ProtectWorkbookCommand(workbook, command.options)
+                    );
+                  }
+                  break;
+                
+                case 'unprotectWorkbook':
+                  if (workbook) {
+                    commandManager.execute(
+                      new UnprotectWorkbookCommand(workbook, command.password)
+                    );
+                  }
+                  break;
+                
+                case 'checkSpelling':
+                  if (sheet && command.corrections && command.corrections.length > 0) {
+                    commandManager.execute(
+                      new SpellCheckCommand(sheet, command.corrections)
+                    );
+                  }
+                  break;
+                
+                case 'trackChanges':
+                  if (workbook && typeof command.enabled === 'boolean') {
+                    commandManager.execute(
+                      new ToggleTrackChangesCommand(workbook, command.enabled)
+                    );
+                  }
+                  break;
+                
+                default:
+                  console.warn('Unknown Review command:', command.type);
+              }
+              
+              onStructureChange?.();
+            } catch (error) {
+              console.error('Review command error:', error);
+            }
           }}
         />
       ) : activeTab === 'view' ? (
@@ -539,28 +719,89 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
           showFormulaBar={true}
           showHeadings={true}
           onViewChange={(view) => {
-            console.log('View changed:', view);
-            // TODO: Wire to ViewStateManager
+            const sheet = worksheet || workbook?.activeSheet;
+            if (sheet && commandManager) {
+              commandManager.execute(
+                new SetViewModeCommand(workbook, view as 'normal' | 'pageBreak' | 'pageLayout')
+              );
+            }
           }}
           onZoomChange={(zoom) => {
-            console.log('Zoom changed:', zoom);
-            // TODO: Wire to ZoomController
+            const sheet = worksheet || workbook?.activeSheet;
+            if (sheet && commandManager) {
+              commandManager.execute(
+                new SetZoomCommand(workbook, zoom)
+              );
+            }
           }}
           onToggleShow={(option, value) => {
-            console.log('Toggle show:', option, value);
-            // TODO: Wire to UIStateManager
+            if (workbook && commandManager) {
+              commandManager.execute(
+                new ToggleShowOptionCommand(workbook, option, value)
+              );
+            }
           }}
           onZoomToSelection={() => {
-            console.log('Zoom to Selection');
-            // TODO: Calculate zoom based on selection size
+            const sheet = worksheet || workbook?.activeSheet;
+            if (sheet && commandManager && cells.length > 0) {
+              const selectionRange = {
+                start: cells[0],
+                end: cells[cells.length - 1] || cells[0],
+              };
+              commandManager.execute(
+                new ZoomToSelectionCommand(workbook, selectionRange)
+              );
+            }
           }}
           onCustomViews={() => {
             console.log('Custom Views dialog');
-            // TODO: Open custom views manager
+            // TODO: Open custom views manager dialog
           }}
           onCommand={(command) => {
             console.log('View tab command:', command);
-            // TODO: Wire to CommandManager for freeze/split/window operations
+            
+            if (!workbook || !commandManager) return;
+
+            try {
+              switch (command.type) {
+                case 'freezePanes':
+                  commandManager.execute(
+                    new FreezePanesCommand(workbook, command.freezeType, command.cell)
+                  );
+                  break;
+                
+                case 'splitWindow':
+                  commandManager.execute(
+                    new SplitWindowCommand(workbook, command.cell)
+                  );
+                  break;
+                
+                case 'hideWindow':
+                  commandManager.execute(
+                    new HideWindowCommand(workbook)
+                  );
+                  break;
+                
+                case 'newWindow':
+                  commandManager.execute(
+                    new NewWindowCommand(workbook)
+                  );
+                  break;
+                
+                case 'arrangeWindows':
+                  commandManager.execute(
+                    new ArrangeWindowsCommand(workbook, command.layout)
+                  );
+                  break;
+                
+                default:
+                  console.warn('Unknown View command:', command.type);
+              }
+              
+              onStructureChange?.();
+            } catch (error) {
+              console.error('View command error:', error);
+            }
           }}
         />
       ) : (
