@@ -27,7 +27,7 @@
     "@angular/common": "^21.2.11",
     "@angular/platform-browser-dynamic": "^21.2.11",
     "jest-axe": "^10.0.0",
-    "zone.js": "^0.16.1"
+    "zone.js": "^0.16.2"
   },
   "dependencies": {
     "@cyber-sheet/cf-ui-core": "*"
