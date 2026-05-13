@@ -212,96 +212,108 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
   return (
     <div className="ribbon-content">
       {/* ==================== Undo/Redo Group ==================== */}
-      <RibbonGroup title="Undo">
-        <RibbonRow>
+      <RibbonGroup title="Undo" className="compact">
+        <RibbonRow gap={2}>
           <RibbonButton
             icon={<ArrowUndoRegular />}
             tooltip="Undo (Ctrl+Z)"
             onClick={handleUndo}
             disabled={!commandManager.canUndo()}
+            size="medium"
           />
           <RibbonButton
             icon={<ArrowRedoRegular />}
             tooltip="Redo (Ctrl+Y)"
             onClick={handleRedo}
             disabled={!commandManager.canRedo()}
+            size="medium"
           />
         </RibbonRow>
       </RibbonGroup>
 
       {/* ==================== Font Group ==================== */}
-      <RibbonGroup title="Font">
-        {/* Row 1: Font Family + Font Size */}
-        <RibbonRow>
-          <RibbonSelect
-            value={selection.fontFamily || 'Calibri'}
-            options={fontFamilies}
-            onChange={handleFontFamilyChange}
-            width={120}
-            ariaLabel="Font family"
-          />
-          <RibbonSelect
-            value={selection.fontSize || 11}
-            options={fontSizes}
-            onChange={handleFontSizeChange}
-            width={60}
-            ariaLabel="Font size"
-          />
-        </RibbonRow>
-
-        {/* Row 2: Bold, Italic, Underline, Font Color */}
-        <RibbonRow>
-          <RibbonButton
-            icon={<TextBoldRegular />}
-            tooltip="Bold (Ctrl+B)"
-            active={selection.bold || false}
-            onClick={handleBoldToggle}
-          />
-          <RibbonButton
-            icon={<TextItalicRegular />}
-            tooltip="Italic (Ctrl+I)"
-            active={selection.italic || false}
-            onClick={handleItalicToggle}
-          />
-          <RibbonButton
-            icon={<TextUnderlineRegular />}
-            tooltip="Underline (Ctrl+U)"
-            active={selection.underline || false}
-            onClick={handleUnderlineToggle}
-          />
+      <RibbonGroup title="Font" showDialogLauncher onDialogLauncherClick={() => console.log('Font dialog')}>
+        <div className="font-group-content">
+          {/* Column 1: Font dropdowns */}
+          <div className="font-dropdowns-column">
+            <RibbonSelect
+              value={selection?.fontFamily || 'Calibri'}
+              options={fontFamilies}
+              onChange={handleFontFamilyChange}
+              width={120}
+              className="font-family-select"
+              ariaLabel="Font family"
+            />
+            <RibbonSelect
+              value={selection?.fontSize || 11}
+              options={fontSizes}
+              onChange={handleFontSizeChange}
+              width={60}
+              className="font-size-select"
+              ariaLabel="Font size"
+            />
+          </div>
           
-          {/* Font Color Picker */}
-          <FontColorButton
-            command={fontColorCommand}
-            selectionColor={selection.fontColor}
-          />
+          {/* Column 2: Font style buttons */}
+          <div className="small-btns-column">
+            <div className="font-row">
+              <RibbonButton
+                icon={<TextBoldRegular />}
+                tooltip="Bold (Ctrl+B)"
+                active={selection?.bold || false}
+                onClick={handleBoldToggle}
+                size="small"
+              />
+              <RibbonButton
+                icon={<TextItalicRegular />}
+                tooltip="Italic (Ctrl+I)"
+                active={selection?.italic || false}
+                onClick={handleItalicToggle}
+                size="small"
+              />
+              <RibbonButton
+                icon={<TextUnderlineRegular />}
+                tooltip="Underline (Ctrl+U)"
+                active={selection?.underline || false}
+                onClick={handleUnderlineToggle}
+                size="small"
+              />
+            </div>
+            <div className="font-row">
+              {/* Font Color Picker */}
+              <FontColorButton
+                command={fontColorCommand}
+                selectionColor={selection?.fontColor}
+              />
+              
+              {/* Fill Color Picker */}
+              <FillColorButton
+                command={fillColorCommand}
+                selectionFill={selection?.fillColor}
+              />
+              
+              {/* Border Picker */}
+              <BorderButton
+                selectionBorder={selection?.border}
+                onApply={handleBorderApply}
+              />
+            </div>
+          </div>
           
-          {/* Fill Color Picker */}
-          <FillColorButton
-            command={fillColorCommand}
-            selectionFill={selection.fillColor}
-          />
-          
-          {/* Border Picker */}
-          <BorderButton
-            selectionBorder={selection.border}
-            onApply={handleBorderApply}
-          />
-          
-          {/* Number Format Dropdown */}
+          {/* Column 3: Number format */}
           <NumberFormatButton
-            numberFormat={selection.numberFormat}
+            numberFormat={selection?.numberFormat}
             onApply={handleNumberFormatApply}
           />
-        </RibbonRow>
+        </div>
       </RibbonGroup>
 
       {/* ==================== Alignment Group ==================== */}
       <RibbonGroup title="Alignment">
         <AlignmentGroup
-          horizontalAlign={selection.horizontalAlign}
-          verticalAlign={selection.verticalAlign}
-          wrapText={selection.wrapText}
+          horizontalAlign={selection?.horizontalAlign}
+          verticalAlign={selection?.verticalAlign}
+          wrapText={selection?.wrapText}
           onHorizontalAlignChange={handleHorizontalAlignChange}
           onVerticalAlignChange={handleVerticalAlignChange}
           onWrapTextToggle={handleWrapTextToggle}

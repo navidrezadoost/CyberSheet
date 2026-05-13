@@ -19,6 +19,7 @@ export * from './PivotRecomputeEngine'; // Phase 31a
 export * from './PivotAnchorIndex'; // Phase 32
 export * from './PivotCalculatedFields'; // Phase 33
 export * from './autocomplete';
+export * from './registry'; // Export FunctionRegistry for autocomplete
 export * from './metadata-api';
 export * from './formatting/NumberFormatter';
 export * from './formatting/NumberFormatSpec';
@@ -26,7 +27,8 @@ export * from './formatting/NumberFormatSpec';
 export * from './StyleCache';
 export * from './CommandManager';
 export * from './ClipboardService';
-export * from './SelectionManager';
+export * from './PasteCommand';
+export * from './ClearCellsCommand';export * from './SelectionManager';
 export * from './FormattingController';
 export * from './FileOperations';
 export * from './DrawingLayer';

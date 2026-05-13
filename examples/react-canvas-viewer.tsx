@@ -85,6 +85,11 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
     selectedCell: selectedCell || { row: 1, col: 1 },
   });
 
+  // Set page title
+  useEffect(() => {
+    document.title = 'CyberSheet Canvas Viewer';
+  }, []);
+
   // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -484,9 +489,10 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
                 const address = event.event?.address;
                 if (address && typeof address.row === 'number' && typeof address.col === 'number') {
                   setSelectedCell(address);
-                  if (event.type === 'cell-double-click') {
-                    setIsEditMode(true);
-                  }
+                  // DISABLED: Double-click formula bar activation - confusing when user wants in-cell editing
+                  // if (event.type === 'cell-double-click') {
+                  //   setIsEditMode(true);
+                  // }
                 }
               }
             };

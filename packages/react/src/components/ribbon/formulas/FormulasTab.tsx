@@ -10,6 +10,7 @@ import { FunctionLibraryGroup } from './FunctionLibraryGroup';
 import { DefinedNamesGroup } from './DefinedNamesGroup';
 import { FormulaAuditingGroup } from './FormulaAuditingGroup';
 import { CalculationGroup } from './CalculationGroup';
+import '../ribbon.css';
 
 export interface FormulasTabProps {
   // Function Library
@@ -45,23 +46,8 @@ export interface FormulasTabProps {
 }
 
 export const FormulasTab: React.FC<FormulasTabProps> = (props) => {
-  const tabContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 0,
-    padding: '8px 0',
-    background: '#F9F9F9',
-    borderBottom: '1px solid #D1D1D1',
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-  };
-
-  const dividerStyle: React.CSSProperties = {
-    width: 1,
-    background: '#D1D1D1',
-    margin: '4px 0',
-  };
-
   return (
-    <div style={tabContainerStyle}>
+    <div className="ribbon-content ribbon-tab-content">
       {/* Function Library Group */}
       <FunctionLibraryGroup
         onInsertFunction={props.onInsertFunction}
@@ -69,7 +55,7 @@ export const FormulasTab: React.FC<FormulasTabProps> = (props) => {
         onSelectFunction={props.onSelectFunction}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* Defined Names Group */}
       <DefinedNamesGroup
@@ -81,7 +67,7 @@ export const FormulasTab: React.FC<FormulasTabProps> = (props) => {
         definedNames={props.definedNames}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* Formula Auditing Group */}
       <FormulaAuditingGroup
@@ -97,7 +83,7 @@ export const FormulasTab: React.FC<FormulasTabProps> = (props) => {
         showFormulas={props.showFormulas}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* Calculation Group */}
       <CalculationGroup

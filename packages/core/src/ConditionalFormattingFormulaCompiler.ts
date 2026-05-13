@@ -15,6 +15,7 @@
  */
 
 import { Address, CellValue } from './types';
+import { SafeExpressionEvaluator } from './utils/SafeExpressionEvaluator';
 
 /**
  * Represents a cell reference with absolute/relative classification
@@ -344,11 +345,9 @@ export class ConditionalFormattingFormulaCompiler {
 			// Excel: AND(A1>10, B1<5) → JavaScript: (A1>10) && (B1<5)
 			normalized = this.convertExcelLogic(normalized);
 
-			// Evaluate using Function constructor (safe for numeric/boolean expressions)
-			const result = new Function(`return ${normalized}`)();
-
-			// Convert result to boolean
-			return Boolean(result);
+			// Use CSP-safe expression evaluator (no eval/new Function)
+			const evaluator = new SafeExpressionEvaluator();
+			return evaluator.evaluate(normalized);
 		} catch (error) {
 			// If evaluation fails, return false (conservative)
 			console.warn('Formula evaluation failed:', expression, error);

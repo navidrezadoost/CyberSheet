@@ -10,6 +10,7 @@ import { ThemesGroup } from './ThemesGroup';
 import { PageSetupGroup } from './PageSetupGroup';
 import { ScaleToFitGroup } from './ScaleToFitGroup';
 import { SheetOptionsGroup } from './SheetOptionsGroup';
+import '../ribbon.css';
 
 export interface PageLayoutTabProps {
   // Themes Group
@@ -40,23 +41,8 @@ export interface PageLayoutTabProps {
 }
 
 export const PageLayoutTab: React.FC<PageLayoutTabProps> = (props) => {
-  const tabContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 0,
-    padding: '8px 0',
-    background: '#F9F9F9',
-    borderBottom: '1px solid #D1D1D1',
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-  };
-
-  const dividerStyle: React.CSSProperties = {
-    width: 1,
-    background: '#D1D1D1',
-    margin: '4px 0',
-  };
-
   return (
-    <div style={tabContainerStyle}>
+    <div className="ribbon-content ribbon-tab-content">
       {/* Themes Group */}
       <ThemesGroup
         onThemeChange={props.onThemeChange}
@@ -65,7 +51,7 @@ export const PageLayoutTab: React.FC<PageLayoutTabProps> = (props) => {
         onEffectsChange={props.onEffectsChange}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* Page Setup Group */}
       <PageSetupGroup
@@ -78,7 +64,7 @@ export const PageLayoutTab: React.FC<PageLayoutTabProps> = (props) => {
         onPrintTitlesSet={props.onPrintTitlesSet}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* Scale to Fit Group */}
       <ScaleToFitGroup
@@ -87,7 +73,7 @@ export const PageLayoutTab: React.FC<PageLayoutTabProps> = (props) => {
         onScaleChange={props.onScaleChange}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* Sheet Options Group */}
       <SheetOptionsGroup

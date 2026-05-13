@@ -28,6 +28,8 @@ export interface FormulaSuggestionsProps {
   highlightedIndex: number;
   /** Maximum number of suggestions to show */
   maxSuggestions?: number;
+  /** Callback when filtered suggestions count changes */
+  onSuggestionsCountChange?: (count: number) => void;
 }
 
 // Common Excel functions with descriptions
@@ -127,6 +129,42 @@ function getCurrentToken(input: string, cursorPosition: number): string {
 }
 
 /**
+ * Get filtered suggestions based on input and cursor position
+ * Exported for use in parent components
+ */
+export function getFilteredSuggestions(
+  input: string,
+  cursorPosition: number,
+  maxSuggestions: number = 10
+): Suggestion[] {
+  const currentToken = getCurrentToken(input, cursorPosition);
+  
+  if (!currentToken) {
+    return [];
+  }
+  
+  // Combine all suggestion sources
+  const allSuggestions = [
+    ...EXCEL_FUNCTIONS,
+    ...generateCellSuggestions(),
+  ];
+  
+  // Filter by current token
+  const filtered = allSuggestions.filter((suggestion) => {
+    return suggestion.value.startsWith(currentToken);
+  });
+  
+  // Sort by relevance (exact match first, then alphabetically)
+  filtered.sort((a, b) => {
+    if (a.value === currentToken) return -1;
+    if (b.value === currentToken) return 1;
+    return a.value.localeCompare(b.value);
+  });
+  
+  return filtered.slice(0, maxSuggestions);
+}
+
+/**
  * FormulaSuggestions Component
  */
 export const FormulaSuggestions: React.FC<FormulaSuggestionsProps> = ({
@@ -136,34 +174,15 @@ export const FormulaSuggestions: React.FC<FormulaSuggestionsProps> = ({
   isVisible,
   highlightedIndex,
   maxSuggestions = 10,
+  onSuggestionsCountChange,
 }) => {
-  // Get the current token being typed
-  const currentToken = getCurrentToken(input, cursorPosition);
+  // Get filtered suggestions
+  const filteredSuggestions = getFilteredSuggestions(input, cursorPosition, maxSuggestions);
 
-  // Filter suggestions based on current token
-  let filteredSuggestions: Suggestion[] = [];
-  
-  if (currentToken) {
-    // Combine all suggestion sources
-    const allSuggestions = [
-      ...EXCEL_FUNCTIONS,
-      ...generateCellSuggestions(),
-    ];
-    
-    // Filter by current token
-    const filtered = allSuggestions.filter((suggestion) => {
-      return suggestion.value.startsWith(currentToken);
-    });
-    
-    // Sort by relevance (exact match first, then alphabetically)
-    filtered.sort((a, b) => {
-      if (a.value === currentToken) return -1;
-      if (b.value === currentToken) return 1;
-      return a.value.localeCompare(b.value);
-    });
-    
-    filteredSuggestions = filtered.slice(0, maxSuggestions);
-  }
+  // Notify parent of suggestions count change
+  React.useEffect(() => {
+    onSuggestionsCountChange?.(filteredSuggestions.length);
+  }, [filteredSuggestions.length, onSuggestionsCountChange]);
 
   if (!isVisible || filteredSuggestions.length === 0) {
     return null;

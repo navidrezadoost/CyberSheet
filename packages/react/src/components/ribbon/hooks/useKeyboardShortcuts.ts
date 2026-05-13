@@ -67,6 +67,16 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void
 
   // Track if we've registered shortcuts (only once)
   const hasRegistered = useRef(false);
+  const selectionRef = useRef(selection);
+  const commandManagerRef = useRef(commandManager);
+
+  useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
+
+  useEffect(() => {
+    commandManagerRef.current = commandManager;
+  }, [commandManager]);
 
   // Register standard shortcuts (once)
   useEffect(() => {
@@ -98,9 +108,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void
       // Build shortcut context
       const context: ShortcutContext = {
         mode,
-        selection,
+        selection: selectionRef.current,
         isEditing,
-        commandManager,
+        commandManager: commandManagerRef.current,
         event,
       };
 
@@ -127,7 +137,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void
         console.log('[useKeyboardShortcuts] Global listener removed');
       }
     };
-  }, [enabled, commandManager, selection]);
+  }, [enabled]);
 }
 
 /**

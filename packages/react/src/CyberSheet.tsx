@@ -82,6 +82,18 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     return () => { r.dispose(); rendererRef.current = null; };
   }, [workbook, sheetName]);
 
+  // Subscribe to renderer selection changes
+  useEffect(() => {
+    const r = rendererRef.current as CanvasRenderer | null;
+    if (!r || typeof r.onSelectionChange !== 'function') return;
+    
+    const unsubscribe = r.onSelectionChange((selections) => {
+      setSelections(selections);
+    });
+    
+    return () => unsubscribe.dispose();
+  }, [rendererRef.current]);
+
   // React to zoom prop changes
   useEffect(() => {
     const r = rendererRef.current as CanvasRenderer | null;
@@ -210,11 +222,14 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
   };
 
   // Selection (single + multi-range) & resizing interactions
+  // DISABLED: CanvasRenderer handles mouse events directly
   useEffect(() => {
     const el = containerRef.current as any;
     const r = rendererRef.current as any;
     const sheet = sheetRef.current as any;
   if (!el || !r || !sheet) return;
+    
+    return; // Skip all mouse handling - let CanvasRenderer do it
 
     draggingRef.current = null;
 

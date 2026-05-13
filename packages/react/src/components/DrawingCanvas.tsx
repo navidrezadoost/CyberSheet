@@ -842,7 +842,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         position: 'absolute',
         top: 0,
         left: 0,
-        pointerEvents: 'auto',
+        pointerEvents: 'none', // Allow clicks to pass through to spreadsheet
         zIndex: 5,
       }}
       width={canvasWidth}

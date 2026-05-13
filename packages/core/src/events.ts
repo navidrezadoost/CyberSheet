@@ -13,6 +13,8 @@ export class Emitter<T> {
   }
 
   emit(event: T): void {
-    for (const l of Array.from(this.listeners)) l(event);
+    for (const l of Array.from(this.listeners)) {
+      l(event);
+    }
   }
 }

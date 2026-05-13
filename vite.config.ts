@@ -9,7 +9,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    open: '/examples/react-index.html',
+    open: '/examples/excel-app-demo.html',
+    headers: {
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:;",
+    },
     proxy: {
       '/api': {
         target: 'http://192.168.100.60:4009',

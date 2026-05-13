@@ -11,6 +11,7 @@ import { WorkbookViewsGroup } from './WorkbookViewsGroup';
 import { ShowGroup } from './ShowGroup';
 import { ZoomGroup } from './ZoomGroup';
 import { WindowGroup } from './WindowGroup';
+import '../ribbon.css';
 
 interface ViewTabProps {
   workbook: Workbook;
@@ -46,17 +47,7 @@ export const ViewTab: React.FC<ViewTabProps> = ({
   onCommand,
 }) => {
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 8,
-        alignItems: 'flex-start',
-        background: '#F0F0F0',
-        padding: '8px 12px',
-        borderBottom: '1px solid #D9D9D9',
-        fontFamily: 'Segoe UI, sans-serif',
-      }}
-    >
+    <div className="ribbon-content ribbon-tab-content ribbon-tab-content-spacious">
       {/* Workbook Views Group */}
       <WorkbookViewsGroup
         workbook={workbook}
@@ -66,7 +57,7 @@ export const ViewTab: React.FC<ViewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Show Group */}
       <ShowGroup
@@ -79,7 +70,7 @@ export const ViewTab: React.FC<ViewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Zoom Group */}
       <ZoomGroup
@@ -90,7 +81,7 @@ export const ViewTab: React.FC<ViewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Window Group */}
       <WindowGroup

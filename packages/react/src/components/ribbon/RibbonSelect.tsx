@@ -9,6 +9,7 @@ export interface RibbonSelectProps {
   placeholder?: string;
   disabled?: boolean;
   ariaLabel?: string;
+  className?: string;
 }
 
 /**
@@ -39,10 +40,11 @@ export const RibbonSelect: React.FC<RibbonSelectProps> = ({
   placeholder,
   disabled = false,
   ariaLabel,
+  className = '',
 }) => {
   return (
     <select
-      className="ribbon-select"
+      className={`ribbon-select ${className}`.trim()}
       style={{ width: `${width}px` }}
       value={value}
       onChange={(e) => onChange(e.target.value)}

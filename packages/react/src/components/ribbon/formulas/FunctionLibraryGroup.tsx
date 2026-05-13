@@ -212,7 +212,7 @@ export const FunctionLibraryGroup: React.FC<FunctionLibraryGroupProps> = ({
             onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
             onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
           >
-            <span style={iconStyle}>🕐</span>
+            <span style={iconStyle}>�</span>
             <span>Recently<br/>Used</span>
           </button>
 

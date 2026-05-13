@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Excel App Editing, Clipboard, Ribbon Polish, and CSP-Safe Formula Evaluation (May 13, 2026)
+
+**Excel app workflow upgrades**
+- Added in-cell editing with `CellEditOverlay`, double-click/F2 entry, blur/escape/commit handling, and formula reference picking support.
+- Added context menu, mini toolbar, color picker, and format-cells dialog wiring for spreadsheet-style editing flows.
+- Added clipboard-driven commands via `PasteCommand` and new `ClearCellsCommand` for cut, paste, delete, and undo/redo-friendly clearing.
+- Added Excel app demo entry points and demo navigation assets in `examples/` plus updated Vite startup routing.
+
+**Formula editing and security**
+- Added `FormulaAutocompletePanel` and function-registry-backed formula autocomplete integration in the formula bar.
+- Added `SafeExpressionEvaluator` plus tests and switched conditional-format formula execution away from `new Function(...)` to a CSP-safe evaluator.
+
+**Ribbon and layout modernization**
+- Expanded ribbon button, select, and group primitives to support medium sizing, class-based layout hooks, and dialog launchers.
+- Applied Excel-style ribbon layouts to Home, Insert, Formulas, Page Layout, Data, Review, and View tabs.
+- Added extensive Fluent-style ribbon CSS for group labels, split controls, responsive tab shells, utility layouts, and visual polish.
+
+**Renderer and interaction fixes**
+- Added renderer selection-change subscriptions so React state stays aligned with canvas selection.
+- Improved canvas interaction handling with drag selection, resize affordances, select-all hit testing, hover throttling, dirty-cell tracking, and debounced resize redraws.
+- Reduced event-listener churn by stabilizing keyboard shortcut listeners and narrowing effect dependencies in `ExcelApp` and ribbon shortcut hooks.
+- Updated drawing overlay pointer behavior to allow sheet interactions to pass through more reliably.
+
+**Developer experience and docs**
+- Added debug logging helpers and keyboard shortcut documentation.
+- Updated minor formatting and exports in core package surfaces to expose new command and autocomplete dependencies.
+
 ### Added - Phase 9: Backend Wiring - Complete Undo/Redo Architecture (May 10, 2026)
 
 **31 Command Classes Implementing Full Undo/Redo for Data, View, and Review Tabs**

@@ -7,7 +7,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { Address, CellValue } from '@cyber-sheet/core';
-import { FormulaSuggestions, Suggestion } from './FormulaSuggestions';
+import type { FunctionRegistry } from '@cyber-sheet/core';
+import { FormulaAutocompletePanel } from './components/FormulaAutocompletePanel';
 
 export interface FormulaBarProps {
   /** Current selected cell address */
@@ -24,6 +25,8 @@ export interface FormulaBarProps {
   isEditing: boolean;
   /** Callback to toggle edit mode */
   onEditModeChange: (editing: boolean) => void;
+  /** Callback when reference picking mode changes  */
+  onReferencePickingChange?: (picking: boolean) => void;
   /** Optional validation error message */
   validationError?: string;
   /** Callback when user navigates to a cell via name box */
@@ -32,6 +35,8 @@ export interface FormulaBarProps {
   onInsertFunction?: () => void;
   /** Named ranges for name box dropdown */
   namedRanges?: Array<{ name: string; address: Address | string }>;
+  /** Function registry for autocomplete */
+  functionRegistry: FunctionRegistry;
   /** Custom class name */
   className?: string;
   /** Custom styles */
@@ -49,27 +54,44 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   onValueChange,
   isEditing,
   onEditModeChange,
+  onReferencePickingChange,
   validationError,
   onNavigateToCell,
   onInsertFunction,
   namedRanges = [],
+  functionRegistry,
   className = '',
   style = {},
 }) => {
   const [inputValue, setInputValue] = useState<string>('');
   const [cursorPosition, setCursorPosition] = useState<number>(0);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
-  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [showNameBoxDropdown, setShowNameBoxDropdown] = useState<boolean>(false);
   const [nameBoxValue, setNameBoxValue] = useState<string>('');
+  const [panelPosition, setPanelPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const inputRef = useRef(null as HTMLInputElement | null);
   const nameBoxRef = useRef(null as HTMLInputElement | null);
   const containerRef = useRef(null as HTMLDivElement | null);
 
-  // Update input when cell selection changes
+  // Update input when cell selection changes or formula updates
   useEffect(() => {
+    const newValue = cellFormula || String(cellValue ?? '');
+    
     if (!isEditing) {
-      setInputValue(cellFormula || String(cellValue ?? ''));
+      setInputValue(newValue);
+    } else if (isEditing && cellFormula && cellFormula !== inputValue) {
+      // Update during editing if formula changed externally (cell reference picking)
+      setInputValue(cellFormula);
+      // Move cursor to end
+      if (inputRef.current) {
+        setTimeout(() => {
+          if (inputRef.current) {
+            const len = inputRef.current.value.length;
+            inputRef.current.selectionStart = len;
+            inputRef.current.selectionEnd = len;
+          }
+        }, 0);
+      }
     }
     // Update name box with current cell reference
     setNameBoxValue(formatCellReference(selectedCell));
@@ -91,16 +113,24 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     // Update cursor position
     setCursorPosition(e.target.selectionStart || 0);
     
+    // Enable reference picking mode if typing a formula
+    const isFormula = value.startsWith('=');
+    onReferencePickingChange?.(isFormula && isEditing);
+    
     // Show suggestions if typing a formula
-    if (value.startsWith('=') && isEditing) {
+    if (isFormula && isEditing) {
       setShowSuggestions(true);
-      setHighlightedIndex(0);
+      // Update panel position
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setPanelPosition({ x: rect.left, y: rect.bottom });
+      }
     } else {
       setShowSuggestions(false);
     }
   };
   
-  const handleSuggestionSelect = (suggestion: Suggestion) => {
+  const handleFunctionSelect = (functionName: string) => {
     if (!inputRef.current) return;
     
     const currentValue = inputValue;
@@ -108,25 +138,25 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     
     // Find the start of the current token
     let start = cursorPos - 1;
-    while (start >= 0 && /[A-Za-z0-9_]/.test(currentValue[start])) {
+    while (start >= 0 && /[A-Za-z0-9_.]/.test(currentValue[start])) {
       start--;
     }
     start++;
     
-    // Replace the current token with the suggestion
+    // Replace the current token with the function name + opening paren
     const newValue = 
       currentValue.substring(0, start) + 
-      suggestion.value +
-      (suggestion.type === 'function' ? '(' : '') +
+      functionName + '(' +
       currentValue.substring(cursorPos);
     
     setInputValue(newValue);
+    onValueChange?.(newValue);
     setShowSuggestions(false);
     
-    // Set cursor position after the inserted text
+    // Set cursor position after the opening paren
     setTimeout(() => {
       if (inputRef.current) {
-        const newCursorPos = start + suggestion.value.length + (suggestion.type === 'function' ? 1 : 0);
+        const newCursorPos = start + functionName.length + 1;
         inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
         inputRef.current.focus();
       }
@@ -141,29 +171,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (showSuggestions) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const newIndex = (highlightedIndex + 1) % 10;
-        setHighlightedIndex(newIndex);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        const newIndex = (highlightedIndex - 1 + 10) % 10;
-        setHighlightedIndex(newIndex);
-      } else if (e.key === 'Tab') {
-        e.preventDefault();
-        // Tab should select the highlighted suggestion
-        setShowSuggestions(false);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        // Enter should close suggestions and submit the formula
-        setShowSuggestions(false);
-        handleSubmit();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        setShowSuggestions(false);
-      }
-    } else {
+    // Only handle keys here if suggestions panel is NOT visible
+    // The panel handles its own keyboard navigation
+    if (!showSuggestions) {
       if (e.key === 'Enter') {
         e.preventDefault();
         handleSubmit();
@@ -172,6 +182,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
         setInputValue(cellFormula || String(cellValue ?? ''));
         onEditModeChange(false);
       }
+    } else if (e.key === 'Escape') {
+      // Allow Escape to close the panel
+      setShowSuggestions(false);
     }
   };
 
@@ -190,7 +203,11 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     if (inputRef.current && inputValue.startsWith('=')) {
       setCursorPosition(inputRef.current.selectionStart || 0);
       setShowSuggestions(true);
-      setHighlightedIndex(0);
+      // Update panel position
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setPanelPosition({ x: rect.left, y: rect.bottom });
+      }
     }
   };
 
@@ -546,12 +563,16 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           style={{ ...inputStyles, width: '100%' }}
         />
         
-        <FormulaSuggestions
+        <FormulaAutocompletePanel
           input={inputValue}
           cursorPosition={cursorPosition}
-          onSelect={handleSuggestionSelect}
+          functionRegistry={functionRegistry}
+          x={panelPosition.x}
+          y={panelPosition.y}
           isVisible={showSuggestions}
-          highlightedIndex={highlightedIndex}
+          onFunctionSelect={handleFunctionSelect}
+          onClose={() => setShowSuggestions(false)}
+          maxSuggestions={10}
         />
       </div>
       

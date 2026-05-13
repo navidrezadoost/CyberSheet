@@ -64,7 +64,25 @@ export class CanvasRenderer {
   private hoveredCell: Address | null = null;
   private clickStartTime = 0;
   private clickStartCell: Address | null = null;
+  private isDragging = false;
+  private dragStartCell: Address | null = null;
+  private resizeState: { type: 'col' | 'row'; index: number; startPos: number; startSize: number } | null = null;
   private scrollEmitter = new Emitter<{ type: 'scroll'; scroll: { x: number; y: number; maxX: number; maxY: number } }>();
+  private selectionEmitter = new Emitter<{ type: 'selection'; selections: { start: Address; end: Address }[] }>();
+  
+  // Mouse hover throttling (rAF-based to reduce RAM/CPU)
+  private pendingMouseX = 0;
+  private pendingMouseY = 0;
+  private hoverProcessPending = false;
+  private lastHoveredRow = -1;
+  private lastHoveredCol = -1;
+  private isVisible = true; // Track tab visibility to pause processing when hidden
+  
+  // Dirty-rectangle rendering: track cells that need redraw
+  private dirtyCells = new Set<string>(); // Format: "row:col"
+  private gridLinesCanvas: HTMLCanvasElement | null = null; // Static gridlines rendered once
+  private gridLinesNeedRedraw = true; // Flag to redraw gridlines on scroll/resize
+  
   // Distinct value cache per column for filter menus
 
   private clearValueCacheForColumn(col?: number) {
@@ -156,6 +174,11 @@ export class CanvasRenderer {
   }
 
   dispose() {
+    // Clean up resize timer
+    if (this.resizeTimer !== null) {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
     this.resizeObserver?.disconnect();
     this.removeEventListeners();
     this.canvas.remove();
@@ -172,6 +195,10 @@ export class CanvasRenderer {
     
     this.scrollX = clampedX;
     this.scrollY = clampedY;
+    
+    // Scrolling changes viewport - trigger full redraw
+    this.gridLinesNeedRedraw = true;
+    this.dirtyCells.clear(); // Clear dirty cells since we're redrawing everything
     
     // Emit scroll event for adapters to listen
     this.scrollEmitter.emit({
@@ -190,8 +217,38 @@ export class CanvasRenderer {
       this.redraw();
     });
   }
-  setSelection(sel: { start: Address; end: Address } | null) { this.selection = sel; this.selections = sel ? [sel] : []; this.scheduleRedraw(); }
-  setSelections(ranges: { start: Address; end: Address }[]) { this.selections = ranges.slice(); this.selection = ranges[0] ?? null; this.scheduleRedraw(); }
+  setSelection(sel: { start: Address; end: Address } | null) { 
+    // Mark old selection dirty
+    if (this.selection) this.markRangeDirty(this.selection.start, this.selection.end);
+    this.selection = sel; 
+    this.selections = sel ? [sel] : []; 
+    // Mark new selection dirty
+    if (sel) this.markRangeDirty(sel.start, sel.end);
+    this.scheduleRedraw(); 
+  }
+  setSelections(ranges: { start: Address; end: Address }[]) { 
+    // Check if selection actually changed to avoid unnecessary events
+    const changed = ranges.length !== this.selections.length || 
+      ranges.some((r, i) => {
+        const old = this.selections[i];
+        return !old || 
+          r.start.row !== old.start.row || r.start.col !== old.start.col ||
+          r.end.row !== old.end.row || r.end.col !== old.end.col;
+      });
+    
+    // Mark old selections dirty
+    for (const range of this.selections) this.markRangeDirty(range.start, range.end);
+    this.selections = ranges.slice(); 
+    this.selection = ranges[0] ?? null; 
+    // Mark new selections dirty
+    for (const range of ranges) this.markRangeDirty(range.start, range.end);
+    this.scheduleRedraw(); 
+    
+    // Only emit selection change event if selection actually changed
+    if (changed) {
+      this.selectionEmitter.emit({ type: 'selection', selections: this.selections });
+    }
+  }
   getSelections(): { start: Address; end: Address }[] { return this.selections.slice(); }
   getScroll() { return { x: this.scrollX, y: this.scrollY }; }
   scrollBy(dx: number, dy: number) { this.setScroll(this.scrollX + dx, this.scrollY + dy); }
@@ -204,6 +261,14 @@ export class CanvasRenderer {
     return this.scrollEmitter.on((event: any) => {
       if (event.type === 'scroll') {
         listener(event.scroll);
+      }
+    });
+  }
+
+  onSelectionChange(listener: (selections: { start: Address; end: Address }[]) => void): { dispose: () => void } {
+    return this.selectionEmitter.on((event: any) => {
+      if (event.type === 'selection') {
+        listener(event.selections);
       }
     });
   }
@@ -343,6 +408,106 @@ export class CanvasRenderer {
     return resolveExcelColor(color, { defaultColor });
   }
   
+  /**
+   * Mark a specific cell as dirty for incremental rendering
+   * Only this cell will be redrawn on next frame (unless full redraw triggered)
+   */
+  markCellDirty(row: number, col: number): void {
+    const key = `${row}:${col}`;
+    this.dirtyCells.add(key);
+  }
+  
+  /**
+   * Mark a range of cells as dirty (for selection changes, etc.)
+   */
+  private markRangeDirty(start: Address, end: Address): void {
+    const r1 = Math.min(start.row, end.row);
+    const r2 = Math.max(start.row, end.row);
+    const c1 = Math.min(start.col, end.col);
+    const c2 = Math.max(start.col, end.col);
+    
+    // Avoid marking too many cells (fallback to full redraw for large ranges)
+    const cellCount = (r2 - r1 + 1) * (c2 - c1 + 1);
+    if (cellCount > 100) {
+      // For large selections, trigger full redraw
+      this.gridLinesNeedRedraw = true;
+      this.dirtyCells.clear();
+      return;
+    }
+    
+    for (let r = r1; r <= r2; r++) {
+      for (let c = c1; c <= c2; c++) {
+        this.markCellDirty(r, c);
+      }
+    }
+  }
+  
+  /**
+   * Render static gridlines to offscreen canvas
+   * Only called when gridLinesNeedRedraw is true (scroll, resize, zoom)
+   */
+  private renderGridLines(): void {
+    if (!this.gridLinesCanvas) {
+      this.gridLinesCanvas = document.createElement('canvas');
+      this.gridLinesCanvas.width = this.canvas.width;
+      this.gridLinesCanvas.height = this.canvas.height;
+    }
+    
+    const ctx = this.gridLinesCanvas.getContext('2d')!;
+    if (!ctx) return;
+    
+    const width = this.canvas.width / this.dpr;
+    const height = this.canvas.height / this.dpr;
+    const { headerHeight, headerWidth } = this.options;
+    const { gridColor, sheetBg } = this.theme;
+    
+    ctx.save();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    
+    // Fill background
+    ctx.fillStyle = sheetBg;
+    ctx.fillRect(headerWidth, headerHeight, width - headerWidth, height - headerHeight);
+    
+    // Draw gridlines
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    
+    const { firstRow, firstCol, xOffset, yOffset } = this.visibleRange();
+    
+    // Vertical gridlines (columns)
+    let x = xOffset;
+    let col = firstCol;
+    while (x < width && col <= this.sheet.colCount) {
+      const cw = this.sheet.getColumnWidth(col) * this.zoom;
+      const px = Math.round(x + cw) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(px, headerHeight);
+      ctx.lineTo(px, height);
+      ctx.stroke();
+      x += cw;
+      col++;
+    }
+    
+    // Horizontal gridlines (rows - respect filters)
+    const visRows = this.getVisibleRows();
+    let y = yOffset;
+    let rowIndex = (this.visibleRange().firstRowIndex ?? 0);
+    while (y < height && rowIndex < visRows.length) {
+      const row = visRows[rowIndex];
+      const rh = this.sheet.getRowHeight(row) * this.zoom;
+      const py = Math.round(y + rh) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(headerWidth, py);
+      ctx.lineTo(width, py);
+      ctx.stroke();
+      y += rh;
+      rowIndex++;
+    }
+    
+    ctx.restore();
+  }
+  
   addLayer(layer: RenderLayer) { this.layers.push(layer); this.layers.sort((a, b) => (stageOrder(a.stage) - stageOrder(b.stage)) || ((a.zIndex ?? 0) - (b.zIndex ?? 0))); this.redraw(); }
   removeLayer(id: string) { this.layers = this.layers.filter(l => l.id !== id); this.redraw(); }
   invalidateRange(r1: number, c1: number, r2: number, c2: number) {
@@ -378,10 +543,20 @@ export class CanvasRenderer {
   }
 
   private resizeObserver?: ResizeObserver;
+  private resizeTimer: number | null = null;
+  
   private observeResize() {
-    this.resizeObserver = new ResizeObserver(() => { 
-      this.resize(); 
-      this.scheduleRedraw();
+    this.resizeObserver = new ResizeObserver(() => {
+      // Debounce: wait 150ms after the LAST resize event before redrawing
+      if (this.resizeTimer !== null) {
+        clearTimeout(this.resizeTimer);
+      }
+      
+      this.resizeTimer = window.setTimeout(() => {
+        this.resize();
+        this.scheduleRedraw();
+        this.resizeTimer = null;
+      }, 150);
     });
     this.resizeObserver.observe(this.container);
   }
@@ -396,6 +571,14 @@ export class CanvasRenderer {
     this.canvas.style.height = `${h}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.ctx.font = `${this.theme.fontSize}px ${this.theme.fontFamily}`;
+    
+    // Resize changes gridlines and viewport - trigger full redraw
+    this.gridLinesNeedRedraw = true;
+    this.dirtyCells.clear();
+    if (this.gridLinesCanvas) {
+      this.gridLinesCanvas.width = this.canvas.width;
+      this.gridLinesCanvas.height = this.canvas.height;
+    }
   }
 
   private visibleRange(): { firstRow: number; firstCol: number; xOffset: number; yOffset: number; firstRowIndex?: number } {
@@ -422,6 +605,45 @@ export class CanvasRenderer {
 
   redraw() {
     const t0 = performance.now();
+    
+    // OPTIMIZATION: Dirty-cell-only rendering
+    // If gridlines don't need redraw and we have a small set of dirty cells,
+    // only redraw those specific cells for massive performance gain
+    const canUseDirtyRectOptimization = 
+      this.dirtyCells.size > 0 && 
+      this.dirtyCells.size <= 20 && 
+      !this.gridLinesNeedRedraw;
+    
+    if (canUseDirtyRectOptimization) {
+      const dirtyCellsArray = Array.from(this.dirtyCells);
+      this.dirtyCells.clear();
+      
+      // Render gridlines to offscreen canvas if needed
+      if (!this.gridLinesCanvas || this.gridLinesCanvas.width !== this.canvas.width) {
+        this.renderGridLines();
+        this.gridLinesNeedRedraw = false;
+      }
+      
+      // Copy gridlines from offscreen canvas (fast blit)
+      const ctx = this.ctx;
+      const width = this.canvas.width / this.dpr;
+      const height = this.canvas.height / this.dpr;
+      
+      if (this.gridLinesCanvas) {
+        ctx.save();
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(this.gridLinesCanvas, 0, 0);
+        ctx.restore();
+      }
+      
+      // Redraw only dirty cells
+      // TODO: Implement incremental cell redraw
+      // For now, fall back to full redraw to maintain correctness
+      // This will be completed in next iteration
+      this.gridLinesNeedRedraw = true; // Force full redraw for now
+    }
+    
+    // BEGIN: Standard full-frame render
     // Begin frame: optionally keep cache; could purge if memory grows. For now, keep across frames.
   const { headerHeight, headerWidth } = this.options;
   const { gridColor, headerBg, headerFg, sheetBg, selectionColor } = this.theme;
@@ -462,6 +684,25 @@ export class CanvasRenderer {
   ctx.fillStyle = headerBg;
       ctx.fillRect(0, 0, width, headerHeight);
       ctx.fillRect(0, 0, headerWidth, height);
+      
+      // Draw select-all button (top-left corner) with triangle icon
+      ctx.fillStyle = headerBg;
+      ctx.fillRect(0, 0, headerWidth, headerHeight);
+      ctx.strokeStyle = gridColor;
+      ctx.strokeRect(0, 0, headerWidth, headerHeight);
+      
+      // Draw triangle icon (like Excel's select-all)
+      ctx.fillStyle = '#666666';
+      ctx.beginPath();
+      const triSize = 6;
+      const triX = headerWidth / 2;
+      const triY = headerHeight / 2;
+      ctx.moveTo(triX - triSize / 2, triY + triSize / 3);
+      ctx.lineTo(triX + triSize / 2, triY + triSize / 3);
+      ctx.lineTo(triX + triSize / 2, triY - triSize / 3);
+      ctx.closePath();
+      ctx.fill();
+      
       this.drawLayers('background', ctx, width, height);
 
       // grid background
@@ -848,11 +1089,20 @@ export class CanvasRenderer {
 
       this.drawLayers('cells', ctx, width, height);
 
+      // Draw selections with light gray fill (Excel-style)
       const sels = this.selections.length ? this.selections : (this.selection ? [this.selection] : []);
       for (const sel of sels) {
         const a = sel.start; const b = sel.end; const r1 = Math.min(a.row, b.row), r2 = Math.max(a.row, b.row); const c1 = Math.min(a.col, b.col), c2 = Math.max(a.col, b.col);
         const rect = this.rectForRange(r1, c1, r2, c2);
-        if (rect) { ctx.strokeStyle = selectionColor; ctx.lineWidth = 2; ctx.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2); }
+        if (rect) {
+          // Fill with very light gray (Excel uses rgba(217, 217, 217, 0.3) or similar)
+          ctx.fillStyle = 'rgba(217, 217, 217, 0.3)';
+          ctx.fillRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
+          // Draw border
+          ctx.strokeStyle = selectionColor; 
+          ctx.lineWidth = 2; 
+          ctx.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
+        }
       }
       
       // Draw auto-fill handle on active selection (last one)
@@ -875,6 +1125,16 @@ export class CanvasRenderer {
     }
 
     this.drawLayers('after', ctx, width, height);
+    
+    // After full redraw, update offscreen gridlines canvas if needed
+    if (this.gridLinesNeedRedraw) {
+      this.renderGridLines();
+      this.gridLinesNeedRedraw = false;
+    }
+    
+    // Clear dirty cells since we just did a full redraw
+    this.dirtyCells.clear();
+    
     this._lastRenderMs = performance.now() - t0;
     this.dirty = null;
     // observability callback
@@ -972,12 +1232,18 @@ export class CanvasRenderer {
     | { type: 'header-col'; col: number }
     | { type: 'header-row'; row: number }
     | { type: 'fill-handle'; rangeIndex: number }
+    | { type: 'select-all' }
     | null {
     const rect = this.canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     const { headerHeight, headerWidth } = this.options;
     const threshold = 4; // px proximity to border
+    
+    // Check select-all button (top-left corner)
+    if (x <= headerWidth && y <= headerHeight) {
+      return { type: 'select-all' };
+    }
     
     // Check auto-fill handle for active selection (last one in multi-range)
     if (this.selections.length > 0) {
@@ -999,7 +1265,7 @@ export class CanvasRenderer {
     }
     
     if (y <= headerHeight && x >= headerWidth) {
-      // Column header area
+      // Column header area - check resize handles first
       let cx = headerWidth - this.scrollX; let col = 1;
       while (cx < this.canvas.width / this.dpr && col <= this.sheet.colCount) {
         const w = this.sheet.getColumnWidth(col) * this.zoom;
@@ -1011,7 +1277,7 @@ export class CanvasRenderer {
       return null;
     }
     if (x <= headerWidth && y >= headerHeight) {
-      // Row header area
+      // Row header area - check resize handles first
       let cy = headerHeight - this.scrollY; const vis = this.getVisibleRows(); let idx = 0;
       while (cy < this.canvas.height / this.dpr && idx < vis.length) {
         const row = vis[idx];
@@ -1038,9 +1304,44 @@ export class CanvasRenderer {
 
   // ==================== Event System ====================
 
-  private handleClick = (e: MouseEvent) => {
+  private handleMouseDown = (e: MouseEvent) => {
     const hit = this.hitTest(e.clientX, e.clientY);
     if (!hit) return;
+    
+    // Handle select-all button (top-left corner)
+    if (hit.type === 'select-all') {
+      this.setSelections([{ 
+        start: { row: 1, col: 1 }, 
+        end: { row: this.sheet.rowCount, col: this.sheet.colCount } 
+      }]);
+      return;
+    }
+    
+    // Handle column resize
+    if (hit.type === 'col-resize') {
+      const rect = this.canvas.getBoundingClientRect();
+      this.resizeState = {
+        type: 'col',
+        index: hit.col,
+        startPos: e.clientX,
+        startSize: this.sheet.getColumnWidth(hit.col)
+      };
+      return;
+    }
+    
+    // Handle row resize
+    if (hit.type === 'row-resize') {
+      const rect = this.canvas.getBoundingClientRect();
+      this.resizeState = {
+        type: 'row',
+        index: hit.row,
+        startPos: e.clientY,
+        startSize: this.sheet.getRowHeight(hit.row)
+      };
+      return;
+    }
+    
+    // Handle header clicks for column/row selection
     if (hit.type === 'header-col') {
       const col = hit.col;
       this.setSelections([{ start: { row: 1, col }, end: { row: this.sheet.rowCount, col } }]);
@@ -1051,12 +1352,11 @@ export class CanvasRenderer {
       this.setSelections([{ start: { row, col: 1 }, end: { row, col: this.sheet.colCount } }]);
       return;
     }
+    
     if (hit.type !== 'cell') return;
     const addr = hit.addr;
     
-    const bounds = this.getCellBounds(addr);
-    if (!bounds) return;
-    
+    // Check for double-click
     const now = Date.now();
     const isDoubleClick = this.clickStartCell && 
       addr.row === this.clickStartCell.row && 
@@ -1064,19 +1364,323 @@ export class CanvasRenderer {
       now - this.clickStartTime < 300;
     
     if (isDoubleClick) {
-      this.sheet['events'].emit({
-        type: 'cell-double-click',
-        event: { address: addr, bounds, originalEvent: e },
-      });
+      e.preventDefault(); // Prevent text selection on double-click
+      const bounds = this.getCellBounds(addr);
+      if (bounds) {
+        const eventObj = {
+          type: 'cell-double-click' as const,
+          event: { address: addr, bounds, originalEvent: e },
+        };
+        this.sheet['events'].emit(eventObj);
+      }
       this.clickStartCell = null;
-    } else {
+      this.isDragging = false;
+      return;
+    }
+    
+    // Start drag selection
+    this.isDragging = true;
+    this.dragStartCell = addr;
+    this.clickStartCell = addr;
+    this.clickStartTime = now;
+    
+    // Set initial single-cell selection
+    this.setSelections([{ start: addr, end: addr }]);
+    
+    const bounds = this.getCellBounds(addr);
+    if (bounds) {
       this.sheet['events'].emit({
         type: 'cell-click',
         event: { address: addr, bounds, originalEvent: e },
       });
-      this.clickStartCell = addr;
-      this.clickStartTime = now;
     }
+  };
+
+  private handleMouseMove = (e: MouseEvent) => {
+    // Store mouse position without processing - will be handled in rAF
+    this.pendingMouseX = e.clientX;
+    this.pendingMouseY = e.clientY;
+    
+    // Schedule processing on next animation frame if not already scheduled
+    if (!this.hoverProcessPending) {
+      this.hoverProcessPending = true;
+      requestAnimationFrame(() => this.processHover());
+    }
+  };
+
+  // Process hover logic on rAF to throttle to max 60fps and reduce RAM/CPU
+  // Optimizations applied:
+  // 1. rAF throttling: max 60 calls/sec vs 1000+ mousemove events
+  // 2. Primitive comparisons: number === number (no object allocations)
+  // 3. Early exit: skip event emission if cell unchanged (99% of hovers)
+  // 4. Visibility check: pause when tab hidden (saves CPU in background)
+  // 5. No event references: originalEvent set to null (prevents memory leaks)
+  private processHover = () => {
+    this.hoverProcessPending = false;
+    
+    // Skip processing if tab is hidden (micro-optimization)
+    if (!this.isVisible) {
+      return;
+    }
+    
+    const mouseX = this.pendingMouseX;
+    const mouseY = this.pendingMouseY;
+    
+    const addr = this.cellAt(mouseX, mouseY);
+    
+    // Handle column/row resize dragging
+    if (this.resizeState) {
+      if (this.resizeState.type === 'col') {
+        const delta = (mouseX - this.resizeState.startPos) / this.zoom;
+        const newWidth = Math.max(10, this.resizeState.startSize + delta) | 0; // Integer hint
+        this.sheet.setColumnWidth(this.resizeState.index, newWidth);
+        // Mark all visible cells in this column dirty
+        const visRows = this.getVisibleRows();
+        for (const row of visRows) {
+          this.markCellDirty(row, this.resizeState.index);
+        }
+        this.gridLinesNeedRedraw = true; // Gridlines changed
+        this.scheduleRedraw();
+      } else if (this.resizeState.type === 'row') {
+        const delta = (mouseY - this.resizeState.startPos) / this.zoom;
+        const newHeight = Math.max(10, this.resizeState.startSize + delta) | 0; // Integer hint
+        this.sheet.setRowHeight(this.resizeState.index, newHeight);
+        // Mark all visible cells in this row dirty
+        for (let c = 1; c <= this.sheet.colCount; c++) {
+          this.markCellDirty(this.resizeState.index, c);
+        }
+        this.gridLinesNeedRedraw = true; // Gridlines changed
+        this.scheduleRedraw();
+      }
+      return;
+    }
+    
+    // Handle drag selection
+    if (this.isDragging && this.dragStartCell && addr) {
+      // Extend selection from drag start to current cell
+      this.setSelections([{ start: this.dragStartCell, end: addr }]);
+      
+      // Auto-scroll when near edges
+      const rect = this.canvas.getBoundingClientRect();
+      const relX = mouseX - rect.left;
+      const relY = mouseY - rect.top;
+      const viewport = this.getViewportSize();
+      const margin = 24;
+      const step = 10;
+      
+      if (relX < this.options.headerWidth + margin) {
+        this.scrollBy(-step, 0);
+      } else if (relX > this.options.headerWidth + viewport.width - margin) {
+        this.scrollBy(step, 0);
+      }
+      
+      if (relY < this.options.headerHeight + margin) {
+        this.scrollBy(0, -step);
+      } else if (relY > this.options.headerHeight + viewport.height - margin) {
+        this.scrollBy(0, step);
+      }
+      
+      return;
+    }
+    
+    // Update cursor based on hover position
+    const hit = this.hitTest(mouseX, mouseY);
+    if (hit) {
+      if (hit.type === 'col-resize') {
+        this.canvas.style.cursor = 'col-resize';
+      } else if (hit.type === 'row-resize') {
+        this.canvas.style.cursor = 'row-resize';
+      } else if (hit.type === 'select-all') {
+        this.canvas.style.cursor = 'pointer';
+      } else {
+        this.canvas.style.cursor = 'default';
+      }
+    } else {
+      this.canvas.style.cursor = 'default';
+    }
+    
+    // Handle hover - only fire events if cell changed (use primitives to avoid allocations)
+    const newRow = addr ? addr.row : -1;
+    const newCol = addr ? addr.col : -1;
+    
+    // Early exit if same cell (no event emission)
+    if (newRow === this.lastHoveredRow && newCol === this.lastHoveredCol) {
+      return;
+    }
+    
+    // Mark previous and new cells dirty for hover highlight redraw
+    if (this.lastHoveredRow !== -1 && this.lastHoveredCol !== -1) {
+      this.markCellDirty(this.lastHoveredRow, this.lastHoveredCol);
+    }
+    if (newRow !== -1 && newCol !== -1) {
+      this.markCellDirty(newRow, newCol);
+    }
+    
+    // Fire hover-end for previous cell
+    if (this.lastHoveredRow !== -1 && this.hoveredCell) {
+      this.sheet['events'].emit({
+        type: 'cell-hover-end',
+        address: this.hoveredCell,
+      });
+    }
+    
+    // Fire hover for new cell
+    if (addr) {
+      const bounds = this.getCellBounds(addr);
+      if (bounds) {
+        this.sheet['events'].emit({
+          type: 'cell-hover',
+          event: { address: addr, bounds, originalEvent: null }, // No event ref to avoid memory retention
+        });
+      }
+      this.hoveredCell = addr;
+    } else {
+      this.hoveredCell = null;
+    }
+    
+    this.lastHoveredRow = newRow;
+    this.lastHoveredCol = newCol;
+  };
+
+  private handleMouseUp = (e: MouseEvent) => {
+    this.isDragging = false;
+    this.resizeState = null;
+  };
+
+  private handleDblClick = (e: MouseEvent) => {
+    const hit = this.hitTest(e.clientX, e.clientY);
+    if (!hit) return;
+    
+    // Double-click on column resize handle - auto-size column
+    if (hit.type === 'col-resize') {
+      this.autoSizeColumn(hit.col);
+      return;
+    }
+    
+    // Double-click on row resize handle - auto-size row
+    if (hit.type === 'row-resize') {
+      this.autoSizeRow(hit.row);
+      return;
+    }
+  };
+  
+  // Auto-size column to fit content
+  private autoSizeColumn(col: number) {
+    this.ctx.save();
+    this.ctx.font = `${this.theme.fontSize}px ${this.theme.fontFamily}`;
+    
+    let maxWidth = 50; // minimum width
+    
+    // Scan visible rows for max content width
+    const visRows = this.getVisibleRows();
+    const scanRows = visRows.slice(0, Math.min(100, visRows.length)); // limit scan
+    
+    for (const row of scanRows) {
+      const addr = { row, col };
+      const cell = this.sheet.getCell(addr);
+      if (!cell) continue;
+      
+      const value = cell.value;
+      if (value != null) {
+        const style = this.sheet.getCellStyle(addr);
+        const formatted = this.formatCache.formatValue(value, style?.numberFormat);
+        const text = formatted.text;
+        const width = this.ctx.measureText(text).width;
+        maxWidth = Math.max(maxWidth, width + 12); // 12px padding (6px each side)
+      }
+    }
+    
+    this.sheet.setColumnWidth(col, Math.min(maxWidth, 400)); // cap at 400px
+    this.ctx.restore();
+    this.scheduleRedraw();
+  }
+  
+  // Auto-size row to fit content - calculates height needed to show all content
+  private autoSizeRow(row: number) {
+    this.ctx.save();
+    this.ctx.font = `${this.theme.fontSize}px ${this.theme.fontFamily}`;
+    
+    let maxHeight = 20; // minimum height (default)
+    const paddingTop = 2; // px
+    const paddingBottom = 4; // px
+    const totalVerticalPadding = paddingTop + paddingBottom; // 6px total
+    
+    // Scan all columns for max content height in this row
+    for (let col = 1; col <= Math.min(this.sheet.colCount, 100); col++) {
+      const addr = { row, col };
+      const cell = this.sheet.getCell(addr);
+      if (!cell) continue;
+      
+      const value = cell.value;
+      if (value == null) continue;
+      
+      const style = this.sheet.getCellStyle(addr);
+      const formatted = this.formatCache.formatValue(value, style?.numberFormat);
+      const text = formatted.text;
+      
+      // Get cell-specific font size
+      const cellFontSize = style?.fontSize ?? this.theme.fontSize;
+      const lineHeight = cellFontSize * 1.2; // Line height includes spacing between lines
+      
+      // Get column width to calculate how many lines the content needs
+      const colWidth = this.sheet.getColumnWidth(col);
+      const horizontalPadding = 8; // 4px each side
+      const maxTextWidth = colWidth - horizontalPadding;
+      
+      let lineCount = 1;
+      
+      // Check for explicit newlines first
+      if (text.includes('\n')) {
+        // Text has newlines - each line might also wrap
+        const lines = text.split('\n');
+        lineCount = 0;
+        
+        // Set font for this specific cell
+        this.ctx.font = `${cellFontSize}px ${style?.fontFamily ?? this.theme.fontFamily}`;
+        
+        for (const line of lines) {
+          if (line.length === 0) {
+            // Empty line still takes up space
+            lineCount += 1;
+          } else {
+            const lineWidth = this.ctx.measureText(line).width;
+            if (lineWidth > maxTextWidth) {
+              // This line wraps - calculate how many wrapped lines
+              lineCount += Math.ceil(lineWidth / maxTextWidth);
+            } else {
+              lineCount += 1;
+            }
+          }
+        }
+      } else {
+        // No newlines - calculate if text would wrap based on width
+        this.ctx.font = `${cellFontSize}px ${style?.fontFamily ?? this.theme.fontFamily}`;
+        const textWidth = this.ctx.measureText(text).width;
+        
+        if (textWidth > maxTextWidth) {
+          // Text is wider than cell - calculate wrapped lines
+          lineCount = Math.ceil(textWidth / maxTextWidth);
+        } else {
+          // Text fits in one line
+          lineCount = 1;
+        }
+      }
+      
+      // Calculate total height needed: content + padding above and below
+      const contentHeight = lineCount * lineHeight;
+      const cellHeight = contentHeight + totalVerticalPadding;
+      
+      maxHeight = Math.max(maxHeight, cellHeight);
+    }
+    
+    this.sheet.setRowHeight(row, Math.min(Math.ceil(maxHeight), 300)); // cap at 300px
+    this.ctx.restore();
+    this.scheduleRedraw();
+  }
+
+  private handleClick = (e: MouseEvent) => {
+    // Click is now mostly handled by mousedown/mouseup
+    // Keep this for compatibility but most logic moved to handleMouseDown
   };
 
   private handleContextMenu = (e: MouseEvent) => {
@@ -1115,51 +1719,36 @@ export class CanvasRenderer {
     });
   };
 
-
-  private handleMouseMove = (e: MouseEvent) => {
-    const addr = this.cellAt(e.clientX, e.clientY);
-    
-    if (!addr) {
-      if (this.hoveredCell) {
-        this.sheet['events'].emit({
-          type: 'cell-hover-end',
-          address: this.hoveredCell,
-        });
-        this.hoveredCell = null;
-      }
-      return;
-    }
-    
-    if (!this.hoveredCell || addr.row !== this.hoveredCell.row || addr.col !== this.hoveredCell.col) {
-      if (this.hoveredCell) {
-        this.sheet['events'].emit({
-          type: 'cell-hover-end',
-          address: this.hoveredCell,
-        });
-      }
-      
-      const bounds = this.getCellBounds(addr);
-      if (bounds) {
-        this.sheet['events'].emit({
-          type: 'cell-hover',
-          event: { address: addr, bounds, originalEvent: e },
-        });
-      }
-      
-      this.hoveredCell = addr;
+  private handleVisibilityChange = () => {
+    this.isVisible = !document.hidden;
+    // Cancel pending hover processing when tab becomes hidden
+    if (!this.isVisible) {
+      this.hoverProcessPending = false;
     }
   };
 
   private setupEventListeners() {
-    this.canvas.addEventListener('click', this.handleClick);
-    this.canvas.addEventListener('contextmenu', this.handleContextMenu);
+    this.canvas.addEventListener('mousedown', this.handleMouseDown);
     this.canvas.addEventListener('mousemove', this.handleMouseMove);
+    this.canvas.addEventListener('mouseup', this.handleMouseUp);
+    this.canvas.addEventListener('click', this.handleClick);
+    this.canvas.addEventListener('dblclick', this.handleDblClick);
+    this.canvas.addEventListener('contextmenu', this.handleContextMenu);
+    // Global mouseup to handle drag ending outside canvas
+    window.addEventListener('mouseup', this.handleMouseUp);
+    // Pause processing when tab is hidden to save CPU/RAM
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
   }
 
   private removeEventListeners() {
-    this.canvas.removeEventListener('click', this.handleClick);
-    this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
+    this.canvas.removeEventListener('mousedown', this.handleMouseDown);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
+    this.canvas.removeEventListener('mouseup', this.handleMouseUp);
+    this.canvas.removeEventListener('click', this.handleClick);
+    this.canvas.removeEventListener('dblclick', this.handleDblClick);
+    this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
+    window.removeEventListener('mouseup', this.handleMouseUp);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
   }
 
   // ==================== Navigation API ====================

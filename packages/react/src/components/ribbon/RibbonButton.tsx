@@ -8,14 +8,17 @@ export interface RibbonButtonProps {
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
-  size?: 'small' | 'large';
+  size?: 'small' | 'medium' | 'large';
+  className?: string;
 }
 
 /**
  * RibbonButton - Core button component for Excel-like Ribbon UI
  * 
  * Matches Excel 365 Online button behavior:
- * - 32x32px default size (small buttons)
+ * - Small: 24px height, horizontal layout
+ * - Medium: 32px height, horizontal layout
+ * - Large: 48x64px, vertical layout
  * - Hover state: #edebe9
  * - Active state: #e1dfdd
  * - Disabled state: #a19f9d
@@ -28,6 +31,7 @@ export interface RibbonButtonProps {
  *   tooltip="Bold (Ctrl+B)"
  *   active={isBold}
  *   onClick={handleBold}
+ *   size="medium"
  * />
  */
 export const RibbonButton: React.FC<RibbonButtonProps> = ({
@@ -38,6 +42,7 @@ export const RibbonButton: React.FC<RibbonButtonProps> = ({
   disabled = false,
   onClick,
   size = 'small',
+  className = '',
 }) => {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -57,7 +62,7 @@ export const RibbonButton: React.FC<RibbonButtonProps> = ({
 
   return (
     <button
-      className={`ribbon-btn ribbon-btn-${size} ${active ? 'active' : ''}`}
+      className={`ribbon-btn ribbon-btn-${size} ${active ? 'active' : ''} ${className}`.trim()}
       title={tooltip}
       disabled={disabled}
       onClick={handleClick}

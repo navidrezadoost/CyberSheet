@@ -1,8 +1,12 @@
 /**
- * Excel 365 Online Ribbon UI Styles
+ * Excel 365 Ribbon UI Styles - Enhanced Version
  * 
- * Extracted from Excel Online using DevTools inspection
- * Color palette, spacing, and interaction states match Excel exactly
+ * Matches Microsoft Excel's modern Fluent Design with:
+ * - Precise color palette (#f3f2f1 background, #edebe9 borders)
+ * - Smooth hover/active states
+ * - Group labels and dialog launchers
+ * - Multiple button sizes (large 48px, medium 32px, small heights)
+ * - Proper typography (Segoe UI 11px)
  */
 
 /* ==================== Ribbon Container ==================== */
@@ -16,6 +20,8 @@
   display: flex;
   padding: 0 8px;
   box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .ribbon-content {
@@ -24,7 +30,8 @@
   height: 100%;
   width: 100%;
   align-items: flex-start;
-  padding-top: 4px;
+  padding-top: 2px;
+  gap: 0;
 }
 
 /* ==================== Ribbon Group ==================== */
@@ -32,10 +39,11 @@
 .ribbon-group {
   display: inline-flex;
   flex-direction: column;
-  padding: 4px 8px;
-  gap: 4px;
+  padding: 3px 6px 0 6px;
   border-right: 1px solid #e1dfdd;
-  min-height: 88px;
+  min-height: 94px;
+  position: relative;
+  box-sizing: border-box;
 }
 
 .ribbon-group:last-child {
@@ -45,16 +53,63 @@
 .ribbon-group-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
+  padding-bottom: 16px;
 }
 
 .ribbon-group-title {
   font-size: 11px;
   color: #605e5c;
   text-align: center;
-  padding-top: 2px;
+  padding: 2px 4px 0 4px;
   white-space: nowrap;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 16px;
+  line-height: 16px;
+}
+
+/* Group label (alternative style) */
+.group-label {
+  font-size: 11px;
+  color: #605e5c;
+  text-align: center;
+  padding: 2px 4px;
+  white-space: nowrap;
+  margin-top: auto;
+}
+
+/* Dialog launcher - small button at bottom-right of group */
+.group-dialog-launcher {
+  position: absolute;
+  bottom: 0;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #605e5c;
+  font-size: 10px;
+  transition: all 0.1s ease;
+}
+
+.group-dialog-launcher:hover {
+  background: #edebe9;
+  border-color: #d2d0ce;
+  color: #323130;
+}
+
+.group-dialog-launcher:active {
+  background: #e1dfdd;
+  border-color: #c8c6c4;
 }
 
 /* ==================== Ribbon Row ==================== */
@@ -63,17 +118,19 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  height: auto;
 }
 
 /* ==================== Ribbon Button ==================== */
 
 .ribbon-btn {
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 2px 4px;
+  min-width: 0;
   border: 1px solid transparent;
   border-radius: 2px;
   background: transparent;
@@ -81,20 +138,55 @@
   cursor: pointer;
   font-family: inherit;
   font-size: 11px;
-  transition: background 0.1s ease, border-color 0.1s ease;
+  transition: background 0.06s ease, border-color 0.06s ease;
   position: relative;
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
-/* Small buttons (default) - 32x32px */
-.ribbon-btn-small {
-  width: 32px;
+/* Button size variants */
+
+/* Small buttons - compact horizontal layout */
+.ribbon-btn-small,
+.ribbon-btn.small {
+  height: 24px;
+  flex-direction: row;
+  padding: 2px 6px;
+  gap: 4px;
+}
+
+/* Medium buttons - horizontal layout, slightly larger */
+.ribbon-btn-medium,
+.ribbon-btn.medium {
   height: 32px;
+  flex-direction: row;
+  padding: 4px 8px;
+  gap: 6px;
 }
 
-/* Large buttons (for primary actions) - 48x48px */
-.ribbon-btn-large {
+/* Large buttons - vertical layout, prominent */
+.ribbon-btn-large,
+.ribbon-btn.large {
   width: 48px;
-  height: 48px;
+  height: 64px;
+  min-width: 48px;
+  flex-direction: column;
+  padding: 4px;
+  gap: 2px;
+}
+
+/* Button with icon and text (horizontal) */
+.ribbon-btn.with-icon {
+  flex-direction: row;
+  gap: 4px;
+}
+
+/* Wide button - auto width */
+.ribbon-btn-wide,
+.ribbon-btn.wide {
+  width: auto;
+  min-width: 64px;
+  padding: 2px 12px;
 }
 
 .ribbon-btn-icon {
@@ -103,35 +195,64 @@
   justify-content: center;
   font-size: 16px;
   line-height: 1;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.ribbon-btn-large .ribbon-btn-icon {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
 }
 
 .ribbon-btn-label {
-  font-size: 10px;
-  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.2;
   text-align: center;
-  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Hover state - matches Excel #edebe9 */
+.ribbon-btn-large .ribbon-btn-label {
+  font-size: 11px;
+}
+
+/* Dropdown arrow for split buttons */
+.dropdown-arrow,
+.dropdown-arrow-small {
+  margin-left: 2px;
+  font-size: 8px;
+  color: #605e5c;
+}
+
+.dropdown-arrow {
+  font-size: 10px;
+}
+
+/* Hover state - smooth transition to light gray */
 .ribbon-btn:hover:not(:disabled) {
   background: #edebe9;
-  border-color: #edebe9;
+  border-color: #e1dfdd;
 }
 
-/* Active/pressed state - matches Excel #e1dfdd */
+/* Active/pressed state - darker gray */
 .ribbon-btn:active:not(:disabled),
 .ribbon-btn.active {
   background: #e1dfdd;
   border-color: #d2d0ce;
 }
 
-/* Focus state - accessibility */
+/* Focus state - accessibility with blue outline */
 .ribbon-btn:focus-visible {
   outline: 2px solid #0078d4;
-  outline-offset: 2px;
+  outline-offset: 1px;
+  z-index: 1;
 }
 
-/* Disabled state - matches Excel #a19f9d */
+/* Disabled state - muted colors */
 .ribbon-btn:disabled {
   color: #a19f9d;
   cursor: not-allowed;
@@ -140,6 +261,13 @@
 
 .ribbon-btn:disabled .ribbon-btn-icon {
   color: #a19f9d;
+}
+
+/* Button with text wrapping for large buttons */
+.ribbon-btn-large .ribbon-btn-label {
+  word-wrap: break-word;
+  max-width: 44px;
+  line-height: 1.1;
 }
 
 /* ==================== Ribbon Select (Dropdown) ==================== */
@@ -243,6 +371,39 @@
 
   .ribbon-btn-label {
     display: none;
+  }
+  
+  /* Keep icon-only buttons visible on mobile */
+  .ribbon-btn-small,
+  .ribbon-btn-medium {
+    width: 32px;
+    min-width: 32px;
+  }
+
+  .ribbon-tab-divider {
+    margin-bottom: 0;
+  }
+}
+
+/* Very small screens - stack groups vertically */
+@media (max-width: 480px) {
+  .ribbon-content {
+    flex-direction: column;
+  }
+  
+  .ribbon-group {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e1dfdd;
+  }
+
+  .ribbon-tab-divider {
+    display: none;
+  }
+
+  .ribbon-tab-shell {
+    width: 100%;
+    border-bottom: 1px solid #e1dfdd;
   }
 }
 
@@ -1132,4 +1293,671 @@
   color: #0078d4;
   font-size: 12px;
   flex-shrink: 0;
+}
+
+/* ==================== Excel-Specific Group Layouts ==================== */
+
+/* Font Group Layout - Combination of dropdowns and button rows */
+.font-group-content {
+  display: flex;
+  gap: 4px;
+}
+
+.font-dropdowns-column {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.font-row {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.font-select {
+  width: 120px;
+}
+
+.font-size-select {
+  width: 50px;
+}
+
+/* Alignment Group Layout - Button grids */
+.align-group-content {
+  display: flex;
+  gap: 4px;
+}
+
+.align-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.align-row {
+  display: flex;
+  gap: 2px;
+}
+
+.align-btn-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 24px);
+  gap: 2px;
+}
+
+/* Number Format Group */
+.number-group-content {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.number-format-select {
+  width: 100px;
+}
+
+/* Small Buttons Column - Vertical stack with tighter spacing */
+.small-btns-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Cells Group Layout */
+.cells-group-content {
+  display: flex;
+  gap: 4px;
+}
+
+/* Editing Group Layout */
+.editing-group-content {
+  display: flex;
+  gap: 2px;
+  flex-direction: column;
+}
+
+/* Style Gallery (Cell Styles, etc.) */
+.style-gallery-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 64px;
+  height: 64px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.06s ease;
+}
+
+.style-gallery-btn:hover {
+  background: #edebe9;
+  border-color: #e1dfdd;
+}
+
+.style-gallery-preview {
+  width: 48px;
+  height: 32px;
+  border: 1px solid #d1d1d1;
+  border-radius: 2px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.style-gallery-label {
+  font-size: 10px;
+  color: #201f1e;
+  text-align: center;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Merge & Center Split Button Layout */
+.merge-split-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Conditional Formatting / Format Button Layout */
+.format-btn-large {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 64px;
+  height: 72px;
+  padding: 4px;
+}
+
+.format-btn-large .ribbon-btn-icon {
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
+}
+
+/* Checkbox in Groups (like R1C1 setting) */
+.checkbox-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #201f1e;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px;
+  transition: background 0.06s ease;
+}
+
+.checkbox-label:hover {
+  background: #f3f2f1;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+/* Indent Increase/Decrease Stacked Layout */
+.indent-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Chart Types Gallery */
+.chart-types-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 48px);
+  gap: 4px;
+}
+
+.chart-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 48px;
+  height: 56px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.06s ease;
+}
+
+.chart-type-btn:hover {
+  background: #edebe9;
+  border-color: #e1dfdd;
+}
+
+.chart-type-icon {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 2px;
+}
+
+.chart-type-label {
+  font-size: 9px;
+  color: #201f1e;
+  text-align: center;
+  line-height: 1.1;
+}
+
+/* ==================== Enhanced Select/Dropdown Styling ==================== */
+
+/* Make font family select match Excel exactly */
+.ribbon-select.font-family-select {
+  width: 150px;
+  font-family: var(--selected-font, inherit);
+}
+
+/* Make font size select narrower */
+.ribbon-select.font-size-select {
+  width: 60px;
+  text-align: left;
+}
+
+/* Number format select */
+.ribbon-select.number-format-select {
+  width: 120px;
+}
+
+/* Enhanced dropdown with custom icon support */
+.ribbon-select-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.ribbon-select-wrapper .ribbon-select {
+  width: 100%;
+}
+
+.ribbon-select-wrapper::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid #605e5c;
+  pointer-events: none;
+}
+
+/* ==================== Utility Classes for Spacing & Layout ==================== */
+
+/* Compact gap variants */
+.ribbon-row.compact {
+  gap: 1px;
+}
+
+.ribbon-group.compact {
+  padding: 2px 4px 0 4px;
+}
+
+/* Wider gap for visual separation */
+.ribbon-row.spacious {
+  gap: 4px;
+}
+
+/* Center content vertically within group */
+.ribbon-group-center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Shared layouts for non-Home ribbon tabs */
+.ribbon-tab-content {
+  align-items: flex-start;
+  min-height: 94px;
+  padding: 2px 8px 0 8px;
+  background: transparent;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ribbon-tab-content-spacious {
+  padding-inline: 10px;
+}
+
+.ribbon-tab-divider {
+  width: 1px;
+  min-width: 1px;
+  align-self: stretch;
+  margin: 4px 6px 16px;
+  background: #e1dfdd;
+}
+
+.ribbon-tab-divider-tall {
+  margin-bottom: 8px;
+}
+
+.ribbon-tab-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px 6px 0;
+  min-height: 94px;
+  position: relative;
+}
+
+.ribbon-tab-shell-title {
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: #605e5c;
+  text-align: center;
+}
+
+.ribbon-tab-shell-center {
+  align-items: center;
+}
+
+.ribbon-feature-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  min-height: 36px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #201f1e;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.15;
+  text-align: center;
+  transition: background 0.06s ease, border-color 0.06s ease;
+}
+
+.ribbon-feature-button:hover:not(:disabled) {
+  background: #edebe9;
+  border-color: #e1dfdd;
+}
+
+.ribbon-feature-button:active:not(:disabled) {
+  background: #e1dfdd;
+  border-color: #d2d0ce;
+}
+
+.ribbon-feature-button:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: 1px;
+}
+
+.ribbon-feature-button:disabled {
+  color: #a19f9d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ribbon-feature-icon {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 2px;
+}
+
+/* Two-row layout within a group */
+.ribbon-two-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+/* Three-button grid (3x1) */
+.btn-grid-3x1 {
+  display: grid;
+  grid-template-columns: repeat(3, 24px);
+  gap: 2px;
+}
+
+/* Four-button grid (2x2) */
+.btn-grid-2x2 {
+  display: grid;
+  grid-template-columns: repeat(2, 24px);
+  grid-template-rows: repeat(2, 24px);
+  gap: 2px;
+}
+
+/* Six-button grid (3x2) */
+.btn-grid-3x2 {
+  display: grid;
+  grid-template-columns: repeat(3, 24px);
+  grid-template-rows: repeat(2, 24px);
+  gap: 2px;
+}
+
+/* Vertical divider between button groups */
+.ribbon-divider {
+  width: 1px;
+  height: 60px;
+  background: #e1dfdd;
+  margin: 0 4px;
+}
+
+/* Horizontal divider within group */
+.ribbon-divider-horizontal {
+  width: 100%;
+  height: 1px;
+  background: #e1dfdd;
+  margin: 2px 0;
+}
+
+/* Mixed size button row (large buttons next to small) */
+.ribbon-row-mixed {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+/* Label above control (for dropdowns with labels) */
+.ribbon-labeled-control {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ribbon-control-label {
+  font-size: 10px;
+  color: #605e5c;
+  line-height: 1;
+}
+
+/* Icon-only button groups (no labels) */
+.ribbon-btn.icon-only {
+  width: 24px;
+  height: 24px;
+  padding: 2px;
+}
+
+.ribbon-btn.icon-only .ribbon-btn-label {
+  display: none;
+}
+
+/* Excel-style number input (font size increase/decrease) */
+.ribbon-number-input {
+  width: 50px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #201f1e;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+  transition: border-color 0.1s ease;
+}
+
+.ribbon-number-input:hover:not(:disabled) {
+  border-color: #323130;
+}
+
+.ribbon-number-input:focus {
+  outline: none;
+  border-color: #0078d4;
+  box-shadow: 0 0 0 1px #0078d4;
+}
+
+/* Increment/decrement buttons next to number input */
+.ribbon-number-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ribbon-stepper-btn {
+  width: 16px;
+  height: 12px;
+  padding: 0;
+  border: 1px solid #8a8886;
+  background: #f3f2f1;
+  color: #605e5c;
+  font-size: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.06s ease;
+}
+
+.ribbon-stepper-btn:first-child {
+  border-radius: 0 2px 0 0;
+  border-bottom: none;
+}
+
+.ribbon-stepper-btn:last-child {
+  border-radius: 0 0 2px 0;
+}
+
+.ribbon-stepper-btn:hover:not(:disabled) {
+  background: #edebe9;
+  border-color: #605e5c;
+}
+
+.ribbon-stepper-btn:active:not(:disabled) {
+  background: #e1dfdd;
+}
+
+/* ==================== Animation & Polish ==================== */
+
+/* Subtle fade-in for dropdowns */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cs-color-dropdown,
+.cs-fill-dropdown {
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* Ripple effect on button click (optional enhancement) */
+.ribbon-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  background: radial-gradient(circle, rgba(0, 120, 212, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.ribbon-btn:active::after {
+  opacity: 1;
+  transition: opacity 0s;
+}
+
+/* Smooth scrolling for ribbon overflow */
+.ribbon {
+  scroll-behavior: smooth;
+}
+
+/* Focus within - highlight entire group when any button is focused */
+.ribbon-group:focus-within {
+  position: relative;
+}
+
+.ribbon-group:focus-within::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 1px solid rgba(0, 120, 212, 0.3);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Enhanced disabled state with better visual feedback */
+.ribbon-btn:disabled,
+.ribbon-select:disabled {
+  filter: grayscale(60%);
+}
+
+/* Loading state for async operations (future) */
+.ribbon-btn.loading {
+  position: relative;
+  color: transparent;
+}
+
+.ribbon-btn.loading::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #edebe9;
+  border-top-color: #0078d4;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==================== Keyboard Navigation Enhancement ==================== */
+
+/* Alt key hint for ribbon access (future) */
+.ribbon-keytip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 1px solid #0078d4;
+  border-radius: 2px;
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #201f1e;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  display: none;
+}
+
+.ribbon-keytips-active .ribbon-keytip {
+  display: block;
+}
+
+/* Arrow key navigation highlighting */
+.ribbon-btn:focus,
+.ribbon-select:focus {
+  position: relative;
+}
+
+/* Tab navigation - skip to next group */
+.ribbon-group:focus-within {
+  scroll-margin: 20px;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ==================== Print Styles ==================== */
+
+@media print {
+  .ribbon {
+    display: none;
+  }
 }

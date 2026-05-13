@@ -60,6 +60,7 @@ export interface AlignmentGroupProps {
 /**
  * Alignment control group
  * Tests: mutually exclusive groups, compound state, mixed state handling
+ * Layout: Vertical column with 3 rows of buttons
  */
 export function AlignmentGroup({
   horizontalAlign,
@@ -93,95 +94,105 @@ export function AlignmentGroup({
     : wrapText;
 
   return (
-    <>
-      {/* Row 1: Horizontal Alignment (mutually exclusive) */}
-      <RibbonRow>
-        <HorizontalAlignGroup
-          value={horizontalAlign === "mixed" ? "mixed" : effectiveHorizontal}
-          onChange={onHorizontalAlignChange}
-          disabled={disabled}
-        >
-          <RibbonButton
-            value="left"
-            icon={<TextAlignLeftRegular />}
-            tooltip="Align Left"
-          />
-          <RibbonButton
-            value="center"
-            icon={<TextAlignCenterRegular />}
-            tooltip="Align Center"
-          />
-          <RibbonButton
-            value="right"
-            icon={<TextAlignRightRegular />}
-            tooltip="Align Right"
-          />
-          <RibbonButton
-            value="justify"
-            icon={<TextAlignJustifyRegular />}
-            tooltip="Justify"
-          />
-        </HorizontalAlignGroup>
-      </RibbonRow>
+    <div className="align-group-content">
+      <div className="align-column">
+        {/* Row 1: Horizontal Alignment (mutually exclusive) */}
+        <div className="align-row">
+          <HorizontalAlignGroup
+            value={horizontalAlign === "mixed" ? "mixed" : effectiveHorizontal}
+            onChange={onHorizontalAlignChange}
+            disabled={disabled}
+          >
+            <RibbonButton
+              value="left"
+              icon={<TextAlignLeftRegular />}
+              tooltip="Align Left"
+              size="small"
+            />
+            <RibbonButton
+              value="center"
+              icon={<TextAlignCenterRegular />}
+              tooltip="Align Center"
+              size="small"
+            />
+            <RibbonButton
+              value="right"
+              icon={<TextAlignRightRegular />}
+              tooltip="Align Right"
+              size="small"
+            />
+            <RibbonButton
+              value="justify"
+              icon={<TextAlignJustifyRegular />}
+              tooltip="Justify"
+              size="small"
+            />
+          </HorizontalAlignGroup>
+        </div>
 
-      {/* Row 2: Vertical Alignment (mutually exclusive) */}
-      <RibbonRow>
-        <VerticalAlignGroup
-          value={verticalAlign === "mixed" ? "mixed" : effectiveVertical}
-          onChange={onVerticalAlignChange}
-          disabled={disabled}
-        >
-          <RibbonButton
-            value="top"
-            icon={<AlignTopRegular />}
-            tooltip="Align Top"
-          />
-          <RibbonButton
-            value="middle"
-            icon={<AlignCenterVerticalRegular />}
-            tooltip="Align Middle"
-          />
-          <RibbonButton
-            value="bottom"
-            icon={<AlignBottomRegular />}
-            tooltip="Align Bottom"
-          />
-        </VerticalAlignGroup>
-      </RibbonRow>
+        {/* Row 2: Vertical Alignment (mutually exclusive) */}
+        <div className="align-row">
+          <VerticalAlignGroup
+            value={verticalAlign === "mixed" ? "mixed" : effectiveVertical}
+            onChange={onVerticalAlignChange}
+            disabled={disabled}
+          >
+            <RibbonButton
+              value="top"
+              icon={<AlignTopRegular />}
+              tooltip="Align Top"
+              size="small"
+            />
+            <RibbonButton
+              value="middle"
+              icon={<AlignCenterVerticalRegular />}
+              tooltip="Align Middle"
+              size="small"
+            />
+            <RibbonButton
+              value="bottom"
+              icon={<AlignBottomRegular />}
+              tooltip="Align Bottom"
+              size="small"
+            />
+          </VerticalAlignGroup>
+        </div>
 
-      {/* Row 3: Wrap Text (independent toggle) + Merge (dropdown future) */}
-      <RibbonRow>
-        <RibbonButton
-          icon={<TextWrapRegular />}
-          tooltip="Wrap Text"
-          active={effectiveWrap}
-          onClick={onWrapTextToggle}
-          disabled={disabled}
-        />
+        {/* Row 3: Wrap Text (independent toggle) + Merge (dropdown future) */}
+        <div className="align-row">
+          <RibbonButton
+            icon={<TextWrapRegular />}
+            tooltip="Wrap Text"
+            active={effectiveWrap}
+            onClick={onWrapTextToggle}
+            disabled={disabled}
+            size="small"
+          />
 
-        {/* Merge button (placeholder - dropdown implementation later) */}
-        {onMergeClick && (
-          <div className="cs-merge-split-button">
-            <button
-              className="cs-merge-main-button"
-              onClick={onMergeClick}
-              disabled={disabled}
-              aria-label="Merge cells"
-              title="Merge & Center"
-            >
-              <TableCellsMergeRegular />
-            </button>
-            <button
-              className="cs-merge-dropdown-button"
-              disabled={disabled}
-              aria-label="Merge options"
-              aria-expanded={false}
-            >
-              <ChevronDown16Regular />
-            </button>
-          </div>
-        )}
-      </RibbonRow>
-    </>
+          {/* Merge button (placeholder - dropdown implementation later) */}
+          {onMergeClick && (
+            <div className="cs-merge-split-button">
+              <button
+                className="cs-merge-main-button"
+                onClick={onMergeClick}
+                disabled={disabled}
+                aria-label="Merge cells"
+                title="Merge & Center"
+              >
+                <TableCellsMergeRegular />
+              </button>
+              <button
+                className="cs-merge-dropdown-button"
+                disabled={disabled}
+                aria-label="Merge options"
+                aria-expanded={false}
+              >
+                <ChevronDown16Regular />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

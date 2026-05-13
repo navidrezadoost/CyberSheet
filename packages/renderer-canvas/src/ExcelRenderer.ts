@@ -134,6 +134,11 @@ export class ExcelRenderer {
   }
 
   dispose() {
+    // Clean up resize timer
+    if (this.resizeTimer !== null) {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
     this.resizeObserver?.disconnect();
     this.multiCanvas.dispose();
   }
@@ -965,12 +970,21 @@ export class ExcelRenderer {
   }
 
   private resizeObserver?: ResizeObserver;
+  private resizeTimer: number | null = null;
   
   private observeResize() {
     this.resizeObserver = new ResizeObserver(() => {
-      const { clientWidth, clientHeight } = this.container;
-      this.multiCanvas.resize(clientWidth, clientHeight);
-      this.redraw();
+      // Debounce: wait 150ms after the LAST resize event before redrawing
+      if (this.resizeTimer !== null) {
+        clearTimeout(this.resizeTimer);
+      }
+      
+      this.resizeTimer = window.setTimeout(() => {
+        const { clientWidth, clientHeight } = this.container;
+        this.multiCanvas.resize(clientWidth, clientHeight);
+        this.redraw();
+        this.resizeTimer = null;
+      }, 150);
     });
     this.resizeObserver.observe(this.container);
   }

@@ -16,6 +16,7 @@ import { LinksGroup } from './LinksGroup';
 import { ChartsGroup } from './ChartsGroup';
 import { SparklinesGroup } from './SparklinesGroup';
 import { SymbolsGroup } from './SymbolsGroup';
+import '../ribbon.css';
 
 export interface InsertTabProps {
   worksheet?: Worksheet;
@@ -56,26 +57,6 @@ export const InsertTab: React.FC<InsertTabProps> = ({
   onInsertSymbol,
   onDrawingChange,
 }) => {
-  const contentStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 0,
-    padding: '4px 8px',
-    background: '#F0F0F0',
-    borderBottom: '1px solid #D9D9D9',
-    minHeight: 90,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-  };
-
-  const dividerStyle: React.CSSProperties = {
-    width: 1,
-    background: '#D9D9D9',
-    margin: '4px 6px',
-    alignSelf: 'stretch',
-    flexShrink: 0,
-  };
-
   // Wrap handlers to trigger redraw
   const handleInsertTable = () => {
     onInsertTable?.();
@@ -142,14 +123,14 @@ export const InsertTab: React.FC<InsertTabProps> = ({
   };
 
   return (
-    <div style={contentStyle}>
+    <div className="ribbon-content ribbon-tab-content">
       {/* 1. Tables */}
       <TablesGroup
         onInsertTable={handleInsertTable}
         onInsertPivotTable={handleInsertPivotTable}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* 2. Illustrations */}
       <IllustrationsGroup
@@ -160,7 +141,7 @@ export const InsertTab: React.FC<InsertTabProps> = ({
         onObjectChange={onDrawingChange}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* 3. Forms */}
       <FormsGroup
@@ -169,7 +150,7 @@ export const InsertTab: React.FC<InsertTabProps> = ({
         onObjectChange={onDrawingChange}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* 4. Text */}
       <TextGroup
@@ -180,7 +161,7 @@ export const InsertTab: React.FC<InsertTabProps> = ({
         onObjectChange={onDrawingChange}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* 5. Charts */}
       <ChartsGroup
@@ -188,21 +169,21 @@ export const InsertTab: React.FC<InsertTabProps> = ({
         onInsertChart={handleInsertChart}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* 6. Sparklines */}
       <SparklinesGroup
         onInsertSparkline={handleInsertSparkline}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* 7. Links */}
       <LinksGroup
         onInsertHyperlink={handleInsertHyperlink}
       />
 
-      <div style={dividerStyle} />
+      <div className="ribbon-tab-divider" />
 
       {/* 8. Symbols */}
       <SymbolsGroup

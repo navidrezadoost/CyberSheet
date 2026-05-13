@@ -13,6 +13,7 @@ import { CommentsGroup } from './CommentsGroup';
 import { ChangesGroup } from './ChangesGroup';
 import { ProtectGroup } from './ProtectGroup';
 import { InkGroup } from './InkGroup';
+import '../ribbon.css';
 
 interface ReviewTabProps {
   workbook: Workbook;
@@ -26,17 +27,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
   onCommand,
 }) => {
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 8,
-        alignItems: 'flex-start',
-        background: '#F0F0F0',
-        padding: '8px 12px',
-        borderBottom: '1px solid #D9D9D9',
-        fontFamily: 'Segoe UI, sans-serif',
-      }}
-    >
+    <div className="ribbon-content ribbon-tab-content ribbon-tab-content-spacious">
       {/* Proofing Group */}
       <ProofingGroup
         workbook={workbook}
@@ -44,7 +35,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Accessibility Group */}
       <AccessibilityGroup
@@ -53,7 +44,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Comments Group */}
       <CommentsGroup
@@ -63,7 +54,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Changes Group */}
       <ChangesGroup
@@ -73,7 +64,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Protect Group */}
       <ProtectGroup
@@ -82,7 +73,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
       />
 
       {/* Divider */}
-      <div style={{ width: 1, height: 64, background: '#D9D9D9', margin: '4px 0' }} />
+      <div className="ribbon-tab-divider ribbon-tab-divider-tall" />
 
       {/* Ink Group */}
       <InkGroup

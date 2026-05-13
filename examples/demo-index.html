@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberSheet Demos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        .demos {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .demo-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .demo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        .demo-card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+        .demo-card p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        .demo-card .features {
+            list-style: none;
+            margin-top: 15px;
+        }
+        .demo-card .features li {
+            color: #888;
+            font-size: 0.9rem;
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        .demo-card .features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .badge {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .badge.viewer {
+            background: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 CyberSheet Demos</h1>
+        
+        <div class="demos">
+            <!-- ExcelApp Demo - WITH In-Cell Editing -->
+            <a href="/examples/excel-app-demo.html" class="demo-card">
+                <h2>📝 ExcelApp (Full UI)</h2>
+                <span class="badge">With In-Cell Editing</span>
+                <p>Complete Excel application with full UI and in-cell editing capabilities.</p>
+                <ul class="features">
+                    <li>Double-click cells to edit in-place</li>
+                    <li>Press F2 to enter edit mode</li>
+                    <li>Green border edit overlay</li>
+                    <li>Title bar + Ribbon</li>
+                    <li>Formula bar + Status bar</li>
+                    <li>Sheet tabs</li>
+                </ul>
+            </a>
+
+            <!-- ReactCanvasViewer - WITHOUT In-Cell Editing -->
+            <a href="/examples/react-index.html" class="demo-card">
+                <h2>👁️ Canvas Viewer</h2>
+                <span class="badge viewer">Basic Viewer</span>
+                <p>Simple spreadsheet viewer with formula bar editing only.</p>
+                <ul class="features">
+                    <li>View spreadsheet data</li>
+                    <li>Edit via formula bar only</li>
+                    <li>Filtering support</li>
+                    <li>Ribbon controls</li>
+                    <li>Backstage menu</li>
+                </ul>
+            </a>
+        </div>
+    </div>
+</body>
+</html>
