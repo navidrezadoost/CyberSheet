@@ -662,6 +662,18 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   // Global keyboard shortcut handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Log EVERY key event for debugging
+      console.log('⌨️ [ExcelApp] Key event', {
+        key: e.key,
+        code: e.code,
+        ctrl: e.ctrlKey,
+        meta: e.metaKey,
+        shift: e.shiftKey,
+        alt: e.altKey,
+        target: (e.target as HTMLElement)?.tagName,
+        isComposing: e.isComposing,
+      });
+      
       // Get current values from refs to avoid re-attaching listeners on state changes
       const selectedCell = selectedCellRef.current;
       const selection = selectionRef.current;
@@ -755,11 +767,23 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       // Ctrl+C (Copy)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') {
         e.preventDefault();
-        console.log('📋 Ctrl+C pressed, selection:', selection);
+        console.log('📋 [ExcelApp] Ctrl+C detected', {
+          key: e.key,
+          code: e.code,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          selection,
+        });
         if (selection) {
           const range = { start: selection.start, end: selection.end };
           clipboardService.copy(sheet, range);
-          console.log('✅ Copied to clipboard');
+          const payload = clipboardService.getPayload();
+          console.log('✅ [ExcelApp] Copied to clipboard', {
+            payloadCells: payload?.cells.length,
+            payloadDimensions: payload ? `${payload.width}x${payload.height}` : 'none',
+          });
+        } else {
+          console.log('❌ [ExcelApp] Cannot copy - no selection');
         }
         return;
       }
@@ -767,14 +791,38 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       // Ctrl+X (Cut)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') {
         e.preventDefault();
-        console.log('✂️ Ctrl+X pressed, selection:', selection);
+        console.log('✂️ [ExcelApp] Ctrl+X detected', {
+          key: e.key,
+          code: e.code,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          selection,
+        });
         if (selection) {
           const range = { start: selection.start, end: selection.end };
+          
+          // IMPORTANT: Log cell data BEFORE cutting
+          console.log('📊 [ExcelApp] Cell data BEFORE cut:', {
+            sourceCell: `(${range.start.row},${range.start.col})`,
+            cellValue: sheet.getCellValue(range.start),
+            cellFormula: sheet.getCellFormula(range.start),
+            cellDisplay: sheet.getCellDisplayValue(range.start),
+          });
+          
           clipboardService.cut(sheet, range);
-          console.log('✅ Cut to clipboard (source will be cleared after paste)');
+          const payload = clipboardService.getPayload();
+          console.log('✅ [ExcelApp] Cut to clipboard (source will be cleared after paste)', {
+            payloadCells: payload?.cells.length,
+            payloadDimensions: payload ? `${payload.width}x${payload.height}` : 'none',
+            isCut: payload?.isCut,
+            firstCellValue: payload?.cells[0]?.value,
+            firstCellFormula: payload?.cells[0]?.formula,
+          });
           
           // Note: Source cells are NOT cleared here.
           // PasteCommand will handle clearing the source after paste completes (via isCut flag)
+        } else {
+          console.log('❌ [ExcelApp] Cannot cut - no selection');
         }
         return;
       }
@@ -783,7 +831,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
         e.preventDefault();
         const payload = clipboardService.getPayload();
-        console.log('📄 [ExcelApp] Ctrl+V pressed', {
+        console.log('📄 [ExcelApp] Ctrl+V detected', {
+          key: e.key,
+          code: e.code,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
           selection,
           selectionDetails: selection ? {
             start: `(${selection.start.row},${selection.start.col})`,
@@ -795,19 +847,58 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             dimensions: `${payload.width}x${payload.height}`,
             cellCount: payload.cells.length,
             isCut: payload.isCut,
-            sourceRange: `(${payload.sourceRange.start.row},${payload.sourceRange.start.col}) to (${payload.sourceRange.end.row},${payload.sourceRange.end.col})`
+            sourceRange: `(${payload.sourceRange.start.row},${payload.sourceRange.start.col}) to (${payload.sourceRange.end.row},${payload.sourceRange.end.col})`,
+            firstCellValue: payload.cells[0]?.value,
+            firstCellFormula: payload.cells[0]?.formula,
           } : null
         });
         if (selection && payload) {
           const targetAnchor = selection.start;
           console.log('▶️ [ExcelApp] Executing PasteCommand with targetAnchor:', `(${targetAnchor.row},${targetAnchor.col})`);
+          
+          // Log target cell data BEFORE paste
+          console.log('📊 [ExcelApp] Target cell BEFORE paste:', {
+            targetCell: `(${targetAnchor.row},${targetAnchor.col})`,
+            cellValue: sheet.getCellValue(targetAnchor),
+            cellFormula: sheet.getCellFormula(targetAnchor),
+            cellDisplay: sheet.getCellDisplayValue(targetAnchor),
+          });
+          
           const pasteCmd = new PasteCommand(sheet, payload, targetAnchor);
           commandManager.execute(pasteCmd);
+          
+          // Log target cell data AFTER paste
+          console.log('📊 [ExcelApp] Target cell AFTER paste:', {
+            targetCell: `(${targetAnchor.row},${targetAnchor.col})`,
+            cellValue: sheet.getCellValue(targetAnchor),
+            cellFormula: sheet.getCellFormula(targetAnchor),
+            cellDisplay: sheet.getCellDisplayValue(targetAnchor),
+          });
+          
+          // If it was a cut operation, also check source cell
+          if (payload.isCut) {
+            const sourceCell = payload.sourceRange.start;
+            console.log('📊 [ExcelApp] Source cell AFTER cut/paste:', {
+              sourceCell: `(${sourceCell.row},${sourceCell.col})`,
+              cellValue: sheet.getCellValue(sourceCell),
+              cellFormula: sheet.getCellFormula(sourceCell),
+              cellDisplay: sheet.getCellDisplayValue(sourceCell),
+              shouldBeEmpty: true,
+            });
+          }
+          
           console.log('✅ [ExcelApp] Paste completed');
           
           const r2 = targetAnchor.row + payload.height - 1;
           const c2 = targetAnchor.col + payload.width - 1;
           renderer?.invalidateRange(targetAnchor.row, targetAnchor.col, r2, c2);
+          
+          // Also invalidate source range if it was a cut
+          if (payload.isCut) {
+            const { start, end } = payload.sourceRange;
+            renderer?.invalidateRange(start.row, start.col, end.row, end.col);
+          }
+          
           renderer?.scheduleRedraw();
         } else {
           console.log('❌ [ExcelApp] Cannot paste - selection:', !!selection, 'payload:', !!payload);

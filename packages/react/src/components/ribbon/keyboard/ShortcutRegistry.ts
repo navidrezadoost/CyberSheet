@@ -26,34 +26,54 @@ import { shortcutEventRecorder } from './ShortcutEventRecorder';
  * - Key name normalization ('esc' → 'Escape')
  * - Modifier key detection
  * - Dead keys (German/French keyboards)
+ * - Keyboard layout independence (uses e.code for alphanumeric, e.key for special)
  * 
  * CRITICAL: Caller must check event.isComposing before calling this
  */
 export function parseKeyboardEvent(event: KeyboardEvent): ParsedShortcut {
-  // Normalize key name
-  let key = event.key;
-
-  // Special key mappings (browser differences)
-  const keyMappings: Record<string, string> = {
-    'Esc': 'Escape',
-    'Del': 'Delete',
-    ' ': 'Space',
-    'Spacebar': 'Space', // Old Safari
-  };
-
-  if (keyMappings[key]) {
-    key = keyMappings[key];
-  }
+  // Use physical key position (e.code) for alphanumeric keys (layout-independent)
+  // Use character key (e.key) for special keys (Enter, Escape, etc.)
+  let key: string;
   
-  // EDGE CASE: Dead keys produce multi-char strings (e.g., "Dead")
-  // These are composition sequences - ignore them
-  if (key.startsWith('Dead')) {
-    key = '';
-  }
+  const code = event.code;
+  
+  // Check if this is a physical key code (KeyA-KeyZ, Digit0-Digit9)
+  if (code.startsWith('Key')) {
+    // Extract letter from KeyA, KeyB, etc.
+    key = code.substring(3).toLowerCase(); // KeyA → 'a', KeyB → 'b'
+    console.log(`[ShortcutRegistry] Using physical key code: ${code} → ${key}`);
+  } else if (code.startsWith('Digit')) {
+    // Extract digit from Digit0, Digit1, etc.
+    key = code.substring(5); // Digit1 → '1', Digit2 → '2'
+    console.log(`[ShortcutRegistry] Using physical key code: ${code} → ${key}`);
+  } else {
+    // For special keys (Enter, Escape, F1-F12, arrows, etc.), use event.key
+    key = event.key;
+    
+    // Special key mappings (browser differences)
+    const keyMappings: Record<string, string> = {
+      'Esc': 'Escape',
+      'Del': 'Delete',
+      ' ': 'Space',
+      'Spacebar': 'Space', // Old Safari
+    };
 
-  // For letter keys, normalize to lowercase
-  if (key.length === 1) {
-    key = key.toLowerCase();
+    if (keyMappings[key]) {
+      key = keyMappings[key];
+    }
+    
+    // EDGE CASE: Dead keys produce multi-char strings (e.g., "Dead")
+    // These are composition sequences - ignore them
+    if (key.startsWith('Dead')) {
+      key = '';
+    }
+
+    // For letter keys (fallback if code wasn't recognized), normalize to lowercase
+    if (key.length === 1) {
+      key = key.toLowerCase();
+    }
+    
+    console.log(`[ShortcutRegistry] Using event.key for special key: ${event.key} → ${key}`);
   }
   
   // EDGE CASE: Mac uses Meta (Cmd), Windows uses Ctrl
@@ -241,9 +261,22 @@ export class ShortcutRegistry implements IShortcutRegistry {
     const parsed = parseKeyboardEvent(event);
     const keyString = shortcutToString(parsed);
     
+    // ALWAYS log for debugging (can be removed after investigation)
+    console.log('[ShortcutRegistry] Key event', {
+      key: event.key,
+      code: event.code,
+      parsed,
+      keyString,
+      mode: context.mode,
+      isEditing: context.isEditing,
+      ctrl: parsed.ctrl,
+      shift: parsed.shift,
+      alt: parsed.alt,
+    });
+    
     if (this.debugConfig.enabled && this.debugConfig.logContext) {
       console.log('[Shortcut] Context', {
-        mode: context.mode,
+        mode: context.mode, 
         isEditing: context.isEditing,
         key: keyString,
         parsed,
@@ -252,6 +285,7 @@ export class ShortcutRegistry implements IShortcutRegistry {
 
     // Find matching shortcuts
     const candidates = this.shortcuts.get(keyString);
+    console.log(`[ShortcutRegistry] Looking for shortcuts matching '${keyString}', found ${candidates?.length || 0} candidates`);
     if (!candidates || candidates.length === 0) {
       if (this.debugConfig.enabled && this.debugConfig.logMisses) {
         console.log('[Shortcut] No candidates', { key: keyString, parsed });
@@ -280,6 +314,7 @@ export class ShortcutRegistry implements IShortcutRegistry {
 
     // Execute highest priority shortcut
     const shortcut = applicable[0];
+    console.log(`[ShortcutRegistry] Executing shortcut: ${shortcut.id} (${shortcut.label})`);
 
     // Determine if we should preventDefault
     let shouldPrevent = false;
@@ -289,10 +324,13 @@ export class ShortcutRegistry implements IShortcutRegistry {
       shouldPrevent = true;
     }
 
+    console.log(`[ShortcutRegistry] preventDefault: ${shouldPrevent}`);
+
     // Prevent default BEFORE executing handler (avoid browser action)
     if (shouldPrevent) {
       event.preventDefault();
       event.stopPropagation();
+      console.log('[ShortcutRegistry] Event prevented and stopped');
     }
 
     // Execute handler

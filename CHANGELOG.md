@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Keyboard Shortcut Registry Layout Independence (May 14, 2026)
+
+**Critical registry system fix**
+- Fixed ShortcutRegistry to use `e.code` (physical key position) instead of `e.key` (character output)
+- Registry-based shortcuts (Ribbon keyboard system) now work across all keyboard layouts
+- Updated `parseKeyboardEvent()` to use physical key codes for alphanumeric keys:
+  - `KeyA-KeyZ` for letter keys (layout-independent)
+  - `Digit0-Digit9` for number keys (layout-independent)
+  - Still uses `e.key` for special keys (Enter, Escape, F2, etc.) where appropriate
+
+**Comprehensive Diagnostic Logging**
+- Added extensive logging throughout both keyboard shortcut systems
+- ExcelApp keyboard handler logs:
+  - Every key event with key, code, modifiers, target element
+  - Cut operation: Cell data BEFORE cut (value, formula, display)
+  - Copy operation: Payload details (cells, dimensions)
+  - Paste operation: Target cell BEFORE and AFTER paste, source cell verification for cuts
+  - Source range invalidation for cut operations (visual updates)
+- ShortcutRegistry logs:
+  - Physical key code translation (KeyC → 'c', Digit1 → '1')
+  - Shortcut matching attempts and results
+  - Context detection (mode, isEditing, modifiers)
+  - Execution confirmation and preventDefault status
+
+**Architecture Context**
+- Two keyboard systems run simultaneously by design:
+  1. **ShortcutRegistry** (Ribbon/useKeyboardShortcuts): Observe-only for clipboard ops (preventDefault: false)
+  2. **ExcelApp inline handlers**: Actual clipboard operation execution (preventDefault: true)
+- Both now use `e.code` for layout independence
+- Registry logs show shortcut matching, ExcelApp logs show actual execution
+
+**Impact**
+- Keyboard shortcuts work consistently across QWERTY, AZERTY, Cyrillic, and all layouts
+- Diagnostic logs enable root-cause analysis of cut/paste issues
+- Shows exact data flow: Cut source → Clipboard payload → Paste target → Source clearing
+
 ### Fixed - Cut Operation Source Clearing (May 14, 2026)
 
 **Critical cut/paste behavior fix**
