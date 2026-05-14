@@ -186,6 +186,17 @@ export class PasteCommand implements Command {
     // Calculate source and target anchors for formula shifting
     const sourceAnchor = this.payload.sourceRange.start;
     const targetAnchor = this.targetAnchor;
+    const payloadContainsMergedRegions = this.payload.cells.some(
+      cellSnapshot =>
+        cellSnapshot.isMergeAnchor
+        && !!cellSnapshot.mergeWidth
+        && !!cellSnapshot.mergeHeight
+        && (cellSnapshot.mergeWidth > 1 || cellSnapshot.mergeHeight > 1)
+    );
+    const shouldClearTargetMerges =
+      this.payload.width > 1
+      || this.payload.height > 1
+      || payloadContainsMergedRegions;
     
     // STEP 6: PRE-PASTE DAG CLEANUP
     // Clear old dependency edges for target region to prevent zombie edges
@@ -198,11 +209,15 @@ export class PasteCommand implements Command {
     }
     
     // STEP 5: CLEAR EXISTING MERGES IN TARGET REGION
-    // Must happen BEFORE applying new content to avoid overlap corruption
-    this.worksheet.cancelMerge({
-      start: this.targetAnchor,
-      end: { row: targetEndRow, col: targetEndCol }
-    });
+    // Must happen BEFORE applying new content to avoid overlap corruption.
+    // Plain 1x1 pastes should preserve an existing target merge, matching
+    // spreadsheet expectations when updating the anchor cell content only.
+    if (shouldClearTargetMerges) {
+      this.worksheet.cancelMerge({
+        start: this.targetAnchor,
+        end: { row: targetEndRow, col: targetEndCol }
+      });
+    }
     
     // STEP 2 & 3: VALUE AND FORMULA PASTE
     // Apply values and formulas from clipboard payload

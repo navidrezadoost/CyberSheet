@@ -463,9 +463,10 @@ export class GraphTransformationValidator {
     for (const [node, deps] of forward) {
       const cell = worksheet.getCellByKey(node);
       if (!cell || !cell.formula) continue;
+      const cellAddr = unpackKey(node);
 
       // Transform the formula
-      const transformedFormula = transform.shiftFormula(cell.formula);
+      const transformedFormula = transform.shiftFormula(cell.formula, cellAddr);
 
       // Extract refs from transformed formula
       const transformedRefs = this.extractRefs(transformedFormula);
@@ -541,6 +542,7 @@ export class GraphTransformationValidator {
     for (const [node, deps] of forward) {
       const cell = worksheet.getCellByKey(node);
       if (!cell || !cell.formula) continue;
+      const cellAddr = unpackKey(node);
 
       // Extract original refs from formula
       const originalRefs = this.extractRefs(cell.formula);
@@ -558,7 +560,7 @@ export class GraphTransformationValidator {
       }
 
       // Extract refs from shifted formula
-      const shiftedFormula = transform.shiftFormula(cell.formula);
+      const shiftedFormula = transform.shiftFormula(cell.formula, cellAddr);
       const shiftedRefs = this.extractRefs(shiftedFormula);
 
       // Check: map(original refs) == extractRefs(shifted formula)

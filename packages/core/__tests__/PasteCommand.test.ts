@@ -1087,6 +1087,34 @@ describe('PasteCommand - Phase 0.3 (Steps 1-6 COMPLETE: Full Clipboard Architect
       expect(newMerge?.end).toEqual({ row: 5, col: 7 });
       expect(worksheet.getCellValue({ row: 5, col: 5 })).toBe('NewMerge');
     });
+
+    test('Paste single cell preserves existing target merge topology', () => {
+      worksheet.setCellValue({ row: 5, col: 5 }, 'OldMerge');
+      worksheet.mergeCells({
+        start: { row: 5, col: 5 },
+        end: { row: 8, col: 5 }
+      });
+
+      worksheet.setCellValue({ row: 0, col: 0 }, 'Copied');
+
+      const payload = clipboard.copy(worksheet, {
+        start: { row: 0, col: 0 },
+        end: { row: 0, col: 0 }
+      });
+
+      const cmd = new PasteCommand(worksheet, payload, { row: 5, col: 5 });
+      cmd.execute();
+
+      expect(worksheet.getCellValue({ row: 5, col: 5 })).toBe('Copied');
+      expect(worksheet.getMergedRangeForCell({ row: 5, col: 5 })).toEqual({
+        start: { row: 5, col: 5 },
+        end: { row: 8, col: 5 }
+      });
+      expect(worksheet.getMergedRangeForCell({ row: 8, col: 5 })).toEqual({
+        start: { row: 5, col: 5 },
+        end: { row: 8, col: 5 }
+      });
+    });
     
     test('Paste with mixed content and merges', () => {
       // Create comprehensive source: values + formulas + styles + merges

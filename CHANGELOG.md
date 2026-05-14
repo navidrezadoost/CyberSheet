@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Paste Command Merge Topology Preservation (May 14, 2026)
+
+**Paste behavior fixes**
+- Fixed `PasteCommand` unconditionally clearing target merged regions for all paste operations.
+- Plain 1×1 copy/paste now preserves existing merge topology when updating a merged cell's anchor value.
+- Added regression test: "Paste single cell preserves existing target merge topology".
+- Fixed `GraphTransformationValidator` signature issue where `shiftFormula()` calls were missing required `cellAddr` parameter.
+
+**Impact**
+- Resolved user-reported bug where right-click copy + Ctrl+V paste caused merged cell children to appear empty.
+- Paste command now matches Excel behavior: single-cell pastes update value only without destroying merge structure.
+
 ### Added - Excel App Editing, Clipboard, Ribbon Polish, and CSP-Safe Formula Evaluation (May 13, 2026)
 
 **Excel app workflow upgrades**
