@@ -889,8 +889,20 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             cellDisplay: sheet.getCellDisplayValue(targetAnchor),
           });
           
+          // For cut operations, also log source cell BEFORE paste
+          if (payload.isCut) {
+            const sourceCell = payload.sourceRange.start;
+            console.log('📊 [ExcelApp] Source cell BEFORE paste (should have data):', {
+              sourceCell: `(${sourceCell.row},${sourceCell.col})`,
+              cellValue: sheet.getCellValue(sourceCell),
+              cellFormula: sheet.getCellFormula(sourceCell),
+              cellDisplay: sheet.getCellDisplayValue(sourceCell),
+            });
+          }
+          
           const pasteCmd = new PasteCommand(sheet, payload, targetAnchor);
           commandManager.execute(pasteCmd);
+          console.log('✅ [ExcelApp] PasteCommand.execute() completed');
           
           // Log target cell data AFTER paste
           console.log('📊 [ExcelApp] Target cell AFTER paste:', {
@@ -900,15 +912,16 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             cellDisplay: sheet.getCellDisplayValue(targetAnchor),
           });
           
-          // If it was a cut operation, also check source cell
+          // If it was a cut operation, also check source cell AFTER paste
           if (payload.isCut) {
             const sourceCell = payload.sourceRange.start;
-            console.log('📊 [ExcelApp] Source cell AFTER cut/paste:', {
+            console.log('📊 [ExcelApp] Source cell AFTER paste (should be EMPTY for cut):', {
               sourceCell: `(${sourceCell.row},${sourceCell.col})`,
               cellValue: sheet.getCellValue(sourceCell),
               cellFormula: sheet.getCellFormula(sourceCell),
               cellDisplay: sheet.getCellDisplayValue(sourceCell),
-              shouldBeEmpty: true,
+              expectedToBeEmpty: true,
+              isEmpty: sheet.getCellValue(sourceCell) === null || sheet.getCellValue(sourceCell) === undefined || sheet.getCellValue(sourceCell) === '',
             });
           }
           
@@ -921,6 +934,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           // Also invalidate source range if it was a cut
           if (payload.isCut) {
             const { start, end } = payload.sourceRange;
+            console.log('🔄 [ExcelApp] Invalidating source range for redraw:', `(${start.row},${start.col}) to (${end.row},${end.col})`);
             renderer?.invalidateRange(start.row, start.col, end.row, end.col);
           }
           
