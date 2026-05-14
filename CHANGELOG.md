@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Context Menu Selection Race Condition (May 14, 2026)
+
+**Critical copy/paste bug fix**
+- Fixed race condition where context menu copy/cut/paste operations used wrong cells
+- `contextMenuSelectionRef` was being continuously updated as selection changed, causing it to drift between menu open and menu click
+- Now captures and freezes selection at context menu open time, preventing incorrect source/target cells
+- Added detailed logging showing frozen selection vs clipboard range to verify fix
+
+**Root Cause**
+- User right-clicks cell (14,13) → context menu opens with that selection
+- Selection changes happen before user clicks "Copy" (visible in `handleSelectionChange` logs)
+- Old code: `contextMenuSelectionRef` was updated on every selection change via effect
+- Result: By the time "Copy" was clicked, ref pointed to different cell (13,12)
+- User saw: Copied cell (14,13) but got data from (13,12) → wrong data pasted
+
+**Impact**
+- Resolves user-reported issue: "When I copy a cell and paste it, it changes the entire row and doesn't put the copied data"
+- Context menu operations now use correct frozen selection from menu open time
+- Paste operations now write to intended target cells
+
 ### Added - Comprehensive Paste Operation Diagnostics (May 14, 2026)
 
 **Enhanced debugging capabilities**

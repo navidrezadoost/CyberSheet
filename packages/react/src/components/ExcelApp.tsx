@@ -104,10 +104,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   const isEditingFormulaRef = useRef(isEditingFormula);
   const formulaBarValueRef = useRef(formulaBarValue);
   const isPickingReferenceRef = useRef(isPickingReference);
+  // Context menu selection: captured at menu open time and frozen until menu closes
+  const contextMenuSelectionRef = useRef<any>(null);
   
-  // Keep refs in sync with state
+  // Keep refs in sync with state (but NOT contextMenuSelectionRef - that's set by context menu handler)
   useEffect(() => {
-    contextMenuSelectionRef.current = selection;
     selectionRef.current = selection;
   }, [selection]);
   
@@ -328,7 +329,15 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         shortcut: 'Ctrl+X',
         onClick: () => {
           const selection = contextMenuSelectionRef.current;
-          console.log('✂️ Context menu Cut, selection:', selection);
+          console.log('✂️ [ExcelApp] Context menu Cut clicked', {
+            frozenSelection: selection,
+            selectionDetails: selection ? {
+              start: `(${selection.start.row},${selection.start.col})`,
+              end: `(${selection.end.row},${selection.end.col})`,
+              dimensions: `${Math.abs(selection.end.row - selection.start.row) + 1}x${Math.abs(selection.end.col - selection.start.col) + 1}`
+            } : null,
+            timestamp: Date.now()
+          });
           debugMenu('Cut clicked');
           const sheet = workbook.activeSheet;
           if (selection && sheet) {
@@ -337,8 +346,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
               start: selection.start,
               end: selection.end,
             };
+            console.log('✂️ [ExcelApp] Calling clipboardService.cut with range:', `(${range.start.row},${range.start.col}) to (${range.end.row},${range.end.col})`);
             clipboardService.cut(sheet, range);
-            console.log('✅ Cut to clipboard');
+            console.log('✅ [ExcelApp] Cut to clipboard completed');
             
             // Clear source cells using command (for undo/redo)
             const clearCmd = new ClearCellsCommand(sheet, range);
@@ -362,12 +372,13 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         onClick: () => {
           const selection = contextMenuSelectionRef.current;
           console.log('📋 [ExcelApp] Context menu Copy clicked', {
-            selection,
+            frozenSelection: selection,
             selectionDetails: selection ? {
               start: `(${selection.start.row},${selection.start.col})`,
               end: `(${selection.end.row},${selection.end.col})`,
               dimensions: `${Math.abs(selection.end.row - selection.start.row) + 1}x${Math.abs(selection.end.col - selection.start.col) + 1}`
-            } : null
+            } : null,
+            timestamp: Date.now()
           });
           debugMenu('Copy clicked');
           const sheet = workbook.activeSheet;
@@ -376,6 +387,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
               start: selection.start,
               end: selection.end,
             };
+            console.log('📋 [ExcelApp] Calling clipboardService.copy with range:', `(${range.start.row},${range.start.col}) to (${range.end.row},${range.end.col})`);
             clipboardService.copy(sheet, range);
             console.log('✅ [ExcelApp] Copy completed');
           } else {
@@ -390,21 +402,41 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         shortcut: 'Ctrl+V',
         onClick: () => {
           const selection = contextMenuSelectionRef.current;
+          const payload = clipboardService.getPayload();
+          
+          console.log('📄 [ExcelApp] Context menu Paste clicked', {
+            frozenSelection: selection,
+            selectionDetails: selection ? {
+              start: `(${selection.start.row},${selection.start.col})`,
+              end: `(${selection.end.row},${selection.end.col})`
+            } : null,
+            hasPayload: !!payload,
+            payloadDetails: payload ? {
+              dimensions: `${payload.width}x${payload.height}`,
+              cellCount: payload.cells.length,
+              isCut: payload.isCut
+            } : null,
+            timestamp: Date.now()
+          });
+          
           debugMenu('Paste clicked');
           const sheet = workbook.activeSheet;
-          const payload = clipboardService.getPayload();
           
           if (selection && sheet && payload) {
             // Create and execute paste command
             const targetAnchor = selection.start;
+            console.log('📄 [ExcelApp] Executing context menu paste with targetAnchor:', `(${targetAnchor.row},${targetAnchor.col})`);
             const pasteCmd = new PasteCommand(sheet, payload, targetAnchor);
             commandManager.execute(pasteCmd);
+            console.log('✅ [ExcelApp] Context menu paste completed');
             
             // Invalidate the pasted region
             const r2 = targetAnchor.row + payload.height - 1;
             const c2 = targetAnchor.col + payload.width - 1;
             renderer?.invalidateRange(targetAnchor.row, targetAnchor.col, r2, c2);
             renderer?.scheduleRedraw();
+          } else {
+            console.log('❌ [ExcelApp] Cannot paste from context menu - selection:', !!selection, 'sheet:', !!sheet, 'payload:', !!payload);
           }
         },
       },
@@ -510,9 +542,16 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
 
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
-      // Use ref to get current selection (always up-to-date)
-      const currentSelection = contextMenuSelectionRef.current;
-      console.log('🖱️ Context menu opened, selection:', currentSelection ? `${currentSelection.start.row},${currentSelection.start.col}` : 'null');
+      // CRITICAL: Capture and freeze selection at the moment context menu is opened
+      // This prevents race conditions where selection changes between open and click
+      const frozenSelection = selection;
+      contextMenuSelectionRef.current = frozenSelection;
+      
+      console.log('🖱️ [ExcelApp] Context menu opened, frozen selection:', frozenSelection ? `(${frozenSelection.start.row},${frozenSelection.start.col})` : 'null', {
+        selection: frozenSelection,
+        timestamp: Date.now()
+      });
+      
       setContextMenu({ x: e.clientX, y: e.clientY });
       // Don't show MiniToolbar on right-click - only show on text selection
       setMiniToolbar(null);
@@ -523,7 +562,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       canvas.addEventListener('contextmenu', handleContextMenu);
       return () => canvas.removeEventListener('contextmenu', handleContextMenu);
     }
-  }, [renderer]); // Only depend on renderer, not selection
+  }, [renderer, selection]); // Include selection in deps so we capture latest
 
   // Handle renderer ready
   const handleRendererReady = useCallback((r: CanvasRenderer) => {
