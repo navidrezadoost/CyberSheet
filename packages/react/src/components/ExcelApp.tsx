@@ -809,28 +809,46 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         
         console.log('🔍 [ExcelApp] Cut checks passed, executing cut logic...');
         
-        const range = { start: selection.start, end: selection.end };
-        
-        // IMPORTANT: Log cell data BEFORE cutting
-        console.log('📊 [ExcelApp] Cell data BEFORE cut:', {
-          sourceCell: `(${range.start.row},${range.start.col})`,
-          cellValue: sheet.getCellValue(range.start),
-          cellFormula: sheet.getCellFormula(range.start),
-          cellDisplay: sheet.getCellDisplayValue(range.start),
-        });
-        
-        clipboardService.cut(sheet, range);
-        const payload = clipboardService.getPayload();
-        console.log('✅ [ExcelApp] Cut to clipboard (source will be cleared after paste)', {
-          payloadCells: payload?.cells.length,
-          payloadDimensions: payload ? `${payload.width}x${payload.height}` : 'none',
-          isCut: payload?.isCut,
-          firstCellValue: payload?.cells[0]?.value,
-          firstCellFormula: payload?.cells[0]?.formula,
-        });
-        
-        // Note: Source cells are NOT cleared here.
-        // PasteCommand will handle clearing the source after paste completes (via isCut flag)
+        try {
+          const range = { start: selection.start, end: selection.end };
+          
+          console.log('📍 [ExcelApp] Creating cut with range:', {
+            start: `(${range.start.row},${range.start.col})`,
+            end: `(${range.end.row},${range.end.col})`,
+          });
+          
+          // Execute cut operation
+          clipboardService.cut(sheet, range);
+          console.log('✅ [ExcelApp] clipboardService.cut() completed');
+          
+          // Get and verify payload
+          const payload = clipboardService.getPayload();
+          console.log('✅ [ExcelApp] Cut to clipboard (source will be cleared after paste)', {
+            payloadCells: payload?.cells.length,
+            payloadDimensions: payload ? `${payload.width}x${payload.height}` : 'none',
+            isCut: payload?.isCut,
+            firstCellValue: payload?.cells[0]?.value,
+            firstCellFormula: payload?.cells[0]?.formula,
+          });
+          
+          // Log cell data for diagnostics
+          try {
+            console.log('📊 [ExcelApp] Source cell data:', {
+              sourceCell: `(${range.start.row},${range.start.col})`,
+              cellValue: sheet.getCellValue(range.start),
+              cellFormula: sheet.getCellFormula(range.start),
+              cellDisplay: sheet.getCellDisplayValue(range.start),
+            });
+          } catch (cellError) {
+            console.warn('⚠️ [ExcelApp] Could not read cell data:', cellError);
+          }
+          
+          // Note: Source cells are NOT cleared here.
+          // PasteCommand will handle clearing the source after paste completes (via isCut flag)
+        } catch (error) {
+          console.error('❌ [ExcelApp] Error during cut operation:', error);
+          console.error('Error stack:', (error as Error).stack);
+        }
         return;
       }
       
