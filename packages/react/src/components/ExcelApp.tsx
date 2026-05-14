@@ -361,7 +361,14 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         shortcut: 'Ctrl+C',
         onClick: () => {
           const selection = contextMenuSelectionRef.current;
-          console.log('📋 Context menu Copy, selection:', selection);
+          console.log('📋 [ExcelApp] Context menu Copy clicked', {
+            selection,
+            selectionDetails: selection ? {
+              start: `(${selection.start.row},${selection.start.col})`,
+              end: `(${selection.end.row},${selection.end.col})`,
+              dimensions: `${Math.abs(selection.end.row - selection.start.row) + 1}x${Math.abs(selection.end.col - selection.start.col) + 1}`
+            } : null
+          });
           debugMenu('Copy clicked');
           const sheet = workbook.activeSheet;
           if (selection && sheet) {
@@ -370,7 +377,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
               end: selection.end,
             };
             clipboardService.copy(sheet, range);
-            console.log('✅ Copied to clipboard');
+            console.log('✅ [ExcelApp] Copy completed');
+          } else {
+            console.log('❌ [ExcelApp] Cannot copy - missing selection or sheet');
           }
         },
       },
@@ -747,19 +756,34 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         e.preventDefault();
         const payload = clipboardService.getPayload();
-        console.log('📄 Ctrl+V pressed, selection:', selection, 'payload:', payload);
+        console.log('📄 [ExcelApp] Ctrl+V pressed', {
+          selection,
+          selectionDetails: selection ? {
+            start: `(${selection.start.row},${selection.start.col})`,
+            end: `(${selection.end.row},${selection.end.col})`,
+            dimensions: `${Math.abs(selection.end.row - selection.start.row) + 1}x${Math.abs(selection.end.col - selection.start.col) + 1}`
+          } : null,
+          hasPayload: !!payload,
+          payloadDetails: payload ? {
+            dimensions: `${payload.width}x${payload.height}`,
+            cellCount: payload.cells.length,
+            isCut: payload.isCut,
+            sourceRange: `(${payload.sourceRange.start.row},${payload.sourceRange.start.col}) to (${payload.sourceRange.end.row},${payload.sourceRange.end.col})`
+          } : null
+        });
         if (selection && payload) {
           const targetAnchor = selection.start;
+          console.log('▶️ [ExcelApp] Executing PasteCommand with targetAnchor:', `(${targetAnchor.row},${targetAnchor.col})`);
           const pasteCmd = new PasteCommand(sheet, payload, targetAnchor);
           commandManager.execute(pasteCmd);
-          console.log('✅ Pasted to', targetAnchor);
+          console.log('✅ [ExcelApp] Paste completed');
           
           const r2 = targetAnchor.row + payload.height - 1;
           const c2 = targetAnchor.col + payload.width - 1;
           renderer?.invalidateRange(targetAnchor.row, targetAnchor.col, r2, c2);
           renderer?.scheduleRedraw();
         } else {
-          console.log('❌ Cannot paste - selection:', !!selection, 'payload:', !!payload);
+          console.log('❌ [ExcelApp] Cannot paste - selection:', !!selection, 'payload:', !!payload);
         }
         return;
       }

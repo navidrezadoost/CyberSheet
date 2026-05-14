@@ -91,6 +91,21 @@ export class PasteCommand implements Command {
     this.targetAnchor = targetAnchor;
     this.description = `Paste ${payload.width}x${payload.height} range to ${targetAnchor.row},${targetAnchor.col}`;
     
+    console.log('📋 [PasteCommand] Constructor', {
+      targetAnchor,
+      payloadDimensions: `${payload.width}x${payload.height}`,
+      sourceRange: payload.sourceRange,
+      cellCount: payload.cells.length,
+      isCut: payload.isCut,
+      cells: payload.cells.map(c => ({
+        offset: `(${c.rowOffset},${c.colOffset})`,
+        value: c.value,
+        formula: c.formula,
+        isMergeAnchor: c.isMergeAnchor,
+        mergeSize: c.mergeWidth && c.mergeHeight ? `${c.mergeWidth}x${c.mergeHeight}` : undefined
+      }))
+    });
+    
     // Capture previous state immediately (before any changes)
     this.captureState();
     
@@ -118,8 +133,14 @@ export class PasteCommand implements Command {
     const endRow = this.targetAnchor.row + this.payload.height - 1;
     const endCol = this.targetAnchor.col + this.payload.width - 1;
     
+    console.log('📸 [PasteCommand] Capturing target state', {
+      targetRange: `(${this.targetAnchor.row},${this.targetAnchor.col}) to (${endRow},${endCol})`,
+      dimensions: `${this.payload.height}x${this.payload.width}`
+    });
+    
     // Track captured anchors to avoid duplicates
     const capturedKeys = new Set<string>();
+    const captureLog: any[] = [];
     
     // Capture all cells in target range
     for (let row = this.targetAnchor.row; row <= endRow; row++) {
@@ -130,15 +151,33 @@ export class PasteCommand implements Command {
         const mergeRange = this.worksheet.getMergedRangeForCell(addr);
         const resolvedAddr = mergeRange ? mergeRange.start : addr;
         
+        const logEntry: any = {
+          requested: `(${row},${col})`,
+          resolved: `(${resolvedAddr.row},${resolvedAddr.col})`
+        };
+        
+        if (mergeRange) {
+          logEntry.mergeRange = `(${mergeRange.start.row},${mergeRange.start.col}) to (${mergeRange.end.row},${mergeRange.end.col})`;
+        }
+        
         // Skip if we already captured this anchor
         const key = `${resolvedAddr.row}:${resolvedAddr.col}`;
         if (capturedKeys.has(key)) {
+          logEntry.skipped = 'duplicate anchor';
+          captureLog.push(logEntry);
           continue;
         }
         capturedKeys.add(key);
         
         // Capture current state at RESOLVED address
         const cell = this.worksheet.getCell(resolvedAddr);
+        
+        logEntry.captured = {
+          value: cell?.value,
+          hasFormula: !!cell?.formula,
+          hasStyle: !!cell?.style
+        };
+        captureLog.push(logEntry);
         
         this.snapshots.push({
           addr: resolvedAddr,
@@ -148,6 +187,12 @@ export class PasteCommand implements Command {
         });
       }
     }
+    
+    console.log('📸 [PasteCommand] Captured snapshots', {
+      totalCells: captureLog.length,
+      uniqueAnchors: capturedKeys.size,
+      details: captureLog
+    });
   }
   
   /**
@@ -219,6 +264,8 @@ export class PasteCommand implements Command {
    * @invariant Cut = atomic paste + source invalidation
    */
   execute(): void {
+    console.log('▶️ [PasteCommand] Execute starting');
+    
     // Calculate source and target anchors for formula shifting
     const sourceAnchor = this.payload.sourceRange.start;
     const targetAnchor = this.targetAnchor;
@@ -233,6 +280,12 @@ export class PasteCommand implements Command {
       this.payload.width > 1
       || this.payload.height > 1
       || payloadContainsMergedRegions;
+    
+    console.log('🔍 [PasteCommand] Execute configuration', {
+      shouldClearTargetMerges,
+      payloadContainsMergedRegions,
+      payloadSize: `${this.payload.width}x${this.payload.height}`
+    });
     
     // STEP 6: PRE-PASTE DAG CLEANUP
     // Clear old dependency edges for target region to prevent zombie edges
@@ -258,6 +311,12 @@ export class PasteCommand implements Command {
     // STEP 2 & 3: VALUE AND FORMULA PASTE
     // Apply values and formulas from clipboard payload
     // CRITICAL: Skip merge anchors here - they're processed in deterministic order later
+    console.log('✍️ [PasteCommand] Starting value/formula paste', {
+      cellsToPaste: this.payload.cells.length
+    });
+    
+    const writeLog: any[] = [];
+    
     for (const cellSnapshot of this.payload.cells) {
       // Skip merge-only entries (no value/formula content)
       if (cellSnapshot.isMergeAnchor && !cellSnapshot.value && !cellSnapshot.formula) {
@@ -267,6 +326,13 @@ export class PasteCommand implements Command {
       const targetAddr: Address = {
         row: this.targetAnchor.row + cellSnapshot.rowOffset,
         col: this.targetAnchor.col + cellSnapshot.colOffset
+      };
+      
+      const logEntry: any = {
+        sourceOffset: `(${cellSnapshot.rowOffset},${cellSnapshot.colOffset})`,
+        targetAddr: `(${targetAddr.row},${targetAddr.col})`,
+        sourceValue: cellSnapshot.value,
+        sourceFormula: cellSnapshot.formula
       };
       
       // PRIORITY RULE: formula > value
@@ -282,6 +348,9 @@ export class PasteCommand implements Command {
           targetAnchor
         );
         
+        logEntry.operation = 'write formula';
+        logEntry.shiftedFormula = shiftedFormula;
+        
         // Write formula to cell (shiftedFormula already has '=')
         this.worksheet.setCellFormula(targetAddr, shiftedFormula);
         
@@ -295,13 +364,23 @@ export class PasteCommand implements Command {
         
       } else {
         // Value-only paste (no formula)
+        logEntry.operation = 'write value';
         this.worksheet.setCellValue(targetAddr, cellSnapshot.value);
       }
+      
+      writeLog.push(logEntry);
     }
+    
+    console.log('✍️ [PasteCommand] Value/formula writes completed', {
+      writesPerformed: writeLog.length,
+      details: writeLog
+    });
     
     // STEP 4: STYLE PASTE
     // Apply styles AFTER value/formula layer (layer separation)
     // Worksheet auto-interns via StyleCache (canonical pointer discipline)
+    console.log('🎨 [PasteCommand] Starting style paste');
+    
     for (const cellSnapshot of this.payload.cells) {
       // Skip merge-only entries (no style content)
       if (cellSnapshot.isMergeAnchor && !cellSnapshot.style) {
@@ -325,6 +404,8 @@ export class PasteCommand implements Command {
     // This is STRUCTURAL TOPOLOGY, not data or rendering
     // CRITICAL: Processed AFTER all cell content to ensure deterministic ordering
     //           (values/formulas/styles written first, then topology applied)
+    console.log('🔗 [PasteCommand] Starting merge reconstruction');
+    
     for (const cellSnapshot of this.payload.cells) {
       if (cellSnapshot.isMergeAnchor && cellSnapshot.mergeWidth && cellSnapshot.mergeHeight) {
         // Guard: Reject degenerate merges (should never happen after transform guards, but defense-in-depth)
@@ -379,6 +460,8 @@ export class PasteCommand implements Command {
     
     // NOTE: Recomputation happens OUTSIDE this command via RecalcCoordinator
     // We only mark dirty - we do NOT recompute here
+    
+    console.log('✅ [PasteCommand] Execute completed');
   }
   
   /**

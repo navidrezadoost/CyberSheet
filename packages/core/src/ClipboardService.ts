@@ -216,13 +216,21 @@ export class ClipboardService {
     const width = end.col - start.col + 1;
     const height = end.row - start.row + 1;
     
+    console.log('📋 [ClipboardService] Creating snapshot', {
+      range: `(${start.row},${start.col}) to (${end.row},${end.col})`,
+      dimensions: `${width}x${height}`,
+      isCut
+    });
+    
     const cells: CellSnapshot[] = [];
     const processedMerges = new Set<string>(); // Track which merge anchors we've handled
+    const captureLog: any[] = [];
     
     // Iterate over all cells in range
     for (let row = start.row; row <= end.row; row++) {
       for (let col = start.col; col <= end.col; col++) {
         const addr: Address = { row, col };
+        const logEntry: any = { addr: `(${row},${col})` };
         
         // Check if this cell is in a merge
         const mergeRange = worksheet.getMergedRangeForCell(addr);
@@ -231,14 +239,24 @@ export class ClipboardService {
           // Only process merge anchor
           const isAnchor = mergeRange.start.row === row && mergeRange.start.col === col;
           
+          logEntry.inMerge = true;
+          logEntry.mergeRange = `(${mergeRange.start.row},${mergeRange.start.col}) to (${mergeRange.end.row},${mergeRange.end.col})`;
+          logEntry.isAnchor = isAnchor;
+          
           if (isAnchor) {
             const mergeKey = `${row}:${col}`;
-            if (processedMerges.has(mergeKey)) continue;
+            if (processedMerges.has(mergeKey)) {
+              logEntry.action = 'skip - already processed';
+              captureLog.push(logEntry);
+              continue;
+            }
             processedMerges.add(mergeKey);
             
             // Calculate merge dimensions
             const mergeHeight = mergeRange.end.row - mergeRange.start.row + 1;
             const mergeWidth = mergeRange.end.col - mergeRange.start.col + 1;
+            
+            logEntry.mergeSize = `${mergeWidth}x${mergeHeight}`;
             
             // Create snapshot for merge anchor
             const snapshot = this.createCellSnapshot(
@@ -250,18 +268,34 @@ export class ClipboardService {
             );
             
             if (snapshot) {
+              logEntry.action = 'captured merge anchor';
+              logEntry.value = snapshot.value;
+              logEntry.hasFormula = !!snapshot.formula;
               cells.push(snapshot);
+            } else {
+              logEntry.action = 'merge anchor empty';
             }
+          } else {
+            logEntry.action = 'skip - non-anchor merged cell';
           }
+          captureLog.push(logEntry);
           // Skip non-anchor cells in merged regions
           continue;
         }
         
         // Regular cell
+        logEntry.inMerge = false;
         const snapshot = this.createCellSnapshot(worksheet, addr, start);
         if (snapshot) {
+          logEntry.action = 'captured';
+          logEntry.value = snapshot.value;
+          logEntry.hasFormula = !!snapshot.formula;
+          logEntry.hasStyle = !!snapshot.style;
           cells.push(snapshot);
+        } else {
+          logEntry.action = 'skip - empty';
         }
+        captureLog.push(logEntry);
       }
     }
     
@@ -272,6 +306,21 @@ export class ClipboardService {
       height,
       cells: Object.freeze(cells.map(c => Object.freeze(c))),
       isCut,
+    });
+    
+    console.log('📋 [ClipboardService] Snapshot created', {
+      totalCellsInRange: (end.row - start.row + 1) * (end.col - start.col + 1),
+      cellsCaptured: cells.length,
+      captureDetails: captureLog,
+      payload: {
+        dimensions: `${width}x${height}`,
+        cells: cells.map(c => ({
+          offset: `(${c.rowOffset},${c.colOffset})`,
+          value: c.value,
+          formula: c.formula,
+          isMergeAnchor: c.isMergeAnchor
+        }))
+      }
     });
     
     return payload;

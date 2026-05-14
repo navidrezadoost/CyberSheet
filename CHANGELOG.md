@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Comprehensive Paste Operation Diagnostics (May 14, 2026)
+
+**Enhanced debugging capabilities**
+- Added detailed console logging throughout the paste operation pipeline:
+  - `ClipboardService`: Logs source range, dimensions, cell capture details, merge handling
+  - `PasteCommand` constructor: Logs payload inspection with cell offsets, values, formulas, merge metadata
+  - `PasteCommand.captureState()`: Logs target cell capture with merge resolution details
+  - `PasteCommand.execute()`: Logs configuration decisions, write operations, style/merge reconstruction phases
+  - `ExcelApp` paste/copy handlers: Logs selection state, target coordinates, payload dimensions
+- Each log entry includes structured data showing:
+  - Cell addresses and offsets
+  - Merge topology (anchors, ranges, dimensions)
+  - Values, formulas, and styles being transferred
+  - Whether cells are skipped (empty, non-anchor, duplicate)
+  - Operation outcomes at each phase
+
+**Purpose**
+- Enables root-cause analysis of paste behavior issues
+- Shows exact data flow from copy → clipboard → paste → worksheet
+- Makes merge anchor resolution and deduplication logic visible
+- Helps diagnose unexpected row/column changes or data corruption
+
 ### Fixed - Paste Command Merge Anchor Resolution (May 14, 2026)
 
 **Critical undo bug fix**
