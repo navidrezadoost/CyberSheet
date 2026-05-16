@@ -38,6 +38,7 @@ export default defineConfig({
       '@cyber-sheet/core': path.resolve(__dirname, './packages/core/src/index.ts'),
       '@cyber-sheet/react': path.resolve(__dirname, './packages/react/src/index.ts'),
       '@cyber-sheet/cf-ui-core': path.resolve(__dirname, './packages/cf-ui-core/src/index.ts'),
+      '@cyber-sheet/icons': path.resolve(__dirname, './packages/icons'),
     },
   },
 });
