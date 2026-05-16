@@ -906,8 +906,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           console.log('📊 [ExcelApp] Target cell BEFORE paste:', {
             targetCell: `(${targetAnchor.row},${targetAnchor.col})`,
             cellValue: sheet.getCellValue(targetAnchor),
-            cellFormula: sheet.getCellFormula(targetAnchor),
-            cellDisplay: sheet.getCellDisplayValue(targetAnchor),
+            cellFormula: sheet.getCell(targetAnchor)?.formula,
           });
           
           // For cut operations, also log source cell BEFORE paste
@@ -916,8 +915,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             console.log('📊 [ExcelApp] Source cell BEFORE paste (should have data):', {
               sourceCell: `(${sourceCell.row},${sourceCell.col})`,
               cellValue: sheet.getCellValue(sourceCell),
-              cellFormula: sheet.getCellFormula(sourceCell),
-              cellDisplay: sheet.getCellDisplayValue(sourceCell),
+              cellFormula: sheet.getCell(sourceCell)?.formula,
             });
           }
           
@@ -929,8 +927,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           console.log('📊 [ExcelApp] Target cell AFTER paste:', {
             targetCell: `(${targetAnchor.row},${targetAnchor.col})`,
             cellValue: sheet.getCellValue(targetAnchor),
-            cellFormula: sheet.getCellFormula(targetAnchor),
-            cellDisplay: sheet.getCellDisplayValue(targetAnchor),
+            cellFormula: sheet.getCell(targetAnchor)?.formula,
           });
           
           // If it was a cut operation, also check source cell AFTER paste
@@ -939,8 +936,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             console.log('📊 [ExcelApp] Source cell AFTER paste (should be EMPTY for cut):', {
               sourceCell: `(${sourceCell.row},${sourceCell.col})`,
               cellValue: sheet.getCellValue(sourceCell),
-              cellFormula: sheet.getCellFormula(sourceCell),
-              cellDisplay: sheet.getCellDisplayValue(sourceCell),
+              cellFormula: sheet.getCell(sourceCell)?.formula,
               expectedToBeEmpty: true,
               isEmpty: sheet.getCellValue(sourceCell) === null || sheet.getCellValue(sourceCell) === undefined || sheet.getCellValue(sourceCell) === '',
             });
