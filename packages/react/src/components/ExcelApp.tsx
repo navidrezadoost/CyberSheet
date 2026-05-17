@@ -355,6 +355,16 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
               isCut: payload?.isCut,
             });
             
+            // Also write to system clipboard
+            if (payload && payload.cells.length > 0) {
+              const textValue = payload.cells[0]?.value?.toString() || '';
+              navigator.clipboard.writeText(textValue).then(() => {
+                console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
+              }).catch(err => {
+                console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
+              });
+            }
+            
             // Set cut range for visual indication
             setCutRange(range);
             console.log('✅ [ExcelApp] Context menu cut range set for visual indication:', range);
@@ -390,7 +400,18 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             };
             console.log('📋 [ExcelApp] Calling clipboardService.copy with range:', `(${range.start.row},${range.start.col}) to (${range.end.row},${range.end.col})`);
             clipboardService.copy(sheet, range);
+            const payload = clipboardService.getPayload();
             console.log('✅ [ExcelApp] Copy completed');
+            
+            // Also write to system clipboard
+            if (payload && payload.cells.length > 0) {
+              const textValue = payload.cells[0]?.value?.toString() || '';
+              navigator.clipboard.writeText(textValue).then(() => {
+                console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
+              }).catch(err => {
+                console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
+              });
+            }
           } else {
             console.log('❌ [ExcelApp] Cannot copy - missing selection or sheet');
           }
@@ -796,6 +817,16 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             payloadCells: payload?.cells.length,
             payloadDimensions: payload ? `${payload.width}x${payload.height}` : 'none',
           });
+          
+          // Also write to system clipboard for external paste
+          if (payload && payload.cells.length > 0) {
+            const textValue = payload.cells[0]?.value?.toString() || '';
+            navigator.clipboard.writeText(textValue).then(() => {
+              console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
+            }).catch(err => {
+              console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
+            });
+          }
         } else {
           console.log('❌ [ExcelApp] Cannot copy - no selection');
         }
@@ -852,6 +883,16 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             firstCellValue: payload?.cells[0]?.value,
             firstCellFormula: payload?.cells[0]?.formula,
           });
+          
+          // Also write to system clipboard for external paste
+          if (payload && payload.cells.length > 0) {
+            const textValue = payload.cells[0]?.value?.toString() || '';
+            navigator.clipboard.writeText(textValue).then(() => {
+              console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
+            }).catch(err => {
+              console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
+            });
+          }
           
           // Log cell data for diagnostics
           try {
