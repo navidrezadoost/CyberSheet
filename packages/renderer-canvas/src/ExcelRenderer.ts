@@ -12,8 +12,7 @@
  * ✅ Dirty rectangle optimization for partial redraws
  */
 
-import { Worksheet, Address, CellStyle, resolveExcelColor, ExcelColorSpec, ConditionalFormattingEngine, ConditionalFormattingRule, ConditionalFormattingResult, DataBarRender, IconRender, computeVerticalOffset } from '@cyber-sheet/core';
-import { renderIconOnCanvas } from '@cyber-sheet/core/src/icon-sets';
+import { Worksheet, Address, CellStyle, resolveExcelColor, ExcelColorSpec, ConditionalFormattingEngine, ConditionalFormattingRule, ConditionalFormattingResult, DataBarRender, IconRender, computeVerticalOffset, renderIconOnCanvas } from '@cyber-sheet/core';
 import { MultiLayerCanvas, CanvasLayerType, ExcelBorderRenderer, ExcelBorderStyle } from './MultiLayerCanvas';
 import { TextMeasureCache } from './TextMeasureCache';
 import { FormatCache } from './FormatCache';

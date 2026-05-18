@@ -47,6 +47,7 @@ export * from './ConditionalFormattingEngine';
 export * from './ConditionalFormattingBatchEngine';
 export * from './icon-sets';
 export * from './cell-styles-presets';
+export * from './icon-sets';
 export * from './DataValidationEngine';
 export * from './DataValidationRenderer.tsx';
 export * from './search/FindService';
