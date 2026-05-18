@@ -6,11 +6,13 @@
 
 import { StatusBarIcon3, StatusBarIcon2, StatusBarIcon1 } from '@cyber-sheet/icons/react';
 import React from 'react';
+import type { Workbook } from '@cyber-sheet/core';
 
 export interface StatusBarProps {
   zoom: number;
   onZoomChange: (zoom: number) => void;
-  selection?: any;
+  selection?: { start: { row: number; col: number }; end: { row: number; col: number } };
+  workbook?: Workbook;
   viewMode?: 'normal' | 'pageLayout' | 'pageBreak';
   onViewModeChange?: (mode: 'normal' | 'pageLayout' | 'pageBreak') => void;
 }
@@ -28,13 +30,61 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   zoom,
   onZoomChange,
   selection,
+  workbook,
   viewMode = 'normal',
   onViewModeChange,
 }) => {
-  // Calculate selection statistics (placeholder for now)
-  const average = selection ? '—' : '—';
-  const count = selection ? '—' : '—';
-  const sum = selection ? '—' : '—';
+  // Calculate selection statistics
+  const calculateStatistics = React.useMemo(() => {
+    if (!selection || !workbook || !workbook.activeSheet) {
+      return { average: null, count: 0, sum: null, numericCount: 0 };
+    }
+
+    const sheet = workbook.activeSheet;
+    const r1 = Math.min(selection.start.row, selection.end.row);
+    const r2 = Math.max(selection.start.row, selection.end.row);
+    const c1 = Math.min(selection.start.col, selection.end.col);
+    const c2 = Math.max(selection.start.col, selection.end.col);
+
+    let sum = 0;
+    let count = 0;
+    let numericCount = 0;
+
+    // Iterate through selected cells
+    for (let row = r1; row <= r2; row++) {
+      for (let col = c1; col <= c2; col++) {
+        const value = sheet.getCellValue({ row, col });
+        
+        if (value !== null && value !== undefined && value !== '') {
+          count++;
+          
+          // Try to convert to number
+          const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+          
+          if (!isNaN(numValue) && isFinite(numValue)) {
+            sum += numValue;
+            numericCount++;
+          }
+        }
+      }
+    }
+
+    const average = numericCount > 0 ? sum / numericCount : null;
+
+    return { average, count, sum: numericCount > 0 ? sum : null, numericCount };
+  }, [selection, workbook]);
+
+  const { average, count, sum, numericCount } = calculateStatistics;
+
+  // Format numbers for display
+  const formatNumber = (num: number | null) => {
+    if (num === null) return '—';
+    // Format with commas and up to 2 decimal places
+    return num.toLocaleString(undefined, { 
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2 
+    });
+  };
 
   const handleZoomIn = () => {
     onZoomChange(Math.min(400, zoom + 10));
@@ -57,9 +107,16 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
       {/* Center: Statistics */}
       <div className="status-center">
-        <span className="status-item">Average: {average}</span>
-        <span className="status-item">Count: {count}</span>
-        <span className="status-item">Sum: {sum}</span>
+        {numericCount > 0 && (
+          <>
+            <span className="status-item">Average: {formatNumber(average)}</span>
+            <span className="status-item">Count: {count}</span>
+            <span className="status-item">Sum: {formatNumber(sum)}</span>
+          </>
+        )}
+        {numericCount === 0 && count > 0 && (
+          <span className="status-item">Count: {count}</span>
+        )}
       </div>
 
       {/* Right: View and Zoom */}

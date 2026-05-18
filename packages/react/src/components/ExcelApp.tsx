@@ -1558,6 +1558,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         zoom={zoom}
         onZoomChange={handleZoomChange}
         selection={selection}
+        workbook={workbook}
       />
 
       {/* Mini Toolbar */}
