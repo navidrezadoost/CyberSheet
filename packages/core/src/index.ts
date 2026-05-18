@@ -48,7 +48,7 @@ export * from './ConditionalFormattingBatchEngine';
 export * from './icon-sets';
 export * from './cell-styles-presets';
 export * from './DataValidationEngine';
-export * from './DataValidationRenderer';
+export * from './DataValidationRenderer.tsx';
 export * from './models/ChartObject';
 export * from './models/AdvancedChartOptions';
 
