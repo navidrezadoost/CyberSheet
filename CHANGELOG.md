@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 4: Data Validation UI Integration (May 18, 2026)
+
+**Completed Data Validation ribbon integration**
+- Wired comprehensive DataValidationDialog to Data ribbon tab Data Validation button
+- Replaced 300-line stub dialog with full 3-tab implementation (Settings, Input Message, Error Alert)
+- Updated dialog props: `isOpen`, `selectedRange`, `existingRule` for proper TypeScript typing
+- Fixed `.tsx` extension in DataValidationRenderer export
+- Data Validation button now opens Excel 365-compatible dialog with all 7 validation types
+
+**Files Modified**
+- `packages/react/src/components/ribbon/data/DataToolsGroup.tsx`: Import and integrate comprehensive dialog
+- `packages/core/src/index.ts`: Fix DataValidationRenderer export (remove .tsx extension)
+
+**Technical Details**
+- Dialog now receives `selectedRange: Range` instead of `selectedCells: Address[]`
+- Added `existingRule?: DataValidationRule` prop for future edit support
+- Removed `workbook` prop (not required by comprehensive implementation)
+- Conditional rendering only shows dialog when cells are selected
+
 ### Added - Phase 4: Data Validation System (May 18, 2026)
 
 **Excel-compatible data validation with 7 validation types**
