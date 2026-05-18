@@ -2,6 +2,7 @@ import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRe
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
+import { extractReferences } from './utils/formula-reference-extractor';
 import {
   buildMatcher,
   cellValueToString,
@@ -271,6 +272,16 @@ export class Worksheet {
     const c = this.ensureCell(addr);
     c.formula = formula;
     if (displayValue !== undefined) c.value = displayValue;
+    
+    // Phase 3: Automatically extract and register formula dependencies
+    try {
+      const dependencies = extractReferences(formula, addr);
+      this.registerDependencies(addr, dependencies);
+    } catch (error) {
+      // Dependency extraction failed - log but continue
+      console.warn(`Failed to extract dependencies from formula at ${addr.row}:${addr.col}:`, error);
+    }
+    
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.recalcCoordinator.notifyChanged(addr.row, addr.col);
     this._emitOrBuffer({ type: 'cell-changed', address: addr, cell: { ...c } });
@@ -943,6 +954,57 @@ export class Worksheet {
   }
 
   /**
+   * Automatically recalculate all dirty formula cells using the FormulaEngine.
+   * 
+   * This is a convenience method that wraps recalc() with automatic formula evaluation.
+   * It evaluates each dirty cell's formula in topological order and updates cell values.
+   * 
+   * Requires that a FormulaEngine was provided to the constructor (via the engine parameter).
+   * 
+   * @returns RecalcResult with evaluated count and any detected cycles
+   * @throws Error if no FormulaEngine is available
+   * 
+   * @example
+   * worksheet.setCellValue({row: 0, col: 0}, 10);
+   * worksheet.setCellFormula({row: 0, col: 1}, '=A1*2');
+   * worksheet.autoRecalculate(); // B1 now has value 20
+   */
+  autoRecalculate(): RecalcResult {
+    if (!this.formulaEngine) {
+      throw new Error('Cannot auto-recalculate: no FormulaEngine available. Pass an engine to the Worksheet constructor.');
+    }
+
+    return this.recalc((nodeKey) => {
+      const { row, col } = unpackKey(nodeKey);
+      const cell = this.cells.get(row, col);
+      
+      if (!cell?.formula) return; // Skip non-formula cells
+      
+      try {
+        const result = (this.formulaEngine as any).evaluate(cell.formula, {
+          worksheet: this as any,
+          currentCell: { row, col },
+        });
+        
+        // Update cell value with evaluated result
+        // Handle Error, Array, and primitive types
+        if (result && typeof result === 'object' && 'message' in result && result instanceof Error) {
+          cell.value = result.message; // Store error as string
+        } else if (Array.isArray(result)) {
+          // For spilled arrays, store the array (SpillEngine will handle display)
+          cell.value = result as any;
+        } else {
+          cell.value = result as CellValue;
+        }
+      } catch (error) {
+        // Evaluation error - store as #ERROR!
+        cell.value = '#ERROR!';
+        console.error(`Formula evaluation error at ${row}:${col}:`, error);
+      }
+    });
+  }
+
+  /**
    * DAG statistics for diagnostics and tests.
    */
   get dagStats(): { nodes: number; edges: number; dirty: number; volatiles: number } {
@@ -1244,8 +1306,16 @@ export class Worksheet {
       this.events.emit({ type: 'merge-removed', region });
     }
 
+    // Phase 3: Clear formula dependencies if cell had a formula
+    if (cell.formula) {
+      this.clearDependencies(resolved);
+    }
+
     // Remove cell from storage (not just clear - actually delete)
     this.cells.delete(resolved.row, resolved.col);
+    
+    // Phase 3: Notify change to mark dependents dirty (if any cells reference this one)
+    this.recalcCoordinator.notifyChanged(resolved.row, resolved.col);
 
     this.events.emit({ type: 'cell-changed', address: resolved, cell: { value: null } });
   }

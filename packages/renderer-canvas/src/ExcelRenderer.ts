@@ -13,6 +13,7 @@
  */
 
 import { Worksheet, Address, CellStyle, resolveExcelColor, ExcelColorSpec, ConditionalFormattingEngine, ConditionalFormattingRule, ConditionalFormattingResult, DataBarRender, IconRender, computeVerticalOffset } from '@cyber-sheet/core';
+import { renderIconOnCanvas } from '@cyber-sheet/core/src/icon-sets';
 import { MultiLayerCanvas, CanvasLayerType, ExcelBorderRenderer, ExcelBorderStyle } from './MultiLayerCanvas';
 import { TextMeasureCache } from './TextMeasureCache';
 import { FormatCache } from './FormatCache';
@@ -660,26 +661,12 @@ export class ExcelRenderer {
     w: number,
     h: number,
     icon: IconRender
-  ) {
-    const iconSetStr = String(icon.iconSet);
-    const palette = iconSetStr.includes('traffic-lights')
-      ? ['#d32f2f', '#fbc02d', '#388e3c']
-      : iconSetStr.includes('flags')
-        ? ['#d32f2f', '#1976d2', '#388e3c']
-        : iconSetStr.includes('stars')
-          ? ['#c0c0c0', '#c0c0c0', '#fbc02d']
-          : ['#d32f2f', '#fbc02d', '#388e3c'];
-
-    const color = palette[Math.min(palette.length - 1, Math.max(0, icon.iconIndex))];
-    const size = Math.min(14, h - 4);
+  ) {size = Math.min(14, h - 4);
     const px = x + 4;
     const py = y + (h - size) / 2;
 
-    ctx.save();
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(px + size / 2, py + size / 2, size / 2, 0, Math.PI * 2);
-    ctx.fill();
+    // Use proper Excel icon rendering
+    renderIconOnCanvas(ctx, icon.iconSet, icon.iconIndex, px, py, size
     ctx.restore();
   }
 

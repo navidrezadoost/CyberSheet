@@ -22,6 +22,7 @@ import { CutRangeOverlay } from './CutRangeOverlay';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { MiniToolbar } from './MiniToolbar';
 import FormatCellsDialog, { FormattingChanges } from './dialogs/FormatCellsDialog/FormatCellsDialog';
+import FindReplaceDialog from './dialogs/FindReplaceDialog';
 import { debugEdit, debugRender, debugMenu } from '../utils/debug';
 import './excel-app.css';
 
@@ -90,6 +91,10 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   
   // Format Cells dialog state
   const [isFormatDialogOpen, setIsFormatDialogOpen] = useState<boolean>(false);
+  
+  // Find/Replace dialog state
+  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState<boolean>(false);
+  const [findReplaceTab, setFindReplaceTab] = useState<'find' | 'replace'>('find');
   
   // Recent colors tracking (up to 10 each)
   const [recentFillColors, setRecentFillColors] = useState<string[]>([]);
@@ -762,6 +767,22 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ'))) {
         e.preventDefault();
         if (onRedo) onRedo();
+        return;
+      }
+      
+      // Ctrl+F (Find) - works everywhere except in input fields
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF' && !isInInput) {
+        e.preventDefault();
+        setFindReplaceTab('find');
+        setIsFindReplaceOpen(true);
+        return;
+      }
+      
+      // Ctrl+H (Replace) - works everywhere except in input fields
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyH' && !isInInput) {
+        e.preventDefault();
+        setFindReplaceTab('replace');
+        setIsFindReplaceOpen(true);
         return;
       }
       
@@ -1724,6 +1745,26 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           onClose={() => {
             setContextMenu(null);
             setMiniToolbar(null);
+          }}
+        />
+      )}
+
+      {/* Find/Replace Dialog */}
+      {isFindReplaceOpen && workbook.activeSheet && (
+        <FindReplaceDialog
+          isOpen={isFindReplaceOpen}
+          onClose={() => setIsFindReplaceOpen(false)}
+          worksheet={workbook.activeSheet}
+          initialTab={findReplaceTab}
+          onMatchSelected={(address) => {
+            // Select the matched cell on the grid
+            setSelectedCell(address);
+            renderer?.setSelection({
+              start: address,
+              end: address,
+            });
+            // Scroll to make the cell visible if needed
+            renderer?.scrollToCell(address.row, address.col);
           }}
         />
       )}

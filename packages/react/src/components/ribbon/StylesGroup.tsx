@@ -17,6 +17,8 @@ import { StylesGroupIcon1 } from '@cyber-sheet/icons/react';
 import React, { useState, useRef, useEffect } from 'react';
 import type { Address, Range } from '@cyber-sheet/core';
 import type { FormattingController } from '@cyber-sheet/core';
+import { getCellStyle } from '@cyber-sheet/core';
+import { CellStylesGallery } from '../CellStylesGallery';
 
 export interface StylesGroupProps {
   formattingController: FormattingController;
@@ -251,33 +253,33 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
   };
 
   /**
-   * Handle cell style selection
+   * Handle cell style selection from gallery
    */
   const handleCellStyle = (styleId: string) => {
-    const style = CELL_STYLES.find(s => s.id === styleId);
+    const style = getCellStyle(styleId);
     if (!style) return;
 
-    // Apply style properties
-    if (style.style.backgroundColor) {
-      formattingController.setFill(selectedCells, style.style.backgroundColor);
+    // Apply style properties via FormattingController
+    if (style.fill) {
+      formattingController.setFill(selectedCells, style.fill);
     }
-    if (style.style.color) {
-      formattingController.setFontColor(selectedCells, style.style.color);
+    if (style.color) {
+      formattingController.setFontColor(selectedCells, style.color);
     }
-    if (style.style.bold !== undefined) {
-      formattingController.setBold(selectedCells, style.style.bold);
+    if (style.bold !== undefined) {
+      formattingController.setBold(selectedCells, style.bold);
     }
-    if (style.style.italic !== undefined) {
-      formattingController.setItalic(selectedCells, style.style.italic);
+    if (style.italic !== undefined) {
+      formattingController.setItalic(selectedCells, style.italic);
     }
-    if (style.style.fontSize !== undefined) {
-      formattingController.setFontSize(selectedCells, style.style.fontSize);
+    if (style.fontSize !== undefined) {
+      formattingController.setFontSize(selectedCells, style.fontSize);
     }
-    if (style.style.border) {
-      formattingController.setBorder(selectedCells, style.style.border);
+    if (style.border) {
+      formattingController.setBorder(selectedCells, style.border);
     }
-    if (style.style.numberFormat) {
-      formattingController.setNumberFormat(selectedCells, style.style.numberFormat);
+    if (style.numberFormat) {
+      formattingController.setNumberFormat(selectedCells, style.numberFormat);
     }
 
     setShowCellStylesMenu(false);
@@ -677,59 +679,14 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
         </button>
 
         {showCellStylesMenu && (
-          <div style={{
-            ...dropdownStyles,
-            minWidth: '350px',
-          }}>
-            {/* Cell Styles Gallery */}
-            {['Good/Bad/Neutral', 'Data & Model', 'Titles & Headings'].map(category => (
-              <div key={category}>
-                <div style={{
-                  padding: '8px 12px',
-                  fontWeight: 600,
-                  fontSize: '11px',
-                  color: '#666',
-                  background: '#f5f5f5',
-                }}>
-                  {category}
-                </div>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '6px',
-                  padding: '12px',
-                }}>
-                  {CELL_STYLES.filter(s => s.category === category).map(style => (
-                    <div
-                      key={style.id}
-                      style={{
-                        padding: '8px',
-                        cursor: 'pointer',
-                        border: '1px solid #d0d0d0',
-                        borderRadius: '3px',
-                        fontSize: '11px',
-                        textAlign: 'center',
-                        transition: 'transform 150ms ease',
-                        backgroundColor: style.style.backgroundColor || '#fff',
-                        color: style.style.color || '#000',
-                        fontWeight: style.style.bold ? 600 : 400,
-                        fontStyle: style.style.italic ? 'italic' : 'normal',
-                      }}
-                      onClick={() => handleCellStyle(style.id)}
-                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                        (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
-                      }}
-                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                        (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
-                      }}
-                      title={style.name}
-                    >
-                      {style.name}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div style={{ ...dropdownStyles }}>
+            <CellStylesGallery
+              onStyleSelect={handleCellStyle}
+              onClose={() => setShowCellStylesMenu(false)}
+              hoverPreview={false}
+              width="420px"
+              maxHeight="500px"
+            />
           </div>
         )}
       </div>

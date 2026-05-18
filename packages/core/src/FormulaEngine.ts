@@ -1317,8 +1317,9 @@ export class FormulaEngine {
     for (let i = 0; i < colStr.length; i++) {
       col = col * 26 + (colStr.charCodeAt(i) - 65 + 1);
     }
-    // Return 1-based coordinates per Address type contract
-    const row = parseInt(rowStr, 10);
+    // Return 0-based coordinates (A1 = row 0, col 0)
+    const row = parseInt(rowStr, 10) - 1; // Excel rows are 1-based, internal is 0-based
+    col = col - 1; // Excel cols are 1-based (A=1), internal is 0-based (A=0)
 
     return { row, col };
   }

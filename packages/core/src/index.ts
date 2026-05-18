@@ -45,6 +45,10 @@ export * from './CalculationController';
 export * from './CellLayout';
 export * from './ConditionalFormattingEngine';
 export * from './ConditionalFormattingBatchEngine';
+export * from './icon-sets';
+export * from './cell-styles-presets';
+export * from './DataValidationEngine';
+export * from './DataValidationRenderer';
 export * from './models/ChartObject';
 export * from './models/AdvancedChartOptions';
 
