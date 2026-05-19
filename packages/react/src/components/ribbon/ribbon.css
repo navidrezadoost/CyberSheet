@@ -20,15 +20,18 @@
   display: flex;
   padding: 0 8px;
   box-sizing: border-box;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ribbon-content {
   display: flex;
   flex-direction: row;
   height: 100%;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   align-items: flex-start;
   padding-top: 2px;
   gap: 0;
@@ -1590,8 +1593,10 @@
   min-height: 94px;
   padding: 2px 8px 0 8px;
   background: #f3f2f1;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ribbon-tab-content-spacious {

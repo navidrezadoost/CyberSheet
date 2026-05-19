@@ -16,6 +16,10 @@ import { FillColorButton } from './FillColorButton';
 import { BorderButton } from './BorderButton';
 import { NumberFormatButton } from './NumberFormatButton';
 import { AlignmentGroup } from './AlignmentGroup';
+import { ClipboardGroup } from './ClipboardGroup';
+import { StylesGroup } from './StylesGroup';
+import { CellsGroup } from './CellsGroup';
+import { EditingGroup } from './EditingGroup';
 import type { SelectionState, CommandManager, StyleState, ColorValue } from './types';
 import type { Fill } from './fillTypes';
 import { solidFill } from './fillTypes';
@@ -211,6 +215,18 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
 
   return (
     <div className="ribbon-content">
+      {/* ==================== Clipboard Group ==================== */}
+      <ClipboardGroup
+        worksheet={null as any}
+        clipboardService={null as any}
+        formattingController={null as any}
+        commandManager={commandManager}
+        selectedCells={selection ? [selection.start] : []}
+        onCut={() => console.log('Cut')}
+        onCopy={() => console.log('Copy')}
+        onPaste={() => console.log('Paste')}
+      />
+
       {/* ==================== Undo/Redo Group ==================== */}
       <RibbonGroup title="Undo" className="compact">
         <RibbonRow gap={2}>
@@ -321,13 +337,33 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
         />
       </RibbonGroup>
 
-      {/* 
-        Future Groups (Phase 1 completion):
-        - Clipboard (Cut, Copy, Paste, Paste Special) - Week 4-5
-        - Styles - Phase 3
-        - Cells (Insert, Delete, Format) - Week 5
-        - Editing (Sum, Fill, Clear, Sort & Filter) - Week 5
-      */}
+      {/* ==================== Styles Group ==================== */}
+      <StylesGroup
+        formattingController={null as any}
+        selectedCells={selection ? [selection.start] : []}
+        onStyleChange={() => console.log('Style change')}
+      />
+
+      {/* ==================== Cells Group ==================== */}
+      <CellsGroup
+        formattingController={null as any}
+        selectedCells={selection ? [selection.start] : []}
+        onInsertCells={(mode) => console.log('Insert cells:', mode)}
+        onDeleteCells={(mode) => console.log('Delete cells:', mode)}
+        onFormatOperation={(op, val) => console.log('Format operation:', op, val)}
+      />
+
+      {/* ==================== Editing Group ==================== */}
+      <EditingGroup
+        formattingController={null as any}
+        selectedCells={selection ? [selection.start] : []}
+        onAutoSum={(fn) => console.log('AutoSum:', fn)}
+        onFill={(dir) => console.log('Fill:', dir)}
+        onClear={(type) => console.log('Clear:', type)}
+        onSort={(dir) => console.log('Sort:', dir)}
+        onFilter={(action) => console.log('Filter:', action)}
+        onFind={(query, opts) => console.log('Find:', query, opts)}
+      />
     </div>
   );
 };
