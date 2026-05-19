@@ -50,6 +50,7 @@ export interface BackstageContainerProps {
   workbook?: any; // Workbook instance for file I/O operations
   
   // Callbacks for actions that affect the main app
+  onWorkbookLoaded?: (workbook: any) => void;
   onCreateBlankWorkbook?: () => void;
   onCreateFromTemplate?: (templateId: string) => void;
   onOpenFile?: (fileId: string) => void;
@@ -64,6 +65,7 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
   fileOperations,
   workbookMetadata,
   workbook,
+  onWorkbookLoaded,
   onCreateBlankWorkbook,
   onCreateFromTemplate,
   onOpenFile,
@@ -155,6 +157,7 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
         return (
           <NewPanel
             fileOperations={fileOperations}
+            onWorkbookLoaded={onWorkbookLoaded}
             onCreateBlank={() => {
               onCreateBlankWorkbook?.();
               onClose();
@@ -169,6 +172,7 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
         return (
           <OpenPanel
             fileOperations={fileOperations}
+            onWorkbookLoaded={onWorkbookLoaded}
             onOpenFile={(fileId) => {
               onOpenFile?.(fileId);
               onClose();

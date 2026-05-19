@@ -2,9 +2,11 @@
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { FileOperations, Template } from '@cyber-sheet/core';
+import { Workbook } from '@cyber-sheet/core';
 
 export interface NewPanelProps {
   fileOperations: FileOperations;
+  onWorkbookLoaded?: (workbook: Workbook) => void;
   onCreateBlank: () => void;
   onCreateFromTemplate: (templateId: string) => void;
 }
@@ -135,6 +137,7 @@ const SEARCH_SUGGESTIONS = [
 
 export const NewPanel: React.FC<NewPanelProps> = ({
   fileOperations,
+  onWorkbookLoaded,
   onCreateBlank,
   onCreateFromTemplate,
 }) => {
@@ -221,6 +224,12 @@ export const NewPanel: React.FC<NewPanelProps> = ({
       setSelectedTemplate('blank');
       setIsCreating(true);
       setTimeout(() => {
+        // Create blank workbook if callback is available
+        if (onWorkbookLoaded) {
+          const blank = new Workbook();
+          blank.addSheet('Sheet1');
+          onWorkbookLoaded(blank);
+        }
         onCreateBlank();
         setIsCreating(false);
         setSelectedTemplate(null);
@@ -234,7 +243,7 @@ export const NewPanel: React.FC<NewPanelProps> = ({
         setSelectedTemplate(null);
       }, 400);
     }
-  }, [onCreateBlank, onCreateFromTemplate]);
+  }, [onWorkbookLoaded, onCreateBlank, onCreateFromTemplate]);
 
   // Cleanup
   useEffect(() => {

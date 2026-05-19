@@ -2,9 +2,11 @@
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { FileOperations, RecentFile } from '@cyber-sheet/core';
+import { loadXlsxFromArrayBuffer } from '@cyber-sheet/io-xlsx';
 
 export interface OpenPanelProps {
   fileOperations: FileOperations;
+  onWorkbookLoaded?: (workbook: any) => void;
   onOpenFile: (fileId: string) => void;
 }
 
@@ -34,6 +36,7 @@ const LOCATION_ICONS: Record<string, string> = {
 
 export const OpenPanel: React.FC<OpenPanelProps> = ({
   fileOperations,
+  onWorkbookLoaded,
   onOpenFile,
 }) => {
   const [activeSource, setActiveSource] = useState<FileSource>('all');
@@ -45,6 +48,7 @@ export const OpenPanel: React.FC<OpenPanelProps> = ({
   
   const searchInputRef = useRef(null as HTMLInputElement | null);
   const searchDebounceRef = useRef(null as NodeJS.Timeout | null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Focus search on mount
   useEffect(() => {
@@ -156,6 +160,24 @@ export const OpenPanel: React.FC<OpenPanelProps> = ({
       setPinningFile(null);
     }, 300);
   }, [fileOperations]);
+
+  const handleFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onWorkbookLoaded) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
+      onWorkbookLoaded(workbook);
+    } catch (err) {
+      console.error('Failed to load file:', err);
+      alert('Failed to load file. Please ensure it is a valid XLSX file.');
+    }
+  }, [onWorkbookLoaded]);
+
+  const handleBrowseClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
 
   const formatDate = (date: Date): string => {
     const now = new Date();
@@ -303,9 +325,46 @@ export const OpenPanel: React.FC<OpenPanelProps> = ({
     overflowY: 'auto' as const,
   };
 
+  const browseButtonStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 16px',
+    fontSize: 14,
+    fontWeight: 500,
+    color: '#FFFFFF',
+    backgroundColor: '#0078D4',
+    border: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
+    transition: 'background-color 150ms',
+    marginBottom: 16,
+  };
+
   return (
     <div style={containerStyle}>
       <h1 style={headingStyle}>Open</h1>
+
+      {/* Browse from computer */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleFileInputChange}
+        style={{ display: 'none' }}
+      />
+      <button
+        onClick={handleBrowseClick}
+        style={browseButtonStyle}
+        onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+          e.currentTarget.style.backgroundColor = '#005A9E';
+        }}
+        onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+          e.currentTarget.style.backgroundColor = '#0078D4';
+        }}
+      >
+        📁 Browse from Computer
+      </button>
 
       {/* Search */}
       <div style={searchContainerStyle}>

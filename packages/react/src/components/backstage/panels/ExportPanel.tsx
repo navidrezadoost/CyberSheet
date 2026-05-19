@@ -155,8 +155,51 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
         blob = new Blob([arrayBuffer], { 
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
         });
+      } else if (selectedFormat === 'csv') {
+        // Basic CSV export: export active sheet as CSV
+        const sheet = workbook.activeSheet;
+        if (!sheet) throw new Error('No active sheet to export');
+        
+        const rows: string[][] = [];
+        const maxRow = 100; // Limit to reasonable size for demo
+        const maxCol = 26; // A-Z
+        
+        for (let r = 0; r < maxRow; r++) {
+          const row: string[] = [];
+          for (let c = 0; c < maxCol; c++) {
+            const value = sheet.getCellValue({ row: r, col: c }) ?? '';
+            // Basic CSV escaping
+            const strValue = String(value);
+            if (strValue.includes(',') || strValue.includes('\"') || strValue.includes('\\n')) {
+              row.push(`\"${strValue.replace(/\"/g, '\"\"')}\"`);
+            } else {
+              row.push(strValue);
+            }
+          }
+          // Skip completely empty rows at the end
+          if (row.some(cell => cell !== '')) {
+            rows.push(row);
+          }
+        }
+        
+        const csvContent = rows.map(row => row.join(',')).join('\\n');
+        blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      } else if (selectedFormat === 'pdf') {
+        // PDF: Use browser print dialog as fallback
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+        }
+        setExportProgress(0);
+        setIsExporting(false);
+        alert('PDF export: Please use your browser\\'s Print function (Ctrl+P) and select \"Save as PDF\".');
+        return; // Don't download, just show message
+      } else if (selectedFormat === 'ods') {
+        throw new Error('ODS export coming soon');
+      } else if (selectedFormat === 'txt' || selectedFormat === 'html') {
+        // TXT/HTML: Fallback to FileOperations stub (will throw)
+        blob = await fileOperations.exportWorkbook(selectedFormat, options);
       } else {
-        // For other formats, use FileOperations (which may throw if not implemented)
+        // Unknown format
         blob = await fileOperations.exportWorkbook(selectedFormat, options);
       }
       

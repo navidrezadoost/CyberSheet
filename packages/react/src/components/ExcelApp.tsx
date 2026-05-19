@@ -33,6 +33,7 @@ export interface ExcelAppProps {
   onSave?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  onWorkbookLoaded?: (workbook: Workbook) => void;
   style?: React.CSSProperties;
 }
 
@@ -53,6 +54,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   onSave,
   onUndo,
   onRedo,
+  onWorkbookLoaded,
   style,
 }) => {
   const [activeTab, setActiveTab] = useState<string>('Home');
@@ -1956,6 +1958,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           fileOperations={fileOperations}
           workbookMetadata={workbookMetadata}
           workbook={workbook}
+          onWorkbookLoaded={onWorkbookLoaded ? (newWorkbook: Workbook) => {
+            onWorkbookLoaded(newWorkbook);
+            setBackstageOpen(false);
+            renderer?.scheduleRedraw();
+          } : undefined}
           onCreateBlankWorkbook={() => {
             // Handle new blank workbook
             console.log('Creating new blank workbook');
