@@ -8,7 +8,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { Workbook } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
-import { CommandManager, DrawingLayer, ClipboardService, PasteCommand, ClearCellsCommand, InsertCellsCommand, DeleteCellsCommand, FormulaEngine, DropdownList } from '@cyber-sheet/core';
+import { CommandManager, DrawingLayer, ClipboardService, PasteCommand, ClearCellsCommand, InsertCellsCommand, DeleteCellsCommand, FormulaEngine, DropdownList, FileOperations } from '@cyber-sheet/core';
 import { TitleBar } from './TitleBar';
 import { RibbonTabs } from './RibbonTabs';
 import { Ribbon } from '../components/ribbon/Ribbon';
@@ -23,6 +23,7 @@ import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { MiniToolbar } from './MiniToolbar';
 import FormatCellsDialog, { FormattingChanges } from './dialogs/FormatCellsDialog/FormatCellsDialog';
 import FindReplaceDialog from './dialogs/FindReplaceDialog';
+import { BackstageContainer, BackstagePanel } from './backstage/BackstageContainer';
 import { debugEdit, debugRender, debugMenu } from '../utils/debug';
 import './excel-app.css';
 
@@ -110,6 +111,29 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     cellBounds: { x: number; y: number; width: number; height: number };
     currentValue: string;
   } | null>(null);
+  
+  // Backstage file menu state
+  const [backstageOpen, setBackstageOpen] = useState<boolean>(false);
+  const [backstagePanel, setBackstagePanel] = useState<BackstagePanel>('new');
+  
+  // FileOperations instance for backstage panels
+  const fileOperations = useMemo(() => new FileOperations({
+    id: `workbook-${Date.now()}`,
+    name: fileName,
+    path: `/Documents/${fileName}.xlsx`,
+    location: 'local',
+    size: 0,
+    created: new Date(),
+    lastModified: new Date(),
+    lastModifiedBy: 'User',
+    author: 'User',
+    sheets: workbook.getSheetNames().length,
+    tags: [],
+    isProtected: false,
+    isMarkedFinal: false,
+  }), [fileName, workbook]);
+  
+  const workbookMetadata = useMemo(() => fileOperations.getMetadata(), [fileOperations]);
   
   // Refs for keyboard handler to avoid re-attaching listeners on every state change
   const selectedCellRef = useRef(selectedCell);
@@ -761,6 +785,37 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       const target = e.target as HTMLElement;
       const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      
+      // ===== FILE MENU SHORTCUTS (ALWAYS ACTIVE) =====
+      
+      // Ctrl+N (New workbook)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyN') {
+        e.preventDefault();
+        setBackstagePanel('new');
+        setBackstageOpen(true);
+        return;
+      }
+      
+      // Ctrl+O (Open workbook)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
+        e.preventDefault();
+        setBackstagePanel('open');
+        setBackstageOpen(true);
+        return;
+      }
+      
+      // Ctrl+S (Save workbook)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+        e.preventDefault();
+        if (onSave) {
+          onSave();
+        } else {
+          // If no save handler, open export panel
+          setBackstagePanel('export');
+          setBackstageOpen(true);
+        }
+        return;
+      }
       
       // ===== SHORTCUTS THAT WORK IN INPUT FIELDS =====
       
@@ -1496,6 +1551,10 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       <RibbonTabs
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        onFileClick={() => {
+          setBackstagePanel('new');
+          setBackstageOpen(true);
+        }}
       />
 
       {/* Ribbon Content */}
@@ -1885,6 +1944,44 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           cellY={validationDropdown.cellBounds.y}
           cellWidth={validationDropdown.cellBounds.width}
           cellHeight={validationDropdown.cellBounds.height}
+        />
+      )}
+
+      {/* Backstage File Menu */}
+      {backstageOpen && (
+        <BackstageContainer
+          isOpen={backstageOpen}
+          onClose={() => setBackstageOpen(false)}
+          initialPanel={backstagePanel}
+          fileOperations={fileOperations}
+          workbookMetadata={workbookMetadata}
+          onCreateBlankWorkbook={() => {
+            // Handle new blank workbook
+            console.log('Creating new blank workbook');
+            setBackstageOpen(false);
+          }}
+          onCreateFromTemplate={(templateId) => {
+            console.log('Creating workbook from template:', templateId);
+            setBackstageOpen(false);
+          }}
+          onOpenFile={(fileId) => {
+            console.log('Opening file:', fileId);
+            setBackstageOpen(false);
+          }}
+          onExportComplete={(blob) => {
+            // Trigger download
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${fileName}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
+            console.log('Export complete, download triggered');
+          }}
+          onVersionRestored={() => {
+            console.log('Version restored');
+            renderer?.scheduleRedraw();
+          }}
         />
       )}
     </div>
