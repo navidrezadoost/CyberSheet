@@ -8,6 +8,7 @@
 import React from 'react';
 import { ThemesGroup } from './ThemesGroup';
 import { PageSetupGroup } from './PageSetupGroup';
+import { ArrangeGroup } from './ArrangeGroup';
 import { ScaleToFitGroup } from './ScaleToFitGroup';
 import { SheetOptionsGroup } from './SheetOptionsGroup';
 import '../ribbon.css';
@@ -27,6 +28,14 @@ export interface PageLayoutTabProps {
   onBreaksInsert?: (breakType: 'page' | 'remove') => void;
   onBackgroundSet?: () => void;
   onPrintTitlesSet?: () => void;
+
+  // Arrange Group
+  onBringForward?: (step: 'front' | 'forward') => void;
+  onSendBackward?: (step: 'back' | 'backward') => void;
+  onSelectionPane?: () => void;
+  onAlign?: (alignment: string) => void;
+  onGroup?: (action: 'group' | 'ungroup' | 'regroup') => void;
+  onRotate?: (rotation: string) => void;
 
   // Scale to Fit Group
   onWidthChange?: (width: number | 'auto') => void;
@@ -62,6 +71,18 @@ export const PageLayoutTab: React.FC<PageLayoutTabProps> = (props) => {
         onBreaksInsert={props.onBreaksInsert}
         onBackgroundSet={props.onBackgroundSet}
         onPrintTitlesSet={props.onPrintTitlesSet}
+      />
+
+      <div className="ribbon-tab-divider" />
+
+      {/* Arrange Group */}
+      <ArrangeGroup
+        onBringForward={props.onBringForward}
+        onSendBackward={props.onSendBackward}
+        onSelectionPane={props.onSelectionPane}
+        onAlign={props.onAlign}
+        onGroup={props.onGroup}
+        onRotate={props.onRotate}
       />
 
       <div className="ribbon-tab-divider" />
