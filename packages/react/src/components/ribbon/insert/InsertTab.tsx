@@ -5,8 +5,10 @@
  * Groups: Tables | Illustrations | Forms | Text | Charts | Sparklines | Links | Symbols
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { DrawingLayer, Worksheet } from '@cyber-sheet/core';
+import { ChartDialog } from '../../ChartDialog';
+import type { ChartType, ChartCreateParams } from '@cyber-sheet/core';
 
 import { TablesGroup } from './TablesGroup';
 import { IllustrationsGroup } from './IllustrationsGroup';
@@ -56,7 +58,9 @@ export const InsertTab: React.FC<InsertTabProps> = ({
   onInsertEquation,
   onInsertSymbol,
   onDrawingChange,
-}) => {
+}) => {  // Chart dialog state
+  const [showChartDialog, setShowChartDialog] = useState(false);
+  const [selectedChartType, setSelectedChartType] = useState<ChartType>('bar');
   // Wrap handlers to trigger redraw
   const handleInsertTable = () => {
     onInsertTable?.();
@@ -97,9 +101,44 @@ export const InsertTab: React.FC<InsertTabProps> = ({
   };
 
   const handleInsertChart = (chartType: string) => {
-    onInsertChart?.(chartType);
+    // Open chart dialog with selected type
+    setSelectedChartType(chartType as ChartType);
+    setShowChartDialog(true);
+  };
+
+  const handleCreateChart = (params: ChartCreateParams) => {
+    if (!drawingLayer) {
+      console.warn('Cannot create chart: DrawingLayer not available');
+      return;
+    }
+
+    // Convert ChartCreateParams to DrawingLayer ChartObject
+    const chartObject: any = {
+      id: `chart-${Date.now()}`,
+      type: 'chart' as const,
+      name: params.title || `Chart ${Date.now()}`,
+      chartType: params.type === 'bar' ? 'column' : params.type,
+      dataRange: `${params.dataRange.startRow}:${params.dataRange.startCol}-${params.dataRange.endRow}:${params.dataRange.endCol}`,
+      position: params.position,
+      size: params.size,
+      rotation: 0,
+      zIndex: params.zIndex,
+      locked: false,
+      visible: true,
+      altText: params.title || '',
+      chartData: {
+        ...params,
+        dataRange: params.dataRange,
+        options: params.options,
+        seriesDirection: params.seriesDirection,
+        hasHeaderRow: params.hasHeaderRow,
+        hasHeaderCol: params.hasHeaderCol,
+      },
+    };
+
+    drawingLayer.addObject(chartObject);
     onDrawingChange?.();
-    console.log('Insert Chart:', chartType);
+    console.log('Chart created:', chartObject);
   };
 
   const handleInsertSparkline = (sparklineType: 'line' | 'column' | 'winLoss') => {
@@ -189,6 +228,14 @@ export const InsertTab: React.FC<InsertTabProps> = ({
       <SymbolsGroup
         onInsertEquation={handleInsertEquation}
         onInsertSymbol={handleInsertSymbol}
+      />
+
+      {/* Chart Dialog */}
+      <ChartDialog
+        isOpen={showChartDialog}
+        onClose={() => setShowChartDialog(false)}
+        onCreate={handleCreateChart}
+        initialChartType={selectedChartType}
       />
     </div>
   );

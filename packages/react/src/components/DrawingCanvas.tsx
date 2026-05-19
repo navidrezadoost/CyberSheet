@@ -218,6 +218,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       case 'formControl':
         renderFormControl(ctx, obj as FormControlObject, x, y, w, h, isSelected);
         break;
+      case 'chart':
+        renderChart(ctx, obj as any, x, y, w, h, isSelected);
+        break;
       default:
         // Placeholder for unknown types
         ctx.strokeStyle = '#999';
@@ -359,6 +362,61 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   }
 
   // ─── Render form control ────────────────────────────────
+
+  function renderChart(
+    ctx: CanvasRenderingContext2D,
+    obj: any,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    isSelected: boolean
+  ): void {
+    // Render chart placeholder/container
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#D1D1D1';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+
+    // Render chart icon and type label
+    const iconSize = Math.min(w, h) * 0.3;
+    ctx.fillStyle = '#666';
+    ctx.font = `${iconSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    const chartIcons: Record<string, string> = {
+      column: '📊',
+      bar: '📊',
+      line: '📈',
+      pie: '🥧',
+      sparkline: '▁▂▃▅▇',
+    };
+    
+    const icon = chartIcons[obj.chartType] || '📊';
+    ctx.fillText(icon, x + w / 2, y + h / 2 - iconSize / 2);
+    
+    // Render chart type label
+    ctx.font = `${iconSize * 0.3}px sans-serif`;
+    ctx.fillStyle = '#999';
+    ctx.fillText(obj.chartType || 'Chart', x + w / 2, y + h / 2 + iconSize / 2);
+    
+    // Render data range info
+    if (obj.dataRange) {
+      ctx.font = `${iconSize * 0.25}px monospace`;
+      ctx.fillStyle = '#AAA';
+      ctx.fillText(obj.dataRange, x + w / 2, y + h - 10);
+    }
+
+    if (isSelected) {
+      ctx.strokeStyle = SELECTION_BORDER;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 2]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+  }
 
   function renderFormControl(
     ctx: CanvasRenderingContext2D,

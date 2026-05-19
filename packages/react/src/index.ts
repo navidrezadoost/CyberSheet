@@ -7,6 +7,7 @@ export * from './conditional-formatting';
 export * from './components/ConditionalFormattingRenderer';
 export * from './components/CellStylesGallery';
 export * from './components/DataValidationDialog';
+export * from './components/ChartDialog';
 export * from './components/ExcelApp';
 export * from './components/TitleBar';
 export * from './components/RibbonTabs';
