@@ -1063,6 +1063,9 @@
 .cs-ribbon-toggle-group .ribbon-btn {
   border-radius: 0;
   border-right: none;
+  background: #faf9f8;
+  border: 1px solid #d2d0ce;
+  color: #201f1e;
 }
 
 .cs-ribbon-toggle-group .ribbon-btn:first-child {
@@ -1091,19 +1094,21 @@
 .cs-merge-split-button {
   display: flex;
   position: relative;
-  height: 32px;
+  height: 24px;
 }
 
 .cs-merge-main-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 24px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 2px 0 0 2px;
-  background: transparent;
+  border-right: none;
+  background: #faf9f8;
+  color: #201f1e;
   cursor: pointer;
   transition: background 0.1s ease;
 }
@@ -1117,13 +1122,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 32px;
+  width: 14px;
+  height: 24px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 0 2px 2px 0;
-  border-left: 1px solid #e1dfdd;
-  background: transparent;
+  border-left: 1px solid #d2d0ce;
+  background: #faf9f8;
   color: #201f1e;
   cursor: pointer;
   font-size: 8px;
@@ -1341,6 +1346,13 @@
 .align-row {
   display: flex;
   gap: 2px;
+}
+
+/* Make small buttons in alignment row visible */
+.align-row .ribbon-btn-small {
+  background: #faf9f8;
+  border: 1px solid #d2d0ce;
+  color: #201f1e;
 }
 
 .align-btn-grid {
