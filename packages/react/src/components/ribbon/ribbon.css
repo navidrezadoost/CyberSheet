@@ -1589,7 +1589,7 @@
   align-items: flex-start;
   min-height: 94px;
   padding: 2px 8px 0 8px;
-  background: transparent;
+  background: #f3f2f1;
   overflow-x: auto;
   overflow-y: hidden;
 }
