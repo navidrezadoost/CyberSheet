@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 4: Data Validation Canvas Integration (May 19, 2026)
+
+**Completed Data Validation visual feedback and dropdown trigger**
+- Wired DataValidationRenderer to ExcelRenderer canvas rendering loop
+- Dropdown arrow rendering: Gray triangle (8px) on right edge of cells with list validation
+- Invalid indicator rendering: Red triangle (6px) in top-right corner of cells with invalid data
+- Alt+↓ keyboard shortcut to trigger validation dropdown for list validation
+- DropdownList React component integration in ExcelApp with absolute positioning
+- Public methods: `getValidationEngine()` to access engine, `rectForCell()` for dropdown positioning
+
+**Canvas Rendering**
+- `renderDropdownArrow(ctx, x, y, width, height)`: Draws gray (#666) triangle arrow
+- `renderInvalidIndicator(ctx, x, y, width, height)`: Draws red (#C00000) triangle
+- `shouldShowDropdown(address)`: Checks if cell has list validation with showDropdown=true
+- `isInvalid(address, value)`: Validates cell value against rule
+
+**Dropdown Trigger**
+- Alt+↓ opens dropdown for cells with list validation
+- Dropdown positioned below cell, matches cell width
+- Click item to select, Escape to close, click outside to dismiss
+- Sets cell value and refreshes canvas on selection
+
+**Files Modified**
+- `packages/renderer-canvas/src/ExcelRenderer.ts`: Added validationEngine, validationRenderer, rendering calls in cell loop (+23 lines)
+- `packages/react/src/components/ExcelApp.tsx`: Added dropdown state, Alt+↓ handler, DropdownList component (+54 lines)
+
+**Data Validation Phase 4 Status: 100% Complete**
+- ✅ 7 validation types, 8 operators, 3 error styles
+- ✅ DataValidationEngine with 117/117 tests passing
+- ✅ 3-tab dialog (Settings, Input Message, Error Alert)
+- ✅ Canvas rendering (dropdown arrow + invalid indicator)
+- ✅ Dropdown trigger (Alt+↓)
+- ✅ Demo with all validation types
+
 ### Added - Phase 4: Data Validation UI Integration (May 18, 2026)
 
 **Completed Data Validation ribbon integration**
