@@ -7,6 +7,7 @@ import { FormulasTab } from './formulas/FormulasTab';
 import { DataTab } from './data/DataTab';
 import { ReviewTab } from './review/ReviewTab';
 import { ViewTab } from './view/ViewTab';
+import { AutomateTab } from './automate/AutomateTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import './ribbon.css';
 
@@ -152,6 +153,14 @@ export const Ribbon: React.FC<RibbonProps> = ({
           onZoomToSelection={() => console.log('Zoom to selection')}
           onCustomViews={() => console.log('Custom views')}
           onCommand={(cmd) => console.log('View command:', cmd)}
+        />
+      )}
+      
+      {activeTab === 'Automate' && workbook && (
+        <AutomateTab 
+          workbook={workbook}
+          selectedCells={selection ? [selection.start] : []}
+          onCommand={(cmd) => console.log('Automate command:', cmd)}
         />
       )}
     </div>
