@@ -1,5 +1,4 @@
-import type { ConditionalFormattingRule, ValueOperator } from '@cyber-sheet/core';
-import type { ExcelIconSet } from '@cyber-sheet/core/src/ConditionalFormattingEngine';
+import type { ConditionalFormattingRule, ExcelIconSet, ValueOperator } from '@cyber-sheet/core';
 
 /**
  * Rule type union for UI

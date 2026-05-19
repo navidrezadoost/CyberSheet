@@ -193,40 +193,42 @@ export const SortFilterGroup: React.FC<SortFilterGroupProps> = ({ workbook, sele
 
       {/* Filter Button with Dropdown */}
       <div style={{ display: 'flex', gap: 4, position: 'relative' }}>
-        <button
-          onClick={handleToggleFilter}
-          title="Toggle Filter"
-          style={{
-            width: 68,
-            height: 24,
-            border: `1px solid ${filterActive ? '#0078D4' : '#D9D9D9'}`,
-            background: filterActive ? '#D3E3FD' : '#F0F0F0',
-            cursor: 'pointer',
-            borderRadius: 2,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 4,
-            fontSize: 11,
-            fontFamily: 'Segoe UI, sans-serif',
-            color: '#333',
-            position: 'relative',
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            if (!filterActive) e.currentTarget.style.background = '#E0E0E0';
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            if (!filterActive) e.currentTarget.style.background = '#F0F0F0';
-          }}
-        >
-          <SortFilterGroupIcon4 />
-          <span>Filter</span>
+        <div style={{ position: 'relative', width: 68, height: 24 }}>
+          <button
+            onClick={handleToggleFilter}
+            title="Toggle Filter"
+            style={{
+              width: '100%',
+              height: '100%',
+              border: `1px solid ${filterActive ? '#0078D4' : '#D9D9D9'}`,
+              background: filterActive ? '#D3E3FD' : '#F0F0F0',
+              cursor: 'pointer',
+              borderRadius: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              fontSize: 11,
+              fontFamily: 'Segoe UI, sans-serif',
+              color: '#333',
+              paddingRight: 16,
+            }}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+              if (!filterActive) e.currentTarget.style.background = '#E0E0E0';
+            }}
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+              if (!filterActive) e.currentTarget.style.background = '#F0F0F0';
+            }}
+          >
+            <SortFilterGroupIcon4 />
+            <span>Filter</span>
+          </button>
+
           {/* Dropdown Arrow */}
           <button
-            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-              e.stopPropagation();
-              setShowFilterDropdown(!showFilterDropdown);
-            }}
+            type="button"
+            aria-label="Filter options"
+            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
             style={{
               position: 'absolute',
               right: 0,
@@ -239,11 +241,13 @@ export const SortFilterGroup: React.FC<SortFilterGroupProps> = ({ workbook, sele
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              borderTopRightRadius: 2,
+              borderBottomRightRadius: 2,
             }}
           >
             <SortFilterGroupIcon5 />
           </button>
-        </button>
+        </div>
 
         {/* Filter Dropdown Menu */}
         {showFilterDropdown && (

@@ -1,13 +1,15 @@
-import type { ConditionalFormattingRule, Address, CellValue } from '@cyber-sheet/core';
-import type { 
+import type {
+	ConditionalFormattingRule,
+	Address,
+	CellValue,
 	TopBottomRule,
 	AboveAverageRule,
 	IconSetRule,
 	DuplicateUniqueRule,
 	DateOccurringRule,
 	TextRule,
-	ErrorsBlankRule
-} from '@cyber-sheet/core/src/ConditionalFormattingEngine';
+	ErrorsBlankRule,
+} from '@cyber-sheet/core';
 
 /**
  * Inspector Data - All information shown in the inspector tooltip

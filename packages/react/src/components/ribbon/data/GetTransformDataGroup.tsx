@@ -173,35 +173,38 @@ export const GetTransformDataGroup: React.FC<GetTransformDataGroupProps> = ({ wo
 
         {/* Refresh All Split Button */}
         <div style={{ position: 'relative' }}>
-          <button
-            onClick={handleRefreshAll}
-            title="Refresh All"
-            style={{
-              width: 56,
-              height: 32,
-              border: 'none',
-              background: '#F0F0F0',
-              cursor: 'pointer',
-              borderRadius: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 8,
-              fontFamily: 'Segoe UI, sans-serif',
-              color: '#333',
-              position: 'relative',
-            }}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-          >
-            <GetTransformDataGroupIcon3 />
-            <span style={{ fontSize: 9, marginTop: 2 }}>Refresh All</span>
+          <div style={{ position: 'relative', width: 56, height: 32 }}>
             <button
-              onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                e.stopPropagation();
-                setShowRefreshDropdown(!showRefreshDropdown);
+              onClick={handleRefreshAll}
+              title="Refresh All"
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                background: '#F0F0F0',
+                cursor: 'pointer',
+                borderRadius: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 8,
+                fontFamily: 'Segoe UI, sans-serif',
+                color: '#333',
+                position: 'relative',
+                paddingRight: 12,
               }}
+              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
+              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
+            >
+              <GetTransformDataGroupIcon3 />
+              <span style={{ fontSize: 9, marginTop: 2 }}>Refresh All</span>
+            </button>
+
+            <button
+              type="button"
+              aria-label="Refresh All options"
+              onClick={() => setShowRefreshDropdown(!showRefreshDropdown)}
               style={{
                 position: 'absolute',
                 bottom: 0,
@@ -214,11 +217,12 @@ export const GetTransformDataGroup: React.FC<GetTransformDataGroupProps> = ({ wo
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                borderBottomRightRadius: 2,
               }}
             >
               <GetTransformDataGroupIcon4 />
             </button>
-          </button>
+          </div>
 
           {/* Refresh Dropdown */}
           {showRefreshDropdown && (

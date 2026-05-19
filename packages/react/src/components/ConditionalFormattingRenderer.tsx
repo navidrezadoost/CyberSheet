@@ -11,8 +11,7 @@
  */
 
 import React from 'react';
-import type { ExcelIconSet } from '@cyber-sheet/core';
-import { ICON_SET_DEFINITIONS } from '@cyber-sheet/core/src/icon-sets';
+import { ICON_SET_DEFINITIONS, type ExcelIconSet } from '@cyber-sheet/core';
 
 export interface IconSetRendererProps {
   /** Icon set type (e.g., '3-arrows', '5-ratings') */
