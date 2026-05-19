@@ -1565,6 +1565,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         selection={selection}
         activeTab={activeTab}
         drawingLayer={drawingLayer}
+        workbook={workbook}
       />
 
       {/* Formula Bar */}

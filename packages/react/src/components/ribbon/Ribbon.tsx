@@ -4,6 +4,9 @@ import { HomeTab } from './HomeTab';
 import { InsertTab } from './insert/InsertTab';
 import { PageLayoutTab } from './pagelayout/PageLayoutTab';
 import { FormulasTab } from './formulas/FormulasTab';
+import { DataTab } from './data/DataTab';
+import { ReviewTab } from './review/ReviewTab';
+import { ViewTab } from './view/ViewTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import './ribbon.css';
 
@@ -12,6 +15,7 @@ export interface RibbonProps {
   selection: any;
   activeTab?: string;
   drawingLayer?: DrawingLayer;
+  workbook?: any;
 }
 
 /**
@@ -37,6 +41,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
   selection, 
   activeTab = 'Home',
   drawingLayer,
+  workbook,
 }) => {
   // Set up global keyboard shortcuts (single entry point)
   useKeyboardShortcuts({
@@ -115,23 +120,39 @@ export const Ribbon: React.FC<RibbonProps> = ({
         />
       )}
       
-      {/* Future tabs */}
-      {activeTab === 'Data' && (
-        <div className="ribbon-placeholder">
-          <p>Data tab coming soon...</p>
-        </div>
+      {activeTab === 'Data' && workbook && (
+        <DataTab 
+          workbook={workbook}
+          selectedCells={selection ? [selection.start] : []}
+          onCommand={(cmd) => console.log('Data command:', cmd)}
+        />
       )}
       
-      {activeTab === 'Review' && (
-        <div className="ribbon-placeholder">
-          <p>Review tab coming soon...</p>
-        </div>
+      {activeTab === 'Review' && workbook && (
+        <ReviewTab 
+          workbook={workbook}
+          selectedCells={selection ? [selection.start] : []}
+          onCommand={(cmd) => console.log('Review command:', cmd)}
+        />
       )}
       
-      {activeTab === 'View' && (
-        <div className="ribbon-placeholder">
-          <p>View tab coming soon...</p>
-        </div>
+      {activeTab === 'View' && workbook && (
+        <ViewTab 
+          workbook={workbook}
+          selectedCells={selection ? [selection.start] : []}
+          currentView="normal"
+          currentZoom={100}
+          showRuler={false}
+          showGridlines={true}
+          showFormulaBar={true}
+          showHeadings={true}
+          onViewChange={(view) => console.log('View changed:', view)}
+          onZoomChange={(zoom) => console.log('Zoom changed:', zoom)}
+          onToggleShow={(opt, val) => console.log('Toggle show:', opt, val)}
+          onZoomToSelection={() => console.log('Zoom to selection')}
+          onCustomViews={() => console.log('Custom views')}
+          onCommand={(cmd) => console.log('View command:', cmd)}
+        />
       )}
     </div>
   );
