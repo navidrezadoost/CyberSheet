@@ -2,10 +2,12 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { FileOperations, ExportFormat, ExportOptions } from '@cyber-sheet/core';
+import { exportXLSX } from '@cyber-sheet/io-xlsx';
 
 export interface ExportPanelProps {
   fileOperations: FileOperations;
   workbookName: string;
+  workbook?: any; // Workbook instance
   onExportComplete?: (blob: Blob, format: ExportFormat) => void;
 }
 
@@ -72,6 +74,7 @@ const FORMAT_CARDS: FormatCard[] = [
 export const ExportPanel: React.FC<ExportPanelProps> = ({
   fileOperations,
   workbookName,
+  workbook,
   onExportComplete,
 }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat | null>(null);
@@ -140,7 +143,22 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
     }, 50);
     
     try {
-      const blob = await fileOperations.exportWorkbook(selectedFormat, options);
+      let blob: Blob;
+
+      if (!workbook) {
+        throw new Error('No workbook available for export');
+      }
+      
+      if (selectedFormat === 'xlsx') {
+        // Use actual exportXLSX from io-xlsx
+        const arrayBuffer = await exportXLSX(workbook);
+        blob = new Blob([arrayBuffer], { 
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
+      } else {
+        // For other formats, use FileOperations (which may throw if not implemented)
+        blob = await fileOperations.exportWorkbook(selectedFormat, options);
+      }
       
       // Complete
       if (progressIntervalRef.current) {

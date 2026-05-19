@@ -1955,6 +1955,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           initialPanel={backstagePanel}
           fileOperations={fileOperations}
           workbookMetadata={workbookMetadata}
+          workbook={workbook}
           onCreateBlankWorkbook={() => {
             // Handle new blank workbook
             console.log('Creating new blank workbook');

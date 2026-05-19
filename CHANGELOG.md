@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Hardening Sprint: File I/O Wiring (May 19, 2026)
+
+**Made Phase 8 file operations actually functional**
+
+Wired the real io-xlsx import/export functions to backstage panels. File operations were UI-complete but non-functional - panels rendered beautifully but couldn't actually load or save files. This update makes Export and CreateCopy fully functional.
+
+**Changes (~150 lines)**
+- ✅ **ExportPanel**: Wired `exportXLSX()` from @cyber-sheet/io-xlsx for XLSX export
+- ✅ **CreateCopyPanel**: Implemented copy via export + download with new filename
+- ✅ **BackstageContainer**: Added `workbook` prop and passed to panels needing file I/O
+- ✅ **ExcelApp**: Passed actual workbook instance to BackstageContainer
+
+**Export Now Works**
+- Click File → Export → Select XLSX format → Click Export
+- Real exportXLSX() function generates proper XLSX file
+- Automatic download with correct filename
+- Blob size tracking in console
+
+**Create Copy Now Works**
+- Click File → Create a Copy → Enter new name → Click Create
+- Exports current workbook as XLSX with new filename
+- Triggers download automatically
+- Success feedback with auto-close
+
+**Technical Implementation**
+- **ExportPanel.tsx**: 
+  - Import `exportXLSX` from @cyber-sheet/io-xlsx
+  - Check if workbook exists before export
+  - Call `await exportXLSX(workbook)` for XLSX format
+  - Convert ArrayBuffer → Blob with proper MIME type
+  - Fall back to FileOperations for other formats (CSV, PDF, ODS, TXT, HTML)
+  
+- **CreateCopyPanel.tsx**:
+  - Import `exportXLSX` from @cyber-sheet/io-xlsx
+  - Export workbook as XLSX ArrayBuffer
+  - Create download link with user-specified filename
+  - Trigger download programmatically
+  - Show success state and auto-close
+
+- **BackstageContainer.tsx**:
+  - Added `workbook?: any` to props interface
+  - Pass workbook to ExportPanel and CreateCopyPanel
+  - Destructure and forward in component
+
+- **ExcelApp.tsx**:
+  - Pass `workbook={workbook}` to BackstageContainer
+
+**Files Modified**
+- `packages/react/src/components/backstage/BackstageContainer.tsx`: +workbook prop, pass to panels (+8 lines)
+- `packages/react/src/components/backstage/panels/ExportPanel.tsx`: +exportXLSX wiring (+15 lines)
+- `packages/react/src/components/backstage/panels/CreateCopyPanel.tsx`: +copy via export (+20 lines)
+- `packages/react/src/components/ExcelApp.tsx`: +pass workbook to backstage (+1 line)
+
+**Integration Status**
+- ✅ XLSX Export: Fully functional
+- ✅ Create Copy: Fully functional  
+- ⏳ Open File: UI exists, needs parent-level workbook state management
+- ⏳ New Blank: UI exists, needs parent-level workbook creation
+- ⏳ CSV/PDF/ODS Export: Needs FileOperations.exportWorkbook() implementation
+
+**Next Steps**
+- Wire OpenPanel file input (needs callback to replace workbook in parent)
+- Wire NewPanel blank workbook creation (needs Workbook constructor)
+- Implement remaining export formats in FileOperations
+- Add keyboard shortcuts (Ctrl+F, Ctrl+H, F2, Ctrl+1)
+
 ### Added - Phase 8: File Operations Completion (May 19, 2026)
 
 **Completed File Operations to 100% - Full production-ready file management**

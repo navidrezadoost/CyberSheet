@@ -47,6 +47,7 @@ export interface BackstageContainerProps {
   // File operations instance
   fileOperations: FileOperations;
   workbookMetadata: WorkbookMetadata;
+  workbook?: any; // Workbook instance for file I/O operations
   
   // Callbacks for actions that affect the main app
   onCreateBlankWorkbook?: () => void;
@@ -62,6 +63,7 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
   initialPanel = 'new',
   fileOperations,
   workbookMetadata,
+  workbook,
   onCreateBlankWorkbook,
   onCreateFromTemplate,
   onOpenFile,
@@ -129,6 +131,7 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
             fileOperations={fileOperations}
             currentFileName={workbookMetadata.name}
             currentLocation={workbookMetadata.location}
+            workbook={workbook}
             onClose={onClose}
           />
         );
@@ -138,6 +141,7 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
           <ExportPanel
             fileOperations={fileOperations}
             workbookName={workbookMetadata.name}
+            workbook={workbook}
             onExportComplete={(blob, format) => {
               onExportComplete?.(blob);
               // Log or track export

@@ -16,11 +16,13 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { FileOperations } from '@cyber-sheet/core';
+import { exportXLSX } from '@cyber-sheet/io-xlsx';
 
 export interface CreateCopyPanelProps {
   fileOperations: FileOperations;
   currentFileName: string;
   currentLocation: string;
+  workbook?: any; // Workbook instance
   onClose: () => void;
 }
 
@@ -31,6 +33,7 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
   fileOperations,
   currentFileName,
   currentLocation,
+  workbook,
   onClose,
 }) => {
   // Remove extension for editing
@@ -106,16 +109,25 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
     setError(null);
 
     try {
-      // Simulate copy operation
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Update metadata (in real app, would save to storage)
-      const fullFileName = copyName + extension;
-      fileOperations.updateMetadata({
-        name: fullFileName,
-        id: `workbook_${Date.now()}`,
-        lastModified: new Date(),
+      if (!workbook) {
+        throw new Error('No workbook available to copy');
+      }
+
+      // Export workbook as XLSX
+      const arrayBuffer = await exportXLSX(workbook);
+      const blob = new Blob([arrayBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
       });
+        
+      // Trigger download with new name
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = copyName + extension;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       
       setIsSuccess(true);
       
@@ -125,6 +137,7 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
       }, 1200);
     } catch (err) {
       setError('Failed to create copy. Please try again.');
+      console.error('Copy error:', err);
     } finally {
       setIsCreating(false);
     }
