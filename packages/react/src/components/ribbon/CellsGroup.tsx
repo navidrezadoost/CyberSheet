@@ -429,18 +429,12 @@ export const CellsGroup: React.FC<CellsGroupProps> = ({
         {/* Insert Dropdown */}
         <div style={{ position: 'relative' }} ref={insertMenuRef}>
           <button
-            style={buttonStyles}
+            className="cs-custom-group-button"
             onClick={() => setShowInsertMenu(!showInsertMenu)}
             title="Insert"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span>Insert</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showInsertMenu && (
@@ -480,18 +474,12 @@ export const CellsGroup: React.FC<CellsGroupProps> = ({
         {/* Delete Dropdown */}
         <div style={{ position: 'relative' }} ref={deleteMenuRef}>
           <button
-            style={buttonStyles}
+            className="cs-custom-group-button"
             onClick={() => setShowDeleteMenu(!showDeleteMenu)}
             title="Delete"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span>Delete</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showDeleteMenu && (
@@ -531,18 +519,13 @@ export const CellsGroup: React.FC<CellsGroupProps> = ({
         {/* Format Dropdown */}
         <div style={{ position: 'relative' }} ref={formatMenuRef}>
           <button
-            style={{ ...buttonStyles, minWidth: '90px' }}
+            className="cs-custom-group-button"
+            style={{ minWidth: '90px' }}
             onClick={() => setShowFormatMenu(!showFormatMenu)}
             title="Format"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span>Format</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showFormatMenu && (

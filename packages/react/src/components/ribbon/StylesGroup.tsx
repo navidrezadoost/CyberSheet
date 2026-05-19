@@ -442,19 +442,13 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
       {/* Row 1: Conditional Formatting */}
       <div style={{ position: 'relative' }} ref={cfMenuRef}>
         <button
-          style={buttonStyles}
+          className="cs-custom-group-button"
           onClick={() => setShowCFMenu(!showCFMenu)}
           title="Conditional Formatting"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#fff';
-          }}
         >
           <span style={{ fontSize: '11px' }}>Conditional</span>
           <span style={{ fontSize: '11px' }}>Formatting</span>
-          <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+          <span className="cs-custom-button-dropdown-arrow">▼</span>
         </button>
 
         {showCFMenu && (
@@ -584,20 +578,14 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
       {/* Row 2: Format as Table */}
       <div style={{ position: 'relative' }} ref={tableStylesMenuRef}>
         <button
-          style={buttonStyles}
+          className="cs-custom-group-button"
           onClick={() => setShowTableStylesMenu(!showTableStylesMenu)}
           title="Format as Table"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#fff';
-          }}
         >
           <StylesGroupIcon1 />
           <span style={{ fontSize: '11px' }}>Format as</span>
           <span style={{ fontSize: '11px' }}>Table</span>
-          <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+          <span className="cs-custom-button-dropdown-arrow">▼</span>
         </button>
 
         {showTableStylesMenu && (
@@ -664,18 +652,12 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
       {/* Row 3: Cell Styles */}
       <div style={{ position: 'relative' }} ref={cellStylesMenuRef}>
         <button
-          style={buttonStyles}
+          className="cs-custom-group-button"
           onClick={() => setShowCellStylesMenu(!showCellStylesMenu)}
           title="Cell Styles"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#fff';
-          }}
         >
           <span style={{ fontSize: '11px' }}>Cell Styles</span>
-          <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+          <span className="cs-custom-button-dropdown-arrow">▼</span>
         </button>
 
         {showCellStylesMenu && (

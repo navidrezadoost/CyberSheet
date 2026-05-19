@@ -1971,6 +1971,59 @@
   border-width: 0;
 }
 
+/* ==================== Custom Group Buttons (Clipboard, Styles, Cells, Editing) ==================== */
+
+/* Standard button style for custom groups */
+.cs-custom-group-button {
+  border: 1px solid #c6c6c6;
+  background: #faf9f8;
+  padding: 6px 12px;
+  cursor: pointer;
+  fontSize: 13px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  height: 28px;
+  border-radius: 2px;
+  transition: all 100ms ease;
+  color: #201f1e;
+}
+
+.cs-custom-group-button:hover:not(:disabled) {
+  background: #edebe9;
+  border-color: #8a8886;
+}
+
+.cs-custom-group-button:active:not(:disabled) {
+  background: #e1dfdd;
+  border-color: #605e5c;
+}
+
+.cs-custom-group-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #faf9f8;
+  border-color: #d2d0ce;
+}
+
+/* Large button variant for Paste button */
+.cs-custom-group-button-large {
+  flex-direction: column;
+  padding: 8px 12px;
+  font-size: 11px;
+  min-width: 70px;
+  height: auto;
+}
+
+/* Dropdown arrow styling in custom buttons */
+.cs-custom-button-dropdown-arrow {
+  font-size: 8px;
+  margin-left: 4px;
+  color: #605e5c;
+}
+
 /* ==================== Print Styles ==================== */
 
 @media print {

@@ -428,19 +428,14 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
         {/* AutoSum Dropdown */}
         <div style={{ position: 'relative' }} ref={autoSumMenuRef}>
           <button
-            style={{ ...buttonStyles, minWidth: '90px' }}
+            className="cs-custom-group-button"
+            style={{ minWidth: '90px' }}
             onClick={() => setShowAutoSumMenu(!showAutoSumMenu)}
             title="AutoSum"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span style={{ fontSize: '16px', marginRight: '4px' }}>Σ</span>
             <span>AutoSum</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showAutoSumMenu && (
@@ -476,18 +471,12 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
         {/* Fill Dropdown */}
         <div style={{ position: 'relative' }} ref={fillMenuRef}>
           <button
-            style={buttonStyles}
+            className="cs-custom-group-button"
             onClick={() => setShowFillMenu(!showFillMenu)}
             title="Fill"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span>Fill</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showFillMenu && (
@@ -537,18 +526,12 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
         {/* Clear Dropdown */}
         <div style={{ position: 'relative' }} ref={clearMenuRef}>
           <button
-            style={buttonStyles}
+            className="cs-custom-group-button"
             onClick={() => setShowClearMenu(!showClearMenu)}
             title="Clear"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span>Clear</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showClearMenu && (
@@ -583,19 +566,14 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
         {/* Sort & Filter Dropdown */}
         <div style={{ position: 'relative' }} ref={sortFilterMenuRef}>
           <button
-            style={{ ...buttonStyles, minWidth: '100px' }}
+            className="cs-custom-group-button"
+            style={{ minWidth: '100px' }}
             onClick={() => setShowSortFilterMenu(!showSortFilterMenu)}
             title="Sort & Filter"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span>Sort &</span>
             <span>Filter</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showSortFilterMenu && (
@@ -651,19 +629,14 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
         {/* Find & Select Dropdown */}
         <div style={{ position: 'relative' }} ref={findSelectMenuRef}>
           <button
-            style={{ ...buttonStyles, minWidth: '110px' }}
+            className="cs-custom-group-button"
+            style={{ minWidth: '110px' }}
             onClick={() => setShowFindSelectMenu(!showFindSelectMenu)}
             title="Find & Select"
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }}
           >
             <span>Find &</span>
             <span>Select</span>
-            <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
           {showFindSelectMenu && (

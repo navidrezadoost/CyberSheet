@@ -200,10 +200,7 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
       {/* Row 1: Large Paste Button */}
       <div style={{ position: 'relative' }}>
         <button
-          style={{
-            ...largeButtonStyles,
-            ...(clipboardHasContent ? {} : { opacity: 0.5, cursor: 'not-allowed' }),
-          }}
+          className="cs-custom-group-button cs-custom-group-button-large"
           onClick={handlePaste}
           onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
@@ -211,18 +208,10 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
           }}
           disabled={!clipboardHasContent}
           title="Paste (Ctrl+V)"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            if (clipboardHasContent) {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#fff';
-          }}
         >
           <span style={iconStyles}>📋</span>
           <span>Paste</span>
-          <span style={dropdownArrowStyles}>▼</span>
+          <span className="cs-custom-button-dropdown-arrow">▼</span>
         </button>
 
         {/* Paste Special Menu */}
@@ -283,57 +272,35 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
       {/* Row 2: Cut, Copy, Format Painter */}
       <div style={buttonRowStyles}>
         <button
-          style={buttonStyles}
+          className="cs-custom-group-button"
           onClick={handleCut}
           disabled={selectedCells.length === 0}
           title="Cut (Ctrl+X)"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#fff';
-          }}
         >
           <span style={iconStyles}>✂️</span>
           Cut
         </button>
         
         <button
-          style={buttonStyles}
+          className="cs-custom-group-button"
           onClick={handleCopy}
           disabled={selectedCells.length === 0}
           title="Copy (Ctrl+C)"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            (e.target as HTMLElement).style.backgroundColor = '#fff';
-          }}
         >
           <span style={iconStyles}>📄</span>
           Copy
         </button>
         
         <button
+          className="cs-custom-group-button"
           style={{
-            ...buttonStyles,
-            backgroundColor: formatPainterActive ? '#e3f2fd' : '#fff',
-            borderColor: formatPainterActive ? '#2196f3' : '#ccc',
+            backgroundColor: formatPainterActive ? '#e3f2fd' : undefined,
+            borderColor: formatPainterActive ? '#2196f3' : undefined,
           }}
           onClick={() => handleFormatPainter(false)}
           onDoubleClick={() => handleFormatPainter(true)}
           disabled={selectedCells.length === 0}
           title="Format Painter - Click once for single use, double-click to stay active"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            if (!formatPainterActive) {
-              (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-            }
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            if (!formatPainterActive) {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
-            }
-          }}
         >
           <span style={iconStyles}>🖌️</span>
           Painter
