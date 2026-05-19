@@ -20,7 +20,7 @@
   display: flex;
   padding: 0 8px;
   box-sizing: border-box;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
 }
 
@@ -1590,7 +1590,7 @@
   min-height: 94px;
   padding: 2px 8px 0 8px;
   background: #f3f2f1;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
 }
 
