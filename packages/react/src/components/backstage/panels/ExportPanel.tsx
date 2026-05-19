@@ -191,7 +191,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
         }
         setExportProgress(0);
         setIsExporting(false);
-        alert('PDF export: Please use your browser\\'s Print function (Ctrl+P) and select \"Save as PDF\".');
+        alert('PDF export: Please use your browser\'s Print function (Ctrl+P) and select "Save as PDF".');
         return; // Don't download, just show message
       } else if (selectedFormat === 'ods') {
         throw new Error('ODS export coming soon');
