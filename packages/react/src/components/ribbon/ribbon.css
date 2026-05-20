@@ -535,9 +535,9 @@
   gap: 6px;
   width: 100%;
   padding: 4px 8px;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 2px;
-  background: transparent;
+  background: #faf9f8;
   color: #201f1e;
   font-family: inherit;
   font-size: 12px;
@@ -617,9 +617,9 @@
   width: 100%;
   padding: 6px 8px;
   margin-top: 8px;
-  border: 1px solid #8a8886;
+  border: 1px solid #d2d0ce;
   border-radius: 2px;
-  background: #ffffff;
+  background: #faf9f8;
   color: #201f1e;
   font-family: inherit;
   font-size: 12px;
@@ -761,8 +761,8 @@
 .cs-section-tabs button {
   flex: 1;
   padding: 4px 8px;
-  border: none;
-  background: transparent;
+  border: 1px solid #d2d0ce;
+  background: #faf9f8;
   color: #605e5c;
   font-size: 11px;
   cursor: pointer;
