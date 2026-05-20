@@ -430,9 +430,9 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 2px 0 0 2px;
-  background: transparent;
+  background: #faf9f8;
   color: #201f1e;
   cursor: pointer;
   font-family: inherit;
@@ -477,10 +477,10 @@
   width: 16px;
   height: 32px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 0 2px 2px 0;
   border-left: 1px solid #e1dfdd;
-  background: transparent;
+  background: #faf9f8;
   color: #201f1e;
   cursor: pointer;
   font-size: 8px;
@@ -688,9 +688,9 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 2px 0 0 2px;
-  background: transparent;
+  background: #faf9f8;
   cursor: pointer;
   transition: background 0.1s ease;
 }
@@ -707,10 +707,10 @@
   width: 16px;
   height: 32px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 0 2px 2px 0;
   border-left: 1px solid #e1dfdd;
-  background: transparent;
+  background: #faf9f8;
   color: #201f1e;
   cursor: pointer;
   font-size: 8px;
@@ -854,9 +854,9 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 2px 0 0 2px;
-  background: transparent;
+  background: #faf9f8;
   cursor: pointer;
   transition: background 0.1s ease;
 }
@@ -873,10 +873,10 @@
   width: 16px;
   height: 32px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid #d2d0ce;
   border-radius: 0 2px 2px 0;
   border-left: 1px solid #e1dfdd;
-  background: transparent;
+  background: #faf9f8;
   color: #201f1e;
   cursor: pointer;
   font-size: 8px;
@@ -1184,8 +1184,8 @@
   height: 32px;
   min-width: 110px;
   padding: 0 8px;
-  background: white;
-  border: 1px solid #8a8886;
+  background: #faf9f8;
+  border: 1px solid #d2d0ce;
   border-radius: 2px;
   display: flex;
   align-items: center;
