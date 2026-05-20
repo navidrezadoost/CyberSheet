@@ -1327,6 +1327,13 @@
   align-items: center;
 }
 
+/* Make small buttons in font row visible */
+.font-row .ribbon-btn-small {
+  background: #faf9f8;
+  border: 1px solid #d2d0ce;
+  color: #201f1e;
+}
+
 .font-select {
   width: 120px;
 }
