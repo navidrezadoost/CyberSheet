@@ -123,16 +123,27 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
   const groupStyles: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
-    padding: '4px 8px',
+    gap: '3px',
+    padding: '3px 6px 0 6px',
     borderRight: '1px solid #d0d0d0',
+    minHeight: '94px',
+    maxHeight: '94px',
+    boxSizing: 'border-box',
+    position: 'relative',
   };
 
   const labelStyles: React.CSSProperties = {
     fontSize: '11px',
-    color: '#444',
+    color: '#605e5c',
     textAlign: 'center',
-    marginTop: '2px',
+    padding: '2px 4px 0 4px',
+    whiteSpace: 'nowrap',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '16px',
+    lineHeight: '16px',
   };
 
   const buttonRowStyles: React.CSSProperties = {
@@ -195,24 +206,23 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
 
   return (
     <div style={groupStyles}>
-      <div style={labelStyles}>Clipboard</div>
-      
-      {/* Row 1: Large Paste Button */}
-      <div style={{ position: 'relative' }}>
-        <button
-          className="cs-custom-group-button cs-custom-group-button-large"
-          onClick={handlePaste}
-          onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => {
-            e.preventDefault();
-            setShowPasteMenu(!showPasteMenu);
-          }}
-          disabled={!clipboardHasContent}
-          title="Paste (Ctrl+V)"
-        >
-          <span style={iconStyles}>📋</span>
-          <span>Paste</span>
-          <span className="cs-custom-button-dropdown-arrow">▼</span>
-        </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingBottom: '16px' }}>
+        {/* Row 1: Large Paste Button */}
+        <div style={{ position: 'relative' }}>
+          <button
+            className="cs-custom-group-button cs-custom-group-button-large"
+            onClick={handlePaste}
+            onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => {
+              e.preventDefault();
+              setShowPasteMenu(!showPasteMenu);
+            }}
+            disabled={!clipboardHasContent}
+            title="Paste (Ctrl+V)"
+          >
+            <span style={iconStyles}>📋</span>
+            <span>Paste</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
+          </button>
 
         {/* Paste Special Menu */}
         {showPasteMenu && (
@@ -306,6 +316,9 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
           Painter
         </button>
       </div>
+      </div>
+
+      <div style={labelStyles}>Clipboard</div>
     </div>
   );
 };

@@ -419,10 +419,15 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      gap: '6px',
-      padding: '8px',
+      gap: '4px',
+      padding: '3px 6px 0 6px',
       borderRight: '1px solid #d0d0d0',
+      minHeight: '94px',
+      maxHeight: '94px',
+      boxSizing: 'border-box',
+      position: 'relative',
     }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingBottom: '16px' }}>
       {/* Row 1: AutoSum, Fill, Clear, Sort & Filter */}
       <div style={{ display: 'flex', gap: '2px' }}>
         {/* AutoSum Dropdown */}
@@ -884,6 +889,21 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
           }
         `}
       </style>
+      </div>
+
+      <div style={{
+        fontSize: '11px',
+        color: '#605e5c',
+        textAlign: 'center',
+        padding: '2px 4px 0 4px',
+        whiteSpace: 'nowrap',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '16px',
+        lineHeight: '16px',
+      }}>Editing</div>
     </div>
   );
 };

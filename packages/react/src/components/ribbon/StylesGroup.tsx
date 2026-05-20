@@ -435,10 +435,15 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      gap: '6px',
-      padding: '8px',
+      gap: '4px',
+      padding: '3px 6px 0 6px',
       borderRight: '1px solid #d0d0d0',
+      minHeight: '94px',
+      maxHeight: '94px',
+      boxSizing: 'border-box',
+      position: 'relative',
     }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingBottom: '16px' }}>
       {/* Row 1: Conditional Formatting */}
       <div style={{ position: 'relative' }} ref={cfMenuRef}>
         <button
