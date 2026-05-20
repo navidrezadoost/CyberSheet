@@ -32,9 +32,10 @@
   height: 100%;
   width: max-content;
   min-width: 100%;
-  align-items: flex-start;
+  align-items: stretch;
   padding-top: 2px;
   gap: 0;
+  overflow: hidden;
 }
 
 /* ==================== Ribbon Group ==================== */
@@ -45,8 +46,10 @@
   padding: 3px 6px 0 6px;
   border-right: 1px solid #e1dfdd;
   min-height: 94px;
+  max-height: 94px;
   position: relative;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .ribbon-group:last-child {
@@ -59,6 +62,7 @@
   gap: 2px;
   flex: 1;
   padding-bottom: 16px;
+  overflow: hidden;
 }
 
 .ribbon-group-title {
@@ -1585,6 +1589,8 @@
 
 .ribbon-group.compact {
   padding: 2px 4px 0 4px;
+  max-height: 94px;
+  overflow: hidden;
 }
 
 /* Wider gap for visual separation */
@@ -1633,7 +1639,10 @@
   gap: 4px;
   padding: 3px 6px 0;
   min-height: 94px;
+  max-height: 94px;
   position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .ribbon-tab-shell-title {
