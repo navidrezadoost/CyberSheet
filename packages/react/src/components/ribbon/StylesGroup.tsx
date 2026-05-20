@@ -677,6 +677,21 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
           </div>
         )}
       </div>
+      </div>
+
+      <div style={{
+        fontSize: '11px',
+        color: '#605e5c',
+        textAlign: 'center',
+        padding: '2px 4px 0 4px',
+        whiteSpace: 'nowrap',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '16px',
+        lineHeight: '16px',
+      }}>Styles</div>
 
       <style>
         {`
