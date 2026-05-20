@@ -12,7 +12,7 @@
 /* ==================== Ribbon Container ==================== */
 
 .ribbon {
-  height: 96px;
+  height: 110px;
   background: #f3f2f1;
   border-bottom: 1px solid #edebe9;
   font-family: "Segoe UI", "Segoe UI Web", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -45,8 +45,8 @@
   flex-direction: column;
   padding: 3px 6px 0 6px;
   border-right: 1px solid #e1dfdd;
-  min-height: 94px;
-  max-height: 94px;
+  min-height: 108px;
+  max-height: 108px;
   position: relative;
   box-sizing: border-box;
   overflow: hidden;
@@ -1589,7 +1589,7 @@
 
 .ribbon-group.compact {
   padding: 2px 4px 0 4px;
-  max-height: 94px;
+  max-height: 108px;
   overflow: hidden;
 }
 
@@ -1608,7 +1608,7 @@
 /* Shared layouts for non-Home ribbon tabs */
 .ribbon-tab-content {
   align-items: flex-start;
-  min-height: 94px;
+  min-height: 108px;
   padding: 2px 8px 0 8px;
   background: #f3f2f1;
   overflow-x: auto;
@@ -1638,8 +1638,8 @@
   flex-direction: column;
   gap: 4px;
   padding: 3px 6px 0;
-  min-height: 94px;
-  max-height: 94px;
+  min-height: 108px;
+  max-height: 108px;
   position: relative;
   box-sizing: border-box;
   overflow: hidden;

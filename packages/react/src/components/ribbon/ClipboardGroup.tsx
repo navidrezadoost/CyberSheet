@@ -126,8 +126,8 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     gap: '3px',
     padding: '3px 6px 0 6px',
     borderRight: '1px solid #d0d0d0',
-    minHeight: '94px',
-    maxHeight: '94px',
+    minHeight: '108px',
+    maxHeight: '108px',
     boxSizing: 'border-box',
     position: 'relative',
   };
