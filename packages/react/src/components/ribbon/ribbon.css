@@ -508,7 +508,7 @@
   border-radius: 2px;
   padding: 8px;
   box-shadow: 0 3.2px 7.2px rgba(0, 0, 0, 0.132), 0 0.6px 1.8px rgba(0, 0, 0, 0.108);
-  z-index: 1000;
+  z-index: 10000;
   min-width: 200px;
 }
 
@@ -746,7 +746,7 @@
   border-radius: 2px;
   padding: 8px;
   box-shadow: 0 3.2px 7.2px rgba(0, 0, 0, 0.132), 0 0.6px 1.8px rgba(0, 0, 0, 0.108);
-  z-index: 1000;
+  z-index: 10000;
   min-width: 220px;
 }
 
@@ -909,7 +909,7 @@
   border-radius: 2px;
   padding: 8px;
   box-shadow: 0 3.2px 7.2px rgba(0, 0, 0, 0.132), 0 0.6px 1.8px rgba(0, 0, 0, 0.108);
-  z-index: 1000;
+  z-index: 10000;
   max-width: 420px;
   max-height: 500px;
   overflow-y: auto;
@@ -1235,7 +1235,7 @@
   border: 1px solid #8a8886;
   border-radius: 2px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  z-index: 10000;
   min-width: 200px;
   max-height: 400px;
   overflow-y: auto;
