@@ -732,6 +732,7 @@ interface A11yOptions {
 ### **Advanced Topics**
 
 - [Accessibility Guide](./docs/ACCESSIBILITY_GUIDE.md)
+- [Global Settings And User Fonts](./docs/guides/GLOBAL_SETTINGS.md)
 - [Keyboard Shortcuts](./docs/KEYBOARD_SHORTCUTS.md)
 - [Chart System](./docs/CHART_SYSTEM_100_PERCENT_COMPLETE.md)
 - [Conditional Formatting](./docs/CF_100_COMPLETE_SUMMARY.md)

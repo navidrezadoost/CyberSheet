@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DrawingLayer } from '@cyber-sheet/core';
+import type { ClipboardService, DrawingLayer, Address } from '@cyber-sheet/core';
 import { HomeTab } from './HomeTab';
 import { InsertTab } from './insert/InsertTab';
 import { PageLayoutTab } from './pagelayout/PageLayoutTab';
@@ -17,10 +17,21 @@ export interface RibbonProps {
   activeTab?: string;
   drawingLayer?: DrawingLayer;
   workbook?: any;
+  clipboardService?: ClipboardService;
+  onAfterCommand?: () => void;
+  historyVersion?: number;
   viewMode?: 'normal' | 'pageLayout' | 'pageBreak';
   onViewModeChange?: (mode: 'normal' | 'pageLayout' | 'pageBreak') => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  onInsertHyperlink?: () => void;
+  onOpenFindReplace?: (tab: 'find' | 'replace') => void;
+  onInsertSheet?: () => void;
+  onDeleteSheet?: () => void;
+  onRequestRenameSheet?: () => void;
+  onFilter?: (action: 'toggle' | 'clear' | 'reapply') => void;
+  onDataCommand?: (command: any) => void;
+  selectedCells?: Address[];
 }
 
 /**
@@ -47,10 +58,21 @@ export const Ribbon: React.FC<RibbonProps> = ({
   activeTab = 'Home',
   drawingLayer,
   workbook,
+  clipboardService,
+  onAfterCommand,
+  historyVersion = 0,
   viewMode = 'normal',
   onViewModeChange,
   zoom = 100,
   onZoomChange,
+  onInsertHyperlink,
+  onOpenFindReplace,
+  onInsertSheet,
+  onDeleteSheet,
+  onRequestRenameSheet,
+  onFilter,
+  onDataCommand,
+  selectedCells = [],
 }) => {
   // Set up global keyboard shortcuts (single entry point)
   useKeyboardShortcuts({
@@ -64,7 +86,19 @@ export const Ribbon: React.FC<RibbonProps> = ({
     <div className="ribbon">
       {/* Active Tab Content */}
       {activeTab === 'Home' && (
-        <HomeTab commandManager={commandManager} selection={selection} />
+        <HomeTab
+          commandManager={commandManager}
+          selection={selection}
+          worksheet={workbook?.activeSheet}
+          clipboardService={clipboardService}
+          onAfterCommand={onAfterCommand}
+          historyVersion={historyVersion}
+          onOpenFindReplace={onOpenFindReplace}
+          onInsertSheet={onInsertSheet}
+          onDeleteSheet={onDeleteSheet}
+          onRequestRenameSheet={onRequestRenameSheet}
+          onFilter={onFilter}
+        />
       )}
       
       {activeTab === 'Insert' && (
@@ -81,7 +115,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
           onInsertWordArt={() => console.log('Insert WordArt')}
           onInsertChart={(type) => console.log('Insert chart:', type)}
           onInsertSparkline={(type) => console.log('Insert sparkline:', type)}
-          onInsertHyperlink={() => console.log('Insert hyperlink')}
+          onInsertHyperlink={onInsertHyperlink}
           onInsertEquation={() => console.log('Insert equation')}
           onInsertSymbol={() => console.log('Insert symbol')}
         />
@@ -132,8 +166,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
       {activeTab === 'Data' && workbook && (
         <DataTab 
           workbook={workbook}
-          selectedCells={selection ? [selection.start] : []}
-          onCommand={(cmd) => console.log('Data command:', cmd)}
+          selectedCells={selectedCells}
+          onCommand={onDataCommand}
         />
       )}
       

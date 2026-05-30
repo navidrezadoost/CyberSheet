@@ -9,18 +9,6 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import {
-  BorderBottomRegular,
-  BorderTopRegular,
-  BorderLeftRegular,
-  BorderRightRegular,
-  BorderNoneRegular,
-  BorderAllRegular,
-  BorderBottomDoubleRegular,
-  BorderBottomThickRegular,
-  BorderTopBottomRegular,
-  BorderTopBottomDoubleRegular,
-} from "@fluentui/react-icons";
 import type { BorderPreset, BorderPayload } from "./borderTypes";
 import { BORDER_PRESETS, resolvePreset } from "./borderTypes";
 
@@ -36,29 +24,28 @@ interface BorderPresetGridProps {
 }
 
 /**
- * Map icon names to React components
- * Note: Some icons don't exist in FluentUI, using closest alternatives
- */
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  BorderBottomRegular,
-  BorderTopRegular,
-  BorderLeftRegular,
-  BorderRightRegular,
-  BorderNoneRegular,
-  BorderAllRegular,
-  BorderOuterRegular: BorderAllRegular, // Using BorderAllRegular as fallback
-  BorderBottomDoubleRegular,
-  BorderBottomThickRegular,
-  BorderTopBottomRegular,
-  BorderTopBottomDoubleRegular,
-};
-
-/**
  * Render icon for a border preset
  */
 function PresetIcon({ iconName }: { iconName: string }) {
-  const IconComponent = ICON_MAP[iconName] || BorderAllRegular;
-  return <IconComponent className="cs-preset-icon" />;
+  const glyphByIcon: Record<string, string> = {
+    BorderBottomRegular: "B",
+    BorderTopRegular: "T",
+    BorderLeftRegular: "L",
+    BorderRightRegular: "R",
+    BorderNoneRegular: "X",
+    BorderAllRegular: "All",
+    BorderOuterRegular: "Out",
+    BorderBottomDoubleRegular: "Dbl",
+    BorderBottomThickRegular: "Thk",
+    BorderTopBottomRegular: "T/B",
+    BorderTopBottomDoubleRegular: "T/D",
+  };
+
+  return (
+    <span className="cs-preset-icon" aria-hidden="true">
+      {glyphByIcon[iconName] || "All"}
+    </span>
+  );
 }
 
 export function BorderPresetGrid({

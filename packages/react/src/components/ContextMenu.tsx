@@ -17,9 +17,10 @@ interface ContextMenuProps {
   items: ContextMenuItem[];
   onClose: () => void;
   onAction?: (actionId: string) => void;
+  onLayoutChange?: (layout: { x: number; y: number; width: number; height: number }) => void;
 }
 
-export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose, onAction }) => {
+export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose, onAction, onLayoutChange }) => {
   const menuRef = useRef(null as HTMLDivElement | null);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const [submenuOpen, setSubmenuOpen] = useState<number | null>(null);
@@ -46,19 +47,26 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose, 
       }
 
       setMenuPosition({ x: adjustedX, y: adjustedY });
+      onLayoutChange?.({
+        x: adjustedX,
+        y: adjustedY,
+        width: rect.width,
+        height: rect.height,
+      });
     }
-  }, [x, y]);
+  }, [x, y, onLayoutChange]);
 
-  // Close on click outside
+  // Close on click outside (use click so item onClick runs before the menu unmounts)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
+      const target = e.target as Node;
+      if (menuRef.current && menuRef.current.contains(target)) return;
+      if ((target as Element).closest?.('.excel-mini-toolbar')) return;
+      onClose();
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('click', handleClickOutside, true);
+    return () => document.removeEventListener('click', handleClickOutside, true);
   }, [onClose]);
 
   // Keyboard navigation
@@ -129,6 +137,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose, 
     <>
       <div
         ref={menuRef}
+        className="excel-context-menu"
+        onMouseDown={(e) => e.stopPropagation()}
         style={{
           position: 'fixed',
           left: `${menuPosition.x}px`,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { ConditionalFormattingRule, ValueOperator, ExcelIconSet } from '@cyber-sheet/core';
 import type { Range } from '@cyber-sheet/core';
+import { SmilodonNativeSelect } from '../components/SmilodonNativeSelect';
 
 type ChangeEvent = React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>;
 type CheckboxChangeEvent = React.ChangeEvent<HTMLInputElement>;
@@ -421,7 +422,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Icon Set</label>
-							<select
+							<SmilodonNativeSelect
 								value={iconSet}
 								onChange={(e: ChangeEvent) => setIconSet(e.target.value as ExcelIconSet)}
 							>
@@ -430,7 +431,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 										{set}
 									</option>
 								))}
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -501,7 +502,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Operator</label>
-							<select
+							<SmilodonNativeSelect
 								value={valueOperator}
 								onChange={(e: ChangeEvent) => setValueOperator(e.target.value as ValueOperator)}
 							>
@@ -510,7 +511,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 										{op.replace(/-/g, ' ')}
 									</option>
 								))}
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -562,13 +563,13 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Type</label>
-							<select
+							<SmilodonNativeSelect
 								value={topBottomType}
 								onChange={(e: ChangeEvent) => setTopBottomType(e.target.value as 'top' | 'bottom')}
 							>
 								<option value="top">Top</option>
 								<option value="bottom">Bottom</option>
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -619,13 +620,13 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Type</label>
-							<select
+							<SmilodonNativeSelect
 								value={aboveAverageType}
 								onChange={(e: ChangeEvent) => setAboveAverageType(e.target.value as 'above' | 'below')}
 							>
 								<option value="above">Above Average</option>
 								<option value="below">Below Average</option>
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -655,13 +656,13 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Type</label>
-							<select
+							<SmilodonNativeSelect
 								value={duplicateUniqueType}
 								onChange={(e: ChangeEvent) => setDuplicateUniqueType(e.target.value as 'duplicate' | 'unique')}
 							>
 								<option value="duplicate">Duplicate</option>
 								<option value="unique">Unique</option>
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -691,7 +692,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Date Type</label>
-							<select
+							<SmilodonNativeSelect
 								value={dateOccurring}
 								onChange={(e: ChangeEvent) => setDateOccurring(e.target.value as any)}
 							>
@@ -703,7 +704,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 								<option value="last-week">Last Week</option>
 								<option value="this-month">This Month</option>
 								<option value="last-month">Last Month</option>
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -733,7 +734,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Operator</label>
-							<select
+							<SmilodonNativeSelect
 								value={textOperator}
 								onChange={(e: ChangeEvent) => setTextOperator(e.target.value as any)}
 							>
@@ -741,7 +742,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 								<option value="not-contains">Does Not Contain</option>
 								<option value="begins-with">Begins With</option>
 								<option value="ends-with">Ends With</option>
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -781,7 +782,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 
 						<div className="form-group">
 							<label>Type</label>
-							<select
+							<SmilodonNativeSelect
 								value={errorsBlankType}
 								onChange={(e: ChangeEvent) => setErrorsBlankType(e.target.value as any)}
 							>
@@ -789,7 +790,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 								<option value="no-errors">No Errors</option>
 								<option value="blanks">Blanks</option>
 								<option value="no-blanks">No Blanks</option>
-							</select>
+							</SmilodonNativeSelect>
 						</div>
 
 						<div className="form-group">
@@ -824,7 +825,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 			{/* Rule Type Selection */}
 			<div className="form-group">
 				<label>Rule Type</label>
-				<select
+				<SmilodonNativeSelect
 					value={ruleType}
 					onChange={(e: ChangeEvent) => setRuleType(e.target.value as RuleType)}
 				>
@@ -833,7 +834,7 @@ export const ConditionalFormattingRuleBuilder: React.FC<ConditionalFormattingRul
 							{label}
 						</option>
 					))}
-				</select>
+				</SmilodonNativeSelect>
 			</div>
 
 			{/* Type-specific form */}

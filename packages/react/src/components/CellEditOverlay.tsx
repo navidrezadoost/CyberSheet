@@ -138,6 +138,7 @@ export const CellEditOverlay: React.FC<CellEditOverlayProps> = ({
       }}
       spellCheck={false}
       autoComplete="off"
+      data-native-text-undo
     />
   );
 };

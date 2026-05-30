@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { CellStyle, FormattingChanges } from './FormatCellsDialog';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
 
 export interface NumberTabProps {
   currentFormatting: CellStyle;
@@ -301,7 +302,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
                   Symbol:
                 </label>
-                <select
+                <SmilodonNativeSelect
                   value={symbol}
                   onChange={(e: any) => setSymbol(e.target.value)}
                   style={{
@@ -315,7 +316,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
                   {CURRENCY_SYMBOLS.map(sym => (
                     <option key={sym} value={sym}>{sym}</option>
                   ))}
-                </select>
+                </SmilodonNativeSelect>
               </div>
             )}
             
@@ -372,7 +373,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
               Type:
             </label>
-            <select
+            <SmilodonNativeSelect
               value={dateType}
               onChange={(e: any) => setDateType(e.target.value)}
               style={{
@@ -386,7 +387,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
               {DATE_FORMATS.map(format => (
                 <option key={format} value={format}>{format}</option>
               ))}
-            </select>
+            </SmilodonNativeSelect>
           </div>
         )}
         
@@ -395,7 +396,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
               Type:
             </label>
-            <select
+            <SmilodonNativeSelect
               value={timeType}
               onChange={(e: any) => setTimeType(e.target.value)}
               style={{
@@ -409,7 +410,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
               {TIME_FORMATS.map(format => (
                 <option key={format} value={format}>{format}</option>
               ))}
-            </select>
+            </SmilodonNativeSelect>
           </div>
         )}
         
@@ -440,7 +441,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
               Type:
             </label>
-            <select
+            <SmilodonNativeSelect
               value={fractionType}
               onChange={(e: any) => setFractionType(e.target.value)}
               style={{
@@ -454,7 +455,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
               {FRACTION_TYPES.map(type => (
                 <option key={type} value={type}>{type}</option>
               ))}
-            </select>
+            </SmilodonNativeSelect>
           </div>
         )}
         
@@ -485,7 +486,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
               Type:
             </label>
-            <select
+            <SmilodonNativeSelect
               value={specialType}
               onChange={(e: any) => setSpecialType(e.target.value)}
               style={{
@@ -499,7 +500,7 @@ const NumberTab: React.FC<NumberTabProps> = ({
               {SPECIAL_TYPES.map(type => (
                 <option key={type} value={type}>{type}</option>
               ))}
-            </select>
+            </SmilodonNativeSelect>
           </div>
         )}
         

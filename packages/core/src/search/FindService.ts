@@ -2,7 +2,7 @@
  * FindService.ts
  *
  * Service layer for Find & Replace operations.
- * Wraps the low-level search functions with a stateful interface for UI components.
+ * Wraps Worksheet search with a stateful interface for UI components.
  *
  * @module search/FindService
  */
@@ -10,13 +10,13 @@
 import type { Address } from '../types';
 import type { Worksheet } from '../worksheet';
 import type { SearchOptions, SearchLookIn, SearchLookAt, SearchOrder } from '../types/search-types';
-import { findAll, replaceAll } from './index';
+import { cellValueToString, escapeRegexLiteral } from '../search-engine';
 
 export interface FindResult {
   address: Address;
   value: string;
   formula?: string;
-  match: string; // The matched text
+  match: string;
 }
 
 export interface FindServiceOptions {
@@ -25,72 +25,106 @@ export interface FindServiceOptions {
   lookAt: SearchLookAt;
   matchCase: boolean;
   searchOrder: SearchOrder;
-  searchWithin?: 'sheet' | 'workbook'; // Default: sheet
-  searchBy?: 'rows' | 'columns'; // Default: rows
+  searchWithin?: 'sheet' | 'workbook';
+  searchBy?: 'rows' | 'columns';
+}
+
+function getCellSourceText(
+  cell: { value: unknown; formula?: string } | undefined,
+  lookIn: SearchLookIn,
+): string | null {
+  if (!cell) return null;
+  if (lookIn === 'formulas') {
+    return cell.formula != null ? cell.formula : cellValueToString(cell.value);
+  }
+  if (lookIn === 'comments') {
+    const comments = (cell as { comments?: Array<{ text: string }> }).comments;
+    if (!comments?.length) return null;
+    return comments.map((c) => c.text).join(' ');
+  }
+  return cellValueToString(cell.value);
+}
+
+function applyTextReplacement(
+  source: string,
+  query: string,
+  replacement: string,
+  lookAt: SearchLookAt,
+  matchCase: boolean,
+): string {
+  if (query === '') return source;
+  if (lookAt === 'whole') return replacement;
+
+  const escaped = escapeRegexLiteral(query);
+  const flags = matchCase ? 'g' : 'gi';
+  return source.replace(new RegExp(escaped, flags), () => replacement);
 }
 
 export class FindService {
   private worksheet: Worksheet;
   private lastResults: FindResult[] = [];
-  private currentIndex: number = -1;
+  private currentIndex = -1;
+  private lastOptions: SearchOptions | null = null;
 
   constructor(worksheet: Worksheet) {
     this.worksheet = worksheet;
   }
 
-  /**
-   * Find all matches in the current worksheet
-   */
-  findAll(query: string, options?: Partial<FindServiceOptions>): FindResult[] {
-    const searchOptions: SearchOptions = {
+  private buildSearchOptions(query: string, options?: Partial<FindServiceOptions>): SearchOptions {
+    return {
       what: query,
-      lookIn: options?.lookIn || 'values',
-      lookAt: options?.lookAt || 'part',
+      lookIn: options?.lookIn ?? 'values',
+      lookAt: options?.lookAt ?? 'part',
       matchCase: options?.matchCase ?? false,
-      searchOrder: options?.searchOrder || 'rows',
+      searchOrder: options?.searchOrder ?? 'rows',
     };
+  }
 
-    // Use the low-level findAll function
-    const results = findAll(this.worksheet, searchOptions);
+  findAll(query: string, options?: Partial<FindServiceOptions>): FindResult[] {
+    if (!query) {
+      this.lastResults = [];
+      this.currentIndex = -1;
+      this.lastOptions = null;
+      return [];
+    }
 
-    // Convert to FindResult format
-    this.lastResults = results.map(result => ({
-      address: result.address,
-      value: this.getCellValue(result.address),
-      formula: this.getCellFormula(result.address),
-      match: result.match,
-    }));
+    const searchOptions = this.buildSearchOptions(query, options);
+    this.lastOptions = searchOptions;
+
+    const addresses = this.worksheet.findAll(searchOptions);
+
+    this.lastResults = addresses.map((address) => {
+      const cell = this.worksheet.getCell(address);
+      const source = getCellSourceText(cell, searchOptions.lookIn ?? 'values') ?? '';
+      return {
+        address,
+        value: this.getCellValue(address),
+        formula: cell?.formula,
+        match: source,
+      };
+    });
 
     this.currentIndex = this.lastResults.length > 0 ? 0 : -1;
     return this.lastResults;
   }
 
-  /**
-   * Find next match (with wrap-around)
-   */
   findNext(): FindResult | null {
     if (this.lastResults.length === 0) return null;
-    
+
     this.currentIndex = (this.currentIndex + 1) % this.lastResults.length;
     return this.lastResults[this.currentIndex];
   }
 
-  /**
-   * Find previous match (with wrap-around)
-   */
   findPrevious(): FindResult | null {
     if (this.lastResults.length === 0) return null;
-    
-    this.currentIndex = this.currentIndex - 1;
+
+    this.currentIndex -= 1;
     if (this.currentIndex < 0) {
       this.currentIndex = this.lastResults.length - 1;
     }
     return this.lastResults[this.currentIndex];
   }
 
-  /**
-   * Get current match
-   */
   getCurrentMatch(): FindResult | null {
     if (this.currentIndex >= 0 && this.currentIndex < this.lastResults.length) {
       return this.lastResults[this.currentIndex];
@@ -98,99 +132,116 @@ export class FindService {
     return null;
   }
 
-  /**
-   * Get total match count
-   */
   getMatchCount(): number {
     return this.lastResults.length;
   }
 
-  /**
-   * Get current match index (1-based for display)
-   */
   getCurrentIndex(): number {
     return this.currentIndex + 1;
   }
 
-  /**
-   * Replace current match
-   */
   replaceCurrent(replacement: string): boolean {
     const current = this.getCurrentMatch();
-    if (!current) return false;
+    if (!current || !this.lastOptions) return false;
 
     const cell = this.worksheet.getCell(current.address);
     if (!cell) return false;
 
-    // Replace in formula if searching formulas, otherwise in value
-    if (cell.formula) {
-      const newFormula = cell.formula.replace(current.match, replacement);
-      this.worksheet.setCellFormula(current.address, newFormula);
+    const lookIn = this.lastOptions.lookIn ?? 'values';
+    const source = getCellSourceText(cell, lookIn);
+    if (source === null) return false;
+
+    const newText = applyTextReplacement(
+      source,
+      this.lastOptions.what,
+      replacement,
+      this.lastOptions.lookAt ?? 'part',
+      this.lastOptions.matchCase ?? false,
+    );
+
+    if (newText === source) return false;
+
+    if (lookIn === 'formulas' && cell.formula != null) {
+      this.worksheet.setCellFormula(current.address, newText);
+    } else if (lookIn === 'comments') {
+      const comments = cell.comments;
+      if (!comments?.length) return false;
+      const latest = comments[comments.length - 1];
+      this.worksheet.updateComment(current.address, latest.id, { text: newText });
     } else {
-      const currentValue = String(cell.value || '');
-      const newValue = currentValue.replace(current.match, replacement);
-      this.worksheet.setCell(current.address, newValue);
+      this.worksheet.setCellValue(current.address, newText);
     }
 
-    // Remove this result from the list
     this.lastResults.splice(this.currentIndex, 1);
-    if (this.currentIndex >= this.lastResults.length) {
+    if (this.lastResults.length === 0) {
+      this.currentIndex = -1;
+    } else if (this.currentIndex >= this.lastResults.length) {
       this.currentIndex = this.lastResults.length - 1;
     }
 
     return true;
   }
 
-  /**
-   * Replace all matches
-   */
   replaceAllMatches(query: string, replacement: string, options?: Partial<FindServiceOptions>): number {
-    const searchOptions: SearchOptions = {
-      what: query,
-      lookIn: options?.lookIn || 'values',
-      lookAt: options?.lookAt || 'part',
-      matchCase: options?.matchCase ?? false,
-      searchOrder: options?.searchOrder || 'rows',
-    };
+    if (!query) return 0;
 
-    // Use the low-level replaceAll function
-    const count = replaceAll(this.worksheet, query, replacement, searchOptions);
+    const searchOptions = this.buildSearchOptions(query, options);
+    const addresses = this.worksheet.findAll(searchOptions);
+    let count = 0;
 
-    // Clear results after replace all
+    for (const address of addresses) {
+      const cell = this.worksheet.getCell(address);
+      if (!cell) continue;
+
+      const lookIn = searchOptions.lookIn ?? 'values';
+      const source = getCellSourceText(cell, lookIn);
+      if (source === null) continue;
+
+      const newText = applyTextReplacement(
+        source,
+        query,
+        replacement,
+        searchOptions.lookAt ?? 'part',
+        searchOptions.matchCase ?? false,
+      );
+
+      if (newText === source) continue;
+
+      if (lookIn === 'formulas' && cell.formula != null) {
+        this.worksheet.setCellFormula(address, newText);
+      } else if (lookIn === 'comments') {
+        const comments = cell.comments;
+        if (!comments?.length) continue;
+        const latest = comments[comments.length - 1];
+        this.worksheet.updateComment(address, latest.id, { text: newText });
+      } else {
+        this.worksheet.setCellValue(address, newText);
+      }
+      count += 1;
+    }
+
     this.lastResults = [];
     this.currentIndex = -1;
+    this.lastOptions = searchOptions;
 
     return count;
   }
 
-  /**
-   * Clear current search results
-   */
   clear(): void {
     this.lastResults = [];
     this.currentIndex = -1;
+    this.lastOptions = null;
   }
 
-  /**
-   * Helper: Get cell value as string
-   */
   private getCellValue(address: Address): string {
     const cell = this.worksheet.getCell(address);
     if (!cell) return '';
-    
+
     const value = cell.value;
     if (value === null || value === undefined) return '';
     if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
     if (typeof value === 'number') return String(value);
     if (typeof value === 'string') return value;
     return String(value);
-  }
-
-  /**
-   * Helper: Get cell formula
-   */
-  private getCellFormula(address: Address): string | undefined {
-    const cell = this.worksheet.getCell(address);
-    return cell?.formula || undefined;
   }
 }

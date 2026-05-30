@@ -14,6 +14,10 @@ export class Emitter<T> {
 
   emit(event: T): void {
     for (const l of Array.from(this.listeners)) {
+      if (typeof l !== 'function') {
+        this.listeners.delete(l as unknown as (e: T) => void);
+        continue;
+      }
       l(event);
     }
   }

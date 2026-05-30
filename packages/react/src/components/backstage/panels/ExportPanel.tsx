@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { FileOperations, ExportFormat, ExportOptions } from '@cyber-sheet/core';
 import { exportXLSX } from '@cyber-sheet/io-xlsx';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
 
 export interface ExportPanelProps {
   fileOperations: FileOperations;
@@ -25,7 +26,7 @@ const FORMAT_CARDS: FormatCard[] = [
     id: 'xlsx',
     name: 'Excel Workbook (.xlsx)',
     icon: '📊',
-    description: 'Best for Microsoft Excel. Preserves all formatting, formulas, and sheets.',
+    description: 'Best for Cybersheet. Preserves all formatting, formulas, and sheets.',
     isRecommended: true,
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   },
@@ -515,7 +516,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
           <div style={optionsLabelStyle}>CSV Options</div>
           <label style={{ ...checkboxLabelStyle, marginBottom: 12 }}>
             Delimiter:
-            <select
+            <SmilodonNativeSelect
               value={csvDelimiter}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCsvDelimiter(e.target.value as ',' | ';' | '\t')}
               style={{ ...selectStyle, width: 'auto', marginBottom: 0 }}
@@ -523,7 +524,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
               <option value=",">Comma (,)</option>
               <option value=";">Semicolon (;)</option>
               <option value="\t">Tab</option>
-            </select>
+            </SmilodonNativeSelect>
           </label>
           <label style={checkboxLabelStyle}>
             <input
@@ -543,14 +544,14 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
           <div style={optionsLabelStyle}>PDF Options</div>
           <label style={{ ...checkboxLabelStyle, marginBottom: 12 }}>
             Orientation:
-            <select
+            <SmilodonNativeSelect
               value={pdfOrientation}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPdfOrientation(e.target.value as 'portrait' | 'landscape')}
               style={{ ...selectStyle, width: 'auto', marginBottom: 0 }}
             >
               <option value="portrait">Portrait</option>
               <option value="landscape">Landscape</option>
-            </select>
+            </SmilodonNativeSelect>
           </label>
           <label style={checkboxLabelStyle}>
             <input

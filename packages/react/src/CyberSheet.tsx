@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Workbook, Worksheet, autoFill } from '@cyber-sheet/core';
 // Import locally to ensure dev picks up latest CanvasRenderer implementation
 import { CanvasRenderer, CanvasRendererOptions, type ViewMode } from '../../renderer-canvas/src';
+import { useCyberSheetConfig } from './config/globalConfig';
+import { isArrowKey } from './utils/keyboardLayout';
 
 export type CyberSheetProps = {
   workbook: Workbook;
@@ -34,6 +36,9 @@ export type PhysicsOptions = {
 };
 
 export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physicsOptions, zoom, viewMode = 'normal', fontFamily, fontSize, onRendererReady, onSelectionChange }: CyberSheetProps) => {
+  const cyberSheetConfig = useCyberSheetConfig();
+  const effectiveFontFamily = fontFamily ?? cyberSheetConfig.fonts.defaultFamily;
+  const effectiveFontSize = fontSize ?? cyberSheetConfig.fonts.defaultSize;
   const containerRef = useRef(null as any);
   const rendererRef = useRef(null as any);
   const sheetRef = useRef(undefined as any);
@@ -119,13 +124,13 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     if (!r || typeof r.setTheme !== 'function') return;
     
     const themeUpdate: any = {};
-    if (fontFamily !== undefined) themeUpdate.fontFamily = fontFamily;
-    if (fontSize !== undefined) themeUpdate.fontSize = fontSize;
+    if (effectiveFontFamily !== undefined) themeUpdate.fontFamily = effectiveFontFamily;
+    if (effectiveFontSize !== undefined) themeUpdate.fontSize = effectiveFontSize;
     
     if (Object.keys(themeUpdate).length > 0) {
       r.setTheme(themeUpdate);
     }
-  }, [fontFamily, fontSize, rendererRef.current]);
+  }, [effectiveFontFamily, effectiveFontSize, rendererRef.current]);
 
   // Basic wheel scroll handler
   useEffect(() => {
@@ -390,7 +395,8 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     };
   }, [rendererRef.current, sheetRef.current]);
 
-  // Keyboard navigation (applies to active range = last) and copy to clipboard (TSV over one or many ranges)
+  // Arrow-key navigation only — clipboard shortcuts are handled by ExcelApp via PasteCommand
+  // so undo/redo stays on the command stack.
   useEffect(() => {
     const el = containerRef.current as any;
     const r = rendererRef.current as any;
@@ -413,103 +419,14 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
         r.setSelections(next);
         setSelections(next);
       };
-      switch (e.key) {
-        case 'ArrowUp': move(-1, 0); e.preventDefault(); break;
-        case 'ArrowDown': move(1, 0); e.preventDefault(); break;
-        case 'ArrowLeft': move(0, -1); e.preventDefault(); break;
-        case 'ArrowRight': move(0, 1); e.preventDefault(); break;
-        case 'c':
-        case 'C':
-          if (e.ctrlKey || e.metaKey) {
-            // Build text/plain (TSV) and text/html (tables) representations with range boundaries
-            const blocks: string[] = [];
-            const htmlTables: string[] = [];
-            const escapeHtml = (s: string) => s
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#39;');
-            for (const rng of ranges) {
-              const r1 = Math.min(rng.start.row, rng.end.row);
-              const r2 = Math.max(rng.start.row, rng.end.row);
-              const c1 = Math.min(rng.start.col, rng.end.col);
-              const c2 = Math.max(rng.start.col, rng.end.col);
-              // Respect sheet bounds
-              const boundR1 = Math.max(1, r1);
-              const boundR2 = Math.min(sheet.rowCount, r2);
-              const boundC1 = Math.max(1, c1);
-              const boundC2 = Math.min(sheet.colCount, c2);
-              const rows: string[] = [];
-              const htmlRows: string[] = [];
-              for (let rIdx = boundR1; rIdx <= boundR2; rIdx++) {
-                const cols: string[] = [];
-                const htmlTds: string[] = [];
-                for (let cIdx = boundC1; cIdx <= boundC2; cIdx++) {
-                  const v = sheet.getCellValue({ row: rIdx, col: cIdx });
-                  const str = v == null ? '' : String(v);
-                  cols.push(str);
-                  htmlTds.push(`<td style="border:1px solid #D9D9D9;padding:2px 4px;white-space:pre;">${escapeHtml(str)}</td>`);
-                }
-                rows.push(cols.join('\t'));
-                htmlRows.push(`<tr>${htmlTds.join('')}</tr>`);
-              }
-              blocks.push(rows.join('\n'));
-              htmlTables.push(`<table style="border-collapse:collapse;font-family:Segoe UI, Arial, sans-serif;font-size:11px">${htmlRows.join('')}</table>`);
-            }
-            const tsv = blocks.join('\n\n');
-            const htmlDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${htmlTables.join('<br/>')}</body></html>`;
-            const writeRich = async () => {
-              if (navigator.clipboard && (window as any).ClipboardItem) {
-                const item = new (window as any).ClipboardItem({
-                  'text/plain': new Blob([tsv], { type: 'text/plain' }),
-                  'text/html': new Blob([htmlDoc], { type: 'text/html' }),
-                });
-                await navigator.clipboard.write([item]);
-              } else {
-                await navigator.clipboard.writeText(tsv);
-              }
-            };
-            writeRich().catch(() => { try { navigator.clipboard?.writeText(tsv); } catch {} });
-            e.preventDefault();
-          }
-          break;
-        case 'v':
-        case 'V':
-          if (e.ctrlKey || e.metaKey) {
-            // Paste from clipboard with boundary checks
-            const pasteData = async () => {
-              try {
-                const text = await navigator.clipboard.readText();
-                if (!text) return;
-                const activeIndex = ranges.length - 1;
-                const sel = ranges[activeIndex];
-                const startRow = Math.min(sel.start.row, sel.end.row);
-                const startCol = Math.min(sel.start.col, sel.end.col);
-                const lines = text.split('\n');
-                let row = startRow;
-                for (const line of lines) {
-                  if (row > sheet.rowCount) break; // boundary check
-                  const vals = line.split('\t');
-                  let col = startCol;
-                  for (const val of vals) {
-                    if (col > sheet.colCount) break; // boundary check
-                    const trimmed = val.trim();
-                    const num = parseFloat(trimmed);
-                    sheet.setCellValue({ row, col }, isNaN(num) ? trimmed : num);
-                    col++;
-                  }
-                  row++;
-                }
-                r.redraw?.();
-              } catch (err) {
-                console.warn('Paste failed:', err);
-              }
-            };
-            pasteData();
-            e.preventDefault();
-          }
-          break;
+      if (isArrowKey(e)) {
+        e.preventDefault();
+        switch (e.code) {
+          case 'ArrowUp': move(-1, 0); break;
+          case 'ArrowDown': move(1, 0); break;
+          case 'ArrowLeft': move(0, -1); break;
+          case 'ArrowRight': move(0, 1); break;
+        }
       }
     };
     el.tabIndex = 0;

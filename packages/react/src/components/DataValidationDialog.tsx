@@ -23,6 +23,7 @@
  */
 
 import React, { useState } from 'react';
+import { SmilodonNativeSelect } from './SmilodonNativeSelect';
 import type {
   DataValidationRule,
   DataValidationType,
@@ -348,7 +349,7 @@ function SettingsTab({
         <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600 }}>
           Allow:
         </label>
-        <select
+        <SmilodonNativeSelect
           value={validationType}
           onChange={(e) => setValidationType(e.target.value as DataValidationType)}
           style={{
@@ -367,7 +368,7 @@ function SettingsTab({
           <option value="time">Time</option>
           <option value="textLength">Text length</option>
           <option value="custom">Custom</option>
-        </select>
+        </SmilodonNativeSelect>
       </div>
       
       {/* Operator (for number/date/time/textLength) */}
@@ -376,7 +377,7 @@ function SettingsTab({
           <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600 }}>
             Data:
           </label>
-          <select
+          <SmilodonNativeSelect
             value={operator}
             onChange={(e) => setOperator(e.target.value as ValidationOperator)}
             style={{
@@ -395,7 +396,7 @@ function SettingsTab({
             <option value="lessThan">less than</option>
             <option value="greaterOrEqual">greater than or equal to</option>
             <option value="lessOrEqual">less than or equal to</option>
-          </select>
+          </SmilodonNativeSelect>
         </div>
       )}
       
@@ -601,7 +602,7 @@ function ErrorAlertTab({
             <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600 }}>
               Style:
             </label>
-            <select
+            <SmilodonNativeSelect
               value={errorStyle}
               onChange={(e) => setErrorStyle(e.target.value as ErrorAlertStyle)}
               style={{
@@ -615,7 +616,7 @@ function ErrorAlertTab({
               <option value="stop">Stop (prevents invalid input)</option>
               <option value="warning">Warning (warns but allows)</option>
               <option value="information">Information (informational only)</option>
-            </select>
+            </SmilodonNativeSelect>
           </div>
           
           <div>

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
 
 export interface GradientEffect {
   type: 'one-color' | 'two-colors' | 'preset';
@@ -259,7 +260,7 @@ const FillEffectsDialog: React.FC<FillEffectsDialogProps> = ({
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
                 Preset:
               </label>
-              <select
+              <SmilodonNativeSelect
                 value={preset}
                 onChange={(e: any) => setPreset(e.target.value)}
                 style={{
@@ -273,7 +274,7 @@ const FillEffectsDialog: React.FC<FillEffectsDialogProps> = ({
                 {PRESET_GRADIENTS.map(p => (
                   <option key={p} value={p}>{p}</option>
                 ))}
-              </select>
+              </SmilodonNativeSelect>
             </div>
           )}
           

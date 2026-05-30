@@ -348,7 +348,7 @@ export const CellsGroup: React.FC<CellsGroupProps> = ({
     border: '1px solid #d0d0d0',
     borderRadius: '4px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-    zIndex: 1000,
+    zIndex: 10000,
     minWidth: '220px',
     animation: 'slideDown 200ms ease-out',
   };
@@ -743,7 +743,7 @@ export const CellsGroup: React.FC<CellsGroupProps> = ({
         <div style={dialogOverlayStyles} onClick={() => setShowDeleteWarning(false)}>
           <div style={{ ...dialogStyles, minWidth: '400px' }} onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
             <div style={dialogHeaderStyles}>
-              <span>⚠️ Microsoft Excel</span>
+              <span>Cybersheet</span>
               <button
                 onClick={() => setShowDeleteWarning(false)}
                 style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}

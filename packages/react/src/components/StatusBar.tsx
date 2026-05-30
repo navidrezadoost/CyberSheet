@@ -15,6 +15,7 @@ export interface StatusBarProps {
   workbook?: Workbook;
   viewMode?: 'normal' | 'pageLayout' | 'pageBreak';
   onViewModeChange?: (mode: 'normal' | 'pageLayout' | 'pageBreak') => void;
+  statusMessage?: string | null;
 }
 
 /**
@@ -33,6 +34,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   workbook,
   viewMode = 'normal',
   onViewModeChange,
+  statusMessage,
 }) => {
   // Calculate selection statistics
   const calculateStatistics = React.useMemo(() => {
@@ -102,7 +104,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     <footer className="status-bar">
       {/* Left: Status */}
       <div className="status-left">
-        <span className="status-text">Ready</span>
+        <span className="status-text">{statusMessage || 'Ready'}</span>
       </div>
 
       {/* Center: Statistics */}

@@ -191,19 +191,22 @@ export class AccessibilityManager {
    * Handles keyboard navigation (arrow keys, Tab, Enter, Escape).
    */
   private handleKeyDown(event: KeyboardEvent): void {
-    const { key, shiftKey, ctrlKey, metaKey } = event;
+    const { code, shiftKey, ctrlKey, metaKey } = event;
 
-    // Navigation keys
-    switch (key) {
+    // Navigation keys (use physical event.code — layout-independent)
+    switch (code) {
       case 'ArrowUp':
         event.preventDefault();
         this.moveFocus(0, -1, shiftKey);
         break;
       case 'ArrowDown':
+        event.preventDefault();
+        this.moveFocus(0, 1, shiftKey);
+        break;
       case 'Enter':
         event.preventDefault();
-        this.moveFocus(0, 1, shiftKey && key === 'ArrowDown');
-        if (key === 'Enter' && !this.focusState.isEditing) {
+        this.moveFocus(0, 1, shiftKey);
+        if (!this.focusState.isEditing) {
           this.startEditing();
         }
         break;
@@ -214,7 +217,7 @@ export class AccessibilityManager {
       case 'ArrowRight':
       case 'Tab':
         event.preventDefault();
-        this.moveFocus(shiftKey ? -1 : 1, 0, false);
+        this.moveFocus(code === 'Tab' && shiftKey ? -1 : 1, 0, false);
         break;
       case 'Escape':
         if (this.focusState.isEditing) {
@@ -261,9 +264,16 @@ export class AccessibilityManager {
         }
         break;
       default:
-        // Start editing on printable character
-        if (!this.focusState.isEditing && key.length === 1 && !ctrlKey && !metaKey) {
-          this.startEditing(key);
+        // Start editing on printable character (use event.key for the typed glyph)
+        if (
+          !this.focusState.isEditing &&
+          !ctrlKey &&
+          !metaKey &&
+          !event.altKey &&
+          event.key.length === 1 &&
+          !event.key.startsWith('Dead')
+        ) {
+          this.startEditing(event.key);
         }
         break;
     }

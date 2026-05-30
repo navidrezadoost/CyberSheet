@@ -415,6 +415,67 @@ export class Workbook {
     return ws;
   }
 
+  /**
+   * Remove a worksheet from the workbook.
+   * Excel parity: at least one sheet must remain.
+   */
+  deleteSheet(name: string): boolean {
+    if (!this.sheets.has(name)) return false;
+    if (this.sheets.size <= 1) {
+      throw new Error('Cannot delete the last sheet in the workbook');
+    }
+
+    const names = this.getSheetNames();
+    const deleteIndex = names.indexOf(name);
+    this.sheets.delete(name);
+
+    if (this._active === name) {
+      const fallbackIndex = deleteIndex > 0 ? deleteIndex - 1 : 0;
+      const remaining = this.getSheetNames();
+      this._active = remaining[fallbackIndex] ?? remaining[0];
+    }
+
+    return true;
+  }
+
+  /**
+   * Rename a worksheet (Excel rules: max 31 chars, no \\ / ? * [ ] :).
+   */
+  renameSheet(oldName: string, newName: string): boolean {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      throw new Error('Sheet name cannot be empty');
+    }
+    if (trimmed.length > 31) {
+      throw new Error('Sheet name cannot exceed 31 characters');
+    }
+    if (/[\\/?*[\]:]/.test(trimmed)) {
+      throw new Error('Sheet name cannot contain \\ / ? * [ ] :');
+    }
+    if (!this.sheets.has(oldName)) return false;
+    if (trimmed !== oldName && this.sheets.has(trimmed)) {
+      throw new Error(`Sheet '${trimmed}' already exists`);
+    }
+    if (trimmed === oldName) return true;
+
+    const ws = this.sheets.get(oldName)!;
+    (ws as { name: string }).name = trimmed;
+
+    const ordered = this.getSheetNames().map((n) =>
+      n === oldName ? [trimmed, ws] as const : [n, this.sheets.get(n)!] as const
+    );
+    this.sheets.clear();
+    for (const [n, sheet] of ordered) {
+      this.sheets.set(n, sheet);
+    }
+
+    if (this._active === oldName) {
+      this._active = trimmed;
+    }
+
+    return true;
+  }
+
   getSheet(name: string): Worksheet | undefined { return this.sheets.get(name); }
   getSheetNames(): string[] { return Array.from(this.sheets.keys()); }
 

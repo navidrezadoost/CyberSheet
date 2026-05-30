@@ -1,20 +1,14 @@
 import * as React from 'react';
 import { CellStyle, FormattingChanges } from './FormatCellsDialog';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
+import { useCyberSheetConfig } from '../../../config/globalConfig';
 
 export interface FontTabProps {
   currentFormatting: CellStyle;
   onChange: (changes: FormattingChanges['font']) => void;
 }
 
-const FONT_FAMILIES = [
-  'Calibri', 'Arial', 'Times New Roman', 'Courier New', 'Verdana',
-  'Georgia', 'Comic Sans MS', 'Trebuchet MS', 'Arial Black', 'Impact',
-  'Palatino Linotype', 'Lucida Sans Unicode', 'Tahoma', 'Century Gothic'
-];
-
 const FONT_STYLES = ['Regular', 'Italic', 'Bold', 'Bold Italic'];
-
-const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
 
 const UNDERLINE_OPTIONS = ['None', 'Single', 'Double', 'Single Accounting', 'Double Accounting'];
 
@@ -22,11 +16,12 @@ const FontTab: React.FC<FontTabProps> = ({
   currentFormatting,
   onChange
 }) => {
+  const cyberSheetConfig = useCyberSheetConfig();
   const [fontFamily, setFontFamily] = React.useState(
-    currentFormatting.fontFamily || 'Calibri'
+    currentFormatting.fontFamily || cyberSheetConfig.fonts.defaultFamily
   );
   const [fontSize, setFontSize] = React.useState(
-    currentFormatting.fontSize || 11
+    currentFormatting.fontSize || cyberSheetConfig.fonts.defaultSize
   );
   const [bold, setBold] = React.useState(
     currentFormatting.bold || false
@@ -102,7 +97,7 @@ const FontTab: React.FC<FontTabProps> = ({
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
             Font:
           </label>
-          <select
+          <SmilodonNativeSelect
             value={fontFamily}
             onChange={(e: any) => setFontFamily(e.target.value)}
             style={{
@@ -113,10 +108,10 @@ const FontTab: React.FC<FontTabProps> = ({
               fontSize: '13px'
             }}
           >
-            {FONT_FAMILIES.map(font => (
+            {cyberSheetConfig.fonts.families.map(font => (
               <option key={font} value={font}>{font}</option>
             ))}
-          </select>
+          </SmilodonNativeSelect>
         </div>
         
         {/* Font Style */}
@@ -124,7 +119,7 @@ const FontTab: React.FC<FontTabProps> = ({
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
             Font style:
           </label>
-          <select
+          <SmilodonNativeSelect
             value={fontStyle}
             onChange={(e: any) => handleFontStyleChange(e.target.value)}
             style={{
@@ -138,7 +133,7 @@ const FontTab: React.FC<FontTabProps> = ({
             {FONT_STYLES.map(style => (
               <option key={style} value={style}>{style}</option>
             ))}
-          </select>
+          </SmilodonNativeSelect>
         </div>
         
         {/* Font Size */}
@@ -146,7 +141,7 @@ const FontTab: React.FC<FontTabProps> = ({
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
             Size:
           </label>
-          <select
+          <SmilodonNativeSelect
             value={fontSize}
             onChange={(e: any) => setFontSize(Number(e.target.value))}
             style={{
@@ -157,10 +152,10 @@ const FontTab: React.FC<FontTabProps> = ({
               fontSize: '13px'
             }}
           >
-            {FONT_SIZES.map(size => (
+            {cyberSheetConfig.fonts.sizes.map(size => (
               <option key={size} value={size}>{size}</option>
             ))}
-          </select>
+          </SmilodonNativeSelect>
         </div>
       </div>
       
@@ -170,7 +165,7 @@ const FontTab: React.FC<FontTabProps> = ({
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
             Underline:
           </label>
-          <select
+          <SmilodonNativeSelect
             value={underline}
             onChange={(e: any) => setUnderline(e.target.value)}
             style={{
@@ -184,7 +179,7 @@ const FontTab: React.FC<FontTabProps> = ({
             {UNDERLINE_OPTIONS.map(option => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SmilodonNativeSelect>
         </div>
         
         {/* Color */}

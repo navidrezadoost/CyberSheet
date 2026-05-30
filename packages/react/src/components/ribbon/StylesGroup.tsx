@@ -246,8 +246,19 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
    * Handle table style selection
    */
   const handleTableStyle = (styleId: string) => {
-    // TODO: Apply table style
-    console.log(`Selected table style: ${styleId}`);
+    const tableStyle = TABLE_STYLES.find((s) => s.id === styleId);
+    if (!tableStyle || !currentRange || selectedCells.length === 0) {
+      setShowTableStylesMenu(false);
+      return;
+    }
+
+    formattingController.applyTableStyle(currentRange, {
+      headerRowColor: tableStyle.headerRowColor,
+      firstRowStripedColor: tableStyle.firstRowStripedColor,
+      secondRowStripedColor: tableStyle.secondRowStripedColor,
+      borderColor: '#BFBFBF',
+    });
+
     setShowTableStylesMenu(false);
     onStyleChange?.();
   };
@@ -256,31 +267,15 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
    * Handle cell style selection from gallery
    */
   const handleCellStyle = (styleId: string) => {
+    if (selectedCells.length === 0) {
+      setShowCellStylesMenu(false);
+      return;
+    }
+
     const style = getCellStyle(styleId);
     if (!style) return;
 
-    // Apply style properties via FormattingController
-    if (style.fill) {
-      formattingController.setFill(selectedCells, style.fill);
-    }
-    if (style.color) {
-      formattingController.setFontColor(selectedCells, style.color);
-    }
-    if (style.bold !== undefined) {
-      formattingController.setBold(selectedCells, style.bold);
-    }
-    if (style.italic !== undefined) {
-      formattingController.setItalic(selectedCells, style.italic);
-    }
-    if (style.fontSize !== undefined) {
-      formattingController.setFontSize(selectedCells, style.fontSize);
-    }
-    if (style.border) {
-      formattingController.setBorder(selectedCells, style.border);
-    }
-    if (style.numberFormat) {
-      formattingController.setNumberFormat(selectedCells, style.numberFormat);
-    }
+    formattingController.applyCellStylePreset(selectedCells, style);
 
     setShowCellStylesMenu(false);
     onStyleChange?.();

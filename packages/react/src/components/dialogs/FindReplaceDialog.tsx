@@ -17,6 +17,7 @@
  */
 
 import * as React from 'react';
+import { SmilodonNativeSelect } from '../SmilodonNativeSelect';
 import { FindService } from '@cyber-sheet/core';
 import type { Address, FindServiceOptions, Worksheet } from '@cyber-sheet/core';
 
@@ -63,23 +64,38 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
     }
   }, [worksheet]);
 
-  // Reset state when dialog opens
+  // Sync tab when dialog opens or parent requests a different initial tab
   React.useEffect(() => {
-    if (isOpen) {
-      setActiveTab(initialTab);
-      setStatusMessage('');
-      // Focus the find input
-      setTimeout(() => {
-        if (activeTab === 'find' && findInputRef.current) {
-          findInputRef.current.focus();
-          findInputRef.current.select();
-        } else if (activeTab === 'replace' && replaceInputRef.current) {
-          replaceInputRef.current.focus();
-          replaceInputRef.current.select();
-        }
-      }, 100);
-    }
-  }, [isOpen, initialTab, activeTab]);
+    if (!isOpen) return;
+    setActiveTab(initialTab);
+    setStatusMessage('');
+  }, [isOpen, initialTab]);
+
+  // Focus the active tab's primary input
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const timer = window.setTimeout(() => {
+      if (activeTab === 'find' && findInputRef.current) {
+        findInputRef.current.focus();
+        findInputRef.current.select();
+      } else if (activeTab === 'replace' && replaceInputRef.current) {
+        replaceInputRef.current.focus();
+        replaceInputRef.current.select();
+      }
+    }, 50);
+
+    return () => window.clearTimeout(timer);
+  }, [isOpen, activeTab]);
+
+  // Clear stale results when search options change
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setMatchCount(0);
+    setCurrentMatch(0);
+    setStatusMessage('');
+    findServiceRef.current?.clear();
+  }, [isOpen, lookIn, matchEntireCell, matchCase, searchBy]);
 
   // Execute find operation
   const executeFind = React.useCallback(() => {
@@ -109,7 +125,7 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
       }
     } else {
       setCurrentMatch(0);
-      setStatusMessage(`Cannot find "${findQuery}"`);
+      setStatusMessage(`No matches found for "${findQuery}"`);
     }
   }, [findQuery, lookIn, matchEntireCell, matchCase, searchBy, onMatchSelected]);
 
@@ -141,7 +157,7 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
 
   // Replace current match
   const handleReplace = React.useCallback(() => {
-    if (!findServiceRef.current || !replaceQuery === undefined) return;
+    if (!findServiceRef.current) return;
 
     const success = findServiceRef.current.replaceCurrent(replaceQuery);
     if (success) {
@@ -229,6 +245,7 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
     >
       <div
         className="find-replace-dialog"
+        data-native-text-undo
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '480px',
@@ -393,7 +410,7 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
                 >
                   Search:
                 </label>
-                <select
+                <SmilodonNativeSelect
                   value={lookIn}
                   onChange={(e) => setLookIn(e.target.value as 'values' | 'formulas' | 'comments')}
                   style={{
@@ -407,7 +424,7 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
                   <option value="values">Values</option>
                   <option value="formulas">Formulas</option>
                   <option value="comments">Comments</option>
-                </select>
+                </SmilodonNativeSelect>
               </div>
 
               <div>
@@ -421,7 +438,7 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
                 >
                   Search by:
                 </label>
-                <select
+                <SmilodonNativeSelect
                   value={searchBy}
                   onChange={(e) => setSearchBy(e.target.value as 'rows' | 'columns')}
                   style={{
@@ -434,7 +451,7 @@ const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
                 >
                   <option value="rows">By Rows</option>
                   <option value="columns">By Columns</option>
-                </select>
+                </SmilodonNativeSelect>
               </div>
             </div>
           </div>

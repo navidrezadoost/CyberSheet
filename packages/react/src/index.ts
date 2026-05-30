@@ -25,3 +25,5 @@ export * from './components/backstage/panels/MoveFilePanel';
 export * from './components/backstage/panels/VersionHistoryPanel';
 export * from './components/backstage/panels/InfoPanel';
 export * from './components/backstage/panels/OptionsPanel';
+export * from './config/globalConfig';
+export * from './utils/keyboardLayout';

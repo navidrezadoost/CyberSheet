@@ -14,7 +14,7 @@
 
 import type { Command } from '../CommandManager';
 import type { Worksheet } from '../worksheet';
-import type { Address, CellValue } from '../types';
+import type { Address, AutoFilterRange, CellValue, ColumnFilter } from '../types';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,13 @@ export interface FilterState {
 }
 
 // ─── Sort Commands ─────────────────────────────────────────────────────────
+
+/** Blank cells sort last in both ascending and descending order (Excel behavior). */
+function isBlankSortValue(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  return false;
+}
 
 /**
  * SortCommand: Sort a range by one or more columns
@@ -101,6 +108,12 @@ export class SortCommand implements Command {
         const valA = a.data.get(level.columnIndex);
         const valB = b.data.get(level.columnIndex);
 
+        const aBlank = isBlankSortValue(valA);
+        const bBlank = isBlankSortValue(valB);
+        if (aBlank && bBlank) continue;
+        if (aBlank) return 1;
+        if (bBlank) return -1;
+
         const comparison = this.compareValues(valA, valB);
         if (comparison !== 0) {
           return level.ascending ? comparison : -comparison;
@@ -116,7 +129,8 @@ export class SortCommand implements Command {
 
       for (let c = startCol; c <= endCol; c++) {
         const addr = { row: targetRow, col: c };
-        this.worksheet.setCellValue(addr, sourceRow.data.get(c) || '');
+        const raw = sourceRow.data.get(c);
+        this.worksheet.setCellValue(addr, isBlankSortValue(raw) ? null : raw);
         
         const style = sourceRow.styles.get(c);
         if (style) {
@@ -168,12 +182,7 @@ export class SortCommand implements Command {
   }
 
   private compareValues(a: any, b: any): number {
-    // Handle null/undefined
-    if (a == null && b == null) return 0;
-    if (a == null) return 1;
-    if (b == null) return -1;
-
-    // Convert to comparable types
+    // Non-blank values only — blank handling is done in the sort comparator.
     const typeA = typeof a;
     const typeB = typeof b;
 
@@ -205,7 +214,7 @@ export class SortCommand implements Command {
 export class ToggleAutoFilterCommand implements Command {
   description = 'Toggle AutoFilter';
 
-  private previousState: FilterState | null = null;
+  private previousAutoFilterRange: AutoFilterRange | null = null;
 
   constructor(
     private worksheet: Worksheet,
@@ -214,37 +223,24 @@ export class ToggleAutoFilterCommand implements Command {
   ) {}
 
   execute(): void {
-    // Store previous filter state (if exists)
-    const currentFilter = (this.worksheet as any).filterState;
-    if (currentFilter) {
-      this.previousState = {
-        enabled: currentFilter.enabled,
-        range: currentFilter.range,
-        columnFilters: currentFilter.columnFilters,
-      };
-    }
+    this.previousAutoFilterRange = this.worksheet.getAutoFilterRange();
 
-    // Set new filter state
     if (this.enabled) {
-      (this.worksheet as any).filterState = {
-        enabled: true,
-        range: this.range,
-        columnFilters: new Map(),
-      };
-      console.log('AutoFilter enabled on range', this.range);
+      const startRow = Math.min(this.range.start.row, this.range.end.row);
+      const startCol = Math.min(this.range.start.col, this.range.end.col);
+      const endCol = Math.max(this.range.start.col, this.range.end.col);
+      this.worksheet.setAutoFilterRange(startRow, startCol, endCol);
     } else {
-      (this.worksheet as any).filterState = null;
-      console.log('AutoFilter disabled');
+      this.worksheet.clearAutoFilterRange();
     }
   }
 
   undo(): void {
-    if (this.previousState) {
-      (this.worksheet as any).filterState = this.previousState;
-      console.log('Restored previous AutoFilter state');
+    if (this.previousAutoFilterRange) {
+      const { headerRow, startCol, endCol } = this.previousAutoFilterRange;
+      this.worksheet.setAutoFilterRange(headerRow, startCol, endCol);
     } else {
-      (this.worksheet as any).filterState = null;
-      console.log('Removed AutoFilter');
+      this.worksheet.clearAutoFilterRange();
     }
   }
 }
@@ -255,24 +251,21 @@ export class ToggleAutoFilterCommand implements Command {
 export class ClearFilterCommand implements Command {
   description = 'Clear Filter';
 
-  private previousFilters: Map<number, Set<any>> | undefined;
+  private previousFilters: Map<number, ColumnFilter> = new Map();
 
   constructor(private worksheet: Worksheet) {}
 
   execute(): void {
-    const filterState = (this.worksheet as any).filterState as FilterState | undefined;
-    if (filterState && filterState.columnFilters) {
-      this.previousFilters = new Map(filterState.columnFilters);
-      filterState.columnFilters.clear();
-      console.log('Cleared all filters');
-    }
+    this.previousFilters = this.worksheet.getAllFilters();
+    if (this.previousFilters.size === 0) return;
+    this.worksheet.clearAllFilters();
   }
 
   undo(): void {
-    const filterState = (this.worksheet as any).filterState as FilterState | undefined;
-    if (filterState && this.previousFilters) {
-      filterState.columnFilters = new Map(this.previousFilters);
-      console.log('Restored previous filters');
+    if (this.previousFilters.size === 0) return;
+    this.worksheet.clearAllFilters();
+    for (const [col, filter] of this.previousFilters) {
+      this.worksheet.setColumnFilter(col, filter);
     }
   }
 }

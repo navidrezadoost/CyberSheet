@@ -296,6 +296,7 @@ export class CommandManager {
   private undoStack: Command[] = [];
   private redoStack: Command[] = [];
   private maxHistorySize: number;
+  private changeListeners = new Set<() => void>();
   
   /** Optional worksheet reference for DAG validation (DEV/TEST only) */
   private worksheet?: Worksheet;
@@ -342,6 +343,24 @@ export class CommandManager {
     
     // Clear redo stack when new command executed
     this.redoStack = [];
+    this.notifyChange();
+  }
+
+  /**
+   * Subscribe to command history mutations (execute, undo, redo, clear).
+   * Returns an unsubscribe function.
+   */
+  subscribe(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => {
+      this.changeListeners.delete(listener);
+    };
+  }
+
+  private notifyChange(): void {
+    for (const listener of this.changeListeners) {
+      listener();
+    }
   }
   
   /**
@@ -375,7 +394,8 @@ export class CommandManager {
         }
       }
     }
-    
+
+    this.notifyChange();
     return true;
   }
   
@@ -410,7 +430,8 @@ export class CommandManager {
         }
       }
     }
-    
+
+    this.notifyChange();
     return true;
   }
   
@@ -434,6 +455,7 @@ export class CommandManager {
   clear(): void {
     this.undoStack = [];
     this.redoStack = [];
+    this.notifyChange();
   }
   
   /**

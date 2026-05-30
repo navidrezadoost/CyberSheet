@@ -119,7 +119,13 @@ export interface ClipboardPayload {
   
   /** True if this is a cut operation (clears source on paste) */
   readonly isCut: boolean;
+
+  /** What was captured: full cell details or displayed values only */
+  readonly copyMode?: ClipboardCopyMode;
 }
+
+/** Controls whether copy/cut captures formulas, styles, and merges or values only. */
+export type ClipboardCopyMode = 'all' | 'values';
 
 /**
  * ClipboardService — pure data extraction for copy/cut operations.
@@ -157,8 +163,8 @@ export class ClipboardService {
    * @invariant Top-left cell maps to (0,0)
    * @invariant Merged cells stored as anchor only
    */
-  copy(worksheet: Worksheet, range: Range): ClipboardPayload {
-    const payload = this.createSnapshot(worksheet, range, false);
+  copy(worksheet: Worksheet, range: Range, mode: ClipboardCopyMode = 'all'): ClipboardPayload {
+    const payload = this.createSnapshot(worksheet, range, false, mode);
     this.currentPayload = payload;
     return payload;
   }
@@ -176,8 +182,8 @@ export class ClipboardService {
    * @invariant No worksheet mutation
    * @invariant No DAG changes
    */
-  cut(worksheet: Worksheet, range: Range): ClipboardPayload {
-    const payload = this.createSnapshot(worksheet, range, true);
+  cut(worksheet: Worksheet, range: Range, mode: ClipboardCopyMode = 'all'): ClipboardPayload {
+    const payload = this.createSnapshot(worksheet, range, true, mode);
     this.currentPayload = payload;
     return payload;
   }
@@ -197,6 +203,87 @@ export class ClipboardService {
   clear(): void {
     this.currentPayload = null;
   }
+
+  /**
+   * Build an immutable paste payload from plain text (TSV).
+   * Used when pasting from the system clipboard (external apps).
+   */
+  static createPayloadFromPlainText(text: string, anchor: Address): ClipboardPayload | null {
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (normalized.length === 0) return null;
+
+    const lines = normalized.split('\n');
+    if (lines.length > 1 && lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+    if (lines.length === 0) return null;
+
+    const cells: CellSnapshot[] = [];
+    let width = 1;
+
+    lines.forEach((line, rowOffset) => {
+      const columns = line.split('\t');
+      width = Math.max(width, columns.length);
+
+      columns.forEach((raw, colOffset) => {
+        if (raw === '') return;
+
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('=')) {
+          cells.push(
+            Object.freeze({
+              rowOffset,
+              colOffset,
+              value: null,
+              formula: trimmed.slice(1),
+            })
+          );
+          return;
+        }
+
+        cells.push(
+          Object.freeze({
+            rowOffset,
+            colOffset,
+            value: ClipboardService.parsePlainTextCellValue(raw),
+          })
+        );
+      });
+    });
+
+    const height = lines.length;
+    const sourceRange: Range = Object.freeze({
+      start: Object.freeze({ row: anchor.row, col: anchor.col }),
+      end: Object.freeze({
+        row: anchor.row + height - 1,
+        col: anchor.col + width - 1,
+      }),
+    });
+
+    return Object.freeze({
+      sourceRange,
+      width,
+      height,
+      cells: Object.freeze(cells),
+      isCut: false,
+    });
+  }
+
+  private static parsePlainTextCellValue(text: string): ExtendedCellValue {
+    if (text === '') return null;
+    const trimmed = text.trim();
+    if (trimmed === '') return text;
+
+    const asNumber = Number(trimmed);
+    if (!Number.isNaN(asNumber) && /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed)) {
+      return asNumber;
+    }
+
+    if (trimmed.toLowerCase() === 'true') return true;
+    if (trimmed.toLowerCase() === 'false') return false;
+
+    return text;
+  }
   
   /**
    * Create snapshot from worksheet range.
@@ -210,7 +297,8 @@ export class ClipboardService {
   private createSnapshot(
     worksheet: Worksheet,
     range: Range,
-    isCut: boolean
+    isCut: boolean,
+    mode: ClipboardCopyMode = 'all'
   ): ClipboardPayload {
     const { start, end } = range;
     const width = end.col - start.col + 1;
@@ -219,20 +307,32 @@ export class ClipboardService {
     console.log('📋 [ClipboardService] Creating snapshot', {
       range: `(${start.row},${start.col}) to (${end.row},${end.col})`,
       dimensions: `${width}x${height}`,
-      isCut
+      isCut,
+      mode,
     });
     
     const cells: CellSnapshot[] = [];
-    const processedMerges = new Set<string>(); // Track which merge anchors we've handled
+    const processedMerges = new Set<string>();
     const captureLog: any[] = [];
     
-    // Iterate over all cells in range
     for (let row = start.row; row <= end.row; row++) {
       for (let col = start.col; col <= end.col; col++) {
         const addr: Address = { row, col };
         const logEntry: any = { addr: `(${row},${col})` };
-        
-        // Check if this cell is in a merge
+
+        if (mode === 'values') {
+          const snapshot = this.createCellSnapshot(worksheet, addr, start, undefined, undefined, 'values');
+          if (snapshot) {
+            logEntry.action = 'captured value';
+            logEntry.value = snapshot.value;
+            cells.push(snapshot);
+          } else {
+            logEntry.action = 'skip - empty';
+          }
+          captureLog.push(logEntry);
+          continue;
+        }
+
         const mergeRange = worksheet.getMergedRangeForCell(addr);
         
         if (mergeRange) {
@@ -306,6 +406,7 @@ export class ClipboardService {
       height,
       cells: Object.freeze(cells.map(c => Object.freeze(c))),
       isCut,
+      copyMode: mode,
     });
     
     console.log('📋 [ClipboardService] Snapshot created', {
@@ -341,21 +442,26 @@ export class ClipboardService {
     addr: Address,
     topLeft: Address,
     mergeHeight?: number,
-    mergeWidth?: number
+    mergeWidth?: number,
+    mode: ClipboardCopyMode = 'all'
   ): CellSnapshot | null {
-    // Get cell using public API
+    const rowOffset = addr.row - topLeft.row;
+    const colOffset = addr.col - topLeft.col;
+
+    if (mode === 'values') {
+      const value = worksheet.getCellValue(addr);
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      return { rowOffset, colOffset, value };
+    }
+
     const cell = worksheet.getCell(addr);
     
-    // Skip empty cells (no value, no formula, no style)
     if (!cell || (cell.value === null && !cell.formula && !cell.style)) {
       return null;
     }
     
-    // Calculate offset-based coordinates
-    const rowOffset = addr.row - topLeft.row;
-    const colOffset = addr.col - topLeft.col;
-    
-    // Build snapshot
     const snapshot: CellSnapshot = {
       rowOffset,
       colOffset,

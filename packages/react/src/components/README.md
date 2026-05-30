@@ -53,6 +53,7 @@ The main wrapper component that orchestrates all parts of the interface.
 - `onSave?: () => void` - Callback when Save button is clicked
 - `onUndo?: () => void` - Callback when Undo button is clicked
 - `onRedo?: () => void` - Callback when Redo button is clicked
+- `config?: CyberSheetConfigInput` - Global CyberSheet settings for this app instance
 - `style?: React.CSSProperties` - Custom styles
 
 ### TitleBar
@@ -173,6 +174,51 @@ const handleRedo = () => {
   }}
 />
 ```
+
+### Global Settings And Fonts
+
+Use the `config` prop or the exported global settings helpers to control shared system values, including custom user fonts.
+
+```tsx
+import { ExcelApp, configureCyberSheet } from '@cyber-sheet/react';
+
+configureCyberSheet({
+  fonts: {
+    defaultFamily: 'Vazirmatn',
+    customFonts: [
+      {
+        family: 'Vazirmatn',
+        sources: ['/fonts/Vazirmatn-Regular.woff2'],
+        weight: 400,
+        style: 'normal',
+      },
+    ],
+  },
+});
+
+<ExcelApp workbook={workbook} />;
+```
+
+Or initialize settings directly on `ExcelApp`:
+
+```tsx
+<ExcelApp
+  workbook={workbook}
+  config={{
+    fonts: {
+      defaultFamily: 'Company Sans',
+      customFonts: [
+        {
+          family: 'Company Sans',
+          sources: ['/assets/fonts/company-sans.woff2'],
+        },
+      ],
+    },
+  }}
+/>
+```
+
+Font paths must be browser-loadable URLs served by your app, not private local filesystem paths. See [CyberSheet Global Settings](../../../../docs/guides/GLOBAL_SETTINGS.md) for the full API.
 
 ## Keyboard Shortcuts
 

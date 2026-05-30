@@ -46,9 +46,15 @@ export const RibbonButton: React.FC<RibbonButtonProps> = ({
 }) => {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!disabled) {
       onClick();
     }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Keep focus on the ribbon — don't move focus into the grid/cell editor.
+    e.preventDefault();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -66,6 +72,7 @@ export const RibbonButton: React.FC<RibbonButtonProps> = ({
       title={tooltip}
       disabled={disabled}
       onClick={handleClick}
+      onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
       aria-label={tooltip}
       aria-pressed={active}

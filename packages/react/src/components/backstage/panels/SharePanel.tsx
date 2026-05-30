@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { FileOperations, Permission } from '@cyber-sheet/core';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
 
 export interface SharePanelProps {
   fileOperations: FileOperations;
@@ -481,7 +482,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({
           
           {inviteEmail.trim() && (
             <>
-              <select
+              <SmilodonNativeSelect
                 value={inviteRole}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInviteRole(e.target.value as 'edit' | 'view')}
                 style={roleSelectStyle}
@@ -489,7 +490,7 @@ export const SharePanel: React.FC<SharePanelProps> = ({
               >
                 <option value="edit">Can edit</option>
                 <option value="view">Can view</option>
-              </select>
+              </SmilodonNativeSelect>
               <button
                 style={addPersonButtonStyle}
                 onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
@@ -626,14 +627,14 @@ export const SharePanel: React.FC<SharePanelProps> = ({
               Create a shareable link to this workbook.
             </p>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <select
+              <SmilodonNativeSelect
                 value={linkPermission}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLinkPermission(e.target.value as 'edit' | 'view')}
                 style={roleSelectStyle}
               >
                 <option value="edit">Anyone can edit</option>
                 <option value="view">Anyone can view</option>
-              </select>
+              </SmilodonNativeSelect>
               <button
                 style={{
                   padding: '8px 20px',
@@ -686,14 +687,14 @@ export const SharePanel: React.FC<SharePanelProps> = ({
               </div>
               {perm.role !== 'owner' ? (
                 <>
-                  <select
+                  <SmilodonNativeSelect
                     value={perm.role}
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleChangePermission(perm.userId, e.target.value as 'edit' | 'view')}
                     style={{ ...roleSelectStyle, fontSize: 12 }}
                   >
                     <option value="edit">Can edit</option>
                     <option value="view">Can view</option>
-                  </select>
+                  </SmilodonNativeSelect>
                   <button
                     style={{
                       background: 'none',

@@ -161,9 +161,10 @@ export interface SelectionState {
  * All UI actions must go through this to enable undo/redo
  */
 export interface CommandManager {
-  undo(): void;
-  redo(): void;
+  undo(): boolean | void;
+  redo(): boolean | void;
   canUndo(): boolean;
   canRedo(): boolean;
   execute(command: any): void;
+  subscribe?(listener: () => void): () => void;
 }

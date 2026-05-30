@@ -31,6 +31,8 @@ export * from './PasteCommand';
 export * from './ClearCellsCommand';
 export * from './InsertCellsCommand';
 export * from './DeleteCellsCommand';
+export * from './SetHyperlinkCommand';
+export * from './hyperlinkUtils';
 export * from './SelectionManager';
 export * from './FormattingController';
 export * from './FileOperations';

@@ -63,6 +63,7 @@ import { FormulasTab } from './formulas/FormulasTab';
 import { DataTab } from './data/DataTab';
 import { ViewTab } from './view/ViewTab';
 import { ReviewTab } from './review/ReviewTab';
+import { RibbonSelect } from './RibbonSelect';
 import './ribbon.css';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -857,11 +858,6 @@ const ClipboardPlaceholder: React.FC = () => {
 
 /** Lightweight font placeholder */
 const FontPlaceholder: React.FC = () => {
-  const selStyle: React.CSSProperties = {
-    height: 22, border: '1px solid #BFBFBF', background: '#fff',
-    fontSize: 11, padding: '0 4px', borderRadius: 2, cursor: 'pointer',
-    fontFamily: 'Segoe UI, sans-serif',
-  };
   const btnStyle: React.CSSProperties = {
     width: 24, height: 22, border: '1px solid transparent',
     background: 'transparent', cursor: 'pointer', borderRadius: 2,
@@ -870,12 +866,8 @@ const FontPlaceholder: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 4px' }}>
       <div style={{ display: 'flex', gap: 2 }}>
-        <select style={{ ...selStyle, width: 110 }}>
-          <option>Calibri</option>
-        </select>
-        <select style={{ ...selStyle, width: 42 }}>
-          <option>11</option>
-        </select>
+        <RibbonSelect value="Calibri" options={['Calibri']} onChange={() => {}} width={110} ariaLabel="Font family" />
+        <RibbonSelect value={11} options={[11]} onChange={() => {}} width={42} ariaLabel="Font size" />
       </div>
       <div style={{ display: 'flex', gap: 1 }}>
         {[

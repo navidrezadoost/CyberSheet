@@ -1,20 +1,46 @@
 /**
  * SheetTabs.tsx
- * 
- * Excel-like sheet tabs component for navigating between worksheets
+ *
+ * Cybersheet sheet tabs for navigating between worksheets
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { CybersheetDialog } from './components/dialogs/CybersheetDialog';
 
 export interface SheetTabsProps {
   sheets: string[];
   activeSheet: string;
   onSheetChange: (sheetName: string) => void;
   onAddSheet?: () => void;
-  onRenameSheet?: (oldName: string, newName: string) => void;
+  /** Return an error message on failure, or null/undefined on success */
+  onRenameSheet?: (oldName: string, newName: string) => string | null | undefined;
   onDeleteSheet?: (sheetName: string) => void;
+  /** Increment to open rename dialog for the active sheet */
+  renameActiveSheetTrigger?: number;
   style?: React.CSSProperties;
 }
+
+const TrashIcon: React.FC<{ size?: number; color?: string }> = ({ size = 14, color = 'currentColor' }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 16 16"
+    fill="none"
+    aria-hidden="true"
+    style={{ display: 'block' }}
+  >
+    <path
+      d="M6 2h4l.5 1H13v1H3V3h2.5L6 2zM4 5h8l-.7 8.1c-.1.9-.9 1.6-1.8 1.6H6.5c-.9 0-1.7-.7-1.8-1.6L4 5z"
+      fill={color}
+    />
+    <path
+      d="M6.5 6.5v5M9.5 6.5v5"
+      stroke="#fff"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+);
 
 export const SheetTabs: React.FC<SheetTabsProps> = ({
   sheets,
@@ -23,249 +49,267 @@ export const SheetTabs: React.FC<SheetTabsProps> = ({
   onAddSheet,
   onRenameSheet,
   onDeleteSheet,
-  style
+  renameActiveSheetTrigger = 0,
+  style,
 }) => {
-  const [editingSheet, setEditingSheet] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
   const [hoveredSheet, setHoveredSheet] = useState<string | null>(null);
-  const inputRef = useRef(null as HTMLInputElement | null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<string | null>(null);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
-  const handleDoubleClick = (sheetName: string) => {
-    if (onRenameSheet) {
-      setEditingSheet(sheetName);
-      setEditValue(sheetName);
-      setTimeout(() => inputRef.current?.select(), 0);
-    }
+  const canDelete = sheets.length > 1;
+
+  const openRenameDialog = (sheetName: string) => {
+    setRenameTarget(sheetName);
   };
 
-  const handleRename = () => {
-    if (editingSheet && editValue.trim() && editValue !== editingSheet) {
-      onRenameSheet?.(editingSheet, editValue.trim());
+  useEffect(() => {
+    if (renameActiveSheetTrigger > 0 && activeSheet) {
+      openRenameDialog(activeSheet);
     }
-    setEditingSheet(null);
+  }, [renameActiveSheetTrigger, activeSheet]);
+
+  const handleRenameConfirm = (newName: string) => {
+    if (!renameTarget) return;
+
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === renameTarget) {
+      setRenameTarget(null);
+      return;
+    }
+
+    const error = onRenameSheet?.(renameTarget, trimmed);
+    if (error) {
+      setAlertMessage(error);
+      return;
+    }
+
+    setRenameTarget(null);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleRename();
-    } else if (e.key === 'Escape') {
-      setEditingSheet(null);
+  const handleDeleteConfirm = () => {
+    if (deleteTarget && onDeleteSheet) {
+      onDeleteSheet(deleteTarget);
     }
+    setDeleteTarget(null);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent, sheetName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openRenameDialog(sheetName);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, sheetName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!canDelete || !onDeleteSheet) return;
+    setDeleteTarget(sheetName);
   };
 
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>, sheetName: string) => {
     e.preventDefault();
-    if (onDeleteSheet && sheets.length > 1) {
-      if (window.confirm(`Delete sheet "${sheetName}"?`)) {
-        onDeleteSheet(sheetName);
-      }
+    if (canDelete && onDeleteSheet) {
+      setDeleteTarget(sheetName);
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      height: '32px',
-      backgroundColor: '#e7e7e7',
-      backgroundImage: 'linear-gradient(to bottom, #e7e7e7, #d8d8d8)',
-      borderTop: '2px solid #c0c0c0',
-      boxShadow: '0 -2px 5px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.5)',
-      overflow: 'auto',
-      userSelect: 'none',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      fontSize: '12px',
-      ...style
-    }}>
-      {/* Navigation arrows (like Excel) */}
-      <div style={{
-        display: 'flex',
-        borderRight: '1px solid #d1d1d1',
-        padding: '0 6px',
-        gap: '2px'
-      }}>
-        <button
+    <>
+      <div
+        className="cybersheet-sheet-tabs"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          height: '32px',
+          backgroundColor: '#e7e7e7',
+          backgroundImage: 'linear-gradient(to bottom, #e7e7e7, #d8d8d8)',
+          borderTop: '2px solid #c0c0c0',
+          boxShadow: '0 -2px 5px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.5)',
+          overflow: 'auto',
+          userSelect: 'none',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          fontSize: '12px',
+          ...style,
+        }}
+      >
+        <div
           style={{
-            background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
-            border: '1px solid #d1d1d1',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            padding: '3px 6px',
-            color: '#555',
-            fontSize: '11px',
-            transition: 'all 0.15s ease'
+            display: 'flex',
+            borderRight: '1px solid #d1d1d1',
+            padding: '0 6px',
+            gap: '2px',
           }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fff, #f5f5f5)'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fafafa, #f0f0f0)'}
-          title="Scroll to first sheet"
         >
-          ◄◄
-        </button>
-        <button
-          style={{
-            background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
-            border: '1px solid #d1d1d1',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            padding: '3px 6px',
-            color: '#555',
-            fontSize: '11px',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fff, #f5f5f5)'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fafafa, #f0f0f0)'}
-          title="Scroll to first sheet"
-        >
-          ◄◄
-        </button>
-        <button
-          style={{
-            background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
-            border: '1px solid #d1d1d1',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            padding: '3px 6px',
-            color: '#555',
-            fontSize: '11px',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fff, #f5f5f5)'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fafafa, #f0f0f0)'}
-          title="Scroll left"
-        >
-          ◄
-        </button>
-        <button
-          style={{
-            background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
-            border: '1px solid #d1d1d1',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            padding: '3px 6px',
-            color: '#555',
-            fontSize: '11px',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fff, #f5f5f5)'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fafafa, #f0f0f0)'}
-          title="Scroll right"
-        >
-          ►
-        </button>
-        <button
-          style={{
-            background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
-            border: '1px solid #d1d1d1',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            padding: '3px 6px',
-            color: '#555',
-            fontSize: '11px',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fff, #f5f5f5)'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'linear-gradient(to bottom, #fafafa, #f0f0f0)'}
-          title="Scroll to last sheet"
-        >
-          ►►
-        </button>
-      </div>
-
-      {/* Sheet tabs */}
-      <div style={{
-        display: 'flex',
-        flex: 1,
-        overflow: 'auto',
-        alignItems: 'flex-end',
-        padding: '0 8px',
-        gap: '2px'
-      }}>
-        {sheets.map((sheetName) => {
-          const isActive = sheetName === activeSheet;
-          const isEditing = editingSheet === sheetName;
-          const isHovered = hoveredSheet === sheetName;
-
-          return (
-            <div
-              key={sheetName}
-              onClick={() => !isEditing && onSheetChange(sheetName)}
-              onDoubleClick={() => handleDoubleClick(sheetName)}
-              onContextMenu={(e: React.MouseEvent<HTMLDivElement>) => handleContextMenu(e, sheetName)}
-              onMouseEnter={() => setHoveredSheet(sheetName)}
-              onMouseLeave={() => setHoveredSheet(null)}
+          {['◄◄', '◄', '►', '►►'].map((label, index) => (
+            <button
+              key={`${label}-${index}`}
+              type="button"
               style={{
-                padding: '5px 16px',
-                cursor: isEditing ? 'text' : 'pointer',
-                backgroundColor: isActive ? '#ffffff' : (isHovered ? '#f8f8f8' : '#ececec'),
-                backgroundImage: isActive ? 'linear-gradient(to bottom, #ffffff, #fafafa)' : (isHovered ? 'linear-gradient(to bottom, #f8f8f8, #f0f0f0)' : 'linear-gradient(to bottom, #ececec, #e0e0e0)'),
-                border: isActive ? '1px solid #b0b0b0' : '1px solid #c8c8c8',
-                borderBottom: isActive ? '3px solid #217346' : '1px solid #c8c8c8',
-                borderRadius: '6px 6px 0 0',
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? '#217346' : '#2c2c2c',
-                whiteSpace: 'nowrap',
-                position: 'relative',
-                bottom: '0',
-                transition: 'all 0.2s ease',
-                boxShadow: isActive ? '0 -3px 6px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.8)' : (isHovered ? '0 -1px 3px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.4)' : '0 -1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.3)'),
-                transform: isActive ? 'translateY(-2px)' : 'translateY(0)'
+                background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
+                border: '1px solid #d1d1d1',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                padding: '3px 6px',
+                color: '#555',
+                fontSize: '11px',
               }}
-              title={sheetName}
+              title="Scroll sheets"
             >
-              {isEditing ? (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={editValue}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditValue(e.target.value)}
-                  onBlur={handleRename}
-                  onKeyDown={handleKeyDown}
-                  style={{
-                    border: '1px solid #217346',
-                    padding: '0 2px',
-                    fontSize: '12px',
-                    width: `${Math.max(50, editValue.length * 8)}px`,
-                    fontFamily: 'inherit'
-                  }}
-                  autoFocus
-                />
-              ) : (
-                sheetName
-              )}
-            </div>
-          );
-        })}
+              {label}
+            </button>
+          ))}
+        </div>
 
-        {/* Add sheet button */}
-        {onAddSheet && (
-          <button
-            onClick={onAddSheet}
-            style={{
-              background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
-              border: '1px solid #d1d1d1',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              padding: '4px 10px',
-              color: '#217346',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              transition: 'all 0.15s ease',
-              marginLeft: '4px'
-            }}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #fff, #f5f5f5)';
-              e.currentTarget.style.transform = 'scale(1.05)';
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #fafafa, #f0f0f0)';
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-            title="Add new sheet"
-          >
-            +
-          </button>
-        )}
+        <div
+          style={{
+            display: 'flex',
+            flex: 1,
+            overflow: 'auto',
+            alignItems: 'flex-end',
+            padding: '0 8px',
+            gap: '2px',
+          }}
+        >
+          {sheets.map((sheetName) => {
+            const isActive = sheetName === activeSheet;
+            const isHovered = hoveredSheet === sheetName;
+            const showDelete = canDelete && onDeleteSheet && (isHovered || isActive);
+
+            return (
+              <div
+                key={sheetName}
+                onClick={() => onSheetChange(sheetName)}
+                onDoubleClick={(e) => handleDoubleClick(e, sheetName)}
+                onContextMenu={(e) => handleContextMenu(e, sheetName)}
+                onMouseEnter={() => setHoveredSheet(sheetName)}
+                onMouseLeave={() => setHoveredSheet(null)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 10px 5px 14px',
+                  cursor: 'pointer',
+                  backgroundColor: isActive ? '#ffffff' : (isHovered ? '#f8f8f8' : '#ececec'),
+                  backgroundImage: isActive
+                    ? 'linear-gradient(to bottom, #ffffff, #fafafa)'
+                    : (isHovered
+                      ? 'linear-gradient(to bottom, #f8f8f8, #f0f0f0)'
+                      : 'linear-gradient(to bottom, #ececec, #e0e0e0)'),
+                  border: isActive ? '1px solid #b0b0b0' : '1px solid #c8c8c8',
+                  borderBottom: isActive ? '3px solid #217346' : '1px solid #c8c8c8',
+                  borderRadius: '6px 6px 0 0',
+                  fontWeight: isActive ? 700 : 500,
+                  color: isActive ? '#217346' : '#2c2c2c',
+                  whiteSpace: 'nowrap',
+                  position: 'relative',
+                  bottom: '0',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isActive
+                    ? '0 -3px 6px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.8)'
+                    : (isHovered
+                      ? '0 -1px 3px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.4)'
+                      : '0 -1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.3)'),
+                  transform: isActive ? 'translateY(-2px)' : 'translateY(0)',
+                }}
+                title={`${sheetName} — double-click to rename`}
+              >
+                <span>{sheetName}</span>
+
+                {showDelete && (
+                  <button
+                    type="button"
+                    aria-label={`Delete sheet ${sheetName}`}
+                    title={`Delete ${sheetName}`}
+                    onClick={(e) => handleDeleteClick(e, sheetName)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '20px',
+                      height: '20px',
+                      padding: 0,
+                      border: 'none',
+                      borderRadius: '3px',
+                      background: isHovered ? 'rgba(192, 57, 43, 0.12)' : 'transparent',
+                      color: '#a94442',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'background 120ms ease, transform 120ms ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(192, 57, 43, 0.18)';
+                      e.currentTarget.style.transform = 'scale(1.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = isHovered ? 'rgba(192, 57, 43, 0.12)' : 'transparent';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  >
+                    <TrashIcon color="#c0392b" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {onAddSheet && (
+            <button
+              type="button"
+              onClick={onAddSheet}
+              style={{
+                background: 'linear-gradient(to bottom, #fafafa, #f0f0f0)',
+                border: '1px solid #d1d1d1',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                padding: '4px 10px',
+                color: '#217346',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                marginLeft: '4px',
+              }}
+              title="Insert worksheet"
+            >
+              +
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+
+      {deleteTarget && (
+        <CybersheetDialog
+          variant="confirm"
+          title="Delete Sheet"
+          message={`Delete sheet "${deleteTarget}"?\n\nThis action cannot be undone.`}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {renameTarget && (
+        <CybersheetDialog
+          variant="prompt"
+          title="Rename Sheet"
+          label="Sheet name:"
+          value={renameTarget}
+          maxLength={31}
+          confirmLabel="Rename"
+          onConfirm={handleRenameConfirm}
+          onCancel={() => setRenameTarget(null)}
+        />
+      )}
+
+      {alertMessage && (
+        <CybersheetDialog
+          variant="alert"
+          title="Rename Sheet"
+          message={alertMessage}
+          onClose={() => setAlertMessage(null)}
+        />
+      )}
+    </>
   );
 };

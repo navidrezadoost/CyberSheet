@@ -1,10 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { NumberFormatGroupIcon1, NumberFormatGroupIcon2 } from '@cyber-sheet/icons/react';
 import { ColorPicker } from './ColorPicker';
+import { RibbonSelect } from './ribbon/RibbonSelect';
+import { useCyberSheetConfig } from '../config/globalConfig';
+
+const QUICK_FORMATS = {
+  comma: '#,##0',
+} as const;
 
 interface MiniToolbarProps {
   x: number;
   y: number;
+  /** Top edge of the context menu — toolbar sits directly above it */
+  menuTopY?: number;
   onClose: () => void;
+  /** When true, parent closes toolbar together with context menu */
+  persistWithContextMenu?: boolean;
   onFontChange?: (font: string) => void;
   onFontSizeChange?: (size: number) => void;
   onBoldToggle?: () => void;
@@ -12,11 +23,19 @@ interface MiniToolbarProps {
   onUnderlineToggle?: () => void;
   onFillColor?: (color: string) => void;
   onFontColor?: (color: string) => void;
+  onCurrencyFormat?: () => void;
+  onPercentFormat?: () => void;
+  onCommaFormat?: () => void;
+  onIncreaseDecimal?: () => void;
+  onDecreaseDecimal?: () => void;
   currentFont?: string;
   currentFontSize?: number;
   isBold?: boolean;
   isItalic?: boolean;
   isUnderline?: boolean;
+  currentFontColor?: string;
+  currentFillColor?: string;
+  numberFormatCategory?: 'general' | 'currency' | 'percentage' | 'number' | 'comma';
   recentFillColors?: string[];
   recentFontColors?: string[];
 }
@@ -24,7 +43,9 @@ interface MiniToolbarProps {
 export const MiniToolbar: React.FC<MiniToolbarProps> = ({
   x,
   y,
+  menuTopY,
   onClose,
+  persistWithContextMenu = false,
   onFontChange,
   onFontSizeChange,
   onBoldToggle,
@@ -32,222 +53,309 @@ export const MiniToolbar: React.FC<MiniToolbarProps> = ({
   onUnderlineToggle,
   onFillColor,
   onFontColor,
-  currentFont = 'Segoe UI',
-  currentFontSize = 11,
+  onCurrencyFormat,
+  onPercentFormat,
+  onCommaFormat,
+  onIncreaseDecimal,
+  onDecreaseDecimal,
+  currentFont,
+  currentFontSize,
   isBold = false,
   isItalic = false,
   isUnderline = false,
+  currentFontColor = '#000000',
+  currentFillColor = '#FFFF00',
+  numberFormatCategory = 'general',
   recentFillColors = [],
   recentFontColors = [],
 }) => {
+  const cyberSheetConfig = useCyberSheetConfig();
+  const resolvedFont = currentFont ?? cyberSheetConfig.fonts.defaultFamily;
+  const resolvedFontSize = currentFontSize ?? cyberSheetConfig.fonts.defaultSize;
   const toolbarRef = useRef<HTMLDivElement>(null);
   const fillColorButtonRef = useRef<HTMLButtonElement>(null);
   const fontColorButtonRef = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState({ x, y: y - 34 }); // 8px above + 26px toolbar height
+  const [position, setPosition] = useState({ x, y: y - 70 });
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
   const [showFontColorPicker, setShowFontColorPicker] = useState(false);
 
-  // Adjust position to keep toolbar on screen
   useEffect(() => {
-    if (toolbarRef.current) {
-      const rect = toolbarRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
+    if (!toolbarRef.current) return;
 
-      let adjustedX = x - rect.width / 2; // Center on cursor
-      const adjustedY = y - 34;
+    const rect = toolbarRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const gap = 6;
+    const anchorTop = menuTopY ?? y;
 
-      // Keep within viewport
-      if (adjustedX < 4) adjustedX = 4;
-      if (adjustedX + rect.width > viewportWidth - 4) {
-        adjustedX = viewportWidth - rect.width - 4;
-      }
+    let adjustedX = x;
+    let adjustedY = anchorTop - rect.height - gap;
 
-      setPosition({ x: adjustedX, y: adjustedY });
+    if (adjustedX + rect.width > viewportWidth - 4) {
+      adjustedX = viewportWidth - rect.width - 4;
     }
-  }, [x, y]);
+    if (adjustedX < 4) adjustedX = 4;
+    if (adjustedY < 4) adjustedY = 4;
+    if (adjustedY + rect.height > viewportHeight - 4) {
+      adjustedY = viewportHeight - rect.height - 4;
+    }
 
-  // Close on click outside
+    setPosition({ x: adjustedX, y: adjustedY });
+  }, [x, y, menuTopY]);
+
   useEffect(() => {
+    if (persistWithContextMenu) return;
+
     const handleClickOutside = (e: MouseEvent) => {
-      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
-        // Don't close immediately - user might be clicking context menu
-        setTimeout(() => onClose(), 100);
-      }
+      const target = e.target as Node;
+      if (toolbarRef.current?.contains(target)) return;
+      if ((target as Element).closest?.('.excel-context-menu')) return;
+      onClose();
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
+  }, [onClose, persistWithContextMenu]);
 
   const buttonStyle: React.CSSProperties = {
-    height: '24px',
-    minWidth: '24px',
-    padding: '0 6px',
+    height: '22px',
+    minWidth: '22px',
+    padding: '0 5px',
     border: 'none',
     background: 'transparent',
     cursor: 'pointer',
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-    fontSize: '14px',
+    fontFamily: 'Segoe UI, Calibri, Arial, sans-serif',
+    fontSize: '13px',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#333',
+    color: '#323130',
+    borderRadius: '2px',
   };
 
   const activeButtonStyle: React.CSSProperties = {
     ...buttonStyle,
-    backgroundColor: '#D3E3FD',
-    borderRadius: '2px',
+    backgroundColor: '#CCE4F7',
+  };
+
+  const formatActiveStyle: React.CSSProperties = {
+    ...buttonStyle,
+    backgroundColor: '#CCE4F7',
+    fontWeight: 600,
   };
 
   const dividerStyle: React.CSSProperties = {
     width: '1px',
-    height: '24px',
-    backgroundColor: '#D9D9D9',
-    margin: '0 2px',
+    height: '20px',
+    backgroundColor: '#D1D1D1',
+    margin: '0 3px',
+    alignSelf: 'center',
+  };
+
+  const stopMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   return (
     <div
       ref={toolbarRef}
+      className="excel-mini-toolbar"
+      onMouseDown={stopMouseDown}
       style={{
         position: 'fixed',
         left: `${position.x}px`,
         top: `${position.y}px`,
-        height: '26px',
-        backgroundColor: '#F0F0F0',
-        border: '1px solid #CCCCCC',
-        borderTop: '1px solid #FFFFFF',
-        borderRadius: '6px',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+        backgroundColor: '#F3F3F3',
+        border: '1px solid #ABABAB',
+        borderRadius: '4px',
+        boxShadow: '0 2px 6px rgba(0, 0, 0, 0.18)',
         display: 'flex',
-        alignItems: 'center',
-        padding: '0 4px',
+        flexDirection: 'column',
+        padding: '3px 4px',
         gap: '2px',
-        zIndex: 10001,
-        fontFamily: 'Segoe UI, Arial, sans-serif',
+        zIndex: 10003,
+        fontFamily: 'Segoe UI, Calibri, Arial, sans-serif',
         userSelect: 'none',
       }}
     >
-      {/* Font Dropdown */}
-      <select
-        value={currentFont}
-        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onFontChange?.(e.target.value)}
-        style={{
-          height: '22px',
-          padding: '0 4px',
-          border: '1px solid #AAA',
-          borderRadius: '2px',
-          fontFamily: 'Segoe UI, Arial, sans-serif',
-          fontSize: '11px',
-          backgroundColor: 'white',
-          cursor: 'pointer',
-        }}
-      >
-        <option value="Segoe UI">Segoe UI</option>
-        <option value="Arial">Arial</option>
-        <option value="Calibri">Calibri</option>
-        <option value="Times New Roman">Times New Roman</option>
-        <option value="Courier New">Courier New</option>
-      </select>
+      {/* Row 1: Font formatting (Excel Mini Toolbar) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
+        <RibbonSelect
+          value={resolvedFont}
+          options={cyberSheetConfig.fonts.families}
+          onChange={(next) => onFontChange?.(next)}
+          width={108}
+          ariaLabel="Font"
+        />
 
-      <div style={dividerStyle} />
+        <div style={dividerStyle} />
 
-      {/* Font Size */}
-      <input
-        type="number"
-        value={currentFontSize}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFontSizeChange?.(parseInt(e.target.value, 10))}
-        style={{
-          width: '40px',
-          height: '22px',
-          padding: '0 4px',
-          border: '1px solid #AAA',
-          borderRadius: '2px',
-          fontFamily: 'Segoe UI, Arial, sans-serif',
-          fontSize: '11px',
-          backgroundColor: 'white',
-        }}
-      />
+        <RibbonSelect
+          value={resolvedFontSize}
+          options={cyberSheetConfig.fonts.sizes}
+          onChange={(next) => onFontSizeChange?.(parseInt(next, 10))}
+          width={44}
+          ariaLabel="Font size"
+        />
 
-      {/* Increase Font Size */}
-      <button
-        onClick={() => onFontSizeChange?.(currentFontSize + 1)}
-        style={buttonStyle}
-        title="Increase Font Size"
-      >
-        A↑
-      </button>
+        <button
+          type="button"
+          onClick={() => onFontSizeChange?.(resolvedFontSize + 1)}
+          style={buttonStyle}
+          title="Increase Font Size"
+        >
+          <span style={{ fontSize: '11px', lineHeight: 1 }}>
+            A<sup style={{ fontSize: '8px' }}>▲</sup>
+          </span>
+        </button>
 
-      {/* Decrease Font Size */}
-      <button
-        onClick={() => onFontSizeChange?.(Math.max(1, currentFontSize - 1))}
-        style={buttonStyle}
-        title="Decrease Font Size"
-      >
-        A↓
-      </button>
+        <button
+          type="button"
+          onClick={() => onFontSizeChange?.(Math.max(1, resolvedFontSize - 1))}
+          style={buttonStyle}
+          title="Decrease Font Size"
+        >
+          <span style={{ fontSize: '11px', lineHeight: 1 }}>
+            A<sup style={{ fontSize: '8px' }}>▼</sup>
+          </span>
+        </button>
 
-      <div style={dividerStyle} />
+        <div style={dividerStyle} />
 
-      {/* Bold */}
-      <button
-        onClick={onBoldToggle}
-        style={isBold ? activeButtonStyle : buttonStyle}
-        title="Bold (Ctrl+B)"
-      >
-        <strong>B</strong>
-      </button>
+        <button
+          type="button"
+          onClick={onBoldToggle}
+          style={isBold ? activeButtonStyle : buttonStyle}
+          title="Bold (Ctrl+B)"
+        >
+          <strong>B</strong>
+        </button>
 
-      {/* Italic */}
-      <button
-        onClick={onItalicToggle}
-        style={isItalic ? activeButtonStyle : buttonStyle}
-        title="Italic (Ctrl+I)"
-      >
-        <em>I</em>
-      </button>
+        <button
+          type="button"
+          onClick={onItalicToggle}
+          style={isItalic ? activeButtonStyle : buttonStyle}
+          title="Italic (Ctrl+I)"
+        >
+          <em>I</em>
+        </button>
 
-      {/* Underline */}
-      <button
-        onClick={onUnderlineToggle}
-        style={isUnderline ? activeButtonStyle : buttonStyle}
-        title="Underline (Ctrl+U)"
-      >
-        <u>U</u>
-      </button>
+        <button
+          type="button"
+          onClick={onUnderlineToggle}
+          style={isUnderline ? activeButtonStyle : buttonStyle}
+          title="Underline (Ctrl+U)"
+        >
+          <u>U</u>
+        </button>
 
-      <div style={dividerStyle} />
+        <div style={dividerStyle} />
 
-      {/* Fill Color */}
-      <button
-        ref={fillColorButtonRef}
-        onClick={(e: React.MouseEvent) => {
-          e.stopPropagation();
-          setShowFillColorPicker(!showFillColorPicker);
-          setShowFontColorPicker(false);
-        }}
-        style={buttonStyle}
-        title="Fill Color"
-      >
-        🎨
-      </button>
+        {/* Fill color — paint bucket with color bar */}
+        <button
+          ref={fillColorButtonRef}
+          type="button"
+          onClick={() => {
+            setShowFillColorPicker(!showFillColorPicker);
+            setShowFontColorPicker(false);
+          }}
+          style={{ ...buttonStyle, flexDirection: 'column', padding: '1px 4px', height: '24px' }}
+          title="Fill Color"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              d="M12.5 2.5l1 1-8.5 8.5-2-2L12.5 2.5zM3 11l1.5 1.5L2 15H0v-2l2.5-2.5z"
+              fill="currentColor"
+            />
+          </svg>
+          <span
+            style={{
+              display: 'block',
+              width: '14px',
+              height: '3px',
+              backgroundColor: currentFillColor,
+              border: '1px solid #888',
+              marginTop: '1px',
+            }}
+          />
+        </button>
 
-      {/* Font Color */}
-      <button
-        ref={fontColorButtonRef}
-        onClick={(e: React.MouseEvent) => {
-          e.stopPropagation();
-          setShowFontColorPicker(!showFontColorPicker);
-          setShowFillColorPicker(false);
-        }}
-        style={buttonStyle}
-        title="Font Color"
-      >
-        <span style={{ color: '#000' }}>A</span>
-      </button>
+        {/* Font color — A with underline bar */}
+        <button
+          ref={fontColorButtonRef}
+          type="button"
+          onClick={() => {
+            setShowFontColorPicker(!showFontColorPicker);
+            setShowFillColorPicker(false);
+          }}
+          style={{ ...buttonStyle, flexDirection: 'column', padding: '1px 4px', height: '24px' }}
+          title="Font Color"
+        >
+          <span style={{ fontWeight: 700, fontSize: '13px', lineHeight: 1, color: '#323130' }}>A</span>
+          <span
+            style={{
+              display: 'block',
+              width: '14px',
+              height: '3px',
+              backgroundColor: currentFontColor,
+              border: '1px solid #888',
+              marginTop: '1px',
+            }}
+          />
+        </button>
+      </div>
 
-      {/* Fill Color Picker */}
+      {/* Row 2: Number format quick controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
+        <button
+          type="button"
+          onClick={onCurrencyFormat}
+          style={numberFormatCategory === 'currency' ? formatActiveStyle : buttonStyle}
+          title="Accounting Number Format"
+        >
+          $
+        </button>
+
+        <button
+          type="button"
+          onClick={onPercentFormat}
+          style={numberFormatCategory === 'percentage' ? formatActiveStyle : buttonStyle}
+          title="Percent Style"
+        >
+          %
+        </button>
+
+        <button
+          type="button"
+          onClick={onCommaFormat}
+          style={numberFormatCategory === 'comma' ? formatActiveStyle : buttonStyle}
+          title="Comma Style"
+        >
+          ,
+        </button>
+
+        <div style={dividerStyle} />
+
+        <button
+          type="button"
+          onClick={onIncreaseDecimal}
+          style={buttonStyle}
+          title="Increase Decimal"
+        >
+          <NumberFormatGroupIcon1 />
+        </button>
+
+        <button
+          type="button"
+          onClick={onDecreaseDecimal}
+          style={buttonStyle}
+          title="Decrease Decimal"
+        >
+          <NumberFormatGroupIcon2 />
+        </button>
+      </div>
+
       {showFillColorPicker && fillColorButtonRef.current && (
         <ColorPicker
           x={fillColorButtonRef.current.getBoundingClientRect().left}
@@ -261,7 +369,6 @@ export const MiniToolbar: React.FC<MiniToolbarProps> = ({
         />
       )}
 
-      {/* Font Color Picker */}
       {showFontColorPicker && fontColorButtonRef.current && (
         <ColorPicker
           x={fontColorButtonRef.current.getBoundingClientRect().left}
@@ -277,3 +384,5 @@ export const MiniToolbar: React.FC<MiniToolbarProps> = ({
     </div>
   );
 };
+
+export { QUICK_FORMATS };

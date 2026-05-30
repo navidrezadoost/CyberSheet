@@ -104,8 +104,11 @@ export function BorderButton({
         }
       }
 
-      onApply(payloads);
-      setIsDropdownOpen(false);
+      try {
+        onApply(payloads);
+      } finally {
+        setIsDropdownOpen(false);
+      }
     },
     [onApply]
   );

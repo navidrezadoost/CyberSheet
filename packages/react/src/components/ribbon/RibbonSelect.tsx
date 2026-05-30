@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { SmilodonSelectCore, type SmilodonSelectItem } from '../SmilodonNativeSelect';
 import './ribbon.css';
+
+export type RibbonSelectOption = string | number | { value: string | number; label: string };
 
 export interface RibbonSelectProps {
   value: string | number;
-  options: (string | number)[];
+  options: RibbonSelectOption[];
   onChange: (value: string) => void;
   width?: number;
   placeholder?: string;
@@ -42,25 +45,26 @@ export const RibbonSelect: React.FC<RibbonSelectProps> = ({
   ariaLabel,
   className = '',
 }) => {
+  const items: SmilodonSelectItem[] = useMemo(
+    () => options.map((opt) => (
+      typeof opt === 'object'
+        ? { value: opt.value, label: opt.label }
+        : { value: opt, label: String(opt) }
+    )),
+    [options]
+  );
+
+  const selectedValue = value === undefined || value === null ? '' : value;
+
   return (
-    <select
-      className={`ribbon-select ${className}`.trim()}
+    <SmilodonSelectCore
+      className={`ribbon-select smilodon-excel-select ${className}`.trim()}
       style={{ width: `${width}px` }}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      items={placeholder ? [{ value: '', label: placeholder, disabled: true }, ...items] : items}
+      value={selectedValue}
       disabled={disabled}
-      aria-label={ariaLabel}
-    >
-      {placeholder && (
-        <option value="" disabled>
-          {placeholder}
-        </option>
-      )}
-      {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt}
-        </option>
-      ))}
-    </select>
+      ariaLabel={ariaLabel}
+      onValueChange={onChange}
+    />
   );
 };

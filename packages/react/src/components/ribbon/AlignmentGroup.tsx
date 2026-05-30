@@ -13,7 +13,7 @@
  * Row 3: [Wrap Text] [Merge ▼]
  */
 
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   TextAlignLeftRegular,
   TextAlignCenterRegular,
@@ -50,8 +50,17 @@ export interface AlignmentGroupProps {
   /** Callback when wrap text toggles */
   onWrapTextToggle: () => void;
 
-  /** Callback when merge button is clicked */
+  /** Callback when merge & center is clicked */
   onMergeClick?: () => void;
+
+  /** Callback when merge cells (no center) is chosen */
+  onMergeCellsClick?: () => void;
+
+  /** Callback when unmerge cells is chosen */
+  onUnmergeClick?: () => void;
+
+  /** Whether the current selection spans multiple cells */
+  canMerge?: boolean;
 
   /** Disabled state */
   disabled?: boolean;
@@ -70,8 +79,32 @@ export function AlignmentGroup({
   onVerticalAlignChange,
   onWrapTextToggle,
   onMergeClick,
+  onMergeCellsClick,
+  onUnmergeClick,
+  canMerge = true,
   disabled = false,
 }: AlignmentGroupProps) {
+  const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
+  const mergeMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mergeMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (mergeMenuRef.current && !mergeMenuRef.current.contains(event.target as Node)) {
+        setMergeMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [mergeMenuOpen]);
+
+  const runMergeAction = useCallback((action?: () => void) => {
+    if (!action || disabled) return;
+    action();
+    setMergeMenuOpen(false);
+  }, [disabled]);
   /**
    * Resolve effective horizontal alignment (defaults to "left")
    */
@@ -171,24 +204,56 @@ export function AlignmentGroup({
 
           {/* Merge button (placeholder - dropdown implementation later) */}
           {onMergeClick && (
-            <div className="cs-merge-split-button">
+            <div className="cs-merge-split-button" ref={mergeMenuRef}>
               <button
+                type="button"
                 className="cs-merge-main-button"
-                onClick={onMergeClick}
-                disabled={disabled}
+                onClick={() => runMergeAction(onMergeClick)}
+                onMouseDown={(e) => e.preventDefault()}
+                disabled={disabled || !canMerge}
                 aria-label="Merge cells"
                 title="Merge & Center"
               >
                 <TableCellsMergeRegular />
               </button>
               <button
+                type="button"
                 className="cs-merge-dropdown-button"
+                onClick={() => setMergeMenuOpen((open) => !open)}
+                onMouseDown={(e) => e.preventDefault()}
                 disabled={disabled}
                 aria-label="Merge options"
-                aria-expanded={false}
+                aria-expanded={mergeMenuOpen}
+                aria-haspopup="menu"
               >
                 <ChevronDown16Regular />
               </button>
+
+              {mergeMenuOpen && (
+                <div className="cs-merge-menu" role="menu">
+                  <div
+                    className={`cs-merge-menu-item${canMerge ? "" : " disabled"}`}
+                    role="menuitem"
+                    onClick={() => runMergeAction(canMerge ? onMergeClick : undefined)}
+                  >
+                    Merge &amp; Center
+                  </div>
+                  <div
+                    className={`cs-merge-menu-item${canMerge ? "" : " disabled"}`}
+                    role="menuitem"
+                    onClick={() => runMergeAction(canMerge ? (onMergeCellsClick ?? onMergeClick) : undefined)}
+                  >
+                    Merge Cells
+                  </div>
+                  <div
+                    className="cs-merge-menu-item"
+                    role="menuitem"
+                    onClick={() => runMergeAction(onUnmergeClick)}
+                  >
+                    Unmerge Cells
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

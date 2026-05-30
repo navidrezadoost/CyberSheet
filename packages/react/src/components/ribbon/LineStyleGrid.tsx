@@ -9,7 +9,6 @@
  * Cell size: 160×20px (wide enough for stroke preview + label)
  */
 
-import { LineStyleGridIcon2, LineStyleGridIcon1 } from '@cyber-sheet/icons/react';
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { BorderStyle } from "./borderTypes";
 import { LINE_STYLES } from "./borderTypes";
@@ -41,13 +40,27 @@ function LinePreview({
   // Special case: double border (two parallel lines)
   if (style === "double") {
     return (
-      <LineStyleGridIcon1 />
+      <svg className="cs-line-preview" width="72" height="14" viewBox="0 0 72 14" aria-hidden="true">
+        <line x1="2" y1="5" x2="70" y2="5" stroke={color} strokeWidth="1" />
+        <line x1="2" y1="9" x2="70" y2="9" stroke={color} strokeWidth="1" />
+      </svg>
     );
   }
 
   // Standard single-line styles
   return (
-    <LineStyleGridIcon2 />
+    <svg className="cs-line-preview" width="72" height="14" viewBox="0 0 72 14" aria-hidden="true">
+      <line
+        x1="2"
+        y1="7"
+        x2="70"
+        y2="7"
+        stroke={color}
+        strokeWidth={metadata.strokeWidth}
+        strokeDasharray={metadata.strokeDasharray}
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 

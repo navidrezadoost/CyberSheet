@@ -355,6 +355,26 @@ export type FreezeState = {
   cols: number;
 };
 
+export type HyperlinkKind = 'url' | 'internal' | 'file' | 'email' | 'newDocument';
+
+export type CellHyperlink = {
+  /** URL, mailto:, file path, or internal reference such as Sheet1!A1 */
+  target: string;
+  /** Screen tip shown on hover */
+  tooltip?: string;
+  /** Link category used by the Insert Hyperlink dialog */
+  kind?: HyperlinkKind | 'document';
+  /** For internal links: sheet!cell reference */
+  subAddress?: string;
+  /** For email links */
+  emailSubject?: string;
+  /** For create-new-document links */
+  newDocumentName?: string;
+  newDocumentPath?: string;
+  /** Cell style snapshot captured when the hyperlink was created (used on Remove Link) */
+  previousStyle?: CellStyle;
+};
+
 export type CellComment = {
   /** Unique identifier for the comment */
   id: string;
@@ -407,6 +427,8 @@ export type Cell = {
   comments?: CellComment[];
   /** Cell icon overlay */
   icon?: CellIcon;
+  /** Clickable hyperlink metadata */
+  hyperlink?: CellHyperlink;
   /** Spill metadata: if this cell is the source of a spilled array */
   spillSource?: {
     /** Dimensions of spilled array [rows, cols] */

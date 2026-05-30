@@ -65,6 +65,8 @@ class SetStyleCommand implements Command {
 /**
  * BatchSetStyleCommand - Apply style to multiple cells atomically
  */
+type StyleUpdater = CellStyle | ((prevStyle: CellStyle | undefined, addr: Address) => CellStyle);
+
 class BatchSetStyleCommand implements Command {
   description = 'Set style for multiple cells';
   
@@ -73,14 +75,14 @@ class BatchSetStyleCommand implements Command {
   constructor(
     worksheet: Worksheet,
     addresses: Address[],
-    styleOrFn: CellStyle | ((prevStyle: CellStyle | undefined) => CellStyle)
+    styleOrFn: StyleUpdater
   ) {
     for (const addr of addresses) {
       let newStyle: CellStyle;
       
       if (typeof styleOrFn === 'function') {
         const prevStyle = worksheet.getCellStyle(addr);
-        newStyle = styleOrFn(prevStyle);
+        newStyle = styleOrFn(prevStyle, addr);
       } else {
         newStyle = styleOrFn;
       }
@@ -261,15 +263,13 @@ export class FormattingController {
   }
   
   /**
-   * Toggle bold formatting
+   * Toggle bold formatting across the selection.
+   * Excel behavior: if every cell is bold, remove bold; otherwise apply bold to all.
    */
   toggleBold(addresses: Address[]): void {
-    const cmd = new BatchSetStyleCommand(this.worksheet, addresses, (prevStyle) => ({
-      ...(prevStyle || {}),
-      bold: !prevStyle?.bold,
-    }));
-    
-    this.commandManager.execute(cmd);
+    if (addresses.length === 0) return;
+    const allBold = addresses.every((addr) => this.worksheet.getCellStyle(addr)?.bold === true);
+    this.setBold(addresses, !allBold);
   }
   
   /**
@@ -285,15 +285,12 @@ export class FormattingController {
   }
   
   /**
-   * Toggle italic formatting
+   * Toggle italic formatting across the selection uniformly.
    */
   toggleItalic(addresses: Address[]): void {
-    const cmd = new BatchSetStyleCommand(this.worksheet, addresses, (prevStyle) => ({
-      ...(prevStyle || {}),
-      italic: !prevStyle?.italic,
-    }));
-    
-    this.commandManager.execute(cmd);
+    if (addresses.length === 0) return;
+    const allItalic = addresses.every((addr) => this.worksheet.getCellStyle(addr)?.italic === true);
+    this.setItalic(addresses, !allItalic);
   }
   
   /**
@@ -309,15 +306,12 @@ export class FormattingController {
   }
   
   /**
-   * Toggle underline formatting
+   * Toggle underline formatting across the selection uniformly.
    */
   toggleUnderline(addresses: Address[]): void {
-    const cmd = new BatchSetStyleCommand(this.worksheet, addresses, (prevStyle) => ({
-      ...(prevStyle || {}),
-      underline: !prevStyle?.underline,
-    }));
-    
-    this.commandManager.execute(cmd);
+    if (addresses.length === 0) return;
+    const allUnderline = addresses.every((addr) => this.worksheet.getCellStyle(addr)?.underline === true);
+    this.setUnderline(addresses, !allUnderline);
   }
   
   /**
@@ -777,6 +771,84 @@ export class FormattingController {
       return newStyle;
     });
     
+    this.commandManager.execute(cmd);
+  }
+
+  /**
+   * Apply a full cell style preset (Cell Styles gallery) in one undo step.
+   */
+  applyCellStylePreset(addresses: Address[], preset: CellStyle): void {
+    if (addresses.length === 0) return;
+
+    const cmd = new BatchSetStyleCommand(this.worksheet, addresses, (prevStyle) => ({
+      ...(prevStyle || {}),
+      ...preset,
+    }));
+
+    this.commandManager.execute(cmd);
+  }
+
+  /**
+   * Apply Format as Table styling to a range in a single undo step.
+   */
+  applyTableStyle(
+    range: Range,
+    options: {
+      headerRowColor: string;
+      firstRowStripedColor: string;
+      secondRowStripedColor: string;
+      borderColor?: string;
+    }
+  ): void {
+    const startRow = Math.min(range.start.row, range.end.row);
+    const endRow = Math.max(range.start.row, range.end.row);
+    const startCol = Math.min(range.start.col, range.end.col);
+    const endCol = Math.max(range.start.col, range.end.col);
+
+    const addresses: Address[] = [];
+    for (let row = startRow; row <= endRow; row++) {
+      for (let col = startCol; col <= endCol; col++) {
+        addresses.push({ row, col });
+      }
+    }
+
+    if (addresses.length === 0) return;
+
+    const borderColor = options.borderColor ?? '#BFBFBF';
+
+    const cmd = new BatchSetStyleCommand(this.worksheet, addresses, (prevStyle, addr) => {
+      const isHeader = addr.row === startRow;
+      const isTop = addr.row === startRow;
+      const isBottom = addr.row === endRow;
+      const isLeft = addr.col === startCol;
+      const isRight = addr.col === endCol;
+
+      const nextStyle: CellStyle = { ...(prevStyle || {}) };
+
+      if (isHeader) {
+        nextStyle.fill = options.headerRowColor;
+        nextStyle.bold = true;
+        nextStyle.color = '#FFFFFF';
+      } else {
+        const dataRowIndex = addr.row - startRow - 1;
+        nextStyle.fill = dataRowIndex % 2 === 0
+          ? options.firstRowStripedColor
+          : options.secondRowStripedColor;
+      }
+
+      if (isTop || isBottom || isLeft || isRight) {
+        const border: NonNullable<CellStyle['border']> = {};
+        if (isTop) border.top = borderColor;
+        if (isBottom) border.bottom = borderColor;
+        if (isLeft) border.left = borderColor;
+        if (isRight) border.right = borderColor;
+        nextStyle.border = border;
+      }
+
+      return nextStyle;
+    });
+
+    cmd.description = 'Format as table';
     this.commandManager.execute(cmd);
   }
 }

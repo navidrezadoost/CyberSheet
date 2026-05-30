@@ -29,7 +29,7 @@ export interface EditingGroupProps {
   onClear?: (clearType: 'all' | 'formats' | 'contents' | 'comments' | 'hyperlinks') => void;
   onSort?: (direction: 'asc' | 'desc' | 'custom') => void;
   onFilter?: (action: 'toggle' | 'clear' | 'reapply') => void;
-  onFind?: (query: string, options: any) => void;
+  onOpenFindReplace?: (tab: 'find' | 'replace') => void;
 }
 
 interface DropdownOption {
@@ -122,18 +122,13 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
   onClear,
   onSort,
   onFilter,
-  onFind,
+  onOpenFindReplace,
 }) => {
   const [showAutoSumMenu, setShowAutoSumMenu] = useState(false);
   const [showFillMenu, setShowFillMenu] = useState(false);
   const [showClearMenu, setShowClearMenu] = useState(false);
   const [showSortFilterMenu, setShowSortFilterMenu] = useState(false);
   const [showFindSelectMenu, setShowFindSelectMenu] = useState(false);
-  const [showFindDialog, setShowFindDialog] = useState(false);
-  const [showReplaceDialog, setShowReplaceDialog] = useState(false);
-  const [findQuery, setFindQuery] = useState('');
-  const [replaceQuery, setReplaceQuery] = useState('');
-  const [replaceWith, setReplaceWith] = useState('');
   
   const autoSumMenuRef = useRef(null);
   const fillMenuRef = useRef(null);
@@ -275,10 +270,10 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
     
     switch (optionId) {
       case 'find':
-        setShowFindDialog(true);
+        onOpenFindReplace?.('find');
         break;
       case 'replace':
-        setShowReplaceDialog(true);
+        onOpenFindReplace?.('replace');
         break;
       case 'goTo':
         onEditOperation?.('goTo');
@@ -305,27 +300,6 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
         onEditOperation?.('showSelectionPane');
         break;
     }
-  };
-
-  /**
-   * Execute find operation
-   */
-  const handleFindNext = () => {
-    onFind?.(findQuery, { matchCase: false, matchEntire: false });
-  };
-
-  /**
-   * Execute replace operation
-   */
-  const handleReplace = () => {
-    onEditOperation?.('replace', { find: replaceQuery, replace: replaceWith });
-  };
-
-  /**
-   * Execute replace all operation
-   */
-  const handleReplaceAll = () => {
-    onEditOperation?.('replaceAll', { find: replaceQuery, replace: replaceWith });
   };
 
   // Common styles
@@ -368,51 +342,6 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
     justifyContent: 'space-between',
     alignItems: 'center',
     transition: 'background 150ms ease',
-  };
-
-  const dialogOverlayStyles: React.CSSProperties = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2000,
-    animation: 'fadeIn 150ms ease-out',
-  };
-
-  const dialogStyles: React.CSSProperties = {
-    background: '#fff',
-    border: '1px solid #d0d0d0',
-    borderRadius: '6px',
-    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
-    minWidth: '400px',
-    animation: 'scaleUp 200ms ease-out',
-  };
-
-  const dialogHeaderStyles: React.CSSProperties = {
-    padding: '12px 16px',
-    borderBottom: '1px solid #e0e0e0',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '14px',
-    fontWeight: 600,
-  };
-
-  const dialogBodyStyles: React.CSSProperties = {
-    padding: '16px',
-  };
-
-  const dialogFooterStyles: React.CSSProperties = {
-    padding: '12px 16px',
-    borderTop: '1px solid #e0e0e0',
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px',
   };
 
   return (
@@ -689,172 +618,6 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
         </div>
       </div>
 
-      {/* Find Dialog */}
-      {showFindDialog && (
-        <div style={dialogOverlayStyles} onClick={() => setShowFindDialog(false)}>
-          <div style={dialogStyles} onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
-            <div style={dialogHeaderStyles}>
-              <span>Find and Replace</span>
-              <button
-                onClick={() => setShowFindDialog(false)}
-                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}
-              >
-                ✕
-              </button>
-            </div>
-            <div style={dialogBodyStyles}>
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Find what:</div>
-                <input
-                  type="text"
-                  value={findQuery}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFindQuery(e.target.value)}
-                  placeholder="Enter search text..."
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    border: '1px solid #d0d0d0',
-                    borderRadius: '3px',
-                    fontSize: '13px',
-                  }}
-                  autoFocus
-                />
-              </div>
-              <div style={{ fontSize: '11px', color: '#666' }}>
-                ☐ Match case &nbsp;&nbsp; ☐ Match entire cell contents
-              </div>
-            </div>
-            <div style={dialogFooterStyles}>
-              <button
-                onClick={handleFindNext}
-                style={{
-                  padding: '6px 20px',
-                  border: '1px solid #2196f3',
-                  background: '#2196f3',
-                  color: '#fff',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                }}
-              >
-                Find Next
-              </button>
-              <button
-                onClick={() => setShowFindDialog(false)}
-                style={{
-                  padding: '6px 20px',
-                  border: '1px solid #d0d0d0',
-                  background: '#fff',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Replace Dialog */}
-      {showReplaceDialog && (
-        <div style={dialogOverlayStyles} onClick={() => setShowReplaceDialog(false)}>
-          <div style={dialogStyles} onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
-            <div style={dialogHeaderStyles}>
-              <span>Find and Replace</span>
-              <button
-                onClick={() => setShowReplaceDialog(false)}
-                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}
-              >
-                ✕
-              </button>
-            </div>
-            <div style={dialogBodyStyles}>
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Find what:</div>
-                <input
-                  type="text"
-                  value={replaceQuery}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReplaceQuery(e.target.value)}
-                  placeholder="Enter search text..."
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    border: '1px solid #d0d0d0',
-                    borderRadius: '3px',
-                    fontSize: '13px',
-                  }}
-                  autoFocus
-                />
-              </div>
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Replace with:</div>
-                <input
-                  type="text"
-                  value={replaceWith}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReplaceWith(e.target.value)}
-                  placeholder="Enter replacement text..."
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    border: '1px solid #d0d0d0',
-                    borderRadius: '3px',
-                    fontSize: '13px',
-                  }}
-                />
-              </div>
-              <div style={{ fontSize: '11px', color: '#666' }}>
-                ☐ Match case &nbsp;&nbsp; ☐ Match entire cell contents
-              </div>
-            </div>
-            <div style={dialogFooterStyles}>
-              <button
-                onClick={handleReplace}
-                style={{
-                  padding: '6px 20px',
-                  border: '1px solid #2196f3',
-                  background: '#fff',
-                  color: '#2196f3',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                }}
-              >
-                Replace
-              </button>
-              <button
-                onClick={handleReplaceAll}
-                style={{
-                  padding: '6px 20px',
-                  border: '1px solid #2196f3',
-                  background: '#2196f3',
-                  color: '#fff',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                }}
-              >
-                Replace All
-              </button>
-              <button
-                onClick={() => setShowReplaceDialog(false)}
-                style={{
-                  padding: '6px 20px',
-                  border: '1px solid #d0d0d0',
-                  background: '#fff',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <style>
         {`
           @keyframes slideDown {
@@ -865,26 +628,6 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
             to {
               opacity: 1;
               transform: translateY(0);
-            }
-          }
-          
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-          
-          @keyframes scaleUp {
-            from {
-              opacity: 0;
-              transform: scale(0.9);
-            }
-            to {
-              opacity: 1;
-              transform: scale(1);
             }
           }
         `}

@@ -251,26 +251,15 @@ export const SELECT_ALL_SHORTCUT: ShortcutDefinition = {
  * All standard shortcuts (for batch registration)
  */
 export const STANDARD_SHORTCUTS: ShortcutDefinition[] = [
-  // Formatting
-  BOLD_SHORTCUT,
-  ITALIC_SHORTCUT,
-  UNDERLINE_SHORTCUT,
-
-  // History
-  UNDO_SHORTCUT,
-  REDO_SHORTCUT,
-  REDO_SHIFT_Z_SHORTCUT,
+  // Formatting and clipboard shortcuts are handled by ExcelApp (needs worksheet/renderer access).
+  // Undo/redo (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) are handled globally by ExcelApp
+  // in capture phase so they work from every ribbon tab and tool.
 
   // Editing
   ENTER_SHORTCUT,
   ESCAPE_SHORTCUT,
   ENTER_EDIT_MODE_SHORTCUT,
 
-  // Clipboard (observe only)
-  COPY_SHORTCUT,
-  CUT_SHORTCUT,
-  PASTE_SHORTCUT,
-  
   // Selection
   SELECT_ALL_SHORTCUT,
 ];

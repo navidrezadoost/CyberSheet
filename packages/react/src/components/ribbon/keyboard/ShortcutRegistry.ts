@@ -17,130 +17,13 @@ import type {
   InteractionContext,
 } from './types';
 import { shortcutEventRecorder } from './ShortcutEventRecorder';
+import {
+  parseKeyboardEvent,
+  shortcutToString,
+  parseShortcutString,
+} from '../../../utils/keyboardLayout';
 
-/**
- * Parse keyboard event into normalized shortcut representation
- * 
- * Handles:
- * - Browser differences (Cmd vs Ctrl on Mac)
- * - Key name normalization ('esc' → 'Escape')
- * - Modifier key detection
- * - Dead keys (German/French keyboards)
- * - Keyboard layout independence (uses e.code for alphanumeric, e.key for special)
- * 
- * CRITICAL: Caller must check event.isComposing before calling this
- */
-export function parseKeyboardEvent(event: KeyboardEvent): ParsedShortcut {
-  // Use physical key position (e.code) for alphanumeric keys (layout-independent)
-  // Use character key (e.key) for special keys (Enter, Escape, etc.)
-  let key: string;
-  
-  const code = event.code;
-  
-  // Check if this is a physical key code (KeyA-KeyZ, Digit0-Digit9)
-  if (code.startsWith('Key')) {
-    // Extract letter from KeyA, KeyB, etc.
-    key = code.substring(3).toLowerCase(); // KeyA → 'a', KeyB → 'b'
-    console.log(`[ShortcutRegistry] Using physical key code: ${code} → ${key}`);
-  } else if (code.startsWith('Digit')) {
-    // Extract digit from Digit0, Digit1, etc.
-    key = code.substring(5); // Digit1 → '1', Digit2 → '2'
-    console.log(`[ShortcutRegistry] Using physical key code: ${code} → ${key}`);
-  } else {
-    // For special keys (Enter, Escape, F1-F12, arrows, etc.), use event.key
-    key = event.key;
-    
-    // Special key mappings (browser differences)
-    const keyMappings: Record<string, string> = {
-      'Esc': 'Escape',
-      'Del': 'Delete',
-      ' ': 'Space',
-      'Spacebar': 'Space', // Old Safari
-    };
-
-    if (keyMappings[key]) {
-      key = keyMappings[key];
-    }
-    
-    // EDGE CASE: Dead keys produce multi-char strings (e.g., "Dead")
-    // These are composition sequences - ignore them
-    if (key.startsWith('Dead')) {
-      key = '';
-    }
-
-    // For letter keys (fallback if code wasn't recognized), normalize to lowercase
-    if (key.length === 1) {
-      key = key.toLowerCase();
-    }
-    
-    console.log(`[ShortcutRegistry] Using event.key for special key: ${event.key} → ${key}`);
-  }
-  
-  // EDGE CASE: Mac uses Meta (Cmd), Windows uses Ctrl
-  // We normalize: treat Cmd as Ctrl for cross-platform shortcuts
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-  const ctrl = isMac ? event.metaKey : event.ctrlKey;
-
-  return {
-    key,
-    ctrl,
-    shift: event.shiftKey,
-    alt: event.altKey,
-    meta: event.metaKey,
-  };
-}
-
-/**
- * Convert ParsedShortcut to string key (for matching)
- * 
- * Format: "Ctrl+Shift+B", "F2", "Escape"
- */
-export function shortcutToString(parsed: ParsedShortcut): string {
-  const parts: string[] = [];
-
-  if (parsed.ctrl) parts.push('Ctrl');
-  if (parsed.shift) parts.push('Shift');
-  if (parsed.alt) parts.push('Alt');
-
-  // Capitalize first letter of key for consistency
-  const keyCapitalized = parsed.key.charAt(0).toUpperCase() + parsed.key.slice(1);
-  parts.push(keyCapitalized);
-
-  return parts.join('+');
-}
-
-/**
- * Parse shortcut string to ParsedShortcut
- * 
- * Example: "Ctrl+B" → { ctrl: true, key: 'b', ... }
- */
-export function parseShortcutString(keys: string): ParsedShortcut {
-  const parts = keys.split('+').map(p => p.trim());
-
-  const parsed: ParsedShortcut = {
-    key: '',
-    ctrl: false,
-    shift: false,
-    alt: false,
-    meta: false,
-  };
-
-  for (const part of parts) {
-    const lower = part.toLowerCase();
-    if (lower === 'ctrl' || lower === 'cmd') {
-      parsed.ctrl = true;
-    } else if (lower === 'shift') {
-      parsed.shift = true;
-    } else if (lower === 'alt') {
-      parsed.alt = true;
-    } else {
-      // This is the actual key
-      parsed.key = part.toLowerCase();
-    }
-  }
-
-  return parsed;
-}
+export { parseKeyboardEvent, shortcutToString, parseShortcutString };
 
 /**
  * Debug configuration for shortcut system

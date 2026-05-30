@@ -1,4 +1,4 @@
-import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset, isHyperlinkVisited, HYPERLINK_COLOR, HYPERLINK_VISITED_COLOR } from '@cyber-sheet/core';
 import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
@@ -169,7 +169,19 @@ export class CanvasRenderer {
     this.sheet.on((ev: SheetEvents) => {
       const t = (ev as any).type;
       if (t === 'cell-changed') this.clearValueCacheForColumn((ev as any).address.col);
-      else if (t === 'sheet-mutated' || t === 'filter-changed') this.clearValueCacheForColumn();
+      else if (t === 'sheet-mutated' || t === 'filter-changed') {
+        this.clearValueCacheForColumn();
+        this.gridLinesNeedRedraw = true;
+        this.scheduleRedraw();
+      } else if (
+        t === 'row-hidden' ||
+        t === 'row-shown' ||
+        t === 'col-hidden' ||
+        t === 'col-shown'
+      ) {
+        this.gridLinesNeedRedraw = true;
+        this.scheduleRedraw();
+      }
       // Invalidate cell region for style/comment/icon changes so visual updates (color, borders, indicators) appear
       if (t === 'style-changed') {
         const a = (ev as any).address; this.invalidateRange(a.row, a.col, a.row, a.col);
@@ -798,6 +810,7 @@ export class CanvasRenderer {
           }
           const v = this.sheet.getCellValue(addr);
           const style: CellStyle | undefined = this.sheet.getCellStyle(addr);
+          const hyperlink = this.sheet.getHyperlink?.(addr);
 
           // Phase 1 UI: Validate style is interned (dev mode only)
           // Prevents ecosystem integration drift (React, XLSX, toolbar mutations)
@@ -834,27 +847,68 @@ export class CanvasRenderer {
             ctx.fillRect(x + 1, y + 1, (merged ? spanW : cw) - 2, (merged ? spanH : rh) - 2);
           }
           if (style?.border) {
-            ctx.lineWidth = 1; const bw = merged ? spanW : cw; const bh = merged ? spanH : rh;
+            const bw = merged ? spanW : cw; const bh = merged ? spanH : rh;
             if (!merged || isAnchor) {
-              // Apply color transform to borders
-              const transformBorder = (color?: string | ExcelColorSpec) => {
-                if (!color) return null;
-                // Resolve Excel color first
-                let resolved = this.resolveColor(color, '#000000');
+              type BorderEdgeLike = string | ExcelColorSpec | { color?: string | ExcelColorSpec; style?: string };
+              const resolveBorderEdge = (edge?: BorderEdgeLike | null) => {
+                if (!edge) return null;
+                const edgeColor = typeof edge === 'object' && 'color' in edge ? edge.color : edge;
+                const edgeStyle = typeof edge === 'object' && 'style' in edge ? edge.style : 'thin';
+                let resolved = this.resolveColor(edgeColor as string | ExcelColorSpec, '#000000');
                 // Apply plugin transforms
                 for (const plugin of this.plugins) {
                   if (plugin.transformColor) {
                     resolved = plugin.transformColor(resolved, { addr, value: v, style });
                   }
                 }
-                return resolved;
+                return { color: resolved, style: edgeStyle ?? 'thin' };
               };
-              if (style.border.top) { ctx.strokeStyle = transformBorder(style.border.top)!; ctx.beginPath(); ctx.moveTo(x, y + 0.5); ctx.lineTo(x + bw, y + 0.5); ctx.stroke(); }
-              if (style.border.bottom) { ctx.strokeStyle = transformBorder(style.border.bottom)!; ctx.beginPath(); ctx.moveTo(x, y + bh + 0.5); ctx.lineTo(x + bw, y + bh + 0.5); ctx.stroke(); }
-              if (style.border.left) { ctx.strokeStyle = transformBorder(style.border.left)!; ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + bh); ctx.stroke(); }
-              if (style.border.right) { ctx.strokeStyle = transformBorder(style.border.right)!; ctx.beginPath(); ctx.moveTo(x + bw + 0.5, y); ctx.lineTo(x + bw + 0.5, y + bh); ctx.stroke(); }
-              if (style.border.diagonalDown) { ctx.strokeStyle = transformBorder(style.border.diagonalDown)!; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + bw, y + bh); ctx.stroke(); }
-              if (style.border.diagonalUp) { ctx.strokeStyle = transformBorder(style.border.diagonalUp)!; ctx.beginPath(); ctx.moveTo(x, y + bh); ctx.lineTo(x + bw, y); ctx.stroke(); }
+              const configureBorderStroke = (edge: { color: string; style: string }) => {
+                ctx.strokeStyle = edge.color;
+                ctx.setLineDash([]);
+                switch (edge.style) {
+                  case 'medium':
+                  case 'mediumDashed':
+                  case 'mediumDashDot':
+                  case 'mediumDashDotDot':
+                    ctx.lineWidth = 2;
+                    break;
+                  case 'thick':
+                    ctx.lineWidth = 3;
+                    break;
+                  case 'hairline':
+                    ctx.lineWidth = 0.5;
+                    break;
+                  default:
+                    ctx.lineWidth = 1;
+                }
+                if (edge.style === 'dashed' || edge.style === 'mediumDashed') ctx.setLineDash([6, 3]);
+                if (edge.style === 'dotted') ctx.setLineDash([1, 2]);
+                if (edge.style === 'dashDot' || edge.style === 'mediumDashDot') ctx.setLineDash([6, 3, 1, 3]);
+                if (edge.style === 'dashDotDot' || edge.style === 'mediumDashDotDot') ctx.setLineDash([6, 3, 1, 3, 1, 3]);
+              };
+              const drawLine = (edgeSpec: BorderEdgeLike | undefined, draw: () => void) => {
+                const edge = resolveBorderEdge(edgeSpec);
+                if (!edge) return;
+                if (edge.style === 'double') {
+                  configureBorderStroke({ ...edge, style: 'thin' });
+                  draw();
+                  ctx.save();
+                  ctx.translate(0, edgeSpec === style.border.left || edgeSpec === style.border.right ? 0 : 3);
+                  draw();
+                  ctx.restore();
+                  return;
+                }
+                configureBorderStroke(edge);
+                draw();
+                ctx.setLineDash([]);
+              };
+              drawLine(style.border.top as BorderEdgeLike, () => { ctx.beginPath(); ctx.moveTo(x, y + 0.5); ctx.lineTo(x + bw, y + 0.5); ctx.stroke(); });
+              drawLine(style.border.bottom as BorderEdgeLike, () => { ctx.beginPath(); ctx.moveTo(x, y + bh + 0.5); ctx.lineTo(x + bw, y + bh + 0.5); ctx.stroke(); });
+              drawLine(style.border.left as BorderEdgeLike, () => { ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + bh); ctx.stroke(); });
+              drawLine(style.border.right as BorderEdgeLike, () => { ctx.beginPath(); ctx.moveTo(x + bw + 0.5, y); ctx.lineTo(x + bw + 0.5, y + bh); ctx.stroke(); });
+              drawLine(style.border.diagonalDown as BorderEdgeLike, () => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + bw, y + bh); ctx.stroke(); });
+              drawLine(style.border.diagonalUp as BorderEdgeLike, () => { ctx.beginPath(); ctx.moveTo(x, y + bh); ctx.lineTo(x + bw, y); ctx.stroke(); });
             }
           }
 
@@ -883,7 +937,9 @@ export class CanvasRenderer {
             }
             const text = fmtResult.text;
             // Apply color from format if present, else use cell style color, then resolve Excel colors and apply plugins
-            let textColor = this.resolveColor(fmtResult.color ?? style?.color, '#000000');
+            let textColor = hyperlink?.target
+              ? (isHyperlinkVisited(hyperlink.target) ? HYPERLINK_VISITED_COLOR : HYPERLINK_COLOR)
+              : this.resolveColor(fmtResult.color ?? style?.color, '#000000');
             for (const plugin of this.plugins) {
               if (plugin.transformColor) {
                 textColor = plugin.transformColor(textColor, { addr, value: v, style });
@@ -982,6 +1038,18 @@ export class CanvasRenderer {
                 ctx.beginPath();
                 ctx.moveTo(tx, strikeY);
                 ctx.lineTo(tx + strikeWidth * scriptScale, strikeY);
+                ctx.stroke();
+              }
+
+              if (style?.underline || hyperlink?.target) {
+                const metrics = ctx.measureText(toDraw);
+                const underlineY = ty + (metrics.actualBoundingBoxDescent || fontSize * 0.15) + 1;
+                const underlineWidth = (typeof metrics.width === 'number') ? metrics.width : (textWidth as number);
+                ctx.strokeStyle = textColor;
+                ctx.lineWidth = Math.max(1, fontSize * 0.05);
+                ctx.beginPath();
+                ctx.moveTo(tx, underlineY);
+                ctx.lineTo(tx + underlineWidth * scriptScale, underlineY);
                 ctx.stroke();
               }
             } else {
@@ -1475,6 +1543,19 @@ export class CanvasRenderer {
 
   // ==================== Event System ====================
 
+  private isAddressInRange(addr: Address, range: { start: Address; end: Address }): boolean {
+    const r1 = Math.min(range.start.row, range.end.row);
+    const r2 = Math.max(range.start.row, range.end.row);
+    const c1 = Math.min(range.start.col, range.end.col);
+    const c2 = Math.max(range.start.col, range.end.col);
+    return addr.row >= r1 && addr.row <= r2 && addr.col >= c1 && addr.col <= c2;
+  }
+
+  private isAddressInAnySelection(addr: Address): boolean {
+    const activeSelections = this.selections.length ? this.selections : (this.selection ? [this.selection] : []);
+    return activeSelections.some((range) => this.isAddressInRange(addr, range));
+  }
+
   private handleMouseDown = (e: MouseEvent) => {
     const hit = this.hitTest(e.clientX, e.clientY);
     if (!hit) return;
@@ -1528,6 +1609,18 @@ export class CanvasRenderer {
     
     if (hit.type !== 'cell') return;
     const addr = hit.addr;
+
+    // Right-click / Ctrl+click (Mac): preserve multi-cell selection when clicking inside it
+    const isContextMenuTrigger = e.button === 2 || (e.button === 0 && e.ctrlKey);
+    if (isContextMenuTrigger) {
+      if (!this.isAddressInAnySelection(addr)) {
+        this.setSelections([{ start: addr, end: addr }]);
+      }
+      this.isDragging = false;
+      this.dragStartCell = null;
+      this.clickStartCell = null;
+      return;
+    }
     
     // Check for double-click
     const now = Date.now();
@@ -1680,6 +1773,8 @@ export class CanvasRenderer {
       } else if (hit.type === 'row-resize') {
         this.canvas.style.cursor = 'row-resize';
       } else if (hit.type === 'select-all') {
+        this.canvas.style.cursor = 'pointer';
+      } else if (hit.type === 'cell' && this.sheet.getHyperlink?.(hit.addr)?.target) {
         this.canvas.style.cursor = 'pointer';
       } else {
         this.canvas.style.cursor = 'default';

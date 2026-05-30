@@ -461,6 +461,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           style={nameBoxInputStyles}
           placeholder="A1"
           title="Name Box - Type cell address or select named range"
+          data-native-text-undo
         />
         <button 
           style={dropdownButtonStyles}
@@ -561,6 +562,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           onBlur={handleInputBlur}
           placeholder="Type = to start a formula (e.g., =SUM(A1:A10), =AVERAGE(B1:B5), =A1+B1*2)"
           style={{ ...inputStyles, width: '100%' }}
+          data-native-text-undo
         />
         
         <FormulaAutocompletePanel

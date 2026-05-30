@@ -117,8 +117,11 @@ export function BorderDropdown({
         <div className="cs-border-section-label">Border Presets</div>
         <BorderPresetGrid
           onSelect={(preset, payloads) => {
-            onPresetApply(payloads);
-            onClose(); // Close after applying preset
+            try {
+              onPresetApply(payloads);
+            } finally {
+              onClose(); // Close after applying preset, even if apply reports an error.
+            }
           }}
           currentColor={currentColor}
           currentStyle={currentStyle}

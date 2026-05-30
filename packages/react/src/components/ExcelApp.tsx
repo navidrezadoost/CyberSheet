@@ -8,7 +8,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { Workbook, CellComment } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
-import { CommandManager, DrawingLayer, ClipboardService, PasteCommand, ClearCellsCommand, InsertCellsCommand, DeleteCellsCommand, FormulaEngine, DropdownList, FileOperations, SetViewModeCommand, type ViewMode } from '@cyber-sheet/core';
+import { CommandManager, DrawingLayer, ClipboardService, ClearCellsCommand, FormulaEngine, DropdownList, FileOperations, SetViewModeCommand, FormattingController, SetHyperlinkCommand, getDefaultHyperlinkScreenTip, SortCommand, ToggleAutoFilterCommand, ClearFilterCommand, type ViewMode, type InsertCellsMode, type DeleteCellsMode, type Address, type CellHyperlink } from '@cyber-sheet/core';
 import { TitleBar } from './TitleBar';
 import { RibbonTabs } from './RibbonTabs';
 import { Ribbon } from '../components/ribbon/Ribbon';
@@ -24,9 +24,83 @@ import { MiniToolbar } from './MiniToolbar';
 import FormatCellsDialog, { FormattingChanges } from './dialogs/FormatCellsDialog/FormatCellsDialog';
 import FindReplaceDialog from './dialogs/FindReplaceDialog';
 import { CellCommentDialog } from './dialogs/CellCommentDialog';
+import { InsertHyperlinkDialog, type InsertHyperlinkDialogResult } from './dialogs/InsertHyperlinkDialog';
+import { InsertDeleteCellsDialog } from './dialogs/InsertDeleteCellsDialog';
+import {
+  executeInsertCells,
+  executeDeleteCells,
+  getInsertDeleteInvalidateBounds,
+  type CellRange,
+} from '../utils/insertDeleteCells';
 import { BackstageContainer, BackstagePanel } from './backstage/BackstageContainer';
 import { debugEdit, debugRender, debugMenu } from '../utils/debug';
+import { configureCyberSheet, useCyberSheetConfig, type CyberSheetConfigInput } from '../config/globalConfig';
+import { handleSpreadsheetHistoryShortcut } from '../utils/spreadsheetHistory';
+import {
+  performCopy,
+  performCut,
+  performPasteAsync,
+  normalizeSelectionRange,
+  type ClipboardCopyMode,
+} from '../utils/clipboardOperations';
+import { normalizeRange } from '../utils/sortFilterCommands';
+import { openHyperlinkTarget, downloadBlankWorkbook } from '../utils/hyperlinkNavigation';
+import {
+  isCtrlLetter,
+  isCtrlPhysicalKey,
+  isArrowKey,
+  getTypedCharacter,
+  hasCtrlOrMeta,
+} from '../utils/keyboardLayout';
 import './excel-app.css';
+
+type NumberFormatCategory = 'general' | 'currency' | 'percentage' | 'number' | 'comma';
+
+function addressesFromRange(range: CellRange | null | undefined): Address[] {
+  if (!range?.start || !range?.end) return [];
+  const r1 = Math.min(range.start.row, range.end.row);
+  const r2 = Math.max(range.start.row, range.end.row);
+  const c1 = Math.min(range.start.col, range.end.col);
+  const c2 = Math.max(range.start.col, range.end.col);
+  const addresses: Address[] = [];
+  for (let row = r1; row <= r2; row++) {
+    for (let col = c1; col <= c2; col++) {
+      addresses.push({ row, col });
+    }
+  }
+  return addresses;
+}
+
+function resolveStyleColor(color: unknown): string {
+  if (typeof color === 'string') return color;
+  return '#000000';
+}
+
+function resolveStyleFillColor(fill: unknown): string {
+  if (typeof fill === 'string') return fill;
+  if (fill && typeof fill === 'object' && 'fgColor' in fill) {
+    const fg = (fill as { fgColor?: unknown }).fgColor;
+    if (typeof fg === 'string') return fg;
+  }
+  return '#FFFF00';
+}
+
+function getNumberFormatCategory(format: string | undefined): NumberFormatCategory {
+  if (!format || format === 'General') return 'general';
+  if (format.includes('$')) return 'currency';
+  if (format.includes('%')) return 'percentage';
+  if (format === '#,##0') return 'comma';
+  return 'number';
+}
+
+function createUniqueSheetName(workbook: Workbook): string {
+  const names = new Set(workbook.getSheetNames());
+  let index = 1;
+  while (names.has(`Sheet${index}`)) {
+    index += 1;
+  }
+  return `Sheet${index}`;
+}
 
 export interface ExcelAppProps {
   workbook: Workbook;
@@ -35,6 +109,7 @@ export interface ExcelAppProps {
   onUndo?: () => void;
   onRedo?: () => void;
   onWorkbookLoaded?: (workbook: Workbook) => void;
+  config?: CyberSheetConfigInput;
   style?: React.CSSProperties;
 }
 
@@ -56,10 +131,13 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   onUndo,
   onRedo,
   onWorkbookLoaded,
+  config,
   style,
 }) => {
   const [activeTab, setActiveTab] = useState<string>('Home');
   const [activeSheet, setActiveSheet] = useState<string>(workbook.activeSheet?.name || 'Sheet1');
+  const [sheetRevision, setSheetRevision] = useState(0);
+  const [renameSheetTrigger, setRenameSheetTrigger] = useState(0);
   const [zoom, setZoom] = useState<number>(100);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     return ((workbook.activeSheet as any)?.viewMode as ViewMode) || 'normal';
@@ -87,6 +165,12 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   } | null>(null);
   const [filterSearch, setFilterSearch] = useState('');
   const [filterSel, setFilterSel] = useState<Set<string>>(new Set());
+  const [historyVersion, setHistoryVersion] = useState(0);
+
+  useEffect(() => {
+    if (config) configureCyberSheet(config);
+  }, [config]);
+  const cyberSheetConfig = useCyberSheetConfig();
 
   // In-cell editing state
   const [inCellEdit, setInCellEdit] = useState<{
@@ -106,7 +190,12 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
 
   // Context menu and mini toolbar state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuLayout, setContextMenuLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [miniToolbar, setMiniToolbar] = useState<{ x: number; y: number } | null>(null);
+  const [insertDeleteDialog, setInsertDeleteDialog] = useState<{
+    type: 'insert' | 'delete';
+    range: CellRange;
+  } | null>(null);
   
   // Format Cells dialog state
   const [isFormatDialogOpen, setIsFormatDialogOpen] = useState<boolean>(false);
@@ -118,11 +207,22 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     address: { row: number; col: number };
     comments: CellComment[];
   } | null>(null);
+  const [hyperlinkDialog, setHyperlinkDialog] = useState<{
+    address: Address;
+    existingHyperlink: CellHyperlink | null;
+    displayText: string;
+  } | null>(null);
   const [commentTooltip, setCommentTooltip] = useState<{
     x: number;
     y: number;
     text: string;
   } | null>(null);
+  const [hyperlinkTooltip, setHyperlinkTooltip] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
+  const [statusBarLink, setStatusBarLink] = useState<string | null>(null);
   
   // Recent colors tracking (up to 10 each)
   const [recentFillColors, setRecentFillColors] = useState<string[]>([]);
@@ -169,8 +269,10 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   const isEditingFormulaRef = useRef(isEditingFormula);
   const formulaBarValueRef = useRef(formulaBarValue);
   const isPickingReferenceRef = useRef(isPickingReference);
+  const isFindReplaceOpenRef = useRef(isFindReplaceOpen);
   // Context menu selection: captured at menu open time and frozen until menu closes
   const contextMenuSelectionRef = useRef<any>(null);
+  const contextMenuTargetCellRef = useRef<Address | null>(null);
   
   // Keep refs in sync with state (but NOT contextMenuSelectionRef - that's set by context menu handler)
   useEffect(() => {
@@ -196,6 +298,10 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   useEffect(() => {
     isPickingReferenceRef.current = isPickingReference;
   }, [isPickingReference]);
+
+  useEffect(() => {
+    isFindReplaceOpenRef.current = isFindReplaceOpen;
+  }, [isFindReplaceOpen]);
   
   // Helper to add color to recent list
   const addRecentColor = (color: string, setRecentColors: React.Dispatch<React.SetStateAction<string[]>>) => {
@@ -204,6 +310,18 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       return [color, ...filtered].slice(0, 10);
     });
   };
+
+  const isAddressInSelection = useCallback((addr: Address, range: { start: Address; end: Address }) => {
+    const r1 = Math.min(range.start.row, range.end.row);
+    const r2 = Math.max(range.start.row, range.end.row);
+    const c1 = Math.min(range.start.col, range.end.col);
+    const c2 = Math.max(range.start.col, range.end.col);
+    return addr.row >= r1 && addr.row <= r2 && addr.col >= c1 && addr.col <= c2;
+  }, []);
+
+  const contextMenuTarget = useCallback(() => {
+    return contextMenuTargetCellRef.current ?? contextMenuSelectionRef.current?.start ?? null;
+  }, []);
 
   const formatCellAddress = useCallback((addr: { row: number; col: number }) => {
     let colNum = Math.max(1, addr.col);
@@ -221,6 +339,19 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     if (!sheet) return;
     const existing = sheet.getComments(address);
     setCommentDialog({ address, comments: existing });
+  }, [workbook]);
+
+  const openHyperlinkEditorForAddress = useCallback((address: Address) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+    const existing = sheet.getHyperlink(address);
+    const raw = sheet.getCellValue(address);
+    const displayText = raw != null && raw !== '' ? String(raw) : '';
+    setHyperlinkDialog({
+      address,
+      existingHyperlink: existing ?? null,
+      displayText,
+    });
   }, [workbook]);
 
   const recomputeHeaderFilterIcons = useCallback(() => {
@@ -268,6 +399,64 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     return new CommandManager(100, sheet);
   }, [workbook]);
 
+  const formattingController = useMemo(() => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return null;
+    return new FormattingController(sheet, commandManager);
+  }, [workbook.activeSheet, commandManager]);
+
+  const selectionAddresses = useMemo(() => addressesFromRange(selection), [selection]);
+
+  const miniToolbarAddresses = useMemo(() => {
+    if (!contextMenu && !miniToolbar) return [];
+    return addressesFromRange(contextMenuSelectionRef.current);
+  }, [contextMenu, miniToolbar, historyVersion]);
+
+  const miniToolbarStyleCell = miniToolbarAddresses[0] ?? selection?.start ?? null;
+  const miniToolbarCellStyle = miniToolbarStyleCell && workbook.activeSheet
+    ? workbook.activeSheet.getCellStyle(miniToolbarStyleCell)
+    : undefined;
+
+  const applyContextMenuFormatting = useCallback(
+    (apply: (addresses: Address[]) => void) => {
+      const addresses = miniToolbarAddresses.length > 0 ? miniToolbarAddresses : selectionAddresses;
+      if (!formattingController || addresses.length === 0) return;
+      apply(addresses);
+      const rows = addresses.map((a) => a.row);
+      const cols = addresses.map((a) => a.col);
+      renderer?.invalidateRange(
+        Math.min(...rows),
+        Math.min(...cols),
+        Math.max(...rows),
+        Math.max(...cols),
+      );
+      renderer?.scheduleRedraw?.();
+    },
+    [miniToolbarAddresses, selectionAddresses, formattingController, renderer],
+  );
+
+  useEffect(() => {
+    return commandManager.subscribe(() => {
+      const sheet = workbook.activeSheet;
+      const cell = selectedCellRef.current;
+      if (sheet && cell) {
+        const formula = (sheet as any).getCellFormula?.(cell);
+        const value = sheet.getCellValue(cell);
+        setCellValue(formula != null && formula !== '' ? formula : (value ?? ''));
+      }
+      renderer?.redraw?.();
+      setHistoryVersion((version) => version + 1);
+    });
+  }, [commandManager, workbook, renderer]);
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      handleSpreadsheetHistoryShortcut(event, commandManager);
+    };
+    window.addEventListener('keydown', handleHistoryShortcut, true);
+    return () => window.removeEventListener('keydown', handleHistoryShortcut, true);
+  }, [commandManager]);
+
   const executeFilterStateCommand = useCallback(
     (applyChange: (sheet: any) => void, description: string) => {
       const sheet = workbook.activeSheet as any;
@@ -292,6 +481,103 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     },
     [workbook, commandManager, renderer]
   );
+
+  const handleRibbonFilter = useCallback((action: 'toggle' | 'clear' | 'reapply') => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    if (action === 'toggle') {
+      if (!selection?.start || !selection?.end) return;
+      const filterRange = normalizeRange({ start: selection.start, end: selection.end });
+      const enabling = !isAutoFilterEnabled;
+
+      if (enabling) {
+        commandManager.execute(new ToggleAutoFilterCommand(sheet, filterRange, true));
+        setIsAutoFilterEnabled(true);
+        setTimeout(() => recomputeHeaderFilterIcons(), 0);
+      } else {
+        commandManager.execute(new ToggleAutoFilterCommand(sheet, filterRange, false));
+        executeFilterStateCommand(
+          (activeSheet) => activeSheet.clearAllFilters?.(),
+          'Clear All Filters',
+        );
+        setIsAutoFilterEnabled(false);
+        setFilterMenu(null);
+      }
+      renderer?.redraw?.();
+      return;
+    }
+
+    if (action === 'clear') {
+      commandManager.execute(new ClearFilterCommand(sheet));
+      renderer?.redraw?.();
+      return;
+    }
+
+    if (action === 'reapply') {
+      renderer?.redraw?.();
+    }
+  }, [
+    workbook,
+    selection,
+    isAutoFilterEnabled,
+    commandManager,
+    executeFilterStateCommand,
+    recomputeHeaderFilterIcons,
+    renderer,
+  ]);
+
+  const handleDataCommand = useCallback((command: { type: string; [key: string]: unknown }) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    switch (command.type) {
+      case 'sort':
+        commandManager.execute(
+          new SortCommand(
+            sheet,
+            command.range as any,
+            command.sortBy as any,
+            (command.hasHeaders as boolean | undefined) ?? true,
+          ),
+        );
+        renderer?.redraw?.();
+        break;
+      case 'toggleAutoFilter': {
+        const enabling = (command.enabled as boolean | undefined) ?? true;
+        commandManager.execute(
+          new ToggleAutoFilterCommand(sheet, command.range as any, enabling),
+        );
+        setIsAutoFilterEnabled(enabling);
+        if (!enabling) {
+          executeFilterStateCommand(
+            (activeSheet) => activeSheet.clearAllFilters?.(),
+            'Clear All Filters',
+          );
+          setFilterMenu(null);
+        } else {
+          setTimeout(() => recomputeHeaderFilterIcons(), 0);
+        }
+        renderer?.redraw?.();
+        break;
+      }
+      case 'clearFilter':
+        commandManager.execute(new ClearFilterCommand(sheet));
+        renderer?.redraw?.();
+        break;
+      case 'reapplyFilter':
+        renderer?.redraw?.();
+        break;
+      default:
+        console.warn('Unhandled data command:', command.type);
+    }
+  }, [
+    workbook,
+    commandManager,
+    renderer,
+    executeFilterStateCommand,
+    recomputeHeaderFilterIcons,
+  ]);
 
   const openColumnFilterMenu = useCallback((col: number, x: number, y: number) => {
     const r = renderer;
@@ -367,7 +653,10 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   const clipboardService = useMemo(() => new ClipboardService(), []);
 
   // Get all sheet names
-  const sheets = workbook.getSheetNames();
+  const sheets = useMemo(
+    () => workbook.getSheetNames(),
+    [workbook, sheetRevision],
+  );
 
   // Handle sheet change
   const handleSheetChange = useCallback((sheetName: string) => {
@@ -380,19 +669,66 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     renderer?.setViewMode(mode);
   }, [workbook, renderer]);
 
+  const navigateHyperlink = useCallback((target: string) => {
+    openHyperlinkTarget(target, workbook, renderer, handleSheetChange, (address) => {
+      setSelectedCell(address);
+      setSelection({ start: address, end: address });
+    });
+    renderer?.scheduleRedraw?.();
+  }, [workbook, renderer, handleSheetChange]);
+
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     commandManager.execute(new SetViewModeCommand(workbook, mode));
     setViewMode(mode);
     renderer?.setViewMode(mode);
   }, [workbook, commandManager, renderer]);
 
-  // Handle add sheet
-  const handleAddSheet = useCallback(() => {
-    const newIndex = sheets.length + 1;
-    const newName = `Sheet${newIndex}`;
+  const handleInsertSheet = useCallback(() => {
+    const newName = createUniqueSheetName(workbook);
     workbook.addSheet(newName);
-    setActiveSheet(newName);
-  }, [workbook, sheets]);
+    handleSheetChange(newName);
+    setSheetRevision((v) => v + 1);
+    setSelectedCell({ row: 1, col: 1 });
+    setSelection({ start: { row: 1, col: 1 }, end: { row: 1, col: 1 } });
+    renderer?.setSelection({ start: { row: 1, col: 1 }, end: { row: 1, col: 1 } });
+    renderer?.scheduleRedraw?.();
+  }, [workbook, handleSheetChange, renderer]);
+
+  const handleAddSheet = handleInsertSheet;
+
+  const handleDeleteSheet = useCallback((sheetName: string) => {
+    if (workbook.getSheetNames().length <= 1) return;
+    try {
+      const wasActive = activeSheet === sheetName;
+      workbook.deleteSheet(sheetName);
+      setSheetRevision((v) => v + 1);
+      if (wasActive) {
+        const next = workbook.activeSheet?.name;
+        if (next) handleSheetChange(next);
+      }
+      renderer?.scheduleRedraw?.();
+    } catch {
+      // last sheet guard
+    }
+  }, [workbook, activeSheet, handleSheetChange, renderer]);
+
+  const handleDeleteActiveSheet = useCallback(() => {
+    const name = workbook.activeSheet?.name;
+    if (name) handleDeleteSheet(name);
+  }, [workbook, handleDeleteSheet]);
+
+  const handleRenameSheet = useCallback((oldName: string, newName: string): string | null => {
+    try {
+      workbook.renameSheet(oldName, newName);
+      setSheetRevision((v) => v + 1);
+      if (activeSheet === oldName) {
+        setActiveSheet(newName.trim());
+      }
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : 'Could not rename sheet.';
+    }
+  }, [workbook, activeSheet]);
 
   // Handle zoom change
   const handleZoomChange = useCallback((newZoom: number) => {
@@ -537,6 +873,65 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     setIsPickingReference(false);
   }, []);
 
+  const applyInsertDelete = useCallback((
+    type: 'insert' | 'delete',
+    range: CellRange,
+    mode: InsertCellsMode | DeleteCellsMode
+  ) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    if (type === 'insert') {
+      executeInsertCells(sheet, commandManager, range, mode as InsertCellsMode);
+    } else {
+      executeDeleteCells(sheet, commandManager, range, mode as DeleteCellsMode);
+    }
+
+    const bounds = getInsertDeleteInvalidateBounds(sheet, range, mode);
+    renderer?.invalidateRange(bounds.r1, bounds.c1, bounds.r2, bounds.c2);
+    renderer?.scheduleRedraw?.();
+  }, [workbook, commandManager, renderer]);
+
+  const openInsertDeleteDialog = useCallback((
+    type: 'insert' | 'delete',
+    range: CellRange | null
+  ) => {
+    if (!range?.start || !range?.end) return;
+    setInsertDeleteDialog({ type, range });
+  }, []);
+
+  const pasteAtSelection = useCallback(async (sel: { start: Address; end: Address } | null) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet || !sel) return false;
+    return performPasteAsync(sheet, commandManager, clipboardService, sel.start, {
+      renderer,
+      onCutComplete: () => setCutRange(null),
+    });
+  }, [workbook, commandManager, clipboardService, renderer]);
+
+  const copySelection = useCallback((
+    sel: { start: Address; end: Address } | null,
+    mode: ClipboardCopyMode = 'all'
+  ) => {
+    const sheet = workbook.activeSheet;
+    const range = normalizeSelectionRange(sel);
+    if (!sheet || !range) return false;
+    performCopy(sheet, clipboardService, range, { mode });
+    return true;
+  }, [workbook, clipboardService]);
+
+  const cutSelection = useCallback((
+    sel: { start: Address; end: Address } | null,
+    mode: ClipboardCopyMode = 'all'
+  ) => {
+    const sheet = workbook.activeSheet;
+    const range = normalizeSelectionRange(sel);
+    if (!sheet || !range) return false;
+    performCut(sheet, clipboardService, range, { mode });
+    setCutRange(range);
+    return true;
+  }, [workbook, clipboardService]);
+
   // Get context menu items
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
     const sheet = workbook.activeSheet;
@@ -547,95 +942,37 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         id: 'cut',
         label: 'Cut',
         icon: '✂️',
-        shortcut: 'Ctrl+X',
-        onClick: () => {
-          const selection = contextMenuSelectionRef.current;
-          console.log('✂️ [ExcelApp] Context menu Cut clicked', {
-            frozenSelection: selection,
-            selectionDetails: selection ? {
-              start: `(${selection.start.row},${selection.start.col})`,
-              end: `(${selection.end.row},${selection.end.col})`,
-              dimensions: `${Math.abs(selection.end.row - selection.start.row) + 1}x${Math.abs(selection.end.col - selection.start.col) + 1}`
-            } : null,
-            timestamp: Date.now()
-          });
-          debugMenu('Cut clicked');
-          const sheet = workbook.activeSheet;
-          if (selection && sheet) {
-            // Copy to clipboard with isCut flag
-            const range = {
-              start: selection.start,
-              end: selection.end,
-            };
-            console.log('✂️ [ExcelApp] Calling clipboardService.cut with range:', `(${range.start.row},${range.start.col}) to (${range.end.row},${range.end.col})`);
-            clipboardService.cut(sheet, range);
-            const payload = clipboardService.getPayload();
-            console.log('✅ [ExcelApp] Cut to clipboard completed (source will be cleared after paste)', {
-              payloadCells: payload?.cells.length,
-              isCut: payload?.isCut,
-            });
-            
-            // Also write to system clipboard
-            if (payload && payload.cells.length > 0) {
-              const textValue = payload.cells[0]?.value?.toString() || '';
-              navigator.clipboard.writeText(textValue).then(() => {
-                console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
-              }).catch(err => {
-                console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
-              });
-            }
-            
-            // Set cut range for visual indication
-            setCutRange(range);
-            console.log('✅ [ExcelApp] Context menu cut range set for visual indication:', range);
-            
-            // Note: Source cells are NOT cleared here.
-            // PasteCommand will handle clearing the source after paste completes (via isCut flag)
-            // This ensures undo/redo works correctly as a single atomic operation
-          }
-        },
+        submenu: [
+          {
+            id: 'cut-all',
+            label: 'Cut',
+            shortcut: 'Ctrl+X',
+            onClick: () => cutSelection(contextMenuSelectionRef.current, 'all'),
+          },
+          {
+            id: 'cut-values',
+            label: 'Cut Values',
+            onClick: () => cutSelection(contextMenuSelectionRef.current, 'values'),
+          },
+        ],
       },
       {
         id: 'copy',
         label: 'Copy',
         icon: '📋',
-        shortcut: 'Ctrl+C',
-        onClick: () => {
-          const selection = contextMenuSelectionRef.current;
-          console.log('📋 [ExcelApp] Context menu Copy clicked', {
-            frozenSelection: selection,
-            selectionDetails: selection ? {
-              start: `(${selection.start.row},${selection.start.col})`,
-              end: `(${selection.end.row},${selection.end.col})`,
-              dimensions: `${Math.abs(selection.end.row - selection.start.row) + 1}x${Math.abs(selection.end.col - selection.start.col) + 1}`
-            } : null,
-            timestamp: Date.now()
-          });
-          debugMenu('Copy clicked');
-          const sheet = workbook.activeSheet;
-          if (selection && sheet) {
-            const range = {
-              start: selection.start,
-              end: selection.end,
-            };
-            console.log('📋 [ExcelApp] Calling clipboardService.copy with range:', `(${range.start.row},${range.start.col}) to (${range.end.row},${range.end.col})`);
-            clipboardService.copy(sheet, range);
-            const payload = clipboardService.getPayload();
-            console.log('✅ [ExcelApp] Copy completed');
-            
-            // Also write to system clipboard
-            if (payload && payload.cells.length > 0) {
-              const textValue = payload.cells[0]?.value?.toString() || '';
-              navigator.clipboard.writeText(textValue).then(() => {
-                console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
-              }).catch(err => {
-                console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
-              });
-            }
-          } else {
-            console.log('❌ [ExcelApp] Cannot copy - missing selection or sheet');
-          }
-        },
+        submenu: [
+          {
+            id: 'copy-all',
+            label: 'Copy',
+            shortcut: 'Ctrl+C',
+            onClick: () => copySelection(contextMenuSelectionRef.current, 'all'),
+          },
+          {
+            id: 'copy-values',
+            label: 'Copy Values',
+            onClick: () => copySelection(contextMenuSelectionRef.current, 'values'),
+          },
+        ],
       },
       {
         id: 'paste',
@@ -643,53 +980,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         icon: '📄',
         shortcut: 'Ctrl+V',
         onClick: () => {
-          const selection = contextMenuSelectionRef.current;
-          const payload = clipboardService.getPayload();
-          
-          console.log('📄 [ExcelApp] Context menu Paste clicked', {
-            frozenSelection: selection,
-            selectionDetails: selection ? {
-              start: `(${selection.start.row},${selection.start.col})`,
-              end: `(${selection.end.row},${selection.end.col})`
-            } : null,
-            hasPayload: !!payload,
-            payloadDetails: payload ? {
-              dimensions: `${payload.width}x${payload.height}`,
-              cellCount: payload.cells.length,
-              isCut: payload.isCut
-            } : null,
-            timestamp: Date.now()
-          });
-          
           debugMenu('Paste clicked');
-          const sheet = workbook.activeSheet;
-          
-          if (selection && sheet && payload) {
-            // Create and execute paste command
-            const targetAnchor = selection.start;
-            console.log('📄 [ExcelApp] Executing context menu paste with targetAnchor:', `(${targetAnchor.row},${targetAnchor.col})`);
-            const pasteCmd = new PasteCommand(sheet, payload, targetAnchor);
-            commandManager.execute(pasteCmd);
-            console.log('✅ [ExcelApp] Context menu paste completed');
-            
-            // Invalidate the pasted region
-            const r2 = targetAnchor.row + payload.height - 1;
-            const c2 = targetAnchor.col + payload.width - 1;
-            renderer?.invalidateRange(targetAnchor.row, targetAnchor.col, r2, c2);
-            
-            // If it was a cut operation, also invalidate source and clear cut range
-            if (payload.isCut) {
-              const { start, end } = payload.sourceRange;
-              renderer?.invalidateRange(start.row, start.col, end.row, end.col);
-              setCutRange(null);
-              console.log('✅ [ExcelApp] Context menu cut range cleared after paste');
-            }
-            
-            // Force immediate redraw to update screen
-            renderer?.redraw();
-          } else {
-            console.log('❌ [ExcelApp] Cannot paste from context menu - selection:', !!selection, 'sheet:', !!sheet, 'payload:', !!payload);
-          }
+          void pasteAtSelection(contextMenuSelectionRef.current);
         },
       },
       { id: 'sep1', label: '', separator: true },
@@ -701,19 +993,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         onClick: () => {
           const selection = contextMenuSelectionRef.current;
           debugMenu('Insert clicked');
-          if (selection && sheet) {
-            // Create and execute InsertCellsCommand for proper undo/redo support
-            const insertCmd = new InsertCellsCommand(sheet, { start: selection.start, end: selection.end });
-            commandManager.execute(insertCmd);
-            
-            // Invalidate and redraw affected area
-            const r1 = Math.min(selection.start.row, selection.end.row);
-            const c1 = Math.min(selection.start.col, selection.end.col);
-            const c2 = Math.max(selection.start.col, selection.end.col);
-            const lastRow = sheet.rowCount - 1;
-            renderer?.invalidateRange(r1, c1, lastRow, c2);
-            renderer?.redraw();
-            console.log('✅ [ExcelApp] Insert cells completed with undo support');
+          if (selection) {
+            openInsertDeleteDialog('insert', {
+              start: selection.start,
+              end: selection.end,
+            });
           }
         },
       },
@@ -725,19 +1009,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         onClick: () => {
           const selection = contextMenuSelectionRef.current;
           debugMenu('Delete clicked');
-          if (selection && sheet) {
-            // Create and execute DeleteCellsCommand for proper undo/redo support
-            const deleteCmd = new DeleteCellsCommand(sheet, { start: selection.start, end: selection.end });
-            commandManager.execute(deleteCmd);
-            
-            // Invalidate and redraw affected area
-            const r1 = Math.min(selection.start.row, selection.end.row);
-            const c1 = Math.min(selection.start.col, selection.end.col);
-            const c2 = Math.max(selection.start.col, selection.end.col);
-            const lastRow = sheet.rowCount - 1;
-            renderer?.invalidateRange(r1, c1, lastRow, c2);
-            renderer?.redraw();
-            console.log('✅ [ExcelApp] Delete cells completed with undo support');
+          if (selection) {
+            openInsertDeleteDialog('delete', {
+              start: selection.start,
+              end: selection.end,
+            });
           }
         },
       },
@@ -813,9 +1089,61 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       },
       { id: 'sep4', label: '', separator: true },
       {
+        id: 'hyperlink',
+        label: (() => {
+          const target = contextMenuTarget();
+          if (!target || !sheet) return 'Hyperlink...';
+          return sheet.getHyperlink(target)?.target ? 'Edit Hyperlink...' : 'Hyperlink...';
+        })(),
+        icon: '🔗',
+        shortcut: 'Ctrl+K',
+        onClick: () => {
+          const target = contextMenuTarget();
+          if (!target) return;
+          openHyperlinkEditorForAddress(target);
+        },
+      },
+      {
+        id: 'openHyperlink',
+        label: 'Open Hyperlink',
+        icon: '🌐',
+        disabled: (() => {
+          const target = contextMenuTarget();
+          if (!target || !sheet) return true;
+          return !sheet.getHyperlink(target)?.target;
+        })(),
+        onClick: () => {
+          const target = contextMenuTarget();
+          if (!target) return;
+          const link = sheet.getHyperlink(target);
+          if (!link?.target) return;
+          navigateHyperlink(link.target);
+        },
+      },
+      {
+        id: 'removeHyperlink',
+        label: 'Remove Hyperlink',
+        icon: '⛓️‍💥',
+        disabled: (() => {
+          const target = contextMenuTarget();
+          if (!target || !sheet) return true;
+          return !sheet.getHyperlink(target)?.target;
+        })(),
+        onClick: () => {
+          const target = contextMenuTarget();
+          if (!target) return;
+          const link = sheet.getHyperlink(target);
+          if (!link?.target) return;
+          commandManager.execute(new SetHyperlinkCommand(sheet, target, null));
+          renderer?.invalidateRange(target.row, target.col, target.row, target.col);
+          renderer?.scheduleRedraw();
+        },
+      },
+      { id: 'sep5', label: '', separator: true },
+      {
         id: 'insertComment',
         label: (() => {
-          const target = contextMenuSelectionRef.current?.start;
+          const target = contextMenuTarget();
           if (!target || !sheet) return 'New Comment';
           const comments = sheet.getComments(target);
           return comments.length > 0 ? 'Edit Comment' : 'New Comment';
@@ -824,7 +1152,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         shortcut: 'Shift+F2',
         onClick: () => {
           debugMenu('New/Edit Comment clicked');
-          const target = contextMenuSelectionRef.current?.start;
+          const target = contextMenuTarget();
           if (!target) return;
           openCommentEditorForAddress(target);
         },
@@ -834,12 +1162,12 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         label: 'Delete Comment',
         icon: '🗑️',
         disabled: (() => {
-          const target = contextMenuSelectionRef.current?.start;
+          const target = contextMenuTarget();
           if (!target || !sheet) return true;
           return sheet.getComments(target).length === 0;
         })(),
         onClick: () => {
-          const target = contextMenuSelectionRef.current?.start;
+          const target = contextMenuTarget();
           if (!target) return;
           const comments = sheet.getComments(target);
           if (comments.length === 0) return;
@@ -850,7 +1178,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         },
       },
     ];
-  }, [workbook, selection, renderer, clipboardService, commandManager, setIsFormatDialogOpen, openCommentEditorForAddress, recomputeHeaderFilterIcons, headerFilterIcons, openColumnFilterMenu]);
+  }, [workbook, selection, renderer, clipboardService, commandManager, setIsFormatDialogOpen, openCommentEditorForAddress, openHyperlinkEditorForAddress, navigateHyperlink, contextMenuTarget, recomputeHeaderFilterIcons, headerFilterIcons, openColumnFilterMenu, openInsertDeleteDialog, cutSelection, copySelection, pasteAtSelection]);
 
   // Handle right-click (context menu)
   useEffect(() => {
@@ -858,22 +1186,22 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
 
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
-      // CRITICAL: Get selection directly from renderer to avoid React state race condition
-      // Right-click triggers selection change, but context menu handler may run before
-      // setSelection completes, so we read from renderer's internal state instead
       const rendererSelections = renderer.getSelections();
       const frozenSelection = rendererSelections.length > 0 ? rendererSelections[0] : renderer['selection'] || selection;
       contextMenuSelectionRef.current = frozenSelection;
-      
-      console.log('🖱️ [ExcelApp] Context menu opened, frozen selection:', frozenSelection ? `(${frozenSelection.start.row},${frozenSelection.start.col})` : 'null', {
-        selection: frozenSelection,
-        rendererSelections: rendererSelections.length,
-        timestamp: Date.now()
-      });
-      
+
+      const hit = renderer.hitTest(e.clientX, e.clientY);
+      const clickedCell = hit?.type === 'cell' ? hit.addr : null;
+      contextMenuTargetCellRef.current = clickedCell;
+
+      // Move active cell to right-clicked cell without shrinking a multi-cell selection
+      if (clickedCell && frozenSelection && isAddressInSelection(clickedCell, frozenSelection)) {
+        setSelectedCell(clickedCell);
+      }
+
       setContextMenu({ x: e.clientX, y: e.clientY });
-      // Don't show MiniToolbar on right-click - only show on text selection
-      setMiniToolbar(null);
+      setContextMenuLayout(null);
+      setMiniToolbar({ x: e.clientX, y: e.clientY });
     };
 
     const canvas = renderer['canvas'];
@@ -881,7 +1209,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       canvas.addEventListener('contextmenu', handleContextMenu);
       return () => canvas.removeEventListener('contextmenu', handleContextMenu);
     }
-  }, [renderer, selection]); // Include selection in deps so we capture latest
+  }, [renderer, selection, isAddressInSelection]);
 
   // Handle renderer ready
   const handleRendererReady = useCallback((r: CanvasRenderer) => {
@@ -1001,7 +1329,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     };
   }, [renderer, workbook]); // Remove startInCellEdit from dependencies
 
-  // Comment hover tooltip
+  // Comment + hyperlink hover tooltips
   useEffect(() => {
     if (!renderer) return;
     const sheet = renderer['sheet'];
@@ -1012,6 +1340,22 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         const addr = event.event?.address;
         const bounds = event.event?.bounds;
         if (!addr || !bounds) return;
+
+        const link = sheet.getHyperlink?.(addr);
+        if (link?.target) {
+          setHyperlinkTooltip({
+            x: bounds.x + 4,
+            y: Math.max(4, bounds.y - 28),
+            text: getDefaultHyperlinkScreenTip(link),
+          });
+          setStatusBarLink(link.target);
+          setCommentTooltip(null);
+          return;
+        }
+
+        setHyperlinkTooltip(null);
+        setStatusBarLink(null);
+
         const comments = sheet.getComments(addr);
         if (comments.length === 0) {
           setCommentTooltip(null);
@@ -1025,6 +1369,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         });
       } else if (event?.type === 'cell-hover-end') {
         setCommentTooltip(null);
+        setHyperlinkTooltip(null);
+        setStatusBarLink(null);
       }
     });
 
@@ -1056,11 +1402,22 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       const target = e.target as HTMLElement;
       const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      const isFindReplaceOpen = isFindReplaceOpenRef.current;
+
+      // When Find/Replace is open, only allow dialog input and Ctrl+F/Ctrl+H reopen shortcuts
+      if (isFindReplaceOpen) {
+        if (isInInput || target.closest('.find-replace-dialog')) return;
+        if (isCtrlLetter(e, 'f') || isCtrlLetter(e, 'h')) {
+          // fall through to open/switch tab
+        } else {
+          return;
+        }
+      }
       
       // ===== FILE MENU SHORTCUTS (ALWAYS ACTIVE) =====
       
       // Ctrl+N (New workbook)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyN') {
+      if (isCtrlLetter(e, 'n')) {
         e.preventDefault();
         setBackstagePanel('new');
         setBackstageOpen(true);
@@ -1068,7 +1425,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Ctrl+O (Open workbook)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
+      if (isCtrlLetter(e, 'o')) {
         e.preventDefault();
         setBackstagePanel('open');
         setBackstageOpen(true);
@@ -1076,7 +1433,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Ctrl+S (Save workbook)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+      if (isCtrlLetter(e, 's')) {
         e.preventDefault();
         if (onSave) {
           onSave();
@@ -1087,31 +1444,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         }
         return;
       }
-      
-      // ===== SHORTCUTS THAT WORK IN INPUT FIELDS =====
-      
-      // Ctrl+Z (Undo) - fallback when shortcut registry did not handle (e.g. input fields)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !e.shiftKey) {
-        if (e.defaultPrevented) return;
-        e.preventDefault();
-        commandManager.undo();
-        renderer?.redraw?.();
-        onUndo?.();
-        return;
-      }
-      
-      // Ctrl+Y or Ctrl+Shift+Z (Redo) - fallback when shortcut registry did not handle
-      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ'))) {
-        if (e.defaultPrevented) return;
-        e.preventDefault();
-        commandManager.redo();
-        renderer?.redraw?.();
-        onRedo?.();
-        return;
-      }
-      
+
       // Ctrl+F (Find) - works everywhere except in input fields
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF' && !isInInput) {
+      if (isCtrlLetter(e, 'f') && !isInInput) {
         e.preventDefault();
         setFindReplaceTab('find');
         setIsFindReplaceOpen(true);
@@ -1119,22 +1454,29 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Ctrl+H (Replace) - works everywhere except in input fields
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyH' && !isInInput) {
+      if (isCtrlLetter(e, 'h') && !isInInput) {
         e.preventDefault();
         setFindReplaceTab('replace');
         setIsFindReplaceOpen(true);
         return;
       }
+
+      // Shift+F11 (Insert Sheet)
+      if (e.code === 'F11' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !isInInput) {
+        e.preventDefault();
+        handleInsertSheet();
+        return;
+      }
       
       // Escape - cancel in-cell editing
-      if (e.key === 'Escape' && inCellEdit) {
+      if (e.code === 'Escape' && inCellEdit) {
         e.preventDefault();
         setInCellEdit(null);
         return;
       }
       
       // Enter - move down (works when not editing)
-      if (e.key === 'Enter' && !e.shiftKey && !isEditingFormula && !inCellEdit && selectedCell) {
+      if (e.code === 'Enter' && !e.shiftKey && !isEditingFormula && !inCellEdit && !isInInput && selectedCell) {
         e.preventDefault();
         const newRow = Math.min(selectedCell.row + 1, workbook.activeSheet?.rowCount || 1000);
         setSelectedCell({ row: newRow, col: selectedCell.col });
@@ -1146,7 +1488,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Shift+Enter - move up (works when not editing)
-      if (e.key === 'Enter' && e.shiftKey && !isEditingFormula && !inCellEdit && selectedCell) {
+      if (e.code === 'Enter' && e.shiftKey && !isEditingFormula && !inCellEdit && !isInInput && selectedCell) {
         e.preventDefault();
         const newRow = Math.max(selectedCell.row - 1, 0);
         setSelectedCell({ row: newRow, col: selectedCell.col });
@@ -1158,7 +1500,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Tab - move right (works when not editing)
-      if (e.key === 'Tab' && !e.shiftKey && !isEditingFormula && !inCellEdit && selectedCell) {
+      if (e.code === 'Tab' && !e.shiftKey && !isEditingFormula && !inCellEdit && !isInInput && selectedCell) {
         e.preventDefault();
         const newCol = Math.min(selectedCell.col + 1, workbook.activeSheet?.colCount || 100);
         setSelectedCell({ row: selectedCell.row, col: newCol });
@@ -1170,7 +1512,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Shift+Tab - move left (works when not editing)
-      if (e.key === 'Tab' && e.shiftKey && !isEditingFormula && !inCellEdit && selectedCell) {
+      if (e.code === 'Tab' && e.shiftKey && !isEditingFormula && !inCellEdit && !isInInput && selectedCell) {
         e.preventDefault();
         const newCol = Math.max(selectedCell.col - 1, 0);
         setSelectedCell({ row: selectedCell.row, col: newCol });
@@ -1192,310 +1534,99 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       // --- Clipboard Operations ---
       
       // Ctrl+C (Copy)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') {
+      if (isCtrlLetter(e, 'c')) {
         e.preventDefault();
-        console.log('📋 [ExcelApp] Ctrl+C detected', {
-          key: e.key,
-          code: e.code,
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-          selection,
-        });
-        if (selection) {
-          const range = { start: selection.start, end: selection.end };
-          clipboardService.copy(sheet, range);
-          const payload = clipboardService.getPayload();
-          console.log('✅ [ExcelApp] Copied to clipboard', {
-            payloadCells: payload?.cells.length,
-            payloadDimensions: payload ? `${payload.width}x${payload.height}` : 'none',
-          });
-          
-          // Also write to system clipboard for external paste
-          if (payload && payload.cells.length > 0) {
-            const textValue = payload.cells[0]?.value?.toString() || '';
-            navigator.clipboard.writeText(textValue).then(() => {
-              console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
-            }).catch(err => {
-              console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
-            });
-          }
-        } else {
-          console.log('❌ [ExcelApp] Cannot copy - no selection');
-        }
+        copySelection(selection);
         return;
       }
       
       // Ctrl+X (Cut)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') {
+      if (isCtrlLetter(e, 'x')) {
         e.preventDefault();
-        console.log('✂️ [ExcelApp] Ctrl+X detected', {
-          key: e.key,
-          code: e.code,
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-          selection,
-          hasSheet: !!sheet,
-          sheetValue: sheet,
-        });
-        
-        if (!sheet) {
-          console.log('❌ [ExcelApp] Cannot cut - sheet is null/undefined!');
-          return;
-        }
-        
-        if (!selection) {
-          console.log('❌ [ExcelApp] Cannot cut - no selection');
-          return;
-        }
-        
-        console.log('🔍 [ExcelApp] Cut checks passed, executing cut logic...');
-        
-        try {
-          const range = { start: selection.start, end: selection.end };
-          
-          console.log('📍 [ExcelApp] Creating cut with range:', {
-            start: `(${range.start.row},${range.start.col})`,
-            end: `(${range.end.row},${range.end.col})`,
-          });
-          
-          // Execute cut operation
-          clipboardService.cut(sheet, range);
-          console.log('✅ [ExcelApp] clipboardService.cut() completed');
-          
-          // Set cut range for visual indication (marching ants border)
-          setCutRange(range);
-          console.log('✅ [ExcelApp] Cut range set for visual indication:', range);
-          
-          // Get and verify payload
-          const payload = clipboardService.getPayload();
-          console.log('✅ [ExcelApp] Cut to clipboard (source will be cleared after paste)', {
-            payloadCells: payload?.cells.length,
-            payloadDimensions: payload ? `${payload.width}x${payload.height}` : 'none',
-            isCut: payload?.isCut,
-            firstCellValue: payload?.cells[0]?.value,
-            firstCellFormula: payload?.cells[0]?.formula,
-          });
-          
-          // Also write to system clipboard for external paste
-          if (payload && payload.cells.length > 0) {
-            const textValue = payload.cells[0]?.value?.toString() || '';
-            navigator.clipboard.writeText(textValue).then(() => {
-              console.log('✅ [ExcelApp] Also wrote to system clipboard:', textValue);
-            }).catch(err => {
-              console.warn('⚠️ [ExcelApp] Could not write to system clipboard:', err);
-            });
-          }
-          
-          // Log cell data for diagnostics
-          try {
-            console.log('📊 [ExcelApp] Source cell data:', {
-              sourceCell: `(${range.start.row},${range.start.col})`,
-              cellValue: sheet.getCellValue(range.start),
-              cellFormula: sheet.getCell(range.start)?.formula,
-            });
-          } catch (cellError) {
-            console.warn('⚠️ [ExcelApp] Could not read cell data:', cellError);
-          }
-          
-          // Note: Source cells are NOT cleared here.
-          // PasteCommand will handle clearing the source after paste completes (via isCut flag)
-        } catch (error) {
-          console.error('❌ [ExcelApp] Error during cut operation:', error);
-          console.error('Error stack:', (error as Error).stack);
-        }
+        cutSelection(selection);
         return;
       }
       
       // Ctrl+V (Paste)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
+      if (isCtrlLetter(e, 'v')) {
         e.preventDefault();
-        const payload = clipboardService.getPayload();
-        console.log('📄 [ExcelApp] Ctrl+V detected', {
-          key: e.key,
-          code: e.code,
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-          selection,
-          selectionDetails: selection ? {
-            start: `(${selection.start.row},${selection.start.col})`,
-            end: `(${selection.end.row},${selection.end.col})`,
-            dimensions: `${Math.abs(selection.end.row - selection.start.row) + 1}x${Math.abs(selection.end.col - selection.start.col) + 1}`
-          } : null,
-          hasPayload: !!payload,
-          payloadDetails: payload ? {
-            dimensions: `${payload.width}x${payload.height}`,
-            cellCount: payload.cells.length,
-            isCut: payload.isCut,
-            sourceRange: `(${payload.sourceRange.start.row},${payload.sourceRange.start.col}) to (${payload.sourceRange.end.row},${payload.sourceRange.end.col})`,
-            firstCellValue: payload.cells[0]?.value,
-            firstCellFormula: payload.cells[0]?.formula,
-          } : null
-        });
-        if (selection && payload) {
-          const targetAnchor = selection.start;
-          console.log('▶️ [ExcelApp] Executing PasteCommand with targetAnchor:', `(${targetAnchor.row},${targetAnchor.col})`);
-          
-          // Log target cell data BEFORE paste
-          console.log('📊 [ExcelApp] Target cell BEFORE paste:', {
-            targetCell: `(${targetAnchor.row},${targetAnchor.col})`,
-            cellValue: sheet.getCellValue(targetAnchor),
-            cellFormula: sheet.getCell(targetAnchor)?.formula,
-          });
-          
-          // For cut operations, also log source cell BEFORE paste
-          if (payload.isCut) {
-            const sourceCell = payload.sourceRange.start;
-            console.log('📊 [ExcelApp] Source cell BEFORE paste (should have data):', {
-              sourceCell: `(${sourceCell.row},${sourceCell.col})`,
-              cellValue: sheet.getCellValue(sourceCell),
-              cellFormula: sheet.getCell(sourceCell)?.formula,
-            });
-          }
-          
-          const pasteCmd = new PasteCommand(sheet, payload, targetAnchor);
-          commandManager.execute(pasteCmd);
-          console.log('✅ [ExcelApp] PasteCommand.execute() completed');
-          
-          // Log target cell data AFTER paste
-          console.log('📊 [ExcelApp] Target cell AFTER paste:', {
-            targetCell: `(${targetAnchor.row},${targetAnchor.col})`,
-            cellValue: sheet.getCellValue(targetAnchor),
-            cellFormula: sheet.getCell(targetAnchor)?.formula,
-          });
-          
-          // If it was a cut operation, also check source cell AFTER paste
-          if (payload.isCut) {
-            const sourceCell = payload.sourceRange.start;
-            console.log('📊 [ExcelApp] Source cell AFTER paste (should be EMPTY for cut):', {
-              sourceCell: `(${sourceCell.row},${sourceCell.col})`,
-              cellValue: sheet.getCellValue(sourceCell),
-              cellFormula: sheet.getCell(sourceCell)?.formula,
-              expectedToBeEmpty: true,
-              isEmpty: sheet.getCellValue(sourceCell) === null || sheet.getCellValue(sourceCell) === undefined || sheet.getCellValue(sourceCell) === '',
-            });
-          }
-          
-          console.log('✅ [ExcelApp] Paste completed');
-          
-          const r2 = targetAnchor.row + payload.height - 1;
-          const c2 = targetAnchor.col + payload.width - 1;
-          console.log('🔄 [ExcelApp] Invalidating target range:', `(${targetAnchor.row},${targetAnchor.col}) to (${r2},${c2})`);
-          renderer?.invalidateRange(targetAnchor.row, targetAnchor.col, r2, c2);
-          
-          // Also invalidate source range if it was a cut
-          if (payload.isCut) {
-            const { start, end } = payload.sourceRange;
-            console.log('🔄 [ExcelApp] Invalidating source range for redraw:', `(${start.row},${start.col}) to (${end.row},${end.col})`);
-            renderer?.invalidateRange(start.row, start.col, end.row, end.col);
-            
-            // Clear cut range visual indication after paste
-            setCutRange(null);
-            console.log('✅ [ExcelApp] Cut range cleared after paste');
-          }
-          
-          // Force immediate redraw to update screen
-          console.log('🎨 [ExcelApp] About to call renderer.redraw()...');
-          renderer?.redraw();
-          console.log('🎨 [ExcelApp] Forced immediate redraw after paste - redraw() call completed');
-        } else {
-          console.log('❌ [ExcelApp] Cannot paste - selection:', !!selection, 'payload:', !!payload);
-        }
+        void pasteAtSelection(selection);
         return;
       }
       
       // --- Formatting Operations ---
       
       // Ctrl+B (Bold)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyB') {
+      if (isCtrlLetter(e, 'b')) {
         e.preventDefault();
-        if (selection) {
-          const r1 = Math.min(selection.start.row, selection.end.row);
-          const r2 = Math.max(selection.start.row, selection.end.row);
-          const c1 = Math.min(selection.start.col, selection.end.col);
-          const c2 = Math.max(selection.start.col, selection.end.col);
-          
-          const firstCellStyle = sheet.getCellStyle(selection.start);
-          const newBoldState = !firstCellStyle?.bold;
-          
-          for (let r = r1; r <= r2; r++) {
-            for (let c = c1; c <= c2; c++) {
-              const addr = { row: r, col: c };
-              const currentStyle = sheet.getCellStyle(addr) || {};
-              const newStyle = sheet.internStyle({ ...currentStyle, bold: newBoldState });
-              sheet.setCellStyle(addr, newStyle);
-            }
-          }
-          renderer?.scheduleRedraw();
+        if (formattingController && selectionAddresses.length > 0) {
+          formattingController.toggleBold(selectionAddresses);
         }
         return;
       }
       
       // Ctrl+I (Italic)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyI') {
+      if (isCtrlLetter(e, 'i')) {
         e.preventDefault();
-        if (selection) {
-          const r1 = Math.min(selection.start.row, selection.end.row);
-          const r2 = Math.max(selection.start.row, selection.end.row);
-          const c1 = Math.min(selection.start.col, selection.end.col);
-          const c2 = Math.max(selection.start.col, selection.end.col);
-          
-          const firstCellStyle = sheet.getCellStyle(selection.start);
-          const newItalicState = !firstCellStyle?.italic;
-          
-          for (let r = r1; r <= r2; r++) {
-            for (let c = c1; c <= c2; c++) {
-              const addr = { row: r, col: c };
-              const currentStyle = sheet.getCellStyle(addr) || {};
-              const newStyle = sheet.internStyle({ ...currentStyle, italic: newItalicState });
-              sheet.setCellStyle(addr, newStyle);
-            }
-          }
-          renderer?.scheduleRedraw();
+        if (formattingController && selectionAddresses.length > 0) {
+          formattingController.toggleItalic(selectionAddresses);
         }
         return;
       }
       
       // Ctrl+U (Underline)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyU') {
+      if (isCtrlLetter(e, 'u')) {
         e.preventDefault();
-        if (selection) {
-          const r1 = Math.min(selection.start.row, selection.end.row);
-          const r2 = Math.max(selection.start.row, selection.end.row);
-          const c1 = Math.min(selection.start.col, selection.end.col);
-          const c2 = Math.max(selection.start.col, selection.end.col);
-          
-          const firstCellStyle = sheet.getCellStyle(selection.start);
-          const newUnderlineState = !firstCellStyle?.underline;
-          
-          for (let r = r1; r <= r2; r++) {
-            for (let c = c1; c <= c2; c++) {
-              const addr = { row: r, col: c };
-              const currentStyle = sheet.getCellStyle(addr) || {};
-              const newStyle = sheet.internStyle({ ...currentStyle, underline: newUnderlineState });
-              sheet.setCellStyle(addr, newStyle);
-            }
-          }
-          renderer?.scheduleRedraw();
+        if (formattingController && selectionAddresses.length > 0) {
+          formattingController.toggleUnderline(selectionAddresses);
         }
         return;
       }
       
       // Ctrl+S (Save)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+      if (isCtrlLetter(e, 's')) {
         e.preventDefault();
         if (onSave) onSave();
         return;
       }
       
       // Ctrl+1 (Format Cells dialog)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'Digit1') {
+      if (isCtrlPhysicalKey(e, 'Digit1')) {
         e.preventDefault();
         setIsFormatDialogOpen(true);
         return;
       }
 
+      // Ctrl+Shift+= / Ctrl+Shift++ (Insert cells dialog)
+      if (
+        !isInInput &&
+        selection?.start &&
+        selection?.end &&
+        hasCtrlOrMeta(e) &&
+        e.shiftKey &&
+        (e.code === 'Equal' || e.code === 'NumpadAdd')
+      ) {
+        e.preventDefault();
+        openInsertDeleteDialog('insert', { start: selection.start, end: selection.end });
+        return;
+      }
+
+      // Ctrl+- (Delete cells dialog)
+      if (
+        !isInInput &&
+        selection?.start &&
+        selection?.end &&
+        hasCtrlOrMeta(e) &&
+        !e.shiftKey &&
+        (e.code === 'Minus' || e.code === 'NumpadSubtract')
+      ) {
+        e.preventDefault();
+        openInsertDeleteDialog('delete', { start: selection.start, end: selection.end });
+        return;
+      }
+
       // Ctrl+Shift+L (toggle AutoFilter)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyL') {
+      if (isCtrlPhysicalKey(e, 'KeyL', { shift: true })) {
         e.preventDefault();
         setIsAutoFilterEnabled((prev) => {
           const next = !prev;
@@ -1516,7 +1647,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       // --- Navigation Operations ---
       
       // Ctrl+Home (Jump to A1)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Home') {
+      if (hasCtrlOrMeta(e) && e.code === 'Home') {
         e.preventDefault();
         setSelectedCell({ row: 0, col: 0 });
         renderer?.setSelection({ 
@@ -1529,7 +1660,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Ctrl+End (Jump to last used cell)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'End') {
+      if (hasCtrlOrMeta(e) && e.code === 'End') {
         e.preventDefault();
         // Find last used cell using sparse cell iteration (O(n) not O(rows*cols))
         let lastRow = 0;
@@ -1547,7 +1678,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Ctrl+A (Select entire sheet)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') {
+      if (isCtrlLetter(e, 'a')) {
         e.preventDefault();
         
         // Select entire sheet
@@ -1568,7 +1699,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Alt+ArrowDown (Show validation dropdown for list validation)
-      if (e.altKey && e.key === 'ArrowDown' && !isInInput && selectedCell) {
+      if (e.altKey && e.code === 'ArrowDown' && !isInInput && selectedCell) {
         e.preventDefault();
         const validationEngine = (renderer as any)?.getValidationEngine?.();
         if (validationEngine) {
@@ -1591,7 +1722,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Ctrl+Arrow keys (Jump to edge of data region)
-      if ((e.ctrlKey || e.metaKey) && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey) {
+      if (hasCtrlOrMeta(e) && isArrowKey(e) && !e.shiftKey) {
         e.preventDefault();
         if (!selectedCell) return;
         
@@ -1609,7 +1740,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         let newCol = selectedCell.col;
         const currentIsEmpty = isEmpty(newRow, newCol);
         
-        switch (e.key) {
+        switch (e.code) {
           case 'ArrowUp':
             if (currentIsEmpty) {
               // Jump to first non-empty cell above
@@ -1684,7 +1815,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Shift+Arrow keys (Extend selection)
-      if (e.shiftKey && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      if (e.shiftKey && isArrowKey(e)) {
         e.preventDefault();
         if (!selection) return;
         
@@ -1692,7 +1823,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         let newRow = currentEnd.row;
         let newCol = currentEnd.col;
         
-        switch (e.key) {
+        switch (e.code) {
           case 'ArrowUp':
             newRow = Math.max(0, currentEnd.row - 1);
             break;
@@ -1719,8 +1850,25 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       // --- Editing Operations ---
       
+      // Enter — follow hyperlink when cell has a link (Excel behavior)
+      if (e.code === 'Enter' && !e.ctrlKey && !e.altKey && !e.shiftKey && selectedCell && !isInInput && !inCellEdit) {
+        const link = sheet.getHyperlink?.(selectedCell);
+        if (link?.target) {
+          e.preventDefault();
+          navigateHyperlink(link.target);
+          return;
+        }
+      }
+
+      // Ctrl+K (Insert/Edit Hyperlink)
+      if (isCtrlLetter(e, 'k') && selectedCell) {
+        e.preventDefault();
+        openHyperlinkEditorForAddress(selectedCell);
+        return;
+      }
+
       // F2 to start editing with existing content
-      if (e.key === 'F2' && selectedCell && renderer) {
+      if (e.code === 'F2' && selectedCell && renderer) {
         if (e.shiftKey) {
           e.preventDefault();
           openCommentEditorForAddress(selectedCell);
@@ -1748,7 +1896,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Delete or Backspace to clear cell
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selection) {
+      if ((e.code === 'Delete' || e.code === 'Backspace') && selection) {
         e.preventDefault();
         
         // Clear cells using command (for undo/redo)
@@ -1766,24 +1914,23 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
       
       // Any printable character starts editing with that character
-      // Filter out control characters (including \x00) - only allow visible ASCII characters
-      const isPrintableKey = e.key.length === 1 && e.key >= ' ' && e.key <= '~' && !e.ctrlKey && !e.metaKey && !e.altKey;
+      const typedCharacter = getTypedCharacter(e);
       
-      if (selectedCell && isPrintableKey && renderer) {
+      if (selectedCell && typedCharacter && renderer) {
         e.preventDefault();
         
         // Inline edit mode activation with initial character
         const bounds = renderer.getCellBounds(selectedCell);
         if (bounds) {
-          console.log('✍️ [TYPING KEY] Activating edit mode for cell', selectedCell, 'key:', e.key);
+          console.log('✍️ [TYPING KEY] Activating edit mode for cell', selectedCell, 'key:', typedCharacter);
           setIsEditingFormula(false);
           setInCellEdit({
             cell: selectedCell,
             bounds,
-            initialValue: e.key,
-            currentValue: e.key,
+            initialValue: typedCharacter,
+            currentValue: typedCharacter,
           });
-          setIsPickingReference(e.key === '=');
+          setIsPickingReference(typedCharacter === '=');
         }
       }
     };
@@ -1794,7 +1941,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       console.log('🧹 Keyboard handler effect cleanup - removing listener');
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [workbook, renderer, clipboardService, commandManager, onSave, onUndo, onRedo, openCommentEditorForAddress, recomputeHeaderFilterIcons, executeFilterStateCommand]); // Removed state deps - now using refs
+  }, [workbook, renderer, clipboardService, commandManager, onSave, openCommentEditorForAddress, openHyperlinkEditorForAddress, navigateHyperlink, recomputeHeaderFilterIcons, executeFilterStateCommand, formattingController, selectionAddresses, openInsertDeleteDialog, copySelection, cutSelection, pasteAtSelection, inCellEdit, handleInsertSheet]);
 
   // Handle cell click when in reference picking mode
   useEffect(() => {
@@ -1802,11 +1949,13 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     if (!renderer || !isPickingReference) return;
 
     const sheet = renderer['sheet'];
-    if (!sheet || !sheet['events']) return;
+    if (!sheet || typeof sheet.on !== 'function') return;
 
     const handleCellClick = (event: any) => {
+      if (event.type !== 'cell-click') return;
       console.log('📍 [CELL-CLICK HANDLER] Cell clicked in reference picking mode', event.event?.address);
       const { address } = event.event;
+      if (!address) return;
       
       // Convert row/col to Excel-style reference (e.g., A1, B2)
       const colLetter = String.fromCharCode(65 + address.col);
@@ -1831,12 +1980,39 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       }
     };
 
-    sheet['events'].on('cell-click', handleCellClick);
+    const subscription = sheet.on(handleCellClick);
 
     return () => {
-      sheet['events'].off('cell-click', handleCellClick);
+      subscription.dispose();
     };
   }, [renderer, isPickingReference]);
+
+  // Ctrl+Click on a hyperlinked cell opens the link (Excel behavior)
+  useEffect(() => {
+    if (!renderer) return;
+
+    const sheet = renderer['sheet'];
+    if (!sheet || typeof sheet.on !== 'function') return;
+
+    const handleHyperlinkClick = (event: any) => {
+      if (event.type !== 'cell-click') return;
+      const { address, originalEvent } = event.event ?? {};
+      if (!address || !originalEvent) return;
+      if (!originalEvent.ctrlKey && !originalEvent.metaKey) return;
+
+      const link = sheet.getHyperlink?.(address);
+      if (!link?.target) return;
+
+      originalEvent.preventDefault();
+      navigateHyperlink(link.target);
+    };
+
+    const subscription = sheet.on(handleHyperlinkClick);
+
+    return () => {
+      subscription.dispose();
+    };
+  }, [renderer, navigateHyperlink]);
 
   const handleCommentDialogSave = useCallback((text: string) => {
     if (!commentDialog) return;
@@ -1868,6 +2044,41 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     renderer?.scheduleRedraw();
   }, [commentDialog, workbook, renderer]);
 
+  const handleHyperlinkDialogSave = useCallback((result: InsertHyperlinkDialogResult) => {
+    if (!hyperlinkDialog) return;
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    commandManager.execute(new SetHyperlinkCommand(
+      sheet,
+      hyperlinkDialog.address,
+      result.hyperlink,
+      { displayText: result.displayText }
+    ));
+
+    if (result.editNewDocumentNow && result.hyperlink.newDocumentName) {
+      downloadBlankWorkbook(result.hyperlink.newDocumentName);
+    }
+
+    const { row, col } = hyperlinkDialog.address;
+    setHyperlinkDialog(null);
+    renderer?.invalidateRange(row, col, row, col);
+    renderer?.scheduleRedraw();
+  }, [hyperlinkDialog, workbook, commandManager, renderer]);
+
+  const handleHyperlinkDialogRemove = useCallback(() => {
+    if (!hyperlinkDialog) return;
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    commandManager.execute(new SetHyperlinkCommand(sheet, hyperlinkDialog.address, null));
+
+    const { row, col } = hyperlinkDialog.address;
+    setHyperlinkDialog(null);
+    renderer?.invalidateRange(row, col, row, col);
+    renderer?.scheduleRedraw();
+  }, [hyperlinkDialog, workbook, commandManager, renderer]);
+
   const handleCommentDialogDelete = useCallback(() => {
     if (!commentDialog) return;
     const sheet = workbook.activeSheet;
@@ -1890,8 +2101,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       <TitleBar
         fileName={`${fileName} - Excel`}
         onSave={onSave}
-        onUndo={onUndo || (() => commandManager.undo())}
-        onRedo={onRedo || (() => commandManager.redo())}
+        onUndo={() => commandManager.undo()}
+        onRedo={() => commandManager.redo()}
       />
 
       {/* Ribbon Tabs */}
@@ -1911,10 +2122,28 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         activeTab={activeTab}
         drawingLayer={drawingLayer}
         workbook={workbook}
+        clipboardService={clipboardService}
+        onAfterCommand={() => renderer?.redraw?.()}
+        historyVersion={historyVersion}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         zoom={zoom}
         onZoomChange={handleZoomChange}
+        onInsertHyperlink={() => {
+          if (selectedCell) {
+            openHyperlinkEditorForAddress(selectedCell);
+          }
+        }}
+        onOpenFindReplace={(tab) => {
+          setFindReplaceTab(tab);
+          setIsFindReplaceOpen(true);
+        }}
+        onInsertSheet={handleInsertSheet}
+        onDeleteSheet={handleDeleteActiveSheet}
+        onRequestRenameSheet={() => setRenameSheetTrigger((v) => v + 1)}
+        onFilter={handleRibbonFilter}
+        onDataCommand={handleDataCommand}
+        selectedCells={selectionAddresses}
       />
 
       {/* Formula Bar */}
@@ -1940,6 +2169,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           sheetName={activeSheet}
           zoom={zoom / 100}
           viewMode={viewMode}
+          fontFamily={cyberSheetConfig.fonts.defaultFamily}
+          fontSize={cyberSheetConfig.fonts.defaultSize}
           rendererOptions={{
             onRequestColumnFilterMenu: ({ col, anchor, values, apply, clear }: any) => {
               if (!isAutoFilterEnabled) return;
@@ -2075,6 +2306,32 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             }}
           >
             {commentTooltip.text}
+          </div>
+        )}
+
+        {hyperlinkTooltip && (
+          <div
+            style={{
+              position: 'absolute',
+              left: hyperlinkTooltip.x,
+              top: hyperlinkTooltip.y,
+              background: '#ffffe1',
+              border: '1px solid #aca899',
+              borderRadius: 0,
+              boxShadow: '1px 1px 3px rgba(0,0,0,0.15)',
+              padding: '4px 8px',
+              maxWidth: 360,
+              fontSize: 11,
+              fontFamily: 'Segoe UI, Arial, sans-serif',
+              lineHeight: 1.3,
+              zIndex: 10004,
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {hyperlinkTooltip.text}
           </div>
         )}
 
@@ -2215,6 +2472,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         activeSheet={activeSheet}
         onSheetChange={handleSheetChange}
         onAddSheet={handleAddSheet}
+        onRenameSheet={handleRenameSheet}
+        onDeleteSheet={handleDeleteSheet}
+        renameActiveSheetTrigger={renameSheetTrigger}
       />
 
       {/* Status Bar */}
@@ -2225,158 +2485,65 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         workbook={workbook}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
+        statusMessage={statusBarLink}
       />
 
-      {/* Mini Toolbar */}
+      {/* Mini Toolbar — Excel-style formatting bar above context menu */}
       {miniToolbar && (
         <MiniToolbar
           x={miniToolbar.x}
           y={miniToolbar.y}
+          menuTopY={contextMenuLayout?.y ?? contextMenu?.y}
+          persistWithContextMenu={!!contextMenu}
           onClose={() => setMiniToolbar(null)}
           recentFillColors={recentFillColors}
           recentFontColors={recentFontColors}
-          currentFont={selection && workbook.activeSheet ? workbook.activeSheet.getCellStyle(selection.start)?.fontFamily || 'Segoe UI' : 'Segoe UI'}
-          currentFontSize={selection && workbook.activeSheet ? workbook.activeSheet.getCellStyle(selection.start)?.fontSize || 11 : 11}
-          isBold={selection && workbook.activeSheet ? workbook.activeSheet.getCellStyle(selection.start)?.bold || false : false}
-          isItalic={selection && workbook.activeSheet ? workbook.activeSheet.getCellStyle(selection.start)?.italic || false : false}
-          isUnderline={selection && workbook.activeSheet ? workbook.activeSheet.getCellStyle(selection.start)?.underline || false : false}
+          currentFont={miniToolbarCellStyle?.fontFamily || 'Calibri'}
+          currentFontSize={miniToolbarCellStyle?.fontSize || 11}
+          isBold={miniToolbarCellStyle?.bold || false}
+          isItalic={miniToolbarCellStyle?.italic || false}
+          isUnderline={!!miniToolbarCellStyle?.underline}
+          currentFontColor={resolveStyleColor(miniToolbarCellStyle?.color)}
+          currentFillColor={resolveStyleFillColor(miniToolbarCellStyle?.fill)}
+          numberFormatCategory={getNumberFormatCategory(miniToolbarCellStyle?.numberFormat)}
           onFontChange={(font) => {
-            const sheet = workbook.activeSheet;
-            if (selection && sheet) {
-              const r1 = Math.min(selection.start.row, selection.end.row);
-              const r2 = Math.max(selection.start.row, selection.end.row);
-              const c1 = Math.min(selection.start.col, selection.end.col);
-              const c2 = Math.max(selection.start.col, selection.end.col);
-              
-              for (let r = r1; r <= r2; r++) {
-                for (let c = c1; c <= c2; c++) {
-                  const addr = { row: r, col: c };
-                  const currentStyle = sheet.getCellStyle(addr) || {};
-                  sheet.setCellStyle(addr, { ...currentStyle, fontFamily: font });
-                }
-              }
-              renderer?.scheduleRedraw();
-            }
+            applyContextMenuFormatting((addresses) => formattingController?.setFontFamily(addresses, font));
           }}
           onFontSizeChange={(size) => {
-            const sheet = workbook.activeSheet;
-            if (selection && sheet) {
-              const r1 = Math.min(selection.start.row, selection.end.row);
-              const r2 = Math.max(selection.start.row, selection.end.row);
-              const c1 = Math.min(selection.start.col, selection.end.col);
-              const c2 = Math.max(selection.start.col, selection.end.col);
-              
-              for (let r = r1; r <= r2; r++) {
-                for (let c = c1; c <= c2; c++) {
-                  const addr = { row: r, col: c };
-                  const currentStyle = sheet.getCellStyle(addr) || {};
-                  sheet.setCellStyle(addr, { ...currentStyle, fontSize: size });
-                }
-              }
-              renderer?.scheduleRedraw();
-            }
+            if (!Number.isFinite(size)) return;
+            applyContextMenuFormatting((addresses) => formattingController?.setFontSize(addresses, size));
           }}
           onBoldToggle={() => {
-            const sheet = workbook.activeSheet;
-            if (selection && sheet) {
-              const r1 = Math.min(selection.start.row, selection.end.row);
-              const r2 = Math.max(selection.start.row, selection.end.row);
-              const c1 = Math.min(selection.start.col, selection.end.col);
-              const c2 = Math.max(selection.start.col, selection.end.col);
-              
-              // Get current bold state from first cell
-              const firstCellStyle = sheet.getCellStyle(selection.start);
-              const newBoldState = !firstCellStyle?.bold;
-              
-              for (let r = r1; r <= r2; r++) {
-                for (let c = c1; c <= c2; c++) {
-                  const addr = { row: r, col: c };
-                  const currentStyle = sheet.getCellStyle(addr) || {};
-                  sheet.setCellStyle(addr, { ...currentStyle, bold: newBoldState });
-                }
-              }
-              renderer?.scheduleRedraw();
-            }
+            applyContextMenuFormatting((addresses) => formattingController?.toggleBold(addresses));
           }}
           onItalicToggle={() => {
-            const sheet = workbook.activeSheet;
-            if (selection && sheet) {
-              const r1 = Math.min(selection.start.row, selection.end.row);
-              const r2 = Math.max(selection.start.row, selection.end.row);
-              const c1 = Math.min(selection.start.col, selection.end.col);
-              const c2 = Math.max(selection.start.col, selection.end.col);
-              
-              const firstCellStyle = sheet.getCellStyle(selection.start);
-              const newItalicState = !firstCellStyle?.italic;
-              
-              for (let r = r1; r <= r2; r++) {
-                for (let c = c1; c <= c2; c++) {
-                  const addr = { row: r, col: c };
-                  const currentStyle = sheet.getCellStyle(addr) || {};
-                  sheet.setCellStyle(addr, { ...currentStyle, italic: newItalicState });
-                }
-              }
-              renderer?.scheduleRedraw();
-            }
+            applyContextMenuFormatting((addresses) => formattingController?.toggleItalic(addresses));
           }}
           onUnderlineToggle={() => {
-            const sheet = workbook.activeSheet;
-            if (selection && sheet) {
-              const r1 = Math.min(selection.start.row, selection.end.row);
-              const r2 = Math.max(selection.start.row, selection.end.row);
-              const c1 = Math.min(selection.start.col, selection.end.col);
-              const c2 = Math.max(selection.start.col, selection.end.col);
-              
-              const firstCellStyle = sheet.getCellStyle(selection.start);
-              const newUnderlineState = !firstCellStyle?.underline;
-              
-              for (let r = r1; r <= r2; r++) {
-                for (let c = c1; c <= c2; c++) {
-                  const addr = { row: r, col: c };
-                  const currentStyle = sheet.getCellStyle(addr) || {};
-                  sheet.setCellStyle(addr, { ...currentStyle, underline: newUnderlineState });
-                }
-              }
-              renderer?.scheduleRedraw();
-            }
+            applyContextMenuFormatting((addresses) => formattingController?.toggleUnderline(addresses));
           }}
           onFillColor={(color) => {
-            const sheet = workbook.activeSheet;
-            if (selection && sheet) {
-              const r1 = Math.min(selection.start.row, selection.end.row);
-              const r2 = Math.max(selection.start.row, selection.end.row);
-              const c1 = Math.min(selection.start.col, selection.end.col);
-              const c2 = Math.max(selection.start.col, selection.end.col);
-              
-              for (let r = r1; r <= r2; r++) {
-                for (let c = c1; c <= c2; c++) {
-                  const addr = { row: r, col: c };
-                  const currentStyle = sheet.getCellStyle(addr) || {};
-                  sheet.setCellStyle(addr, { ...currentStyle, fill: color });
-                }
-              }
-              renderer?.scheduleRedraw();
-              addRecentColor(color, setRecentFillColors);
-            }
+            applyContextMenuFormatting((addresses) => formattingController?.setFill(addresses, color));
+            addRecentColor(color, setRecentFillColors);
           }}
           onFontColor={(color) => {
-            const sheet = workbook.activeSheet;
-            if (selection && sheet) {
-              const r1 = Math.min(selection.start.row, selection.end.row);
-              const r2 = Math.max(selection.start.row, selection.end.row);
-              const c1 = Math.min(selection.start.col, selection.end.col);
-              const c2 = Math.max(selection.start.col, selection.end.col);
-              
-              for (let r = r1; r <= r2; r++) {
-                for (let c = c1; c <= c2; c++) {
-                  const addr = { row: r, col: c };
-                  const currentStyle = sheet.getCellStyle(addr) || {};
-                  sheet.setCellStyle(addr, { ...currentStyle, color });
-                }
-              }
-              renderer?.scheduleRedraw();
-              addRecentColor(color, setRecentFontColors);
-            }
+            applyContextMenuFormatting((addresses) => formattingController?.setFontColor(addresses, color));
+            addRecentColor(color, setRecentFontColors);
+          }}
+          onCurrencyFormat={() => {
+            applyContextMenuFormatting((addresses) => formattingController?.applyNumberFormatPreset(addresses, 'currency'));
+          }}
+          onPercentFormat={() => {
+            applyContextMenuFormatting((addresses) => formattingController?.applyNumberFormatPreset(addresses, 'percentage'));
+          }}
+          onCommaFormat={() => {
+            applyContextMenuFormatting((addresses) => formattingController?.setNumberFormat(addresses, '#,##0'));
+          }}
+          onIncreaseDecimal={() => {
+            applyContextMenuFormatting((addresses) => formattingController?.increaseDecimalPlaces(addresses));
+          }}
+          onDecreaseDecimal={() => {
+            applyContextMenuFormatting((addresses) => formattingController?.decreaseDecimalPlaces(addresses));
           }}
         />
       )}
@@ -2387,9 +2554,24 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           x={contextMenu.x}
           y={contextMenu.y}
           items={getContextMenuItems()}
+          onLayoutChange={setContextMenuLayout}
           onClose={() => {
             setContextMenu(null);
+            setContextMenuLayout(null);
+            contextMenuTargetCellRef.current = null;
             setMiniToolbar(null);
+          }}
+        />
+      )}
+
+      {/* Insert / Delete cells dialog (Excel-style shift direction) */}
+      {insertDeleteDialog && (
+        <InsertDeleteCellsDialog
+          type={insertDeleteDialog.type}
+          onCancel={() => setInsertDeleteDialog(null)}
+          onConfirm={(mode) => {
+            applyInsertDelete(insertDeleteDialog.type, insertDeleteDialog.range, mode);
+            setInsertDeleteDialog(null);
           }}
         />
       )}
@@ -2402,14 +2584,14 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           worksheet={workbook.activeSheet}
           initialTab={findReplaceTab}
           onMatchSelected={(address) => {
-            // Select the matched cell on the grid
             setSelectedCell(address);
+            setSelection({ start: address, end: address });
             renderer?.setSelection({
               start: address,
               end: address,
             });
-            // Scroll to make the cell visible if needed
-            renderer?.scrollToCell(address.row, address.col);
+            renderer?.scrollToCell({ row: address.row, col: address.col });
+            renderer?.scheduleRedraw?.();
           }}
         />
       )}
@@ -2511,6 +2693,21 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           onClose={() => setCommentDialog(null)}
           onSave={handleCommentDialogSave}
           onDelete={handleCommentDialogDelete}
+        />
+      )}
+
+      {hyperlinkDialog && (
+        <InsertHyperlinkDialog
+          isOpen={!!hyperlinkDialog}
+          cellLabel={formatCellAddress(hyperlinkDialog.address)}
+          cellAddress={hyperlinkDialog.address}
+          initialDisplayText={hyperlinkDialog.displayText}
+          existingHyperlink={hyperlinkDialog.existingHyperlink}
+          sheetNames={workbook.getSheetNames()}
+          activeSheetName={activeSheet}
+          onClose={() => setHyperlinkDialog(null)}
+          onSave={handleHyperlinkDialogSave}
+          onRemove={handleHyperlinkDialogRemove}
         />
       )}
 

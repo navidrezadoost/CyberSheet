@@ -1,4 +1,4 @@
-import { Address, Cell, CellStyle, CellComment, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState, type SortKey, type AutoFilterRange } from './types';
+import { Address, Cell, CellStyle, CellComment, CellHyperlink, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState, type SortKey, type AutoFilterRange } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
@@ -793,10 +793,12 @@ export class Worksheet {
         const ci = key.col - start.col;
         const av = a.values[ci] ?? null;
         const bv = b.values[ci] ?? null;
-        // Nulls last — independent of direction.
-        if (av === null && bv === null) continue;
-        if (av === null) return 1;
-        if (bv === null) return -1;
+        const aBlank = av === null || (typeof av === 'string' && av.trim() === '');
+        const bBlank = bv === null || (typeof bv === 'string' && bv.trim() === '');
+        // Blanks last — independent of direction.
+        if (aBlank && bBlank) continue;
+        if (aBlank) return 1;
+        if (bBlank) return -1;
         const cmp = this._compareValues(av, bv, key.type ?? 'text');
         if (cmp !== 0) return key.dir === 'asc' ? cmp : -cmp;
       }
@@ -1325,6 +1327,37 @@ export class Worksheet {
       start: { row: Math.min(r.start.row, r.end.row), col: Math.min(r.start.col, r.end.col) },
       end:   { row: Math.max(r.start.row, r.end.row), col: Math.max(r.start.col, r.end.col) },
     };
+  }
+
+  // ==================== Hyperlink APIs ====================
+
+  getHyperlink(addr: Address): CellHyperlink | undefined {
+    const link = this.getCell(addr)?.hyperlink;
+    return link ? { ...link } : undefined;
+  }
+
+  setHyperlink(addr: Address, hyperlink: CellHyperlink | undefined): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.setHyperlink(addr, hyperlink));
+    }
+
+    const c = this.ensureCell(addr);
+    if (hyperlink) {
+      c.hyperlink = { ...hyperlink };
+    } else {
+      delete c.hyperlink;
+    }
+
+    this._emitOrBuffer({
+      type: 'cell-changed',
+      address: addr,
+      cell: { ...c },
+      previousValue: c.value ?? null,
+    });
+  }
+
+  removeHyperlink(addr: Address): void {
+    this.setHyperlink(addr, undefined);
   }
 
   // ==================== Comment APIs ====================

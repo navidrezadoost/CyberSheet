@@ -1,6 +1,13 @@
 // src/components/backstage/panels/OptionsPanel.tsx
 
 import React, { useState, useCallback } from 'react';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
+import {
+  configureCyberSheet,
+  registerCyberSheetFonts,
+  useCyberSheetConfig,
+  type CyberSheetFontDefinition,
+} from '../../../config/globalConfig';
 import type { FileOperations, ApplicationSettings, GeneralSettings, FormulaSettings, SaveSettings, AdvancedSettings } from '@cyber-sheet/core';
 
 export interface OptionsPanelProps {
@@ -15,6 +22,7 @@ type SettingsTab =
   | 'save'
   | 'language'
   | 'advanced'
+  | 'fonts'
   | 'customizeRibbon'
   | 'quickAccessToolbar'
   | 'trustCenter';
@@ -32,13 +40,12 @@ const TABS: TabDef[] = [
   { id: 'save', label: 'Save' },
   { id: 'language', label: 'Language' },
   { id: 'advanced', label: 'Advanced' },
+  { id: 'fonts', label: 'Fonts' },
   { id: 'customizeRibbon', label: 'Customize Ribbon' },
   { id: 'quickAccessToolbar', label: 'Quick Access Toolbar' },
   { id: 'trustCenter', label: 'Trust Center' },
 ];
 
-const FONT_OPTIONS = ['Calibri', 'Arial', 'Times New Roman', 'Helvetica', 'Verdana', 'Segoe UI', 'Consolas'];
-const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24];
 const THEMES = [
   { value: 'colorful', label: 'Colorful' },
   { value: 'darkGray', label: 'Dark Gray' },
@@ -57,6 +64,12 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settings, setSettings] = useState<ApplicationSettings>(fileOperations.getSettings());
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const cyberSheetConfig = useCyberSheetConfig();
+  const [fontFamilyName, setFontFamilyName] = useState('');
+  const [fontSourcePaths, setFontSourcePaths] = useState('');
+  const [fontWeight, setFontWeight] = useState('normal');
+  const [fontStyle, setFontStyle] = useState('normal');
+  const [fontMessage, setFontMessage] = useState<string | null>(null);
 
   const updateSettings = useCallback(
     <K extends keyof ApplicationSettings>(section: K, updates: Partial<ApplicationSettings[K]>) => {
@@ -81,6 +94,42 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     setSaveMessage('Settings reset to defaults');
     setTimeout(() => setSaveMessage(null), 2000);
   }, [fileOperations]);
+
+  const handleAddFont = useCallback(() => {
+    const family = fontFamilyName.trim();
+    const paths = fontSourcePaths
+      .split(/\n|,/)
+      .map((path) => path.trim())
+      .filter(Boolean);
+
+    if (!family || paths.length === 0) {
+      setFontMessage('Enter a font family name and at least one font path.');
+      return;
+    }
+
+    const font: CyberSheetFontDefinition = {
+      family,
+      sources: paths,
+      weight: fontWeight || 'normal',
+      style: fontStyle || 'normal',
+      display: 'swap',
+    };
+
+    registerCyberSheetFonts([font]);
+    setFontFamilyName('');
+    setFontSourcePaths('');
+    setFontMessage(`Registered ${family}`);
+    setTimeout(() => setFontMessage(null), 2500);
+  }, [fontFamilyName, fontSourcePaths, fontWeight, fontStyle]);
+
+  const handleFontDefaultsChange = useCallback((updates: { defaultFamily?: string; defaultSize?: number }) => {
+    configureCyberSheet({
+      fonts: {
+        defaultFamily: updates.defaultFamily ?? cyberSheetConfig.fonts.defaultFamily,
+        defaultSize: updates.defaultSize ?? cyberSheetConfig.fonts.defaultSize,
+      },
+    });
+  }, [cyberSheetConfig]);
 
   // ─── Reusable Sub-Components ─────────────────────────────
 
@@ -130,7 +179,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   }> = ({ label, value, options, onChange, width = 200 }) => (
     <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#333333', padding: '4px 0' }}>
       <span style={{ minWidth: 180 }}>{label}</span>
-      <select
+      <SmilodonNativeSelect
         value={String(value)}
         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
         style={{
@@ -148,7 +197,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
             {opt.label}
           </option>
         ))}
-      </select>
+      </SmilodonNativeSelect>
     </label>
   );
 
@@ -212,24 +261,24 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
         <Section label="When creating new workbooks">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '4px 0' }}>
             <span style={{ fontSize: 13, color: '#333333' }}>Use this as the default font:</span>
-            <select
+            <SmilodonNativeSelect
               value={g.defaultFont}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateSettings('general', { defaultFont: e.target.value })}
               style={{ padding: '6px 8px', fontSize: 13, border: '1px solid #D1D1D1', borderRadius: 4, width: 160 }}
             >
-              {FONT_OPTIONS.map(f => (
+              {cyberSheetConfig.fonts.families.map(f => (
                 <option key={f} value={f}>{f}</option>
               ))}
-            </select>
-            <select
+            </SmilodonNativeSelect>
+            <SmilodonNativeSelect
               value={String(g.defaultFontSize)}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateSettings('general', { defaultFontSize: parseInt(e.target.value) })}
               style={{ padding: '6px 8px', fontSize: 13, border: '1px solid #D1D1D1', borderRadius: 4, width: 60 }}
             >
-              {FONT_SIZES.map(s => (
+              {cyberSheetConfig.fonts.sizes.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
-            </select>
+            </SmilodonNativeSelect>
           </div>
           <SpinnerSetting
             label="Include this many sheets:"
@@ -435,6 +484,94 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     );
   };
 
+  const renderFontsTab = () => (
+    <>
+      <Section label="Global font defaults">
+        <SelectSetting
+          label="Default workbook font:"
+          value={cyberSheetConfig.fonts.defaultFamily}
+          options={cyberSheetConfig.fonts.families.map((family) => ({ value: family, label: family }))}
+          onChange={(value) => handleFontDefaultsChange({ defaultFamily: value })}
+        />
+        <SelectSetting
+          label="Default workbook font size:"
+          value={cyberSheetConfig.fonts.defaultSize}
+          options={cyberSheetConfig.fonts.sizes.map((size) => ({ value: size, label: String(size) }))}
+          onChange={(value) => handleFontDefaultsChange({ defaultSize: parseInt(value, 10) })}
+          width={80}
+        />
+      </Section>
+
+      <Section label="Add a user font from path">
+        <div style={{ display: 'grid', gap: 10, maxWidth: 560 }}>
+          <label style={{ display: 'grid', gap: 4, fontSize: 13, color: '#333333' }}>
+            Font family name
+            <input
+              type="text"
+              value={fontFamilyName}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFontFamilyName(e.target.value)}
+              placeholder="Example: Vazirmatn"
+              style={{ padding: '6px 8px', fontSize: 13, border: '1px solid #D1D1D1', borderRadius: 4 }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontSize: 13, color: '#333333' }}>
+            Font file path or paths
+            <textarea
+              value={fontSourcePaths}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFontSourcePaths(e.target.value)}
+              placeholder="/fonts/Vazirmatn-Regular.woff2&#10;/fonts/Vazirmatn-Bold.woff2"
+              rows={4}
+              style={{ padding: '6px 8px', fontSize: 13, border: '1px solid #D1D1D1', borderRadius: 4, resize: 'vertical' }}
+            />
+            <span style={{ fontSize: 12, color: '#666666' }}>
+              Use public URLs, app-relative paths, or any path served by your application. Separate multiple paths with commas or new lines.
+            </span>
+          </label>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <label style={{ display: 'grid', gap: 4, fontSize: 13, color: '#333333' }}>
+              Weight
+              <input
+                type="text"
+                value={fontWeight}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFontWeight(e.target.value)}
+                style={{ width: 100, padding: '6px 8px', fontSize: 13, border: '1px solid #D1D1D1', borderRadius: 4 }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 13, color: '#333333' }}>
+              Style
+              <input
+                type="text"
+                value={fontStyle}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFontStyle(e.target.value)}
+                style={{ width: 100, padding: '6px 8px', fontSize: 13, border: '1px solid #D1D1D1', borderRadius: 4 }}
+              />
+            </label>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              onClick={handleAddFont}
+              style={{ padding: '7px 14px', border: '1px solid #0078D4', background: '#0078D4', color: '#FFFFFF', borderRadius: 4, cursor: 'pointer' }}
+            >
+              Register font
+            </button>
+            {fontMessage && <span style={{ fontSize: 13, color: '#107C10' }}>{fontMessage}</span>}
+          </div>
+        </div>
+      </Section>
+
+      <Section label="Registered fonts">
+        <div style={{ display: 'grid', gap: 6, fontSize: 13, color: '#333333' }}>
+          {cyberSheetConfig.fonts.families.map((family) => (
+            <div key={family} style={{ fontFamily: family, padding: '4px 0' }}>
+              {family}
+            </div>
+          ))}
+        </div>
+      </Section>
+    </>
+  );
+
   const renderPlaceholderTab = (tabName: string) => (
     <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999999' }}>
       <div style={{ fontSize: 40, marginBottom: 12 }}>⚙️</div>
@@ -453,6 +590,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
       case 'formulas': return renderFormulasTab();
       case 'save': return renderSaveTab();
       case 'advanced': return renderAdvancedTab();
+      case 'fonts': return renderFontsTab();
       case 'data': return renderPlaceholderTab('Data');
       case 'proofing': return renderPlaceholderTab('Proofing');
       case 'language': return renderPlaceholderTab('Language');

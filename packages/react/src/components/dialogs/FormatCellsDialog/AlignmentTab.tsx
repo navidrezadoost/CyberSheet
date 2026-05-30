@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { CellStyle, FormattingChanges } from './FormatCellsDialog';
 import OrientationWidget from './OrientationWidget';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
 
 export interface AlignmentTabProps {
   currentFormatting: CellStyle;
@@ -80,7 +81,7 @@ const AlignmentTab: React.FC<AlignmentTabProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
               Horizontal:
             </label>
-            <select
+            <SmilodonNativeSelect
               value={horizontal}
               onChange={(e: any) => setHorizontal(e.target.value)}
               style={{
@@ -94,7 +95,7 @@ const AlignmentTab: React.FC<AlignmentTabProps> = ({
               {HORIZONTAL_OPTIONS.map(option => (
                 <option key={option} value={option}>{option}</option>
               ))}
-            </select>
+            </SmilodonNativeSelect>
           </div>
           
           {/* Indent */}
@@ -125,7 +126,7 @@ const AlignmentTab: React.FC<AlignmentTabProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
               Vertical:
             </label>
-            <select
+            <SmilodonNativeSelect
               value={vertical}
               onChange={(e: any) => setVertical(e.target.value)}
               style={{
@@ -139,7 +140,7 @@ const AlignmentTab: React.FC<AlignmentTabProps> = ({
               {VERTICAL_OPTIONS.map(option => (
                 <option key={option} value={option}>{option}</option>
               ))}
-            </select>
+            </SmilodonNativeSelect>
           </div>
           
           {/* Orientation Widget */}
@@ -208,7 +209,7 @@ const AlignmentTab: React.FC<AlignmentTabProps> = ({
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
             Text direction:
           </label>
-          <select
+          <SmilodonNativeSelect
             value={textDirection}
             onChange={(e: any) => setTextDirection(e.target.value)}
             style={{
@@ -222,7 +223,7 @@ const AlignmentTab: React.FC<AlignmentTabProps> = ({
             {TEXT_DIRECTION_OPTIONS.map(option => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SmilodonNativeSelect>
         </div>
       </div>
     </div>

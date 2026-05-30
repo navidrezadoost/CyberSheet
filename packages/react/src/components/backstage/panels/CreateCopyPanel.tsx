@@ -17,6 +17,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { FileOperations } from '@cyber-sheet/core';
 import { exportXLSX } from '@cyber-sheet/io-xlsx';
+import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
 
 export interface CreateCopyPanelProps {
   fileOperations: FileOperations;
@@ -340,7 +341,7 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
         <label style={labelStyle} htmlFor="copy-location">
           Location
         </label>
-        <select
+        <SmilodonNativeSelect
           id="copy-location"
           value={selectedLocation}
           onChange={(e: any) => setSelectedLocation(e.target.value)}
@@ -352,7 +353,7 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
               {loc.label}
             </option>
           ))}
-        </select>
+        </SmilodonNativeSelect>
       </div>
 
       {/* Action buttons */}

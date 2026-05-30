@@ -9,6 +9,13 @@
  * - Proper typography (Segoe UI 11px)
  */
 
+:root {
+  --ribbon-primary: #0078d4;
+  --ribbon-hover-bg: #deecf9;
+  --ribbon-hover-border: #c7e0f4;
+  --ribbon-active-bg: #c7e0f4;
+}
+
 /* ==================== Ribbon Container ==================== */
 
 .ribbon {
@@ -20,12 +27,12 @@
   display: flex;
   padding: 0 8px;
   box-sizing: border-box;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   position: relative;
   z-index: 1000;
+  color-scheme: light;
 }
 
 .ribbon-content {
@@ -37,7 +44,7 @@
   align-items: stretch;
   padding-top: 2px;
   gap: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* ==================== Ribbon Group ==================== */
@@ -51,7 +58,7 @@
   max-height: 108px;
   position: relative;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ribbon-group:last-child {
@@ -64,7 +71,7 @@
   gap: 2px;
   flex: 1;
   padding-bottom: 16px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ribbon-group-title {
@@ -111,9 +118,9 @@
 }
 
 .group-dialog-launcher:hover {
-  background: #edebe9;
-  border-color: #d2d0ce;
-  color: #323130;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
 .group-dialog-launcher:active {
@@ -241,17 +248,27 @@
   font-size: 10px;
 }
 
-/* Hover state - smooth transition to light gray */
+/* Hover state - Fluent primary tint */
 .ribbon-btn:hover:not(:disabled) {
-  background: #edebe9;
-  border-color: #e1dfdd;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
-/* Active/pressed state - darker gray */
+.ribbon-btn:hover:not(:disabled) .ribbon-btn-icon {
+  color: var(--ribbon-primary);
+}
+
+/* Active/pressed state */
 .ribbon-btn:active:not(:disabled),
 .ribbon-btn.active {
-  background: #e1dfdd;
-  border-color: #d2d0ce;
+  background: var(--ribbon-active-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
+}
+
+.ribbon-btn.active .ribbon-btn-icon {
+  color: var(--ribbon-primary);
 }
 
 /* Focus state - accessibility with blue outline */
@@ -282,11 +299,12 @@
 /* ==================== Ribbon Select (Dropdown) ==================== */
 
 .ribbon-select {
+  color-scheme: light;
   height: 24px;
   padding: 0 24px 0 8px;
   border: 1px solid #8a8886;
   border-radius: 2px;
-  background: #ffffff;
+  background-color: #ffffff;
   color: #201f1e;
   font-family: inherit;
   font-size: 12px;
@@ -296,6 +314,12 @@
   background-repeat: no-repeat;
   background-position: right 6px center;
   transition: border-color 0.1s ease;
+}
+
+.ribbon-select option {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #201f1e;
 }
 
 .ribbon-select:hover:not(:disabled) {
@@ -313,6 +337,40 @@
   color: #a19f9d;
   cursor: not-allowed;
   border-color: #c8c6c4;
+}
+
+.smilodon-excel-select-host {
+  display: inline-flex;
+  height: 24px;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.smilodon-excel-select {
+  display: inline-block;
+  padding: 0;
+  background-image: none;
+}
+
+.smilodon-excel-select-value {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: #201f1e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smilodon-excel-select:hover {
+  border-color: #323130;
+}
+
+.smilodon-excel-select:focus-within {
+  outline: none;
+  border-color: #0078d4;
+  box-shadow: 0 0 0 1px #0078d4;
 }
 
 /* ==================== Color Picker Button ==================== */
@@ -444,8 +502,9 @@
 }
 
 .cs-font-color-main-btn:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
 .cs-font-color-icon {
@@ -490,9 +549,10 @@
 }
 
 .cs-font-color-dropdown-btn:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
   border-left-color: #d2d0ce;
+  color: var(--ribbon-primary);
 }
 
 .cs-dropdown-arrow {
@@ -549,8 +609,9 @@
 }
 
 .cs-automatic-btn:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  color: var(--ribbon-primary);
+  border-color: var(--ribbon-hover-border);
 }
 
 .cs-automatic-swatch {
@@ -698,8 +759,9 @@
 }
 
 .cs-fill-color-main-btn:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
 .cs-fill-color-dropdown-btn {
@@ -720,9 +782,10 @@
 }
 
 .cs-fill-color-dropdown-btn:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
   border-left-color: #d2d0ce;
+  color: var(--ribbon-primary);
 }
 
 .cs-fill-preview {
@@ -786,58 +849,90 @@
 /* ==================== Dark Mode Support (Future) ==================== */
 
 @media (prefers-color-scheme: dark) {
+  /* Keep the ribbon light (Excel-style) even on dark OS themes */
   .ribbon {
-    background: #252423;
-    border-bottom-color: #3b3a39;
+    background: #f3f2f1;
+    border-bottom-color: #edebe9;
   }
 
   .ribbon-group {
-    border-right-color: #3b3a39;
+    border-right-color: #e1dfdd;
   }
 
   .ribbon-group-title {
-    color: #f3f2f1;
+    color: #605e5c;
   }
 
   .ribbon-btn {
-    color: #f3f2f1;
+    color: #201f1e;
   }
 
   .ribbon-btn:hover:not(:disabled) {
-    background: #3b3a39;
-    border-color: #3b3a39;
+    background: var(--ribbon-hover-bg);
+    border-color: var(--ribbon-hover-border);
+    color: var(--ribbon-primary);
+  }
+
+  .ribbon-btn:hover:not(:disabled) .ribbon-btn-icon {
+    color: var(--ribbon-primary);
   }
 
   .ribbon-btn:active:not(:disabled),
   .ribbon-btn.active {
-    background: #484644;
-    border-color: #605e5c;
+    background: var(--ribbon-active-bg);
+    border-color: var(--ribbon-hover-border);
+    color: var(--ribbon-primary);
   }
 
   .ribbon-select {
-    background: #252423;
-    color: #f3f2f1;
-    border-color: #605e5c;
-  }
-
-  .ribbon-select:hover:not(:disabled) {
+    background: #ffffff;
+    color: #201f1e;
     border-color: #8a8886;
   }
 
+  .smilodon-excel-select {
+    background: #ffffff;
+    color: #201f1e;
+    border-color: #8a8886;
+  }
+
+  .smilodon-excel-select-value {
+    color: #201f1e;
+  }
+
+  .ribbon-select:hover:not(:disabled) {
+    border-color: var(--ribbon-primary);
+  }
+
+  .ribbon-feature-button:hover:not(:disabled) {
+    background: var(--ribbon-hover-bg);
+    border-color: var(--ribbon-hover-border);
+    color: var(--ribbon-primary);
+  }
+
+  .cs-merge-main-button:hover,
+  .cs-merge-dropdown-button:hover,
+  .cs-border-main-button:hover,
+  .cs-border-dropdown-button:hover {
+    background: var(--ribbon-hover-bg);
+    border-color: var(--ribbon-hover-border);
+    color: var(--ribbon-primary);
+  }
+
   .cs-color-dropdown {
-    background: #252423;
-    border-color: #3b3a39;
+    background: #ffffff;
+    border-color: #8a8886;
   }
 
   .cs-font-color-main-btn,
   .cs-font-color-dropdown-btn,
   .cs-automatic-btn,
   .cs-more-colors-btn {
-    color: #f3f2f1;
+    color: #201f1e;
   }
 
   .cs-section-title {
-    color: #f3f2f1;
+    color: #605e5c;
   }
 }
 
@@ -864,8 +959,9 @@
 }
 
 .cs-border-main-button:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
 .cs-border-dropdown-button {
@@ -886,9 +982,10 @@
 }
 
 .cs-border-dropdown-button:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
   border-left-color: #d2d0ce;
+  color: var(--ribbon-primary);
 }
 
 .cs-border-preview-icon {
@@ -967,8 +1064,8 @@
 }
 
 .cs-border-preset-cell:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-primary);
 }
 
 .cs-border-preset-cell.focused {
@@ -1009,8 +1106,8 @@
 }
 
 .cs-line-style-cell:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-primary);
 }
 
 .cs-line-style-cell.selected {
@@ -1086,8 +1183,9 @@
 }
 
 .cs-ribbon-toggle-group .ribbon-btn.active {
-  background: #e1dfdd;
-  border-color: #d2d0ce;
+  background: var(--ribbon-active-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
   z-index: 1;
 }
 
@@ -1120,8 +1218,9 @@
 }
 
 .cs-merge-main-button:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
 .cs-merge-dropdown-button {
@@ -1142,9 +1241,41 @@
 }
 
 .cs-merge-dropdown-button:hover {
-  background: #edebe9;
-  border-color: #edebe9;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
   border-left-color: #d2d0ce;
+  color: var(--ribbon-primary);
+}
+
+.cs-merge-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 10000;
+  min-width: 180px;
+  background: #ffffff;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+}
+
+.cs-merge-menu-item {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #201f1e;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cs-merge-menu-item:hover:not(.disabled) {
+  background: var(--ribbon-hover-bg);
+  color: var(--ribbon-primary);
+}
+
+.cs-merge-menu-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* ==================== GenericDropdown Section Styles (NEW) ==================== */
@@ -1198,8 +1329,9 @@
 }
 
 .cs-number-format-button:hover:not(.disabled) {
-  background: #f3f2f1;
-  border-color: #201f1e;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-primary);
+  color: var(--ribbon-primary);
 }
 
 .cs-number-format-button.active {
@@ -1264,7 +1396,8 @@
 }
 
 .cs-dropdown-list-item:hover:not(.disabled) {
-  background: #f3f2f1;
+  background: var(--ribbon-hover-bg);
+  color: var(--ribbon-primary);
 }
 
 .cs-dropdown-list-item.focused:not(.disabled) {
@@ -1422,8 +1555,9 @@
 }
 
 .style-gallery-btn:hover {
-  background: #edebe9;
-  border-color: #e1dfdd;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-primary);
+  color: var(--ribbon-primary);
 }
 
 .style-gallery-preview {
@@ -1529,8 +1663,9 @@
 }
 
 .chart-type-btn:hover {
-  background: #edebe9;
-  border-color: #e1dfdd;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-primary);
+  color: var(--ribbon-primary);
 }
 
 .chart-type-icon {
@@ -1599,7 +1734,7 @@
 .ribbon-group.compact {
   padding: 2px 4px 0 4px;
   max-height: 108px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Wider gap for visual separation */
@@ -1620,8 +1755,7 @@
   min-height: 108px;
   padding: 2px 8px 0 8px;
   background: #f3f2f1;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: visible;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
@@ -1651,7 +1785,7 @@
   max-height: 108px;
   position: relative;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ribbon-tab-shell-title {
@@ -1688,8 +1822,9 @@
 }
 
 .ribbon-feature-button:hover:not(:disabled) {
-  background: #edebe9;
-  border-color: #e1dfdd;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
 .ribbon-feature-button:active:not(:disabled) {
@@ -1849,8 +1984,9 @@
 }
 
 .ribbon-stepper-btn:hover:not(:disabled) {
-  background: #edebe9;
-  border-color: #605e5c;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-primary);
+  color: var(--ribbon-primary);
 }
 
 .ribbon-stepper-btn:active:not(:disabled) {
@@ -2010,8 +2146,9 @@
 }
 
 .cs-custom-group-button:hover:not(:disabled) {
-  background: #edebe9;
-  border-color: #8a8886;
+  background: var(--ribbon-hover-bg);
+  border-color: var(--ribbon-hover-border);
+  color: var(--ribbon-primary);
 }
 
 .cs-custom-group-button:active:not(:disabled) {

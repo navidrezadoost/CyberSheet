@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Home Tab Tools, Undo/Redo, and Cybersheet UX (May 30, 2026)
+
+**Wire up Home ribbon tools, global undo/redo, and Cybersheet-branded dialogs**
+
+#### Find & Replace
+- ✅ Ribbon **Find** opens the real `FindReplaceDialog` (was a stub)
+- ✅ Replace tab no longer resets when switching tabs
+- ✅ Match options and keyboard shortcuts work while the dialog is open
+
+#### Editing & Clipboard
+- ✅ **Mini toolbar** on right-click: font, colors, number format above the context menu
+- ✅ **Insert / Delete cells** and **Insert / Delete / Rename sheet** wired from Home → Cells
+- ✅ **Clipboard** copy/cut/paste integrated with `CommandManager` undo
+
+#### Sort & Filter (Home + Data tabs)
+- ✅ **Sort A→Z / Z→A**, custom multi-level sort dialog, and **Filter** toggle
+- ✅ Uses `SortCommand`, `ToggleAutoFilterCommand`, and `ClearFilterCommand` with undo
+- ✅ Blank cells sort **last** (Excel-like), including empty strings
+
+#### Styles (Home tab)
+- ✅ **Format as Table** applies header, banding, and border in one undo step (`applyTableStyle`)
+- ✅ **Cell Styles** gallery applies presets via `applyCellStylePreset`; fixed React border shorthand warnings
+
+#### Cells → Format menu
+- ✅ Row height, column width, AutoFit, hide/unhide rows/columns, lock cell
+- ✅ All format structure changes go through `CommandManager` (**Ctrl+Z** / **Ctrl+Shift+Z** / **Ctrl+Y**)
+- ✅ Canvas redraws on row/column size and visibility changes
+
+#### Hyperlinks
+- ✅ Insert/edit hyperlinks (web, file, email, place in document) with visited styling and Enter-to-follow
+- ✅ `SetHyperlinkCommand` with undo; status bar screentip support
+
+#### Cybersheet branding
+- ✅ `CybersheetDialog` replaces `window.alert` / `confirm` for sheet delete and rename flows
+- ✅ Export panel and delete-sheet copy use **Cybersheet** branding
+
+#### Keyboard & history
+- ✅ Global **Ctrl+Z**, **Ctrl+Shift+Z**, and **Ctrl+Y** via `spreadsheetHistory.ts` (layout-independent)
+- ✅ Skips native text fields (formula bar, find dialog, backstage)
+
+#### Core
+- ✅ `FormattingController.applyTableStyle()` and `applyCellStylePreset()`
+- ✅ `ToggleAutoFilterCommand` / `ClearFilterCommand` use real worksheet filter APIs
+- ✅ Insert/delete cells commands expanded; workbook `deleteSheet` / `renameSheet`
+
+#### New files
+- `packages/react/src/utils/formatOperations.ts`, `sortFilterCommands.ts`, `spreadsheetHistory.ts`
+- `packages/react/src/components/dialogs/CybersheetDialog.tsx`, `CustomSortDialog.tsx`, `InsertHyperlinkDialog.tsx`
+- `packages/core/src/SetHyperlinkCommand.ts`, `hyperlinkUtils.ts`
+- `packages/react/src/config/globalConfig.ts`
+
 ### Added - ExcelApp: Comments, AutoFilter, View Modes, and Undo Fixes (May 26, 2026)
 
 **Cell comments, filter undo/redo, workbook view modes, and full-sheet resize when the entire sheet is selected**

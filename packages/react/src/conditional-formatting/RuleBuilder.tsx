@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ConditionalFormattingRuleDraft } from './types';
+import { SmilodonNativeSelect } from '../components/SmilodonNativeSelect';
 
 export type RuleBuilderProps = {
 	rule: ConditionalFormattingRuleDraft | null;
@@ -34,7 +35,7 @@ export const RuleBuilder = ({ rule, onChange, onSave, onCancel }: RuleBuilderPro
 			<div style={{ display: 'grid', gap: 10 }}>
 				<label style={{ display: 'grid', gap: 4 }}>
 					<span style={{ fontSize: 12, color: '#6b7280' }}>Rule Type</span>
-					<select
+					<SmilodonNativeSelect
 						value={rule.type ?? ''}
 						onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
 							onChange({ ...rule, type: event.target.value as any })
@@ -48,7 +49,7 @@ export const RuleBuilder = ({ rule, onChange, onSave, onCancel }: RuleBuilderPro
 								{type.label}
 							</option>
 						))}
-					</select>
+					</SmilodonNativeSelect>
 				</label>
 
 				<label style={{ display: 'grid', gap: 4 }}>

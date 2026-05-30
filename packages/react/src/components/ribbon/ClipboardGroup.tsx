@@ -12,8 +12,14 @@
  */
 
 import React, { useState } from 'react';
-import type { Address, Worksheet } from '@cyber-sheet/core';
-import { ClipboardService, FormattingController, CommandManager } from '@cyber-sheet/core';
+import type { Address, Range, Worksheet } from '@cyber-sheet/core';
+import { FormattingController, CommandManager, ClipboardService } from '@cyber-sheet/core';
+import {
+  performCopy,
+  performCut,
+  performPasteAsync,
+  normalizeSelectionRange,
+} from '../../utils/clipboardOperations';
 
 export interface ClipboardGroupProps {
   worksheet: Worksheet;
@@ -21,6 +27,9 @@ export interface ClipboardGroupProps {
   formattingController: FormattingController;
   commandManager: CommandManager;
   selectedCells: Address[];
+  currentRange?: Range;
+  onAfterClipboard?: () => void;
+  onCutComplete?: (range: Range) => void;
   onFormatPainterActivate?: (active: boolean) => void;
   onCut?: () => void;
   onCopy?: () => void;
@@ -33,6 +42,9 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
   formattingController,
   commandManager,
   selectedCells,
+  currentRange,
+  onAfterClipboard,
+  onCutComplete,
   onFormatPainterActivate,
   onCut,
   onCopy,
@@ -42,52 +54,52 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
   const [formatPainterActive, setFormatPainterActive] = useState(false);
   const [clipboardHasContent, setClipboardHasContent] = useState(false);
 
+  const getRange = (): Range | null => {
+    if (currentRange) return normalizeSelectionRange(currentRange);
+    if (selectedCells.length === 0) return null;
+    return normalizeSelectionRange({
+      start: selectedCells[0],
+      end: selectedCells[selectedCells.length - 1],
+    });
+  };
+
   // === Clipboard Handlers ===
 
   const handleCut = () => {
-    if (selectedCells.length === 0) return;
+    const range = getRange();
+    if (!range) return;
 
-    // Get selection range
-    const range = {
-      start: selectedCells[0],
-      end: selectedCells[selectedCells.length - 1],
-    };
-
-    // Cut to clipboard
-    clipboardService.cut(worksheet, range);
+    performCut(worksheet, clipboardService, range);
     setClipboardHasContent(true);
-
-    // Visual feedback: marching ants border (would be implemented in renderer)
+    onCutComplete?.(range);
     onCut?.();
+    onAfterClipboard?.();
 
-    // Optional: Add pulse animation
     document.body.classList.add('clipboard-action-pulse');
     setTimeout(() => document.body.classList.remove('clipboard-action-pulse'), 300);
   };
 
   const handleCopy = () => {
-    if (selectedCells.length === 0) return;
+    const range = getRange();
+    if (!range) return;
 
-    const range = {
-      start: selectedCells[0],
-      end: selectedCells[selectedCells.length - 1],
-    };
-
-    clipboardService.copy(worksheet, range);
+    performCopy(worksheet, clipboardService, range);
     setClipboardHasContent(true);
-
     onCopy?.();
+    onAfterClipboard?.();
 
-    // Pulse animation
     document.body.classList.add('clipboard-action-pulse');
     setTimeout(() => document.body.classList.remove('clipboard-action-pulse'), 300);
   };
 
   const handlePaste = () => {
-    // This would integrate with PasteCommand
-    onPaste?.();
+    const range = getRange();
+    if (!range) return;
 
-    // Fade-in animation for pasted cells (handled by renderer)
+    void performPasteAsync(worksheet, commandManager, clipboardService, range.start).then(() => {
+      onPaste?.();
+      onAfterClipboard?.();
+    });
   };
 
   const handlePasteSpecial = (option: 'values' | 'formulas' | 'formats' | 'all') => {

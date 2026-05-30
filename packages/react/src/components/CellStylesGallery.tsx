@@ -235,6 +235,44 @@ interface StyleTileProps {
   onFocus: () => void;
 }
 
+function parseBorderSide(side: unknown): { width: string; color: string } | null {
+  if (!side) return null;
+  if (typeof side !== 'string') return null;
+  if (side.includes('solid')) {
+    const match = side.match(/([\d.]+px)\s+solid\s+(.+)/);
+    if (match) return { width: match[1], color: match[2] };
+  }
+  return { width: '1px', color: side };
+}
+
+function tileBorderStyles(
+  presetStyle: CellStylePreset['style'],
+  isFocused: boolean,
+): React.CSSProperties {
+  const defaultColor = isFocused ? '#0078d4' : '#e1e1e1';
+  const defaultWidth = isFocused ? '2px' : '1px';
+
+  const top = parseBorderSide(presetStyle.border?.top);
+  const bottom = parseBorderSide(presetStyle.border?.bottom);
+  const left = parseBorderSide(presetStyle.border?.left);
+  const right = parseBorderSide(presetStyle.border?.right);
+
+  return {
+    borderTopWidth: top?.width ?? defaultWidth,
+    borderTopStyle: 'solid',
+    borderTopColor: top?.color ?? defaultColor,
+    borderBottomWidth: bottom?.width ?? defaultWidth,
+    borderBottomStyle: 'solid',
+    borderBottomColor: bottom?.color ?? defaultColor,
+    borderLeftWidth: left?.width ?? defaultWidth,
+    borderLeftStyle: 'solid',
+    borderLeftColor: left?.color ?? defaultColor,
+    borderRightWidth: right?.width ?? defaultWidth,
+    borderRightStyle: 'solid',
+    borderRightColor: right?.color ?? defaultColor,
+  };
+}
+
 function StyleTile({
   preset,
   isHovered,
@@ -246,15 +284,9 @@ function StyleTile({
 }: StyleTileProps): JSX.Element {
   const { style, name, description } = preset;
 
-  // Extract fill color (can be string or complex object)
   const bgColor = typeof style.fill === 'string' ? style.fill : '#ffffff';
   const textColor = typeof style.color === 'string' ? style.color : '#000000';
-
-  // Extract border properties for styling
-  const borderTop = style.border?.top ? '1px solid' : undefined;
-  const borderBottom = style.border?.bottom ? '1px solid' : undefined;
-  const borderLeft = style.border?.left ? '1px solid' : undefined;
-  const borderRight = style.border?.right ? '1px solid' : undefined;
+  const borderStyles = tileBorderStyles(style, isFocused);
 
   return (
     <div
@@ -268,7 +300,6 @@ function StyleTile({
       style={{
         padding: '8px',
         borderRadius: '3px',
-        border: isFocused ? '2px solid #0078d4' : '1px solid #e1e1e1',
         backgroundColor: bgColor,
         color: textColor,
         fontWeight: style.bold ? 'bold' : 'normal',
@@ -282,10 +313,8 @@ function StyleTile({
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
-        borderTop: borderTop,
-        borderBottom: borderBottom,
-        borderLeft: borderLeft,
-        borderRight: borderRight,
+        boxSizing: 'border-box',
+        ...borderStyles,
       }}
       aria-label={`${name}${description ? `: ${description}` : ''}`}
     >

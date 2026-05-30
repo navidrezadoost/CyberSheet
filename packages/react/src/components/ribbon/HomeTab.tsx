@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import type { Address, Range, Worksheet } from '@cyber-sheet/core';
 import {
   ArrowUndoRegular,
   ArrowRedoRegular,
@@ -6,6 +7,29 @@ import {
   TextItalicRegular,
   TextUnderlineRegular,
 } from '@fluentui/react-icons';
+import { ClearCellsCommand, ClipboardService, FormattingController, type InsertCellsMode, type DeleteCellsMode } from '@cyber-sheet/core';
+import {
+  executeInsertCells,
+  executeDeleteCells,
+} from '../../utils/insertDeleteCells';
+import {
+  executeMultiSortSelection,
+  executeSortSelection,
+  normalizeRange,
+  resolveSortRange,
+} from '../../utils/sortFilterCommands';
+import { CustomSortDialog } from '../dialogs/CustomSortDialog';
+import {
+  autoFitColumnWidths,
+  autoFitRowHeights,
+  hideColumnsInRange,
+  hideRowsInRange,
+  setCellsLocked,
+  setColumnWidthsInRange,
+  setRowHeightsInRange,
+  unhideColumnsNearRange,
+  unhideRowsNearRange,
+} from '../../utils/formatOperations';
 
 import { RibbonGroup } from './RibbonGroup';
 import { RibbonButton } from './RibbonButton';
@@ -20,9 +44,10 @@ import { ClipboardGroup } from './ClipboardGroup';
 import { StylesGroup } from './StylesGroup';
 import { CellsGroup } from './CellsGroup';
 import { EditingGroup } from './EditingGroup';
+import { useCyberSheetConfig } from '../../config/globalConfig';
 import type { SelectionState, CommandManager, StyleState, ColorValue } from './types';
 import type { Fill } from './fillTypes';
-import { solidFill } from './fillTypes';
+import { NO_FILL, solidFill } from './fillTypes';
 import type { BorderPayload } from './borderTypes';
 import type { NumberFormatValue } from './numberFormatTypes';
 import './ribbon.css';
@@ -33,6 +58,16 @@ export interface HomeTabProps {
   
   // Current selection state
   selection: SelectionState;
+
+  worksheet?: Worksheet | null;
+  clipboardService?: ClipboardService;
+  onAfterCommand?: () => void;
+  historyVersion?: number;
+  onOpenFindReplace?: (tab: 'find' | 'replace') => void;
+  onInsertSheet?: () => void;
+  onDeleteSheet?: () => void;
+  onRequestRenameSheet?: () => void;
+  onFilter?: (action: 'toggle' | 'clear' | 'reapply') => void;
 }
 
 /**
@@ -63,168 +98,432 @@ export interface HomeTabProps {
  *   selection={getCurrentSelection()} 
  * />
  */
-export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) => {
-  // Excel standard font families
-  const fontFamilies = useMemo(
-    () => [
-      'Calibri',
-      'Arial',
-      'Segoe UI',
-      'Times New Roman',
-      'Courier New',
-      'Georgia',
-      'Verdana',
-      'Tahoma',
-      'Trebuchet MS',
-      'Comic Sans MS',
-    ],
-    []
-  );
+export const HomeTab: React.FC<HomeTabProps> = ({
+  commandManager,
+  selection,
+  worksheet,
+  clipboardService,
+  onAfterCommand,
+  historyVersion = 0,
+  onOpenFindReplace,
+  onInsertSheet,
+  onDeleteSheet,
+  onRequestRenameSheet,
+  onFilter,
+}) => {
+  const [showCustomSortDialog, setShowCustomSortDialog] = useState(false);
+  const [styleVersion, setStyleVersion] = useState(0);
+  const cyberSheetConfig = useCyberSheetConfig();
 
-  // Excel standard font sizes
-  const fontSizes = useMemo(
-    () => [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72],
-    []
-  );
+  useEffect(() => {
+    setStyleVersion((version) => version + 1);
+  }, [historyVersion]);
+  const fontFamilies = cyberSheetConfig.fonts.families;
+  const fontSizes = cyberSheetConfig.fonts.sizes;
+
+  const range = useMemo<Range | null>(() => {
+    const sel = selection as any;
+    if (!sel?.start || !sel?.end) return null;
+    return {
+      start: {
+        row: Math.min(sel.start.row, sel.end.row),
+        col: Math.min(sel.start.col, sel.end.col),
+      },
+      end: {
+        row: Math.max(sel.start.row, sel.end.row),
+        col: Math.max(sel.start.col, sel.end.col),
+      },
+    };
+  }, [selection]);
+
+  const selectedAddresses = useMemo<Address[]>(() => {
+    if (!range) return [];
+    const addresses: Address[] = [];
+    for (let row = range.start.row; row <= range.end.row; row++) {
+      for (let col = range.start.col; col <= range.end.col; col++) {
+        addresses.push({ row, col });
+      }
+    }
+    return addresses;
+  }, [range]);
+
+  const formattingController = useMemo(() => {
+    if (!worksheet) return null;
+    return new FormattingController(worksheet, commandManager as any);
+  }, [worksheet, commandManager]);
+
+  const activeStyle = useMemo(() => {
+    if (!worksheet || !range) return {};
+    return worksheet.getCellStyle(range.start) ?? {};
+  }, [worksheet, range, styleVersion]);
+
+  const selectionBold = useMemo(() => {
+    if (!worksheet || selectedAddresses.length === 0) return false;
+    const boldStates = selectedAddresses.map((addr) => worksheet.getCellStyle(addr)?.bold === true);
+    if (boldStates.every(Boolean)) return true;
+    if (boldStates.some(Boolean)) return undefined;
+    return false;
+  }, [worksheet, selectedAddresses, styleVersion]);
+
+  const selectionStyle = useMemo<SelectionState>(() => {
+    const fill = activeStyle.fill;
+    const fillColor: StyleState<Fill> =
+      typeof fill === 'string'
+        ? solidFill(fill)
+        : undefined;
+
+    return {
+      ...(selection || {}),
+      fontFamily: activeStyle.fontFamily ?? selection?.fontFamily ?? cyberSheetConfig.fonts.defaultFamily,
+      fontSize: activeStyle.fontSize ?? selection?.fontSize ?? cyberSheetConfig.fonts.defaultSize,
+      bold: selectionBold ?? selection?.bold,
+      italic: activeStyle.italic ?? selection?.italic,
+      underline: activeStyle.underline ?? selection?.underline,
+      fontColor: (activeStyle.color as string | undefined) ?? selection?.fontColor,
+      fillColor: fillColor ?? selection?.fillColor,
+      border: selection?.border,
+      numberFormat: activeStyle.numberFormat
+        ? { formatString: activeStyle.numberFormat }
+        : selection?.numberFormat,
+      horizontalAlign: (activeStyle.align as any) ?? selection?.horizontalAlign,
+      verticalAlign: (activeStyle.valign as any) ?? selection?.verticalAlign,
+      wrapText: activeStyle.wrap ?? selection?.wrapText,
+    };
+  }, [activeStyle, selection, cyberSheetConfig, selectionBold]);
+
+  const runFormatting = useCallback((operation: () => void) => {
+    if (!formattingController || selectedAddresses.length === 0) return;
+    operation();
+    setStyleVersion((version) => version + 1);
+    onAfterCommand?.();
+  }, [formattingController, selectedAddresses.length, onAfterCommand]);
 
   // Undo handler
   const handleUndo = useCallback(() => {
-    commandManager.undo();
-  }, [commandManager]);
+    if (commandManager.undo()) {
+      setStyleVersion((version) => version + 1);
+      onAfterCommand?.();
+    }
+  }, [commandManager, onAfterCommand]);
 
-  // Redo handler
   const handleRedo = useCallback(() => {
-    commandManager.redo();
-  }, [commandManager]);
+    if (commandManager.redo()) {
+      setStyleVersion((version) => version + 1);
+      onAfterCommand?.();
+    }
+  }, [commandManager, onAfterCommand]);
 
   // Font family change handler
   const handleFontFamilyChange = useCallback(
     (fontFamily: string) => {
-      // TODO: Import SetStyleCommand from @cyber-sheet/core
-      // commandManager.execute(new SetStyleCommand(selection, { fontFamily }));
-      console.log('Font family change:', fontFamily);
+      runFormatting(() => formattingController?.setFontFamily(selectedAddresses, fontFamily));
     },
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   // Font size change handler
   const handleFontSizeChange = useCallback(
     (fontSize: string) => {
-      // TODO: Import SetStyleCommand from @cyber-sheet/core
-      // commandManager.execute(new SetStyleCommand(selection, { fontSize: Number(fontSize) }));
-      console.log('Font size change:', fontSize);
+      const size = Number(fontSize);
+      if (!Number.isFinite(size)) return;
+      runFormatting(() => formattingController?.setFontSize(selectedAddresses, size));
     },
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   // Bold toggle handler
   const handleBoldToggle = useCallback(() => {
-    // TODO: Import ToggleStyleCommand from @cyber-sheet/core
-    // commandManager.execute(new ToggleStyleCommand(selection, 'bold'));
-    console.log('Bold toggle');
-  }, [commandManager, selection]);
+    runFormatting(() => formattingController?.toggleBold(selectedAddresses));
+  }, [formattingController, runFormatting, selectedAddresses]);
 
   // Italic toggle handler
   const handleItalicToggle = useCallback(() => {
-    // TODO: Import ToggleStyleCommand from @cyber-sheet/core
-    // commandManager.execute(new ToggleStyleCommand(selection, 'italic'));
-    console.log('Italic toggle');
-  }, [commandManager, selection]);
+    runFormatting(() => formattingController?.toggleItalic(selectedAddresses));
+  }, [formattingController, runFormatting, selectedAddresses]);
 
   // Underline toggle handler
   const handleUnderlineToggle = useCallback(() => {
-    // TODO: Import ToggleStyleCommand from @cyber-sheet/core
-    // commandManager.execute(new ToggleStyleCommand(selection, 'underline'));
-    console.log('Underline toggle');
-  }, [commandManager, selection]);
+    runFormatting(() => formattingController?.toggleUnderline(selectedAddresses));
+  }, [formattingController, runFormatting, selectedAddresses]);
 
   // Font color command (range-aware)
   const fontColorCommand = useMemo(
     () => ({
       execute: (color: ColorValue, sel: any) => {
-        // TODO: Import SetStyleCommand from @cyber-sheet/core
-        // commandManager.execute(new SetStyleCommand(sel || selection, { fontColor: color }));
-        console.log('Font color change:', color, 'for selection:', sel || selection);
+        runFormatting(() => formattingController?.setFontColor(selectedAddresses, color));
       },
     }),
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   // Fill color command (range-aware, works with Fill objects)
   const fillColorCommand = useMemo(
     () => ({
       execute: (fill: Fill, sel: any) => {
-        // TODO: Import SetStyleCommand from @cyber-sheet/core
-        // commandManager.execute(new SetStyleCommand(sel || selection, { fillColor: fill }));
-        console.log('Fill color change:', fill, 'for selection:', sel || selection);
+        runFormatting(() => {
+          if (!formattingController) return;
+          if (fill === NO_FILL || (fill.type === 'solid' && fill.color === 'transparent')) {
+            formattingController.removeFill(selectedAddresses);
+          } else if (fill.type === 'solid') {
+            formattingController.setFill(selectedAddresses, fill.color);
+          } else if (fill.type === 'pattern') {
+            formattingController.setFill(selectedAddresses, fill.background);
+          } else {
+            formattingController.setFill(selectedAddresses, fill.stops[0]?.color ?? '#FFFFFF');
+          }
+        });
       },
     }),
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   // Border command handler (range-aware, works with BorderPayload arrays)
   const handleBorderApply = useCallback(
     (payloads: BorderPayload[]) => {
-      // TODO: Import SetBorderCommand from @cyber-sheet/core
-      // commandManager.execute(new SetBorderCommand(selection, payloads));
-      console.log('Border apply:', payloads, 'for selection:', selection);
+      runFormatting(() => {
+        if (!formattingController) return;
+
+        const border: Record<string, { color: string; style: string }> = {};
+        const makeEdge = (payload: BorderPayload) => ({
+          color: payload.color || '#000000',
+          style: payload.style === 'hair' ? 'hairline' : payload.style,
+        });
+        for (const payload of payloads) {
+          if (payload.position === 'clear' || payload.style === 'none') {
+            formattingController.removeBorders(selectedAddresses);
+            return;
+          }
+
+          const edge = makeEdge(payload);
+          switch (payload.position) {
+            case 'all':
+            case 'outer':
+              border.top = edge;
+              border.right = edge;
+              border.bottom = edge;
+              border.left = edge;
+              break;
+            case 'horizontal':
+              border.top = edge;
+              border.bottom = edge;
+              break;
+            case 'vertical':
+              border.left = edge;
+              border.right = edge;
+              break;
+            case 'inner':
+              border.top = edge;
+              border.right = edge;
+              border.bottom = edge;
+              border.left = edge;
+              break;
+            default:
+              border[payload.position] = edge;
+          }
+        }
+
+        formattingController.setBorder(selectedAddresses, border as any);
+      });
     },
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   // Number format command handler (semantic state, NOT visual)
   const handleNumberFormatApply = useCallback(
     (format: NumberFormatValue) => {
-      // TODO: Import SetNumberFormatCommand from @cyber-sheet/core
-      // commandManager.execute(new SetNumberFormatCommand(selection, format));
-      console.log('Number format apply:', format, 'for selection:', selection);
+      runFormatting(() => formattingController?.setNumberFormat(selectedAddresses, format.formatString));
     },
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   // Alignment handlers (compound state: horizontal × vertical × wrap)
   const handleHorizontalAlignChange = useCallback(
     (align: "left" | "center" | "right" | "justify") => {
-      // TODO: Import SetAlignmentCommand from @cyber-sheet/core
-      // commandManager.execute(new SetAlignmentCommand(selection, { horizontal: align }));
-      console.log('Horizontal align change:', align);
+      runFormatting(() => formattingController?.setHorizontalAlign(selectedAddresses, align));
     },
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   const handleVerticalAlignChange = useCallback(
     (align: "top" | "middle" | "bottom") => {
-      // TODO: Import SetAlignmentCommand from @cyber-sheet/core
-      // commandManager.execute(new SetAlignmentCommand(selection, { vertical: align }));
-      console.log('Vertical align change:', align);
+      runFormatting(() => formattingController?.setVerticalAlign(selectedAddresses, align));
     },
-    [commandManager, selection]
+    [formattingController, runFormatting, selectedAddresses]
   );
 
   const handleWrapTextToggle = useCallback(() => {
-    // TODO: Import ToggleWrapCommand from @cyber-sheet/core
-    // commandManager.execute(new ToggleWrapCommand(selection));
-    console.log('Wrap text toggle');
-  }, [commandManager, selection]);
+    runFormatting(() => formattingController?.toggleWrapText(selectedAddresses));
+  }, [formattingController, runFormatting, selectedAddresses]);
 
   const handleMergeClick = useCallback(() => {
-    // TODO: Import MergeCellsCommand from @cyber-sheet/core
-    // commandManager.execute(new MergeCellsCommand(selection, 'center'));
-    console.log('Merge cells');
-  }, [commandManager, selection]);
+    if (!formattingController || !range) return;
+    if (range.start.row === range.end.row && range.start.col === range.end.col) return;
+    formattingController.mergeAndCenter(range);
+    setStyleVersion((version) => version + 1);
+    onAfterCommand?.();
+  }, [formattingController, range, onAfterCommand]);
+
+  const handleMergeCellsClick = useCallback(() => {
+    if (!formattingController || !range) return;
+    if (range.start.row === range.end.row && range.start.col === range.end.col) return;
+    formattingController.mergeCells(range);
+    setStyleVersion((version) => version + 1);
+    onAfterCommand?.();
+  }, [formattingController, range, onAfterCommand]);
+
+  const handleUnmergeClick = useCallback(() => {
+    if (!formattingController || !range) return;
+    formattingController.unmergeCells(range);
+    setStyleVersion((version) => version + 1);
+    onAfterCommand?.();
+  }, [formattingController, range, onAfterCommand]);
+
+  const canMerge = useMemo(() => {
+    if (!range) return false;
+    return !(range.start.row === range.end.row && range.start.col === range.end.col);
+  }, [range]);
+
+  const handleClear = useCallback((type: 'all' | 'formats' | 'contents' | 'comments' | 'hyperlinks') => {
+    if (!worksheet || !range) return;
+    if (type === 'formats') {
+      runFormatting(() => formattingController?.clearFormat(selectedAddresses));
+      return;
+    }
+    if (type === 'contents' || type === 'all') {
+      commandManager.execute(new ClearCellsCommand(worksheet, range));
+      if (type === 'all') {
+        formattingController?.clearFormat(selectedAddresses);
+      }
+      setStyleVersion((version) => version + 1);
+      onAfterCommand?.();
+    }
+  }, [worksheet, range, runFormatting, formattingController, selectedAddresses, commandManager, onAfterCommand]);
+
+  const handleFormatOperation = useCallback((operation: string, value?: any) => {
+    if (operation === 'insertSheet') {
+      onInsertSheet?.();
+      onAfterCommand?.();
+      return;
+    }
+    if (operation === 'deleteSheet') {
+      onDeleteSheet?.();
+      onAfterCommand?.();
+      return;
+    }
+    if (operation === 'renameSheet') {
+      onRequestRenameSheet?.();
+      return;
+    }
+
+    if (!worksheet || !range) return;
+
+    switch (operation) {
+      case 'rowHeight': {
+        const px = Number(value) * (4 / 3);
+        if (!Number.isFinite(px) || px <= 0) return;
+        setRowHeightsInRange(commandManager, worksheet, range, px);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      }
+      case 'columnWidth': {
+        const px = Math.max(12, Number(value) * 8);
+        if (!Number.isFinite(px) || px <= 0) return;
+        setColumnWidthsInRange(commandManager, worksheet, range, px);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      }
+      case 'autoFitColumnWidth':
+        autoFitColumnWidths(commandManager, worksheet, range);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      case 'autoFitRowHeight':
+        autoFitRowHeights(commandManager, worksheet, range);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      case 'hideRows':
+        hideRowsInRange(commandManager, worksheet, range);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      case 'unhideRows':
+        unhideRowsNearRange(commandManager, worksheet, range);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      case 'hideColumns':
+        hideColumnsInRange(commandManager, worksheet, range);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      case 'unhideColumns':
+        unhideColumnsNearRange(commandManager, worksheet, range);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      case 'lockCell':
+        setCellsLocked(commandManager, worksheet, selectedAddresses, true);
+        setStyleVersion((version) => version + 1);
+        onAfterCommand?.();
+        break;
+      default:
+        console.warn(`Unknown Home tab format operation: ${operation}`);
+    }
+  }, [worksheet, range, selectedAddresses, commandManager, onAfterCommand, onInsertSheet, onDeleteSheet, onRequestRenameSheet]);
+
+  const handleInsertCells = useCallback((mode: InsertCellsMode) => {
+    if (!worksheet || !range) return;
+    executeInsertCells(worksheet, commandManager, range, mode);
+    onAfterCommand?.();
+  }, [worksheet, range, commandManager, onAfterCommand]);
+
+  const handleDeleteCells = useCallback((mode: DeleteCellsMode) => {
+    if (!worksheet || !range) return;
+    executeDeleteCells(worksheet, commandManager, range, mode);
+    onAfterCommand?.();
+  }, [worksheet, range, commandManager, onAfterCommand]);
+
+  const handleSort = useCallback((direction: 'asc' | 'desc' | 'custom') => {
+    if (!worksheet || !range) return;
+    if (direction === 'custom') {
+      setShowCustomSortDialog(true);
+      return;
+    }
+    executeSortSelection(commandManager, worksheet, range, direction);
+    setStyleVersion((version) => version + 1);
+    onAfterCommand?.();
+  }, [worksheet, range, commandManager, onAfterCommand]);
+
+  const handleCustomSortApply = useCallback((
+    levels: Array<{ columnIndex: number; ascending: boolean }>,
+    hasHeaders: boolean,
+  ) => {
+    if (!worksheet || !range) return;
+    executeMultiSortSelection(commandManager, worksheet, range, levels, hasHeaders);
+    setShowCustomSortDialog(false);
+    setStyleVersion((version) => version + 1);
+    onAfterCommand?.();
+  }, [worksheet, range, commandManager, onAfterCommand]);
+
+  const customSortRange = useMemo(() => {
+    if (!range) return null;
+    return worksheet ? resolveSortRange(worksheet, range) : normalizeRange(range);
+  }, [worksheet, range]);
 
   return (
     <div className="ribbon-content">
       {/* ==================== Clipboard Group ==================== */}
       <ClipboardGroup
-        worksheet={null as any}
-        clipboardService={null as any}
-        formattingController={null as any}
+        worksheet={worksheet as any}
+        clipboardService={(clipboardService ?? new ClipboardService()) as any}
+        formattingController={formattingController as any}
         commandManager={commandManager}
-        selectedCells={selection ? [selection.start] : []}
-        onCut={() => console.log('Cut')}
-        onCopy={() => console.log('Copy')}
-        onPaste={() => console.log('Paste')}
+        selectedCells={selectedAddresses}
+        currentRange={range ?? undefined}
+        onAfterClipboard={onAfterCommand}
       />
 
       {/* ==================== Undo/Redo Group ==================== */}
@@ -253,7 +552,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
           {/* Column 1: Font dropdowns */}
           <div className="font-dropdowns-column">
             <RibbonSelect
-              value={selection?.fontFamily || 'Calibri'}
+              value={selectionStyle?.fontFamily || 'Calibri'}
               options={fontFamilies}
               onChange={handleFontFamilyChange}
               width={120}
@@ -261,7 +560,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
               ariaLabel="Font family"
             />
             <RibbonSelect
-              value={selection?.fontSize || 11}
+              value={selectionStyle?.fontSize || 11}
               options={fontSizes}
               onChange={handleFontSizeChange}
               width={60}
@@ -276,21 +575,21 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
               <RibbonButton
                 icon={<TextBoldRegular />}
                 tooltip="Bold (Ctrl+B)"
-                active={selection?.bold || false}
+                active={selectionStyle?.bold || false}
                 onClick={handleBoldToggle}
                 size="small"
               />
               <RibbonButton
                 icon={<TextItalicRegular />}
                 tooltip="Italic (Ctrl+I)"
-                active={selection?.italic || false}
+                active={selectionStyle?.italic || false}
                 onClick={handleItalicToggle}
                 size="small"
               />
               <RibbonButton
                 icon={<TextUnderlineRegular />}
                 tooltip="Underline (Ctrl+U)"
-                active={selection?.underline || false}
+                active={selectionStyle?.underline || false}
                 onClick={handleUnderlineToggle}
                 size="small"
               />
@@ -299,18 +598,18 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
               {/* Font Color Picker */}
               <FontColorButton
                 command={fontColorCommand}
-                selectionColor={selection?.fontColor}
+                selectionColor={selectionStyle?.fontColor}
               />
               
               {/* Fill Color Picker */}
               <FillColorButton
                 command={fillColorCommand}
-                selectionFill={selection?.fillColor}
+                selectionFill={selectionStyle?.fillColor}
               />
               
               {/* Border Picker */}
               <BorderButton
-                selectionBorder={selection?.border}
+                selectionBorder={selectionStyle?.border}
                 onApply={handleBorderApply}
               />
             </div>
@@ -318,7 +617,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
           
           {/* Column 3: Number format */}
           <NumberFormatButton
-            numberFormat={selection?.numberFormat}
+            numberFormat={selectionStyle?.numberFormat}
             onApply={handleNumberFormatApply}
           />
         </div>
@@ -327,43 +626,58 @@ export const HomeTab: React.FC<HomeTabProps> = ({ commandManager, selection }) =
       {/* ==================== Alignment Group ==================== */}
       <RibbonGroup title="Alignment">
         <AlignmentGroup
-          horizontalAlign={selection?.horizontalAlign}
-          verticalAlign={selection?.verticalAlign}
-          wrapText={selection?.wrapText}
+          horizontalAlign={selectionStyle?.horizontalAlign}
+          verticalAlign={selectionStyle?.verticalAlign}
+          wrapText={selectionStyle?.wrapText}
           onHorizontalAlignChange={handleHorizontalAlignChange}
           onVerticalAlignChange={handleVerticalAlignChange}
           onWrapTextToggle={handleWrapTextToggle}
           onMergeClick={handleMergeClick}
+          onMergeCellsClick={handleMergeCellsClick}
+          onUnmergeClick={handleUnmergeClick}
+          canMerge={canMerge}
         />
       </RibbonGroup>
 
       {/* ==================== Styles Group ==================== */}
       <StylesGroup
-        formattingController={null as any}
-        selectedCells={selection ? [selection.start] : []}
-        onStyleChange={() => console.log('Style change')}
+        formattingController={formattingController as any}
+        selectedCells={selectedAddresses}
+        currentRange={range ?? undefined}
+        onStyleChange={onAfterCommand}
       />
 
       {/* ==================== Cells Group ==================== */}
       <CellsGroup
-        formattingController={null as any}
-        selectedCells={selection ? [selection.start] : []}
-        onInsertCells={(mode) => console.log('Insert cells:', mode)}
-        onDeleteCells={(mode) => console.log('Delete cells:', mode)}
-        onFormatOperation={(op, val) => console.log('Format operation:', op, val)}
+        formattingController={formattingController as any}
+        selectedCells={selectedAddresses}
+        currentRange={range ?? undefined}
+        onInsertCells={handleInsertCells}
+        onDeleteCells={handleDeleteCells}
+        onFormatOperation={handleFormatOperation}
+        onStructureChange={onAfterCommand}
       />
 
       {/* ==================== Editing Group ==================== */}
       <EditingGroup
-        formattingController={null as any}
-        selectedCells={selection ? [selection.start] : []}
+        formattingController={formattingController as any}
+        selectedCells={selectedAddresses}
+        currentRange={range ?? undefined}
         onAutoSum={(fn) => console.log('AutoSum:', fn)}
         onFill={(dir) => console.log('Fill:', dir)}
-        onClear={(type) => console.log('Clear:', type)}
-        onSort={(dir) => console.log('Sort:', dir)}
-        onFilter={(action) => console.log('Filter:', action)}
-        onFind={(query, opts) => console.log('Find:', query, opts)}
+        onClear={handleClear}
+        onSort={handleSort}
+        onFilter={onFilter}
+        onOpenFindReplace={onOpenFindReplace}
       />
+
+      {showCustomSortDialog && customSortRange && (
+        <CustomSortDialog
+          sortRange={customSortRange}
+          onClose={() => setShowCustomSortDialog(false)}
+          onSort={handleCustomSortApply}
+        />
+      )}
     </div>
   );
 };

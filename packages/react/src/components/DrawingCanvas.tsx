@@ -7,6 +7,7 @@
  */
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { isCtrlLetter } from '../utils/keyboardLayout';
 import type {
   DrawingLayer,
   DrawingObject,
@@ -788,7 +789,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       const selectedIds = drawingLayer.getSelectedIds();
 
       // Delete or Backspace: Remove selected objects
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (e.code === 'Delete' || e.code === 'Backspace') {
         if (selectedIds.length > 0) {
           e.preventDefault();
           const objectsToDelete = selectedIds
@@ -808,7 +809,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
 
       // Ctrl+C or Cmd+C: Copy selected objects
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      if (isCtrlLetter(e, 'c')) {
         if (selectedIds.length > 0) {
           e.preventDefault();
           const objects = selectedIds
@@ -829,7 +830,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
 
       // Ctrl+V or Cmd+V: Paste objects from clipboard
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      if (isCtrlLetter(e, 'v')) {
         if (clipboard.length > 0) {
           e.preventDefault();
           const newPasteCount = pasteCount + 1;
@@ -858,7 +859,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
 
       // Ctrl+X or Cmd+X: Cut selected objects
-      if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+      if (isCtrlLetter(e, 'x')) {
         if (selectedIds.length > 0) {
           e.preventDefault();
           const objects = selectedIds
@@ -880,7 +881,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
 
       // Escape: Clear selection
-      if (e.key === 'Escape') {
+      if (e.code === 'Escape') {
         if (selectedIds.length > 0) {
           e.preventDefault();
           drawingLayer.deselectAll();
