@@ -17,6 +17,10 @@ export interface RibbonProps {
   activeTab?: string;
   drawingLayer?: DrawingLayer;
   workbook?: any;
+  viewMode?: 'normal' | 'pageLayout' | 'pageBreak';
+  onViewModeChange?: (mode: 'normal' | 'pageLayout' | 'pageBreak') => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
 }
 
 /**
@@ -43,6 +47,10 @@ export const Ribbon: React.FC<RibbonProps> = ({
   activeTab = 'Home',
   drawingLayer,
   workbook,
+  viewMode = 'normal',
+  onViewModeChange,
+  zoom = 100,
+  onZoomChange,
 }) => {
   // Set up global keyboard shortcuts (single entry point)
   useKeyboardShortcuts({
@@ -141,14 +149,14 @@ export const Ribbon: React.FC<RibbonProps> = ({
         <ViewTab 
           workbook={workbook}
           selectedCells={selection ? [selection.start] : []}
-          currentView="normal"
-          currentZoom={100}
-          showRuler={false}
+          currentView={viewMode}
+          currentZoom={zoom}
+          showRuler={viewMode === 'pageLayout'}
           showGridlines={true}
           showFormulaBar={true}
           showHeadings={true}
-          onViewChange={(view) => console.log('View changed:', view)}
-          onZoomChange={(zoom) => console.log('Zoom changed:', zoom)}
+          onViewChange={onViewModeChange}
+          onZoomChange={onZoomChange}
           onToggleShow={(opt, val) => console.log('Toggle show:', opt, val)}
           onZoomToSelection={() => console.log('Zoom to selection')}
           onCustomViews={() => console.log('Custom views')}

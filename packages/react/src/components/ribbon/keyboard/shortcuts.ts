@@ -92,6 +92,13 @@ export const UNDO_SHORTCUT: ShortcutDefinition = {
   condition: (ctx: ShortcutContext) => ctx.commandManager.canUndo(),
 };
 
+const redoHandler = (ctx: ShortcutContext) => {
+  if (ctx.commandManager.canRedo()) {
+    ctx.commandManager.redo();
+    console.log('[Shortcut] Redo');
+  }
+};
+
 export const REDO_SHORTCUT: ShortcutDefinition = {
   id: 'history.redo',
   label: 'Redo',
@@ -99,12 +106,18 @@ export const REDO_SHORTCUT: ShortcutDefinition = {
   contexts: ['grid', 'ribbon'],
   priority: 10,
   preventDefault: true,
-  handler: (ctx: ShortcutContext) => {
-    if (ctx.commandManager.canRedo()) {
-      ctx.commandManager.redo();
-      console.log('[Shortcut] Redo');
-    }
-  },
+  handler: redoHandler,
+  condition: (ctx: ShortcutContext) => ctx.commandManager.canRedo(),
+};
+
+export const REDO_SHIFT_Z_SHORTCUT: ShortcutDefinition = {
+  id: 'history.redo.shiftZ',
+  label: 'Redo',
+  keys: 'Ctrl+Shift+Z',
+  contexts: ['grid', 'ribbon'],
+  priority: 10,
+  preventDefault: true,
+  handler: redoHandler,
   condition: (ctx: ShortcutContext) => ctx.commandManager.canRedo(),
 };
 
@@ -246,6 +259,7 @@ export const STANDARD_SHORTCUTS: ShortcutDefinition[] = [
   // History
   UNDO_SHORTCUT,
   REDO_SHORTCUT,
+  REDO_SHIFT_Z_SHORTCUT,
 
   // Editing
   ENTER_SHORTCUT,

@@ -6,9 +6,9 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import type { Workbook } from '@cyber-sheet/core';
+import type { Workbook, CellComment } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
-import { CommandManager, DrawingLayer, ClipboardService, PasteCommand, ClearCellsCommand, InsertCellsCommand, DeleteCellsCommand, FormulaEngine, DropdownList, FileOperations } from '@cyber-sheet/core';
+import { CommandManager, DrawingLayer, ClipboardService, PasteCommand, ClearCellsCommand, InsertCellsCommand, DeleteCellsCommand, FormulaEngine, DropdownList, FileOperations, SetViewModeCommand, type ViewMode } from '@cyber-sheet/core';
 import { TitleBar } from './TitleBar';
 import { RibbonTabs } from './RibbonTabs';
 import { Ribbon } from '../components/ribbon/Ribbon';
@@ -23,6 +23,7 @@ import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { MiniToolbar } from './MiniToolbar';
 import FormatCellsDialog, { FormattingChanges } from './dialogs/FormatCellsDialog/FormatCellsDialog';
 import FindReplaceDialog from './dialogs/FindReplaceDialog';
+import { CellCommentDialog } from './dialogs/CellCommentDialog';
 import { BackstageContainer, BackstagePanel } from './backstage/BackstageContainer';
 import { debugEdit, debugRender, debugMenu } from '../utils/debug';
 import './excel-app.css';
@@ -60,6 +61,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   const [activeTab, setActiveTab] = useState<string>('Home');
   const [activeSheet, setActiveSheet] = useState<string>(workbook.activeSheet?.name || 'Sheet1');
   const [zoom, setZoom] = useState<number>(100);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    return ((workbook.activeSheet as any)?.viewMode as ViewMode) || 'normal';
+  });
   const [selectedCell, setSelectedCell] = useState<any>(null);
   const [cellValue, setCellValue] = useState<any>('');
   const [cellFormula, setCellFormula] = useState<string>('');
@@ -71,6 +75,18 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   const [scrollTop, setScrollTop] = useState<number>(0);
   const [viewportWidth, setViewportWidth] = useState<number>(1000);
   const [viewportHeight, setViewportHeight] = useState<number>(600);
+  const [isAutoFilterEnabled, setIsAutoFilterEnabled] = useState<boolean>(true);
+  const [headerFilterIcons, setHeaderFilterIcons] = useState<Array<{ col: number; x: number; w: number }>>([]);
+  const [filterMenu, setFilterMenu] = useState<{
+    col: number;
+    x: number;
+    y: number;
+    values: Array<{ value: string; count: number }>;
+    apply: (selected: string[]) => void;
+    clear: () => void;
+  } | null>(null);
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterSel, setFilterSel] = useState<Set<string>>(new Set());
 
   // In-cell editing state
   const [inCellEdit, setInCellEdit] = useState<{
@@ -98,6 +114,15 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   // Find/Replace dialog state
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState<boolean>(false);
   const [findReplaceTab, setFindReplaceTab] = useState<'find' | 'replace'>('find');
+  const [commentDialog, setCommentDialog] = useState<{
+    address: { row: number; col: number };
+    comments: CellComment[];
+  } | null>(null);
+  const [commentTooltip, setCommentTooltip] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
   
   // Recent colors tracking (up to 10 each)
   const [recentFillColors, setRecentFillColors] = useState<string[]>([]);
@@ -180,11 +205,157 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     });
   };
 
+  const formatCellAddress = useCallback((addr: { row: number; col: number }) => {
+    let colNum = Math.max(1, addr.col);
+    let colLabel = '';
+    while (colNum > 0) {
+      const rem = (colNum - 1) % 26;
+      colLabel = String.fromCharCode(65 + rem) + colLabel;
+      colNum = Math.floor((colNum - 1) / 26);
+    }
+    return `${colLabel || 'A'}${Math.max(1, addr.row)}`;
+  }, []);
+
+  const openCommentEditorForAddress = useCallback((address: { row: number; col: number }) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+    const existing = sheet.getComments(address);
+    setCommentDialog({ address, comments: existing });
+  }, [workbook]);
+
+  const recomputeHeaderFilterIcons = useCallback(() => {
+    const r = renderer;
+    if (!r || !isAutoFilterEnabled) {
+      setHeaderFilterIcons([]);
+      return;
+    }
+
+    try {
+      const opts = r.optionsReadonly ?? { headerWidth: 48, headerHeight: 24 };
+      const headerWidth = opts.headerWidth;
+      const vp = r.getViewportSize?.() || { width: 0, height: 0 };
+      const sheet = r.sheetReadonly;
+      const sx = scrollLeft;
+      const zoomFactor = typeof (r as any).getZoom === 'function' ? (r as any).getZoom() : 1;
+      const icons: Array<{ col: number; x: number; w: number }> = [];
+
+      let col = 1;
+      let x = headerWidth - sx;
+      while (col <= sheet.colCount) {
+        const cw = sheet.getColumnWidth(col) * zoomFactor;
+        if (x + cw > headerWidth) break;
+        x += cw;
+        col++;
+      }
+
+      const limit = headerWidth + vp.width;
+      while (col <= sheet.colCount && x < limit) {
+        const cw = sheet.getColumnWidth(col) * zoomFactor;
+        icons.push({ col, x, w: cw });
+        x += cw;
+        col++;
+      }
+
+      setHeaderFilterIcons(icons);
+    } catch {
+      setHeaderFilterIcons([]);
+    }
+  }, [renderer, isAutoFilterEnabled, scrollLeft]);
+
   // Create a command manager for this workbook
   const commandManager = useMemo(() => {
     const sheet = workbook.activeSheet;
     return new CommandManager(100, sheet);
   }, [workbook]);
+
+  const executeFilterStateCommand = useCallback(
+    (applyChange: (sheet: any) => void, description: string) => {
+      const sheet = workbook.activeSheet as any;
+      if (!sheet) return;
+      const before = new Map(sheet.getAllFilters?.() ?? []);
+      const refresh = () => renderer?.redraw?.();
+
+      commandManager.execute({
+        description,
+        execute: () => {
+          applyChange(sheet);
+          refresh();
+        },
+        undo: () => {
+          sheet.clearAllFilters?.();
+          for (const [col, filter] of before) {
+            sheet.setColumnFilter(col, filter);
+          }
+          refresh();
+        },
+      });
+    },
+    [workbook, commandManager, renderer]
+  );
+
+  const openColumnFilterMenu = useCallback((col: number, x: number, y: number) => {
+    const r = renderer;
+    if (!r) return;
+
+    const rows = (r.sheetReadonly as any).getVisibleRowIndicesExcluding?.(col) || [];
+    const seen = new Map<string, number>();
+    for (const rr of rows) {
+      const v = r.sheetReadonly.getCellValue({ row: rr, col });
+      const key = v == null ? '' : String(v);
+      seen.set(key, (seen.get(key) || 0) + 1);
+    }
+    const values = Array.from(seen.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+
+    const existing = r.sheetReadonly.getColumnFilter?.(col);
+    const allValues = values.map((v) => v.value);
+    let selected: Set<string>;
+    if (existing && existing.type === 'in' && Array.isArray(existing.value)) {
+      selected = new Set((existing.value as any[]).map(String));
+    } else {
+      const present = new Set<string>();
+      try {
+        const visibleRows: number[] = r.sheetReadonly.getVisibleRowIndices();
+        for (const rr of visibleRows) {
+          const v = r.sheetReadonly.getCellValue({ row: rr, col });
+          present.add(v == null ? '' : String(v));
+        }
+      } catch {}
+      selected = present.size ? present : new Set(allValues);
+    }
+
+    setFilterSel(selected);
+    setFilterSearch('');
+    setFilterMenu({
+      col,
+      x,
+      y,
+      values,
+      apply: (sel) => {
+        executeFilterStateCommand(
+          (sheet) => {
+            if (sel.length === allValues.length) {
+              sheet.clearColumnFilter(col);
+            } else {
+              sheet.setColumnFilter(col, { type: 'in', value: sel });
+            }
+          },
+          `Filter Column ${col}`
+        );
+        setFilterMenu(null);
+      },
+      clear: () => {
+        executeFilterStateCommand(
+          (sheet) => {
+            sheet.clearColumnFilter(col);
+          },
+          `Clear Filter Column ${col}`
+        );
+        setFilterMenu(null);
+      },
+    });
+  }, [renderer, executeFilterStateCommand]);
 
   // Create formula engine for autocomplete
   const formulaEngine = useMemo(() => new FormulaEngine(), []);
@@ -203,7 +374,17 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     // Set active sheet by setting activeSheetName property
     workbook.activeSheetName = sheetName;
     setActiveSheet(sheetName);
-  }, [workbook]);
+    const sheet = workbook.getSheet(sheetName);
+    const mode = ((sheet as any)?.viewMode as ViewMode) || 'normal';
+    setViewMode(mode);
+    renderer?.setViewMode(mode);
+  }, [workbook, renderer]);
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    commandManager.execute(new SetViewModeCommand(workbook, mode));
+    setViewMode(mode);
+    renderer?.setViewMode(mode);
+  }, [workbook, commandManager, renderer]);
 
   // Handle add sheet
   const handleAddSheet = useCallback(() => {
@@ -598,8 +779,16 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         label: 'Filter',
         icon: '🔽',
         onClick: () => {
-          const selection = contextMenuSelectionRef.current;
+          const currentSelection = contextMenuSelectionRef.current;
           debugMenu('Filter clicked');
+          setIsAutoFilterEnabled(true);
+          recomputeHeaderFilterIcons();
+          if (currentSelection?.start?.col && renderer) {
+            const headerHeight = renderer.optionsReadonly?.headerHeight ?? 24;
+            const icon = headerFilterIcons.find((h) => h.col === currentSelection.start.col);
+            const x = icon ? Math.round(icon.x + icon.w - 14) : 80;
+            openColumnFilterMenu(currentSelection.start.col, x, headerHeight);
+          }
         },
       },
       { id: 'sep3', label: '', separator: true },
@@ -625,15 +814,43 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       { id: 'sep4', label: '', separator: true },
       {
         id: 'insertComment',
-        label: 'New Comment',
+        label: (() => {
+          const target = contextMenuSelectionRef.current?.start;
+          if (!target || !sheet) return 'New Comment';
+          const comments = sheet.getComments(target);
+          return comments.length > 0 ? 'Edit Comment' : 'New Comment';
+        })(),
         icon: '💬',
         shortcut: 'Shift+F2',
         onClick: () => {
-          debugMenu('New Comment clicked');
+          debugMenu('New/Edit Comment clicked');
+          const target = contextMenuSelectionRef.current?.start;
+          if (!target) return;
+          openCommentEditorForAddress(target);
+        },
+      },
+      {
+        id: 'deleteComment',
+        label: 'Delete Comment',
+        icon: '🗑️',
+        disabled: (() => {
+          const target = contextMenuSelectionRef.current?.start;
+          if (!target || !sheet) return true;
+          return sheet.getComments(target).length === 0;
+        })(),
+        onClick: () => {
+          const target = contextMenuSelectionRef.current?.start;
+          if (!target) return;
+          const comments = sheet.getComments(target);
+          if (comments.length === 0) return;
+          const latest = comments[comments.length - 1];
+          sheet.deleteComment(target, latest.id, true);
+          renderer?.invalidateRange(target.row, target.col, target.row, target.col);
+          renderer?.scheduleRedraw();
         },
       },
     ];
-  }, [workbook, selection, renderer, clipboardService, commandManager, setIsFormatDialogOpen]);
+  }, [workbook, selection, renderer, clipboardService, commandManager, setIsFormatDialogOpen, openCommentEditorForAddress, recomputeHeaderFilterIcons, headerFilterIcons, openColumnFilterMenu]);
 
   // Handle right-click (context menu)
   useEffect(() => {
@@ -698,6 +915,26 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     const unsubscribe = renderer.onScrollChange(onScroll);
     return () => unsubscribe.dispose();
   }, [renderer]);
+
+  useEffect(() => {
+    renderer?.setViewMode(viewMode);
+  }, [renderer, viewMode]);
+
+  useEffect(() => {
+    recomputeHeaderFilterIcons();
+  }, [recomputeHeaderFilterIcons, viewportWidth, viewportHeight, activeSheet, zoom]);
+
+  useEffect(() => {
+    if (!filterMenu) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.excel-filter-menu') && !target.closest('.excel-filter-icon')) {
+        setFilterMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [filterMenu]);
 
   // Handle double-click to start in-cell editing
   const isHandlingDoubleClick = useRef(false);
@@ -764,6 +1001,38 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     };
   }, [renderer, workbook]); // Remove startInCellEdit from dependencies
 
+  // Comment hover tooltip
+  useEffect(() => {
+    if (!renderer) return;
+    const sheet = renderer['sheet'];
+    if (!sheet || typeof sheet.on !== 'function') return;
+
+    const disposable = sheet.on((event: any) => {
+      if (event?.type === 'cell-hover') {
+        const addr = event.event?.address;
+        const bounds = event.event?.bounds;
+        if (!addr || !bounds) return;
+        const comments = sheet.getComments(addr);
+        if (comments.length === 0) {
+          setCommentTooltip(null);
+          return;
+        }
+        const latest = comments[comments.length - 1];
+        setCommentTooltip({
+          x: bounds.x + bounds.width + 8,
+          y: bounds.y + 4,
+          text: `${latest.author}: ${latest.text}`,
+        });
+      } else if (event?.type === 'cell-hover-end') {
+        setCommentTooltip(null);
+      }
+    });
+
+    return () => {
+      disposable.dispose();
+    };
+  }, [renderer]);
+
   // Global keyboard shortcut handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -821,17 +1090,23 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       // ===== SHORTCUTS THAT WORK IN INPUT FIELDS =====
       
-      // Ctrl+Z (Undo) - works everywhere
+      // Ctrl+Z (Undo) - fallback when shortcut registry did not handle (e.g. input fields)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !e.shiftKey) {
+        if (e.defaultPrevented) return;
         e.preventDefault();
-        if (onUndo) onUndo();
+        commandManager.undo();
+        renderer?.redraw?.();
+        onUndo?.();
         return;
       }
       
-      // Ctrl+Y or Ctrl+Shift+Z (Redo) - works everywhere
+      // Ctrl+Y or Ctrl+Shift+Z (Redo) - fallback when shortcut registry did not handle
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ'))) {
+        if (e.defaultPrevented) return;
         e.preventDefault();
-        if (onRedo) onRedo();
+        commandManager.redo();
+        renderer?.redraw?.();
+        onRedo?.();
         return;
       }
       
@@ -1218,6 +1493,25 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         setIsFormatDialogOpen(true);
         return;
       }
+
+      // Ctrl+Shift+L (toggle AutoFilter)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyL') {
+        e.preventDefault();
+        setIsAutoFilterEnabled((prev) => {
+          const next = !prev;
+          if (!next) {
+            executeFilterStateCommand(
+              (activeSheet) => activeSheet.clearAllFilters?.(),
+              'Clear All Filters'
+            );
+            setFilterMenu(null);
+          } else {
+            setTimeout(() => recomputeHeaderFilterIcons(), 0);
+          }
+          return next;
+        });
+        return;
+      }
       
       // --- Navigation Operations ---
       
@@ -1427,6 +1721,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       // F2 to start editing with existing content
       if (e.key === 'F2' && selectedCell && renderer) {
+        if (e.shiftKey) {
+          e.preventDefault();
+          openCommentEditorForAddress(selectedCell);
+          return;
+        }
         e.preventDefault();
         
         // Inline edit mode activation
@@ -1495,7 +1794,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       console.log('🧹 Keyboard handler effect cleanup - removing listener');
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [workbook, renderer, clipboardService, commandManager, onSave, onUndo, onRedo]); // Removed state deps - now using refs
+  }, [workbook, renderer, clipboardService, commandManager, onSave, onUndo, onRedo, openCommentEditorForAddress, recomputeHeaderFilterIcons, executeFilterStateCommand]); // Removed state deps - now using refs
 
   // Handle cell click when in reference picking mode
   useEffect(() => {
@@ -1539,6 +1838,52 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     };
   }, [renderer, isPickingReference]);
 
+  const handleCommentDialogSave = useCallback((text: string) => {
+    if (!commentDialog) return;
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    const trimmed = text.trim();
+    const existing = sheet.getComments(commentDialog.address);
+    const latest = existing.length > 0 ? existing[existing.length - 1] : null;
+
+    if (trimmed.length === 0) {
+      if (latest) {
+        sheet.deleteComment(commentDialog.address, latest.id, true);
+      }
+      setCommentDialog(null);
+      renderer?.invalidateRange(commentDialog.address.row, commentDialog.address.col, commentDialog.address.row, commentDialog.address.col);
+      renderer?.scheduleRedraw();
+      return;
+    }
+
+    if (latest) {
+      sheet.updateComment(commentDialog.address, latest.id, { text: trimmed });
+    } else {
+      sheet.addComment(commentDialog.address, { text: trimmed, author: 'You' });
+    }
+
+    setCommentDialog(null);
+    renderer?.invalidateRange(commentDialog.address.row, commentDialog.address.col, commentDialog.address.row, commentDialog.address.col);
+    renderer?.scheduleRedraw();
+  }, [commentDialog, workbook, renderer]);
+
+  const handleCommentDialogDelete = useCallback(() => {
+    if (!commentDialog) return;
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+    const existing = sheet.getComments(commentDialog.address);
+    const latest = existing.length > 0 ? existing[existing.length - 1] : null;
+    if (!latest) {
+      setCommentDialog(null);
+      return;
+    }
+    sheet.deleteComment(commentDialog.address, latest.id, true);
+    setCommentDialog(null);
+    renderer?.invalidateRange(commentDialog.address.row, commentDialog.address.col, commentDialog.address.row, commentDialog.address.col);
+    renderer?.scheduleRedraw();
+  }, [commentDialog, workbook, renderer]);
+
   return (
     <div className="excel-app" style={style}>
       {/* Title Bar */}
@@ -1566,6 +1911,10 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         activeTab={activeTab}
         drawingLayer={drawingLayer}
         workbook={workbook}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
+        zoom={zoom}
+        onZoomChange={handleZoomChange}
       />
 
       {/* Formula Bar */}
@@ -1590,6 +1939,53 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           workbook={workbook}
           sheetName={activeSheet}
           zoom={zoom / 100}
+          viewMode={viewMode}
+          rendererOptions={{
+            onRequestColumnFilterMenu: ({ col, anchor, values, apply, clear }: any) => {
+              if (!isAutoFilterEnabled) return;
+              const existing = renderer?.sheetReadonly?.getColumnFilter?.(col);
+              const allValues = values.map((v: { value: string; count: number }) => v.value);
+              let selected: Set<string>;
+              if (existing && existing.type === 'in' && Array.isArray(existing.value)) {
+                selected = new Set((existing.value as any[]).map(String));
+              } else {
+                const present = new Set<string>();
+                try {
+                  const visibleRows: number[] = renderer?.sheetReadonly?.getVisibleRowIndices?.() || [];
+                  for (const rr of visibleRows) {
+                    const v = renderer?.sheetReadonly?.getCellValue({ row: rr, col });
+                    present.add(v == null ? '' : String(v));
+                  }
+                } catch {}
+                selected = present.size ? present : new Set(allValues);
+              }
+              setFilterSel(selected);
+              setFilterSearch('');
+              setFilterMenu({
+                col,
+                x: anchor.x,
+                y: anchor.y,
+                values,
+                apply: (sel) => {
+                  executeFilterStateCommand(
+                    (sheet) => {
+                      if (sel.length === allValues.length) clear();
+                      else apply(sel);
+                    },
+                    `Filter Column ${col}`
+                  );
+                  setFilterMenu(null);
+                },
+                clear: () => {
+                  executeFilterStateCommand(
+                    () => clear(),
+                    `Clear Filter Column ${col}`
+                  );
+                  setFilterMenu(null);
+                },
+              });
+            },
+          }}
           onRendererReady={handleRendererReady}
           onSelectionChange={handleSelectionChange}
           style={{ width: '100%', height: '100%' }}
@@ -1657,6 +2053,160 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             />
           </div>
         )}
+
+        {/* Comment hover preview */}
+        {commentTooltip && (
+          <div
+            style={{
+              position: 'absolute',
+              left: commentTooltip.x,
+              top: commentTooltip.y,
+              background: '#fffbe6',
+              border: '1px solid #d9c27a',
+              borderRadius: 4,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+              padding: '6px 8px',
+              maxWidth: 280,
+              fontSize: 12,
+              lineHeight: 1.35,
+              zIndex: 10003,
+              pointerEvents: 'none',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {commentTooltip.text}
+          </div>
+        )}
+
+        {/* AutoFilter header icons */}
+        {isAutoFilterEnabled && renderer && headerFilterIcons.map((h) => {
+          const headerHeight = renderer.optionsReadonly?.headerHeight ?? 24;
+          const iconLeft = Math.round(h.x + h.w - 14);
+          const iconTop = Math.round(headerHeight / 2 - 6);
+          const isActive = !!renderer.sheetReadonly?.getColumnFilter?.(h.col);
+          return (
+            <div
+              key={`filter-col-${h.col}`}
+              className="excel-filter-icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                openColumnFilterMenu(h.col, iconLeft, headerHeight);
+              }}
+              title={`Filter column ${h.col}`}
+              style={{
+                position: 'absolute',
+                left: iconLeft,
+                top: iconTop,
+                zIndex: 1001,
+                width: 12,
+                height: 12,
+                borderRadius: 2,
+                fontSize: 10,
+                lineHeight: '12px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                background: isActive ? '#e6f2ff' : 'transparent',
+                color: isActive ? '#0f6cbd' : '#666',
+              }}
+            >
+              ▼
+            </div>
+          );
+        })}
+
+        {/* AutoFilter menu */}
+        {filterMenu && (
+          <div
+            className="excel-filter-menu"
+            style={{
+              position: 'absolute',
+              left: filterMenu.x,
+              top: filterMenu.y,
+              zIndex: 1002,
+              width: 260,
+              background: '#fff',
+              border: '1px solid #c8c8c8',
+              borderRadius: 6,
+              boxShadow: '0 8px 22px rgba(0,0,0,0.18)',
+              overflow: 'hidden',
+              fontFamily: 'Segoe UI, Arial, sans-serif',
+              fontSize: 12,
+            }}
+          >
+            <div style={{ padding: '8px 10px', borderBottom: '1px solid #eee', fontWeight: 600 }}>
+              Filter - Column {filterMenu.col}
+            </div>
+            <div style={{ padding: 8 }}>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  border: '1px solid #c8c8c8',
+                  borderRadius: 4,
+                  padding: '6px 8px',
+                  fontSize: 12,
+                }}
+              />
+            </div>
+            <div style={{ maxHeight: 220, overflowY: 'auto', borderTop: '1px solid #f3f3f3', borderBottom: '1px solid #f3f3f3' }}>
+              {(() => {
+                const allValues = filterMenu.values.map((v) => v.value);
+                const isAllSelected = allValues.length > 0 && filterSel.size === allValues.length;
+                return (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}>
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={() => setFilterSel(isAllSelected ? new Set() : new Set(allValues))}
+                    />
+                    (Select All)
+                  </label>
+                );
+              })()}
+
+              {filterMenu.values
+                .filter((item) => !filterSearch || item.value.toLowerCase().includes(filterSearch.toLowerCase()))
+                .map((item) => (
+                  <label
+                    key={`filter-value-${item.value}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={filterSel.has(item.value)}
+                      onChange={() => {
+                        setFilterSel((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(item.value)) next.delete(item.value);
+                          else next.add(item.value);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span style={{ flex: 1 }}>{item.value || '(Blank)'}</span>
+                    <span style={{ color: '#888' }}>({item.count})</span>
+                  </label>
+                ))}
+            </div>
+            <div style={{ padding: 8, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const allValues = filterMenu.values.map((v) => v.value);
+                  setFilterSel(new Set(allValues));
+                }}
+              >
+                Reset
+              </button>
+              <button type="button" onClick={() => filterMenu.clear()}>Clear</button>
+              <button type="button" onClick={() => filterMenu.apply(Array.from(filterSel))}>OK</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sheet Tabs */}
@@ -1673,6 +2223,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         onZoomChange={handleZoomChange}
         selection={selection}
         workbook={workbook}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
       />
 
       {/* Mini Toolbar */}
@@ -1947,6 +2499,18 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           cellY={validationDropdown.cellBounds.y}
           cellWidth={validationDropdown.cellBounds.width}
           cellHeight={validationDropdown.cellBounds.height}
+        />
+      )}
+
+      {/* Cell Comment Dialog */}
+      {commentDialog && (
+        <CellCommentDialog
+          isOpen={!!commentDialog}
+          cellLabel={formatCellAddress(commentDialog.address)}
+          existingComments={commentDialog.comments}
+          onClose={() => setCommentDialog(null)}
+          onSave={handleCommentDialogSave}
+          onDelete={handleCommentDialogDelete}
         />
       )}
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Workbook, Worksheet, autoFill } from '@cyber-sheet/core';
 // Import locally to ensure dev picks up latest CanvasRenderer implementation
-import { CanvasRenderer, CanvasRendererOptions } from '../../renderer-canvas/src';
+import { CanvasRenderer, CanvasRendererOptions, type ViewMode } from '../../renderer-canvas/src';
 
 export type CyberSheetProps = {
   workbook: Workbook;
@@ -10,6 +10,7 @@ export type CyberSheetProps = {
   style?: any;
   physicsOptions?: PhysicsOptions;
   zoom?: number; // external zoom control (1 = 100%)
+  viewMode?: ViewMode;
   fontFamily?: string; // global font family configuration
   fontSize?: number; // global font size configuration (in pixels)
   onRendererReady?: (renderer: CanvasRenderer) => void;
@@ -32,7 +33,7 @@ export type PhysicsOptions = {
   snapIntervalMs?: number;           // how often to check snap (default 200)
 };
 
-export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physicsOptions, zoom, fontFamily, fontSize, onRendererReady, onSelectionChange }: CyberSheetProps) => {
+export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physicsOptions, zoom, viewMode = 'normal', fontFamily, fontSize, onRendererReady, onSelectionChange }: CyberSheetProps) => {
   const containerRef = useRef(null as any);
   const rendererRef = useRef(null as any);
   const sheetRef = useRef(undefined as any);
@@ -78,6 +79,9 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     if (typeof zoom === 'number' && typeof (r as any).setZoom === 'function') {
       try { (r as any).setZoom(zoom); } catch {}
     }
+    if (typeof (r as any).setViewMode === 'function') {
+      try { (r as any).setViewMode(viewMode); } catch {}
+    }
     try { onRendererReady?.(r); } catch {}
     return () => { r.dispose(); rendererRef.current = null; };
   }, [workbook, sheetName]);
@@ -102,6 +106,12 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
       (r as any).setZoom(zoom);
     }
   }, [zoom, rendererRef.current]);
+
+  useEffect(() => {
+    const r = rendererRef.current as CanvasRenderer | null;
+    if (!r || typeof (r as any).setViewMode !== 'function') return;
+    (r as any).setViewMode(viewMode);
+  }, [viewMode, rendererRef.current]);
 
   // React to font configuration changes
   useEffect(() => {

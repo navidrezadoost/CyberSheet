@@ -3,6 +3,12 @@ import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
 import { RenderPlugin } from './plugins';
+import {
+  type ViewMode,
+  getDefaultPageMetrics,
+  computeRowPageBreaks,
+  computeColPageBreaks,
+} from './ViewModeRenderer';
 
 export type CanvasRendererOptions = {
   headerHeight?: number; // px
@@ -66,7 +72,7 @@ export class CanvasRenderer {
   private clickStartCell: Address | null = null;
   private isDragging = false;
   private dragStartCell: Address | null = null;
-  private resizeState: { type: 'col' | 'row'; index: number; startPos: number; startSize: number } | null = null;
+  private resizeState: { type: 'col' | 'row'; index: number; startPos: number; startSize: number; applyToAll?: boolean } | null = null;
   private scrollEmitter = new Emitter<{ type: 'scroll'; scroll: { x: number; y: number; maxX: number; maxY: number } }>();
   private selectionEmitter = new Emitter<{ type: 'selection'; selections: { start: Address; end: Address }[] }>();
   
@@ -82,6 +88,7 @@ export class CanvasRenderer {
   private dirtyCells = new Set<string>(); // Format: "row:col"
   private gridLinesCanvas: HTMLCanvasElement | null = null; // Static gridlines rendered once
   private gridLinesNeedRedraw = true; // Flag to redraw gridlines on scroll/resize
+  private viewMode: ViewMode = 'normal';
   
   // Distinct value cache per column for filter menus
 
@@ -323,6 +330,15 @@ export class CanvasRenderer {
     this.invalidateRect(0, 0, this.canvas.width / this.dpr, this.canvas.height / this.dpr);
   }
   getZoom() { return this.zoom; }
+  setViewMode(mode: ViewMode) {
+    if (this.viewMode === mode) return;
+    this.viewMode = mode;
+    this.gridLinesNeedRedraw = true;
+    this.redraw();
+  }
+  getViewMode(): ViewMode {
+    return this.viewMode;
+  }
   /**
    * Compute and apply column widths based on measured text of cells.
    * By default scans visible rows for performance, includes header labels, and applies padding/minWidth.
@@ -688,7 +704,7 @@ export class CanvasRenderer {
       else { ctx.clearRect(0, 0, width, height); }
 
       // background
-      ctx.fillStyle = sheetBg;
+      ctx.fillStyle = this.viewMode === 'pageLayout' ? '#BFBFBF' : sheetBg;
       if (clip) ctx.fillRect(clip.x, clip.y, clip.w, clip.h); else ctx.fillRect(0, 0, width, height);
       // headers background
   ctx.fillStyle = headerBg;
@@ -716,8 +732,14 @@ export class CanvasRenderer {
       this.drawLayers('background', ctx, width, height);
 
       // grid background
-  ctx.fillStyle = sheetBg;
-      ctx.fillRect(headerWidth, headerHeight, width - headerWidth, height - headerHeight);
+      if (this.viewMode === 'pageLayout') {
+        ctx.fillStyle = '#BFBFBF';
+        ctx.fillRect(headerWidth, headerHeight, width - headerWidth, height - headerHeight);
+        this.drawViewModePageBackground(ctx, width, height);
+      } else {
+        ctx.fillStyle = sheetBg;
+        ctx.fillRect(headerWidth, headerHeight, width - headerWidth, height - headerHeight);
+      }
 
       // grid lines and headers
   ctx.strokeStyle = gridColor;
@@ -1130,6 +1152,9 @@ export class CanvasRenderer {
       }
 
       this.drawLayers('selection', ctx, width, height);
+      if (this.viewMode !== 'normal') {
+        this.drawViewModeOverlay(ctx, width, height);
+      }
       this.drawLayers('overlays', ctx, width, height);
       ctx.restore();
     }
@@ -1152,6 +1177,141 @@ export class CanvasRenderer {
     if (this.options.onRender) {
       try { this.options.onRender({ ms: this._lastRenderMs, regions: this.lastDirtyRects.slice() }); } catch {}
     }
+  }
+
+  private sheetXForCol(col: number): number {
+    const { headerWidth } = this.options;
+    let x = headerWidth;
+    for (let c = 1; c < col; c++) x += this.sheet.getColumnWidth(c) * this.zoom;
+    return x - this.scrollX;
+  }
+
+  private sheetYForRow(row: number): number {
+    const { headerHeight } = this.options;
+    let y = headerHeight;
+    for (const r of this.getVisibleRows()) {
+      if (r >= row) break;
+      y += this.sheet.getRowHeight(r) * this.zoom;
+    }
+    return y - this.scrollY;
+  }
+
+  private getPageBreakPositions(): { rowBreaks: number[]; colBreaks: number[] } {
+    const metrics = getDefaultPageMetrics(this.zoom);
+    const rows = this.getVisibleRows();
+    const rowBreaks = computeRowPageBreaks(
+      rows,
+      (row) => this.sheet.getRowHeight(row) * this.zoom,
+      metrics.contentHeightPx,
+    );
+    const colBreaks = computeColPageBreaks(
+      this.sheet.colCount,
+      (col) => this.sheet.getColumnWidth(col) * this.zoom,
+      metrics.contentWidthPx,
+    );
+    return { rowBreaks, colBreaks };
+  }
+
+  private drawViewModePageBackground(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    const { headerHeight, headerWidth } = this.options;
+    const metrics = getDefaultPageMetrics(this.zoom);
+    const { rowBreaks, colBreaks } = this.getPageBreakPositions();
+    const rowStarts = [this.getVisibleRows()[0] ?? 1, ...rowBreaks.map((r) => r + 1)];
+    const colStarts = [1, ...colBreaks.map((c) => c + 1)];
+
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#999999';
+    ctx.lineWidth = 1;
+
+    for (let pi = 0; pi < rowStarts.length; pi++) {
+      const startRow = rowStarts[pi];
+      const endRow = pi < rowBreaks.length ? rowBreaks[pi] : (this.getVisibleRows().at(-1) ?? startRow);
+      for (let pj = 0; pj < colStarts.length; pj++) {
+        const startCol = colStarts[pj];
+        const endCol = pj < colBreaks.length ? colBreaks[pj] : this.sheet.colCount;
+        const rect = this.rectForRange(startRow, startCol, endRow, endCol);
+        if (!rect) continue;
+        const pageX = rect.x - metrics.marginLeftPx;
+        const pageY = rect.y - metrics.marginTopPx - metrics.headerPx;
+        const pageW = rect.w + metrics.marginLeftPx + metrics.marginRightPx;
+        const pageH = rect.h + metrics.marginTopPx + metrics.marginBottomPx + metrics.headerPx + metrics.footerPx;
+        if (pageX + pageW < headerWidth || pageY + pageH < headerHeight) continue;
+        if (pageX > width || pageY > height) continue;
+        ctx.fillRect(pageX, pageY, pageW, pageH);
+        ctx.strokeRect(pageX + 0.5, pageY + 0.5, pageW - 1, pageH - 1);
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawViewModeOverlay(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    const { headerHeight, headerWidth } = this.options;
+    const metrics = getDefaultPageMetrics(this.zoom);
+    const { rowBreaks, colBreaks } = this.getPageBreakPositions();
+
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#0070C0';
+    ctx.lineWidth = 1;
+
+    for (const row of rowBreaks) {
+      const y = this.sheetYForRow(row) + this.sheet.getRowHeight(row) * this.zoom;
+      if (y < headerHeight || y > height) continue;
+      ctx.beginPath();
+      ctx.moveTo(headerWidth, y + 0.5);
+      ctx.lineTo(width, y + 0.5);
+      ctx.stroke();
+    }
+
+    for (const col of colBreaks) {
+      const x = this.sheetXForCol(col) + this.sheet.getColumnWidth(col) * this.zoom;
+      if (x < headerWidth || x > width) continue;
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, headerHeight);
+      ctx.lineTo(x + 0.5, height);
+      ctx.stroke();
+    }
+
+    if (this.viewMode === 'pageLayout') {
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(220, 220, 220, 0.55)';
+      ctx.font = `10px ${this.theme.fontFamily}`;
+      ctx.fillStyle = '#666666';
+
+      const rowStarts = [this.getVisibleRows()[0] ?? 1, ...rowBreaks.map((r) => r + 1)];
+      const colStarts = [1, ...colBreaks.map((c) => c + 1)];
+
+      for (let pi = 0; pi < rowStarts.length; pi++) {
+        const startRow = rowStarts[pi];
+        const endRow = pi < rowBreaks.length ? rowBreaks[pi] : (this.getVisibleRows().at(-1) ?? startRow);
+        for (let pj = 0; pj < colStarts.length; pj++) {
+          const startCol = colStarts[pj];
+          const endCol = pj < colBreaks.length ? colBreaks[pj] : this.sheet.colCount;
+          const rect = this.rectForRange(startRow, startCol, endRow, endCol);
+          if (!rect) continue;
+
+          const pageX = rect.x - metrics.marginLeftPx;
+          const pageY = rect.y - metrics.marginTopPx - metrics.headerPx;
+          const pageW = rect.w + metrics.marginLeftPx + metrics.marginRightPx;
+          const pageH = rect.h + metrics.marginTopPx + metrics.marginBottomPx + metrics.headerPx + metrics.footerPx;
+
+          ctx.fillStyle = 'rgba(220, 220, 220, 0.55)';
+          ctx.fillRect(pageX, pageY, metrics.marginLeftPx, pageH);
+          ctx.fillRect(pageX + pageW - metrics.marginRightPx, pageY, metrics.marginRightPx, pageH);
+          ctx.fillRect(pageX, pageY, pageW, metrics.marginTopPx + metrics.headerPx);
+          ctx.fillRect(pageX, pageY + pageH - metrics.marginBottomPx - metrics.footerPx, pageW, metrics.marginBottomPx + metrics.footerPx);
+
+          ctx.fillStyle = '#666666';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('Header', pageX + pageW / 2, pageY + (metrics.marginTopPx + metrics.headerPx) / 2);
+          ctx.fillText('Footer', pageX + pageW / 2, pageY + pageH - (metrics.marginBottomPx + metrics.footerPx) / 2);
+        }
+      }
+    }
+
+    ctx.restore();
   }
 
   private rectForRange(r1: number, c1: number, r2: number, c2: number): { x: number; y: number; w: number; h: number } | null {
@@ -1330,24 +1490,26 @@ export class CanvasRenderer {
     
     // Handle column resize
     if (hit.type === 'col-resize') {
-      const rect = this.canvas.getBoundingClientRect();
+      const applyToAll = this.shouldResizeAllFromSelection();
       this.resizeState = {
         type: 'col',
         index: hit.col,
         startPos: e.clientX,
-        startSize: this.sheet.getColumnWidth(hit.col)
+        startSize: this.sheet.getColumnWidth(hit.col),
+        applyToAll
       };
       return;
     }
     
     // Handle row resize
     if (hit.type === 'row-resize') {
-      const rect = this.canvas.getBoundingClientRect();
+      const applyToAll = this.shouldResizeAllFromSelection();
       this.resizeState = {
         type: 'row',
         index: hit.row,
         startPos: e.clientY,
-        startSize: this.sheet.getRowHeight(hit.row)
+        startSize: this.sheet.getRowHeight(hit.row),
+        applyToAll
       };
       return;
     }
@@ -1444,21 +1606,37 @@ export class CanvasRenderer {
       if (this.resizeState.type === 'col') {
         const delta = (mouseX - this.resizeState.startPos) / this.zoom;
         const newWidth = Math.max(10, this.resizeState.startSize + delta) | 0; // Integer hint
-        this.sheet.setColumnWidth(this.resizeState.index, newWidth);
-        // Mark all visible cells in this column dirty
-        const visRows = this.getVisibleRows();
-        for (const row of visRows) {
-          this.markCellDirty(row, this.resizeState.index);
+        if (this.resizeState.applyToAll) {
+          for (let c = 1; c <= this.sheet.colCount; c++) {
+            this.sheet.setColumnWidth(c, newWidth);
+          }
+          // All column boundaries changed, force full redraw.
+          this.dirtyCells.clear();
+        } else {
+          this.sheet.setColumnWidth(this.resizeState.index, newWidth);
+          // Mark all visible cells in this column dirty
+          const visRows = this.getVisibleRows();
+          for (const row of visRows) {
+            this.markCellDirty(row, this.resizeState.index);
+          }
         }
         this.gridLinesNeedRedraw = true; // Gridlines changed
         this.scheduleRedraw();
       } else if (this.resizeState.type === 'row') {
         const delta = (mouseY - this.resizeState.startPos) / this.zoom;
         const newHeight = Math.max(10, this.resizeState.startSize + delta) | 0; // Integer hint
-        this.sheet.setRowHeight(this.resizeState.index, newHeight);
-        // Mark all visible cells in this row dirty
-        for (let c = 1; c <= this.sheet.colCount; c++) {
-          this.markCellDirty(this.resizeState.index, c);
+        if (this.resizeState.applyToAll) {
+          for (let r = 1; r <= this.sheet.rowCount; r++) {
+            this.sheet.setRowHeight(r, newHeight);
+          }
+          // All row boundaries changed, force full redraw.
+          this.dirtyCells.clear();
+        } else {
+          this.sheet.setRowHeight(this.resizeState.index, newHeight);
+          // Mark all visible cells in this row dirty
+          for (let c = 1; c <= this.sheet.colCount; c++) {
+            this.markCellDirty(this.resizeState.index, c);
+          }
         }
         this.gridLinesNeedRedraw = true; // Gridlines changed
         this.scheduleRedraw();
@@ -1557,6 +1735,27 @@ export class CanvasRenderer {
     this.isDragging = false;
     this.resizeState = null;
   };
+
+  private isFullSheetSelection(range: { start: Address; end: Address }): boolean {
+    const minRow = Math.min(range.start.row, range.end.row);
+    const maxRow = Math.max(range.start.row, range.end.row);
+    const minCol = Math.min(range.start.col, range.end.col);
+    const maxCol = Math.max(range.start.col, range.end.col);
+
+    const coversRowsOneBased = minRow <= 1 && maxRow >= this.sheet.rowCount;
+    const coversColsOneBased = minCol <= 1 && maxCol >= this.sheet.colCount;
+
+    // Some legacy callers still use 0-based addresses when setting selection.
+    const coversRowsZeroBased = minRow <= 0 && maxRow >= this.sheet.rowCount - 1;
+    const coversColsZeroBased = minCol <= 0 && maxCol >= this.sheet.colCount - 1;
+
+    return (coversRowsOneBased && coversColsOneBased) || (coversRowsZeroBased && coversColsZeroBased);
+  }
+
+  private shouldResizeAllFromSelection(): boolean {
+    const activeSelections = this.selections.length ? this.selections : (this.selection ? [this.selection] : []);
+    return activeSelections.some((range) => this.isFullSheetSelection(range));
+  }
 
   private handleDblClick = (e: MouseEvent) => {
     const hit = this.hitTest(e.clientX, e.clientY);

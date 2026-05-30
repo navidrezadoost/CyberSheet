@@ -24,6 +24,10 @@ export const WorkbookViewsGroup: React.FC<WorkbookViewsGroupProps> = ({
 }) => {
   const [activeView, setActiveView] = useState(currentView);
 
+  useEffect(() => {
+    setActiveView(currentView);
+  }, [currentView]);
+
   const handleViewChange = useCallback((view: 'normal' | 'pageBreak' | 'pageLayout') => {
     setActiveView(view);
     onViewChange?.(view);

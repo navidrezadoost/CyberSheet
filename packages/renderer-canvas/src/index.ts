@@ -1,4 +1,5 @@
 export * from './CanvasRenderer';
+export * from './ViewModeRenderer';
 export * from './ExcelRenderer';
 export * from './MultiLayerCanvas';
 export * from './AccessibilityManager';

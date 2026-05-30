@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - ExcelApp: Comments, AutoFilter, View Modes, and Undo Fixes (May 26, 2026)
+
+**Cell comments, filter undo/redo, workbook view modes, and full-sheet resize when the entire sheet is selected**
+
+#### Cell Comments
+- ✅ **CellCommentDialog**: Add/edit/delete cell comments via context menu and `Shift+F2`
+- ✅ **Hover tooltip**: Shows latest comment author and text on cell hover
+- ✅ Uses core APIs: `addComment`, `updateComment`, `deleteComment`, `getComments`
+
+#### AutoFilter
+- ✅ **Filter dropdown UI**: Search, Select All, value checklist with counts, OK/Clear/Reset
+- ✅ **Multi-column AND filtering** via existing worksheet filter APIs
+- ✅ **`Ctrl+Shift+L`**: Toggle AutoFilter (disabling clears filters)
+- ✅ **Filter undo/redo**: Filter changes recorded in `CommandManager` with canvas redraw on undo/redo
+
+#### View Modes (Status Bar + View Ribbon)
+- ✅ **Normal View**: Standard grid editing (default)
+- ✅ **Page Break Preview**: Blue dashed lines at automatic page boundaries (Letter paper + default margins)
+- ✅ **Page Layout View**: Gray inter-page background, white page cards, margin shading, Header/Footer labels
+- ✅ **ViewModeRenderer**: Page metrics and break computation (`packages/renderer-canvas/src/ViewModeRenderer.ts`)
+- ✅ **CanvasRenderer**: `setViewMode()` / `getViewMode()` with overlay rendering
+- ✅ **ExcelApp wiring**: Status bar and View ribbon tab connected via `SetViewModeCommand` (undoable, per-sheet)
+
+#### Full-Sheet Resize (Ctrl+A)
+- ✅ When the entire sheet is selected, dragging any column or row boundary resizes **all** columns or rows (Excel-like)
+
+#### Undo / Redo Fixes
+- ✅ **`Ctrl+Shift+Z`**: Registered as redo alias alongside `Ctrl+Y`
+- ✅ **ExcelApp keyboard handler**: Calls `commandManager` directly; skips when shortcut registry already handled the event
+- ✅ **`commandManager` init order**: Fixed temporal dead zone error in `executeFilterStateCommand`
+- ✅ **Demo**: Removed stub `onUndo`/`onRedo` handlers that only logged and blocked real undo/redo
+
+#### Tests
+- ✅ **view-mode-renderer.test.ts**: Row/column page break computation and default page metrics
+- ✅ **renderer.test.ts**: Full-sheet resize when entire sheet is selected
+
 ### Added - Hardening Sprint: Complete File I/O Integration (May 19, 2026)
 
 **Completed all remaining file operations - Open, New, and export format stubs**

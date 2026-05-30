@@ -47,8 +47,6 @@ const ExcelAppDemo = () => {
       workbook={workbook}
       fileName="Book1.xlsx"
       onSave={() => console.log('Save clicked')}
-      onUndo={() => console.log('Undo clicked')}
-      onRedo={() => console.log('Redo clicked')}
     />
   );
 };
