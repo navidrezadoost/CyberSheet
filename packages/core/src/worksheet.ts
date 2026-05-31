@@ -1,4 +1,4 @@
-import { Address, Cell, CellStyle, CellComment, CellHyperlink, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState, type SortKey, type AutoFilterRange } from './types';
+import { Address, Cell, CellStyle, CellComment, CellHyperlink, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState, type SortKey, type AutoFilterRange, type CustomCellComponent } from './types';
 import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
 import { Emitter } from './events';
 import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
@@ -1521,6 +1521,39 @@ export class Worksheet {
 
     this.cells.forEach((row, col, cell) => {
       if (cell.icon) result.push({ address: { row, col }, icon: cell.icon });
+    });
+
+    return result;
+  }
+
+  // ==================== Custom Cell Component APIs ====================
+
+  setCellComponent(addr: Address, component: CustomCellComponent | undefined): void {
+    const c = this.cells.getOrCreate(addr.row, addr.col);
+    c.customComponent = component;
+    this.events.emit({ type: 'cell-component-changed', address: addr, component });
+  }
+
+  getCellComponent(addr: Address): CustomCellComponent | undefined {
+    return this.getCell(addr)?.customComponent;
+  }
+
+  clearCellComponent(addr: Address): void {
+    this.setCellComponent(addr, undefined);
+  }
+
+  getAllCellComponents(): Array<{ address: Address; component: CustomCellComponent }> {
+    const result: Array<{ address: Address; component: CustomCellComponent }> = [];
+
+    this.cells.forEach((row, col, cell) => {
+      if (cell.customComponent) {
+        result.push({ address: { row, col }, component: cell.customComponent });
+      }
+    });
+
+    result.sort((a, b) => {
+      if (a.address.row !== b.address.row) return a.address.row - b.address.row;
+      return a.address.col - b.address.col;
     });
 
     return result;

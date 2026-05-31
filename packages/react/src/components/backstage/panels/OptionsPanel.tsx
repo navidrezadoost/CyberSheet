@@ -5,9 +5,9 @@ import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
 import {
   configureCyberSheet,
   registerCyberSheetFonts,
-  useCyberSheetConfig,
   type CyberSheetFontDefinition,
 } from '../../../config/globalConfig';
+import { useCyberSheetConfig } from '../../../config/CyberSheetConfigContext';
 import type { FileOperations, ApplicationSettings, GeneralSettings, FormulaSettings, SaveSettings, AdvancedSettings } from '@cyber-sheet/core';
 
 export interface OptionsPanelProps {

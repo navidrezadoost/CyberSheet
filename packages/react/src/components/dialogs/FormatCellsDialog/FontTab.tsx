@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { CellStyle, FormattingChanges } from './FormatCellsDialog';
 import { SmilodonNativeSelect } from '../../SmilodonNativeSelect';
-import { useCyberSheetConfig } from '../../../config/globalConfig';
+import { useCyberSheetConfig } from '../../../config/CyberSheetConfigContext';
 
 export interface FontTabProps {
   currentFormatting: CellStyle;

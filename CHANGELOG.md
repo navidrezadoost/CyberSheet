@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 6: Embedder API, Integration Docs, and Insert Tab Fixes (May 30, 2026)
+
+**Formal embedder surface: events, config, comments, custom components, file loading, and documentation**
+
+#### Phase 6.1 — Event API (lazy bridging)
+- ✅ `EventBus` with lazy bridge activation on first subscriber, deactivation on last unsubscribe
+- ✅ `Workbook.eventBus` + worksheet/renderer bridges for cell, comment, selection, scroll, and command events
+- ✅ `CyberSheetHandle` exposes `on` / `once` / `off`; `CommandManager` emits `command-execute`, `command-undo`, `command-redo`
+- ✅ Tests: `packages/core/__tests__/EventBus.test.ts`
+
+#### Phase 6.2 — Comment Panel
+- ✅ Sidebar **CommentPanel**: filter by sheet, thread list, avatars, reply, resolve/reopen, resolve all
+- ✅ Review ribbon → Open/Close Comments Panel; lazy event subscriptions while panel is open
+- ✅ Extended `CellComment` with optional `authorAvatar` and `resolved`
+
+#### Phase 6.3 — Custom Cell Components
+- ✅ `CustomCellComponent` on cells: canvas **icon** + React **portal** overlays
+- ✅ `SetCellComponentCommand` (undoable); `CyberSheetHandle.registerComponent` / `setCellComponent` / `clearCellComponent`
+- ✅ Tests: `packages/core/__tests__/CellComponentCommands.test.ts`
+
+#### Phase 6.4 — Centralised Configuration
+- ✅ `CyberSheetConfigInput`: feature flags, `enabledTabs`, `enabledGroups`, author info, `eventFilter`
+- ✅ `CyberSheetConfigProvider` + `useCyberSheetAppConfig()` / `useCyberSheetConfig()`
+- ✅ Ribbon tab/group gating, guarded `CommandManager`, `onEvent` prop on `ExcelApp`
+- ✅ Permission checks: `allowEdit`, `allowFormatting`, `allowFormulaEdit`, `enableComments`, `enableCustomComponents`
+
+#### Phase 6.5 — Drag-and-Drop File Loading
+- ✅ Drop `.xlsx` / `.xls` onto the spreadsheet area when `allowOpen` and `onWorkbookLoaded` are set
+- ✅ Demo wired: `examples/excel-app-demo.tsx` passes `onWorkbookLoaded={setWorkbook}`
+
+#### Phase 6.8 — Integration Documentation
+- ✅ **`docs/INTEGRATION_GUIDE.md`**: quick start, config reference, event catalog, custom components, comments, file I/O matrix, embedding patterns, API reference
+
+#### Insert tab & pivot fixes
+- ✅ **Insert → Table** opens Create Table dialog and applies table style + AutoFilter (was `console.log` stub)
+- ✅ **PivotTable** header matching trims whitespace (`Qty` matches `Qty ` in source headers)
+- ✅ **View tab** crash fixed: missing `useEffect` import in `WorkbookViewsGroup.tsx`
+- ✅ **RibbonTabs** import path fix; config module circular dependency resolved (`globalConfig` ↔ `CyberSheetConfigContext`)
+
+#### Conditional formatting & styles (Home tab)
+- ✅ Conditional formatting rules manager, quick rules, and undoable `SetConditionalFormattingRulesCommand`
+- ✅ Format as Table + AutoFilter batched via `BatchCommand` in Styles group
+
+#### New files
+- `docs/INTEGRATION_GUIDE.md`
+- `packages/core/src/EventBus.ts`, `eventBridge.ts`, `commands/CellComponentCommands.ts`, `commands/ConditionalFormattingCommands.ts`
+- `packages/react/src/config/appConfig.ts`, `CyberSheetConfigContext.tsx`, `commandPermissions.ts`, `guardedCommandManager.ts`, `eventForwarder.ts`
+- `packages/react/src/components/CommentPanel.tsx`, `rendererEventBridge.ts`, `customComponents/`
+- `packages/react/src/utils/createTable.ts`, `insertPivotTable.ts`, `conditionalFormattingRibbon.ts`, `commentPanelUtils.ts`
+- Dialogs: `CreatePivotTableDialog`, `CreateTableDialog`, `QuickConditionalRuleDialog`, `ConditionalFormattingManagerDialog`
+
 ### Added - Home Tab Tools, Undo/Redo, and Cybersheet UX (May 30, 2026)
 
 **Wire up Home ribbon tools, global undo/redo, and Cybersheet-branded dialogs**

@@ -49,7 +49,7 @@ const DEFAULT_FONT_FAMILIES = [
 
 const DEFAULT_FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
 
-const DEFAULT_CONFIG: CyberSheetGlobalConfig = {
+export const DEFAULT_CONFIG: CyberSheetGlobalConfig = {
   fonts: {
     families: DEFAULT_FONT_FAMILIES,
     customFonts: [],
@@ -58,6 +58,8 @@ const DEFAULT_CONFIG: CyberSheetGlobalConfig = {
     sizes: DEFAULT_FONT_SIZES,
   },
 };
+
+export { DEFAULT_CONFIG as DEFAULT_FONT_CONFIG };
 
 let currentConfig: CyberSheetGlobalConfig = DEFAULT_CONFIG;
 const listeners = new Set<(config: CyberSheetGlobalConfig) => void>();
@@ -77,7 +79,7 @@ function serializeFontSource(source: string | CyberSheetFontSource): string {
   return `url("${normalized.url}")${format}`;
 }
 
-function normalizeConfig(input?: CyberSheetConfigInput): CyberSheetGlobalConfig {
+export function normalizeConfig(input?: CyberSheetConfigInput): CyberSheetGlobalConfig {
   const fontFamilies = uniqueValues([
     ...(input?.fonts?.families ?? DEFAULT_CONFIG.fonts.families),
     ...(input?.fonts?.customFonts ?? []).map((font) => font.family),
@@ -194,7 +196,8 @@ export function subscribeCyberSheetConfig(listener: (config: CyberSheetGlobalCon
   return () => listeners.delete(listener);
 }
 
-export function useCyberSheetConfig() {
+/** @deprecated Use module-level font sync via configureCyberSheet; prefer CyberSheetConfigProvider for app flags. */
+export function useCyberSheetFontConfig() {
   const [config, setConfig] = useState(currentConfig);
 
   useEffect(() => {
@@ -202,5 +205,5 @@ export function useCyberSheetConfig() {
     return subscribeCyberSheetConfig(setConfig);
   }, []);
 
-  return config;
+  return config.fonts;
 }

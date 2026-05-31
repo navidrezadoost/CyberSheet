@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NumberFormatGroupIcon1, NumberFormatGroupIcon2 } from '@cyber-sheet/icons/react';
 import { ColorPicker } from './ColorPicker';
 import { RibbonSelect } from './ribbon/RibbonSelect';
-import { useCyberSheetConfig } from '../config/globalConfig';
+import { useCyberSheetConfig } from '../config/CyberSheetConfigContext';
 
 const QUICK_FORMATS = {
   comma: '#,##0',

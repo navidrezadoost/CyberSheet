@@ -6,7 +6,7 @@
  */
 
 import { WorkbookViewsGroupIcon4, WorkbookViewsGroupIcon3, WorkbookViewsGroupIcon2, WorkbookViewsGroupIcon1 } from '@cyber-sheet/icons/react';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { Workbook } from '@cyber-sheet/core';
 
 interface WorkbookViewsGroupProps {

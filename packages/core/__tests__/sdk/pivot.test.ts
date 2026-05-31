@@ -429,6 +429,23 @@ describe('§7 buildPivot — field resolution errors', () => {
     };
     expect(() => buildPivot(SALES_GRID, def)).toThrowError(PivotFieldError);
   });
+
+  it('matches fields when source headers have trailing spaces', () => {
+    const gridWithSpacedHeaders: (string | number)[][] = [
+      ['Region', 'Revenue ', 'Units'],
+      ['North', 100, 2],
+      ['South', 200, 4],
+    ];
+    const def: PivotDefinition = {
+      source: { start: { row: 1, col: 1 }, end: { row: 3, col: 3 } },
+      rows: ['Region'],
+      values: [{ field: 'Revenue', aggregator: 'sum' }],
+    };
+    const grid = buildPivot(gridWithSpacedHeaders, def);
+    expect(grid.rows).toHaveLength(2);
+    expect(grid.rows[0]?.values[0]).toBe(100);
+    expect(grid.rows[1]?.values[0]).toBe(200);
+  });
 });
 
 // ---------------------------------------------------------------------------

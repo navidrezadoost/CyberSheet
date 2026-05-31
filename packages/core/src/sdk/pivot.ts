@@ -141,6 +141,18 @@
 import type { ExtendedCellValue } from '../types';
 import { PivotSourceError, PivotFieldError, EmptyPivotSourceError } from './errors';
 
+function normalizePivotHeader(value: ExtendedCellValue): string {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function resolveHeaderIndex(headers: string[], field: string): number {
+  const target = field.trim();
+  const exact = headers.indexOf(target);
+  if (exact !== -1) return exact;
+  return headers.findIndex((header) => header === target || header.trim() === target);
+}
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -310,8 +322,8 @@ export function buildPivot(
     throw new PivotSourceError('header row is empty (source has no columns)');
   }
 
-  // Normalise headers to strings.
-  const headers = headerRow.map(h => (h === null || h === undefined ? '' : String(h)));
+  // Normalise headers to trimmed strings (Excel headers often have trailing spaces).
+  const headers = headerRow.map(normalizePivotHeader);
 
   const dataRows = rawGrid.slice(1);
   if (dataRows.length === 0) {
@@ -341,15 +353,17 @@ export function buildPivot(
     v === null || v === undefined ? '' : String(v);
 
   const rowFieldIndices: number[] = definition.rows.map(field => {
-    const idx = headers.indexOf(field);
-    if (idx === -1) throw new PivotFieldError(field, headers);
+    const idx = resolveHeaderIndex(headers, field);
+    if (idx === -1) throw new PivotFieldError(field.trim(), headers);
     return idx;
   });
 
   // Validate aggregate spec fields; calculated specs need no field validation.
   for (const spec of definition.values) {
     if (!isCalc(spec)) {
-      if (headers.indexOf(spec.field) === -1) throw new PivotFieldError(spec.field, headers);
+      if (resolveHeaderIndex(headers, spec.field) === -1) {
+        throw new PivotFieldError(spec.field.trim(), headers);
+      }
     }
   }
 
@@ -371,7 +385,7 @@ export function buildPivot(
         outputLabel: spec.label ?? spec.name,
       } as ResolvedCalcSpec;
     }
-    const idx = headers.indexOf(spec.field);
+    const idx = resolveHeaderIndex(headers, spec.field);
     // idx already validated above
     return {
       ...spec,
@@ -419,8 +433,8 @@ export function buildPivot(
   if (colFields.length > 0) {
     // Resolve column-axis field indices.
     const colFieldIndices: number[] = colFields.map(field => {
-      const idx = headers.indexOf(field);
-      if (idx === -1) throw new PivotFieldError(field, headers);
+      const idx = resolveHeaderIndex(headers, field);
+      if (idx === -1) throw new PivotFieldError(field.trim(), headers);
       return idx;
     });
 

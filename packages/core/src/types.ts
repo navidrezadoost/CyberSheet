@@ -382,6 +382,10 @@ export type CellComment = {
   text: string;
   /** Author name */
   author: string;
+  /** Optional avatar URL or data URI */
+  authorAvatar?: string;
+  /** Whether this thread root is resolved (CyberSheet extension) */
+  resolved?: boolean;
   /** Creation timestamp */
   createdAt: Date;
   /** Last edit timestamp */
@@ -394,6 +398,17 @@ export type CellComment = {
   richText?: Array<{ text: string; style?: Partial<CellStyle> }>;
   /** Custom metadata for extensibility */
   metadata?: Record<string, unknown>;
+};
+
+/**
+ * CyberSheet custom cell component descriptor (Excel ignores; persisted in custom parts later).
+ */
+export type CustomCellComponent = {
+  type: 'icon' | 'react-component';
+  id: string;
+  props?: Record<string, unknown>;
+  position?: 'left' | 'right' | 'overlay';
+  size?: number;
 };
 
 /**
@@ -427,6 +442,8 @@ export type Cell = {
   comments?: CellComment[];
   /** Cell icon overlay */
   icon?: CellIcon;
+  /** CyberSheet custom component (icon or registered React component) */
+  customComponent?: CustomCellComponent;
   /** Clickable hyperlink metadata */
   hyperlink?: CellHyperlink;
   /** Spill metadata: if this cell is the source of a spilled array */
@@ -527,6 +544,7 @@ export type SheetEvents =
   | { type: 'comment-updated'; address: Address; commentId: string; comment: CellComment }
   | { type: 'comment-deleted'; address: Address; commentId: string }
   | { type: 'icon-changed'; address: Address; icon: CellIcon | undefined }
+  | { type: 'cell-component-changed'; address: Address; component: CustomCellComponent | undefined }
   | { type: 'merge-added'; region: MergedRegion }
   | { type: 'merge-removed'; region: MergedRegion }
   | { type: 'row-hidden'; row: number }

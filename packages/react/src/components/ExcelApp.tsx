@@ -9,6 +9,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import type { Workbook, CellComment } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 import { CommandManager, DrawingLayer, ClipboardService, ClearCellsCommand, FormulaEngine, DropdownList, FileOperations, SetViewModeCommand, FormattingController, SetHyperlinkCommand, getDefaultHyperlinkScreenTip, SortCommand, ToggleAutoFilterCommand, ClearFilterCommand, type ViewMode, type InsertCellsMode, type DeleteCellsMode, type Address, type CellHyperlink } from '@cyber-sheet/core';
+import { loadXlsxFromArrayBuffer } from '@cyber-sheet/io-xlsx';
 import { TitleBar } from './TitleBar';
 import { RibbonTabs } from './RibbonTabs';
 import { Ribbon } from '../components/ribbon/Ribbon';
@@ -24,8 +25,11 @@ import { MiniToolbar } from './MiniToolbar';
 import FormatCellsDialog, { FormattingChanges } from './dialogs/FormatCellsDialog/FormatCellsDialog';
 import FindReplaceDialog from './dialogs/FindReplaceDialog';
 import { CellCommentDialog } from './dialogs/CellCommentDialog';
+import { CommentPanel } from './CommentPanel';
 import { InsertHyperlinkDialog, type InsertHyperlinkDialogResult } from './dialogs/InsertHyperlinkDialog';
 import { InsertDeleteCellsDialog } from './dialogs/InsertDeleteCellsDialog';
+import { CreatePivotTableDialog } from './dialogs/CreatePivotTableDialog';
+import { CreateTableDialog } from './dialogs/CreateTableDialog';
 import {
   executeInsertCells,
   executeDeleteCells,
@@ -34,7 +38,12 @@ import {
 } from '../utils/insertDeleteCells';
 import { BackstageContainer, BackstagePanel } from './backstage/BackstageContainer';
 import { debugEdit, debugRender, debugMenu } from '../utils/debug';
-import { configureCyberSheet, useCyberSheetConfig, type CyberSheetConfigInput } from '../config/globalConfig';
+import { configureCyberSheet } from '../config/globalConfig';
+import { CyberSheetConfigProvider, useCyberSheetAppConfig, useCyberSheetConfig } from '../config/CyberSheetConfigContext';
+import { getVisibleRibbonTabLabels, isTabEnabled, type CyberSheetConfigInput } from '../config/appConfig';
+import { canEditCellValue, canStartCellEdit } from '../config/commandPermissions';
+import { createGuardedCommandManager } from '../config/guardedCommandManager';
+import { attachOnEventForwarder } from '../config/eventForwarder';
 import { handleSpreadsheetHistoryShortcut } from '../utils/spreadsheetHistory';
 import {
   performCopy,
@@ -44,6 +53,9 @@ import {
   type ClipboardCopyMode,
 } from '../utils/clipboardOperations';
 import { normalizeRange } from '../utils/sortFilterCommands';
+import { insertPivotTable } from '../utils/insertPivotTable';
+import { applyTableFormat, DEFAULT_INSERT_TABLE_STYLE } from '../utils/createTable';
+import { resolveTableDataRange } from '../utils/conditionalFormattingRibbon';
 import { openHyperlinkTarget, downloadBlankWorkbook } from '../utils/hyperlinkNavigation';
 import {
   isCtrlLetter,
@@ -110,6 +122,7 @@ export interface ExcelAppProps {
   onRedo?: () => void;
   onWorkbookLoaded?: (workbook: Workbook) => void;
   config?: CyberSheetConfigInput;
+  onEvent?: (event: string, payload: unknown) => void;
   style?: React.CSSProperties;
 }
 
@@ -124,17 +137,23 @@ export interface ExcelAppProps {
  * - Sheet tabs
  * - Status bar with zoom controls
  */
-export const ExcelApp: React.FC<ExcelAppProps> = ({
+const ExcelAppView: React.FC<ExcelAppProps> = ({
   workbook,
   fileName = 'Book1',
   onSave,
   onUndo,
   onRedo,
   onWorkbookLoaded,
-  config,
+  onEvent,
   style,
 }) => {
-  const [activeTab, setActiveTab] = useState<string>('Home');
+  const appConfig = useCyberSheetAppConfig();
+  const cyberSheetConfig = useCyberSheetConfig();
+
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const visible = getVisibleRibbonTabLabels(appConfig);
+    return visible[0] ?? 'Home';
+  });
   const [activeSheet, setActiveSheet] = useState<string>(workbook.activeSheet?.name || 'Sheet1');
   const [sheetRevision, setSheetRevision] = useState(0);
   const [renameSheetTrigger, setRenameSheetTrigger] = useState(0);
@@ -168,9 +187,20 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   const [historyVersion, setHistoryVersion] = useState(0);
 
   useEffect(() => {
-    if (config) configureCyberSheet(config);
-  }, [config]);
-  const cyberSheetConfig = useCyberSheetConfig();
+    configureCyberSheet({ fonts: cyberSheetConfig.fonts });
+  }, [cyberSheetConfig.fonts]);
+
+  useEffect(() => {
+    if (!onEvent) return;
+    return attachOnEventForwarder(workbook.eventBus, onEvent, appConfig.eventFilter);
+  }, [workbook, onEvent, appConfig.eventFilter]);
+
+  useEffect(() => {
+    if (!isTabEnabled(appConfig, activeTab)) {
+      const visible = getVisibleRibbonTabLabels(appConfig);
+      if (visible.length > 0) setActiveTab(visible[0]!);
+    }
+  }, [appConfig, activeTab]);
 
   // In-cell editing state
   const [inCellEdit, setInCellEdit] = useState<{
@@ -203,10 +233,15 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   // Find/Replace dialog state
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState<boolean>(false);
   const [findReplaceTab, setFindReplaceTab] = useState<'find' | 'replace'>('find');
+  const [isCreatePivotTableOpen, setIsCreatePivotTableOpen] = useState(false);
+  const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
+  const [tableInsertError, setTableInsertError] = useState<string | null>(null);
+  const [pivotTableError, setPivotTableError] = useState<string | null>(null);
   const [commentDialog, setCommentDialog] = useState<{
     address: { row: number; col: number };
     comments: CellComment[];
   } | null>(null);
+  const [showCommentPanel, setShowCommentPanel] = useState(appConfig.showCommentPanel);
   const [hyperlinkDialog, setHyperlinkDialog] = useState<{
     address: Address;
     existingHyperlink: CellHyperlink | null;
@@ -335,11 +370,12 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   }, []);
 
   const openCommentEditorForAddress = useCallback((address: { row: number; col: number }) => {
+    if (!appConfig.enableComments) return;
     const sheet = workbook.activeSheet;
     if (!sheet) return;
     const existing = sheet.getComments(address);
     setCommentDialog({ address, comments: existing });
-  }, [workbook]);
+  }, [workbook, appConfig.enableComments]);
 
   const openHyperlinkEditorForAddress = useCallback((address: Address) => {
     const sheet = workbook.activeSheet;
@@ -393,11 +429,15 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     }
   }, [renderer, isAutoFilterEnabled, scrollLeft]);
 
-  // Create a command manager for this workbook
-  const commandManager = useMemo(() => {
+  const baseCommandManager = useMemo(() => {
     const sheet = workbook.activeSheet;
-    return new CommandManager(100, sheet);
+    return new CommandManager(100, sheet, workbook.eventBus);
   }, [workbook]);
+
+  const commandManager = useMemo(
+    () => createGuardedCommandManager(baseCommandManager, appConfig),
+    [baseCommandManager, appConfig],
+  );
 
   const formattingController = useMemo(() => {
     const sheet = workbook.activeSheet;
@@ -406,6 +446,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
   }, [workbook.activeSheet, commandManager]);
 
   const selectionAddresses = useMemo(() => addressesFromRange(selection), [selection]);
+
+  const selectionRange = useMemo(() => normalizeSelectionRange(selection), [selection]);
 
   const miniToolbarAddresses = useMemo(() => {
     if (!contextMenu && !miniToolbar) return [];
@@ -526,6 +568,63 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     recomputeHeaderFilterIcons,
     renderer,
   ]);
+
+  const handleInsertPivotTable = useCallback(() => {
+    setPivotTableError(null);
+    setIsCreatePivotTableOpen(true);
+  }, []);
+
+  const handleInsertTable = useCallback(() => {
+    setTableInsertError(null);
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    const range = resolveTableDataRange(sheet, selectionRange);
+    if (!range) {
+      setTableInsertError('Select a data range with at least one cell, then try again.');
+      return;
+    }
+
+    setIsCreateTableOpen(true);
+  }, [workbook, selectionRange]);
+
+  const handleCreateTable = useCallback((range: CellRange, hasHeaders: boolean) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet || !formattingController) return;
+
+    applyTableFormat(formattingController, commandManager, sheet, range, hasHeaders);
+    setIsCreateTableOpen(false);
+    setTableInsertError(null);
+    renderer?.invalidateRange?.(range.start.row, range.start.col, range.end.row, range.end.col);
+    renderer?.scheduleRedraw?.();
+    setHistoryVersion((version) => version + 1);
+  }, [workbook, formattingController, commandManager, renderer]);
+
+  const handleCreatePivotTable = useCallback((sourceRange: CellRange, target: Address) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+
+    const result = insertPivotTable(sheet, commandManager, sourceRange, target);
+    if (!result.ok) {
+      setPivotTableError(result.error);
+      return;
+    }
+
+    setIsCreatePivotTableOpen(false);
+    setPivotTableError(null);
+    setSelectedCell(target);
+    setSelection({ start: target, end: result.outputRange.end });
+    renderer?.setSelection?.({ start: target, end: result.outputRange.end });
+    renderer?.invalidateRange?.(
+      result.outputRange.start.row,
+      result.outputRange.start.col,
+      result.outputRange.end.row,
+      result.outputRange.end.col,
+    );
+    renderer?.scrollToCell?.({ row: target.row, col: target.col });
+    renderer?.scheduleRedraw?.();
+    setHistoryVersion((version) => version + 1);
+  }, [workbook.activeSheet, commandManager, renderer]);
 
   const handleDataCommand = useCallback((command: { type: string; [key: string]: unknown }) => {
     const sheet = workbook.activeSheet;
@@ -669,6 +768,110 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     renderer?.setViewMode(mode);
   }, [workbook, renderer]);
 
+  const applyLoadedWorkbook = useCallback((newWorkbook: Workbook) => {
+    onWorkbookLoaded?.(newWorkbook);
+    setActiveSheet(newWorkbook.activeSheet?.name || 'Sheet1');
+    setSheetRevision((v) => v + 1);
+    renderer?.scheduleRedraw();
+  }, [onWorkbookLoaded, renderer]);
+
+  const handleSpreadsheetDragOver = useCallback((e: React.DragEvent) => {
+    if (!appConfig.allowOpen || !onWorkbookLoaded) return;
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, [appConfig.allowOpen, onWorkbookLoaded]);
+
+  const handleSpreadsheetDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!appConfig.allowOpen || !onWorkbookLoaded) return;
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.xlsx') && !lowerName.endsWith('.xls')) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const newWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
+      applyLoadedWorkbook(newWorkbook);
+    } catch (err) {
+      console.error('Failed to load dropped file:', err);
+      alert('Failed to load file. Please ensure it is a valid XLSX file.');
+    }
+  }, [appConfig.allowOpen, onWorkbookLoaded, applyLoadedWorkbook]);
+
+  const navigateToCommentCell = useCallback((sheetName: string, address: Address) => {
+    if (workbook.activeSheet?.name !== sheetName) {
+      handleSheetChange(sheetName);
+    }
+    setSelection({ start: address, end: address });
+    setSelectedCell(address);
+    renderer?.setSelection({ start: address, end: address });
+    renderer?.scrollToCell(address, 'nearest');
+    renderer?.scheduleRedraw?.();
+  }, [workbook, handleSheetChange, renderer]);
+
+  const handleReviewCommand = useCallback((command: {
+    type: string;
+    cell?: Address;
+    option?: 'show' | 'hide' | 'showIndicator';
+  }) => {
+    if (!appConfig.enableComments) return;
+
+    const sheet = workbook.activeSheet;
+    const target = command.cell ?? selectedCell ?? contextMenuTarget() ?? { row: 1, col: 1 };
+
+    switch (command.type) {
+      case 'newComment':
+        openCommentEditorForAddress(target);
+        break;
+      case 'deleteComment': {
+        if (!sheet) break;
+        const comments = sheet.getComments(target);
+        if (comments.length === 0) break;
+        const latest = comments[comments.length - 1]!;
+        sheet.deleteComment(target, latest.id, true);
+        renderer?.invalidateRange(target.row, target.col, target.row, target.col);
+        renderer?.scheduleRedraw?.();
+        break;
+      }
+      case 'previousComment': {
+        if (!sheet || !selectedCell) break;
+        const prev = sheet.getNextCommentCell(selectedCell, 'prev');
+        if (prev) navigateToCommentCell(sheet.name, prev);
+        break;
+      }
+      case 'nextComment': {
+        if (!sheet || !selectedCell) break;
+        const next = sheet.getNextCommentCell(selectedCell, 'next');
+        if (next) navigateToCommentCell(sheet.name, next);
+        break;
+      }
+      case 'toggleComments':
+        if (command.option === 'show') {
+          setShowCommentPanel(true);
+        } else if (command.option === 'hide') {
+          setShowCommentPanel(false);
+        }
+        break;
+      case 'toggleCommentPanel':
+        setShowCommentPanel((open) => !open);
+        break;
+      default:
+        break;
+    }
+  }, [
+    appConfig.enableComments,
+    workbook,
+    selectedCell,
+    contextMenuTarget,
+    openCommentEditorForAddress,
+    navigateToCommentCell,
+    renderer,
+  ]);
+
   const navigateHyperlink = useCallback((target: string) => {
     openHyperlinkTarget(target, workbook, renderer, handleSheetChange, (address) => {
       setSelectedCell(address);
@@ -747,9 +950,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         console.log('💾 Committing edit before changing selection, value:', inCellEdit.currentValue);
         // Commit the current edit with the actual typed value
         const sheet = workbook.activeSheet;
-        if (sheet && renderer) {
+        const value = inCellEdit.currentValue;
+        if (sheet && renderer && canEditCellValue(appConfig, value)) {
           const address = { row: inCellEdit.cell.row, col: inCellEdit.cell.col };
-          const value = inCellEdit.currentValue; // Use the current value, not initial
           
           // Update cell value/formula in worksheet
           if (value.startsWith('=')) {
@@ -787,11 +990,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         setFormulaBarValue(formula || String(value));
       }
     }
-  }, [workbook, isEditingFormula, inCellEdit, renderer]);
-
-  // Handle formula submit
+  }, [workbook, isEditingFormula, inCellEdit, renderer, appConfig]);
   const handleFormulaSubmit = useCallback((formula: string) => {
-    if (!selectedCell) return;
+    if (!selectedCell || !canEditCellValue(appConfig, formula)) return;
     
     const sheet = workbook.activeSheet;
     if (sheet) {
@@ -804,10 +1005,16 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     }
     setIsEditingFormula(false);
     setIsPickingReference(false);
-  }, [workbook, selectedCell]);
+  }, [workbook, selectedCell, appConfig]);
+
+  const handleFormulaEditModeChange = useCallback((editing: boolean) => {
+    if (editing && !canStartCellEdit(appConfig)) return;
+    setIsEditingFormula(editing);
+  }, [appConfig]);
 
   // Start in-cell editing
   const startInCellEdit = useCallback((cell: { row: number; col: number }, initialValue?: string) => {
+    if (!canStartCellEdit(appConfig)) return;
     console.log('🚀 [START_IN_CELL_EDIT CALLBACK] called for', cell, 'initialValue:', initialValue);
     console.trace('Call stack:');
     debugEdit('🚀 startInCellEdit called:', cell, 'renderer:', !!renderer);
@@ -841,11 +1048,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
 
     // Enable reference picking if editing a formula
     setIsPickingReference(value.startsWith('='));
-  }, [renderer, workbook]);
+  }, [renderer, workbook, appConfig]);
 
   // Commit in-cell edit
   const commitInCellEdit = useCallback((value: string) => {
-    if (!inCellEdit) return;
+    if (!inCellEdit || !canEditCellValue(appConfig, value)) return;
 
     const sheet = workbook.activeSheet;
     if (sheet && renderer) {
@@ -865,7 +1072,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     }
     setInCellEdit(null);
     setIsPickingReference(false);
-  }, [inCellEdit, workbook, renderer]);
+  }, [inCellEdit, workbook, renderer, appConfig]);
 
   // Cancel in-cell edit
   const cancelInCellEdit = useCallback(() => {
@@ -1185,6 +1392,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     if (!renderer) return;
 
     const handleContextMenu = (e: MouseEvent) => {
+      if (!appConfig.showContextMenu) return;
       e.preventDefault();
       const rendererSelections = renderer.getSelections();
       const frozenSelection = rendererSelections.length > 0 ? rendererSelections[0] : renderer['selection'] || selection;
@@ -1209,7 +1417,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       canvas.addEventListener('contextmenu', handleContextMenu);
       return () => canvas.removeEventListener('contextmenu', handleContextMenu);
     }
-  }, [renderer, selection, isAddressInSelection]);
+  }, [renderer, selection, isAddressInSelection, appConfig.showContextMenu]);
 
   // Handle renderer ready
   const handleRendererReady = useCallback((r: CanvasRenderer) => {
@@ -1277,6 +1485,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     const handleCellDoubleClick = (event: any) => {
       // Only handle double-click events (ignore other events)
       if (event.type !== 'cell-double-click') return;
+      if (!canStartCellEdit(appConfig)) return;
       console.log('🎯 handleCellDoubleClick received event:', event.type);
       
       // Prevent multiple simultaneous handlers
@@ -1327,7 +1536,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       console.log('🧹 Double-click listener cleanup');
       disposable.dispose();
     };
-  }, [renderer, workbook]); // Remove startInCellEdit from dependencies
+  }, [renderer, workbook, appConfig]);
 
   // Comment + hyperlink hover tooltips
   useEffect(() => {
@@ -1418,6 +1627,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       // Ctrl+N (New workbook)
       if (isCtrlLetter(e, 'n')) {
+        if (!appConfig.allowOpen) return;
         e.preventDefault();
         setBackstagePanel('new');
         setBackstageOpen(true);
@@ -1426,6 +1636,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       // Ctrl+O (Open workbook)
       if (isCtrlLetter(e, 'o')) {
+        if (!appConfig.allowOpen) return;
         e.preventDefault();
         setBackstagePanel('open');
         setBackstageOpen(true);
@@ -1434,10 +1645,11 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       
       // Ctrl+S (Save workbook)
       if (isCtrlLetter(e, 's')) {
+        if (!appConfig.allowSave && !onSave) return;
         e.preventDefault();
         if (onSave) {
           onSave();
-        } else {
+        } else if (appConfig.allowSave || appConfig.allowExport) {
           // If no save handler, open export panel
           setBackstagePanel('export');
           setBackstageOpen(true);
@@ -1870,10 +2082,12 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       // F2 to start editing with existing content
       if (e.code === 'F2' && selectedCell && renderer) {
         if (e.shiftKey) {
+          if (!appConfig.enableComments) return;
           e.preventDefault();
           openCommentEditorForAddress(selectedCell);
           return;
         }
+        if (!canStartCellEdit(appConfig)) return;
         e.preventDefault();
         
         // Inline edit mode activation
@@ -1917,6 +2131,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       const typedCharacter = getTypedCharacter(e);
       
       if (selectedCell && typedCharacter && renderer) {
+        if (!canStartCellEdit(appConfig)) return;
+        if (typedCharacter === '=' && appConfig.allowFormulaEdit === false) return;
         e.preventDefault();
         
         // Inline edit mode activation with initial character
@@ -1941,7 +2157,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       console.log('🧹 Keyboard handler effect cleanup - removing listener');
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [workbook, renderer, clipboardService, commandManager, onSave, openCommentEditorForAddress, openHyperlinkEditorForAddress, navigateHyperlink, recomputeHeaderFilterIcons, executeFilterStateCommand, formattingController, selectionAddresses, openInsertDeleteDialog, copySelection, cutSelection, pasteAtSelection, inCellEdit, handleInsertSheet]);
+  }, [workbook, renderer, clipboardService, commandManager, onSave, openCommentEditorForAddress, openHyperlinkEditorForAddress, navigateHyperlink, recomputeHeaderFilterIcons, executeFilterStateCommand, formattingController, selectionAddresses, openInsertDeleteDialog, copySelection, cutSelection, pasteAtSelection, inCellEdit, handleInsertSheet, appConfig]);
 
   // Handle cell click when in reference picking mode
   useEffect(() => {
@@ -2036,13 +2252,17 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     if (latest) {
       sheet.updateComment(commentDialog.address, latest.id, { text: trimmed });
     } else {
-      sheet.addComment(commentDialog.address, { text: trimmed, author: 'You' });
+      sheet.addComment(commentDialog.address, {
+        text: trimmed,
+        author: appConfig.authorName,
+        authorAvatar: appConfig.authorAvatar,
+      });
     }
 
     setCommentDialog(null);
     renderer?.invalidateRange(commentDialog.address.row, commentDialog.address.col, commentDialog.address.row, commentDialog.address.col);
     renderer?.scheduleRedraw();
-  }, [commentDialog, workbook, renderer]);
+  }, [commentDialog, workbook, renderer, appConfig.authorName, appConfig.authorAvatar]);
 
   const handleHyperlinkDialogSave = useCallback((result: InsertHyperlinkDialogResult) => {
     if (!hyperlinkDialog) return;
@@ -2106,10 +2326,13 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       />
 
       {/* Ribbon Tabs */}
+      {appConfig.showRibbon && (
+        <>
       <RibbonTabs
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onFileClick={() => {
+          if (!appConfig.allowOpen) return;
           setBackstagePanel('new');
           setBackstageOpen(true);
         }}
@@ -2144,29 +2367,42 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         onFilter={handleRibbonFilter}
         onDataCommand={handleDataCommand}
         selectedCells={selectionAddresses}
+        onInsertPivotTable={handleInsertPivotTable}
+        onInsertTable={handleInsertTable}
+        formattingController={formattingController}
+        onReviewCommand={handleReviewCommand}
       />
+        </>
+      )}
 
       {/* Formula Bar */}
-      <FormulaBar
-        selectedCell={selectedCell}
-        cellValue={cellValue}
-        cellFormula={cellFormula}
-        onFormulaSubmit={handleFormulaSubmit}
-        onValueChange={setFormulaBarValue}
-        isEditing={isEditingFormula}
-        onEditModeChange={setIsEditingFormula}
-        onReferencePickingChange={setIsPickingReference}
-        functionRegistry={formulaEngine.functions}
-      />
+      {appConfig.showFormulaBar && (
+        <FormulaBar
+          selectedCell={selectedCell}
+          cellValue={cellValue}
+          cellFormula={cellFormula}
+          onFormulaSubmit={handleFormulaSubmit}
+          onValueChange={setFormulaBarValue}
+          isEditing={isEditingFormula}
+          onEditModeChange={handleFormulaEditModeChange}
+          onReferencePickingChange={setIsPickingReference}
+          functionRegistry={formulaEngine.functions}
+        />
+      )}
 
       {/* Spreadsheet Area */}
-      <div 
-        className="spreadsheet-area" 
-        style={{ position: 'relative' }}
+      <div
+        className="spreadsheet-area"
+        style={{ position: 'relative', display: 'flex', minHeight: 0 }}
+        onDragOver={handleSpreadsheetDragOver}
+        onDrop={handleSpreadsheetDrop}
       >
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
         <CyberSheet
           workbook={workbook}
           sheetName={activeSheet}
+          commandManager={commandManager}
+          enableCustomComponents={appConfig.enableCustomComponents}
           zoom={zoom / 100}
           viewMode={viewMode}
           fontFamily={cyberSheetConfig.fonts.defaultFamily}
@@ -2464,9 +2700,26 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             </div>
           </div>
         )}
+        </div>
+
+        {appConfig.enableComments && (
+        <CommentPanel
+          isOpen={showCommentPanel}
+          workbook={workbook}
+          activeSheetName={activeSheet}
+          defaultAuthor={appConfig.authorName}
+          onClose={() => setShowCommentPanel(false)}
+          onNavigate={navigateToCommentCell}
+          onNewComment={() => {
+            const target = selectedCell ?? { row: 1, col: 1 };
+            openCommentEditorForAddress(target);
+          }}
+        />
+        )}
       </div>
 
       {/* Sheet Tabs */}
+      {appConfig.showSheetTabs && (
       <SheetTabs
         sheets={sheets}
         activeSheet={activeSheet}
@@ -2476,8 +2729,10 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         onDeleteSheet={handleDeleteSheet}
         renameActiveSheetTrigger={renameSheetTrigger}
       />
+      )}
 
       {/* Status Bar */}
+      {appConfig.showStatusBar && (
       <StatusBar
         zoom={zoom}
         onZoomChange={handleZoomChange}
@@ -2487,6 +2742,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
         onViewModeChange={handleViewModeChange}
         statusMessage={statusBarLink}
       />
+      )}
 
       {/* Mini Toolbar — Excel-style formatting bar above context menu */}
       {miniToolbar && (
@@ -2549,7 +2805,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       )}
 
       {/* Context Menu */}
-      {contextMenu && (
+      {appConfig.showContextMenu && contextMenu && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
@@ -2574,6 +2830,76 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
             setInsertDeleteDialog(null);
           }}
         />
+      )}
+
+      {isCreateTableOpen && workbook.activeSheet && (
+        <CreateTableDialog
+          isOpen={isCreateTableOpen}
+          worksheet={workbook.activeSheet}
+          selection={selectionRange}
+          styleName={DEFAULT_INSERT_TABLE_STYLE.name}
+          onClose={() => {
+            setIsCreateTableOpen(false);
+            setTableInsertError(null);
+          }}
+          onConfirm={handleCreateTable}
+        />
+      )}
+
+      {tableInsertError && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#fde7e9',
+            color: '#a4262c',
+            border: '1px solid #f1aeb5',
+            borderRadius: 4,
+            padding: '10px 16px',
+            zIndex: 10013,
+            fontFamily: 'Segoe UI, Arial, sans-serif',
+            fontSize: 13,
+          }}
+        >
+          {tableInsertError}
+        </div>
+      )}
+
+      {/* Create PivotTable Dialog */}
+      {isCreatePivotTableOpen && workbook.activeSheet && (
+        <CreatePivotTableDialog
+          isOpen={isCreatePivotTableOpen}
+          worksheet={workbook.activeSheet}
+          selection={selectionRange}
+          onClose={() => {
+            setIsCreatePivotTableOpen(false);
+            setPivotTableError(null);
+          }}
+          onCreate={handleCreatePivotTable}
+        />
+      )}
+
+      {pivotTableError && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#fde7e9',
+            color: '#a4262c',
+            border: '1px solid #f1aeb5',
+            borderRadius: 4,
+            padding: '10px 16px',
+            zIndex: 10013,
+            fontFamily: 'Segoe UI, Arial, sans-serif',
+            fontSize: 13,
+          }}
+        >
+          {pivotTableError}
+        </div>
       )}
 
       {/* Find/Replace Dialog */}
@@ -2670,7 +2996,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           value={validationDropdown.currentValue}
           onSelect={(value) => {
             const sheet = workbook.activeSheet;
-            if (sheet) {
+            if (sheet && canEditCellValue(appConfig, value)) {
               sheet.setCellValue(validationDropdown.cellAddress, value);
               renderer?.scheduleRedraw();
             }
@@ -2712,7 +3038,7 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
       )}
 
       {/* Backstage File Menu */}
-      {backstageOpen && (
+      {backstageOpen && appConfig.allowOpen && (
         <BackstageContainer
           isOpen={backstageOpen}
           onClose={() => setBackstageOpen(false)}
@@ -2721,9 +3047,8 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
           workbookMetadata={workbookMetadata}
           workbook={workbook}
           onWorkbookLoaded={onWorkbookLoaded ? (newWorkbook: Workbook) => {
-            onWorkbookLoaded(newWorkbook);
+            applyLoadedWorkbook(newWorkbook);
             setBackstageOpen(false);
-            renderer?.scheduleRedraw();
           } : undefined}
           onCreateBlankWorkbook={() => {
             // Handle new blank workbook
@@ -2757,3 +3082,9 @@ export const ExcelApp: React.FC<ExcelAppProps> = ({
     </div>
   );
 };
+
+export const ExcelApp: React.FC<ExcelAppProps> = (props) => (
+  <CyberSheetConfigProvider config={props.config}>
+    <ExcelAppView {...props} />
+  </CyberSheetConfigProvider>
+);

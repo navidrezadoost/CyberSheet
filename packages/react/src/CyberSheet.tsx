@@ -1,13 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Workbook, Worksheet, autoFill } from '@cyber-sheet/core';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Workbook, Worksheet, autoFill, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, SetCellComponentCommand } from '@cyber-sheet/core';
+import { ComponentRegistry, CustomCellOverlay, type CustomCellComponentRenderProps, type RegisteredCellComponent } from './customComponents';
 // Import locally to ensure dev picks up latest CanvasRenderer implementation
 import { CanvasRenderer, CanvasRendererOptions, type ViewMode } from '../../renderer-canvas/src';
-import { useCyberSheetConfig } from './config/globalConfig';
+import { useCyberSheetConfig } from './config/CyberSheetConfigContext';
 import { isArrowKey } from './utils/keyboardLayout';
+import { registerRendererLazyBridges, reactivateRendererLazyBridges } from './rendererEventBridge';
 
 export type CyberSheetProps = {
   workbook: Workbook;
   sheetName?: string;
+  commandManager?: CommandManager;
   rendererOptions?: CanvasRendererOptions;
   style?: any;
   physicsOptions?: PhysicsOptions;
@@ -17,7 +20,22 @@ export type CyberSheetProps = {
   fontSize?: number; // global font size configuration (in pixels)
   onRendererReady?: (renderer: CanvasRenderer) => void;
   onSelectionChange?: (selection: { start: { row: number; col: number }; end: { row: number; col: number } }) => void;
+  enableCustomComponents?: boolean;
 };
+
+export interface CyberSheetHandle extends EventAPI {
+  getWorkbook: () => Workbook;
+  getActiveSheet: () => Worksheet | undefined;
+  executeCommand: (command: Command) => void;
+  registerComponent: (id: string, component: RegisteredCellComponent) => void;
+  unregisterComponent: (id: string) => void;
+  listRegisteredComponents: () => string[];
+  setCellComponent: (address: Address, component: CustomCellComponent | null) => void;
+  getCellComponent: (address: Address) => CustomCellComponent | undefined;
+  clearCellComponent: (address: Address) => void;
+}
+
+export type { CustomCellComponentRenderProps, RegisteredCellComponent };
 
 export type PhysicsOptions = {
   // Toggles
@@ -35,21 +53,94 @@ export type PhysicsOptions = {
   snapIntervalMs?: number;           // how often to check snap (default 200)
 };
 
-export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physicsOptions, zoom, viewMode = 'normal', fontFamily, fontSize, onRendererReady, onSelectionChange }: CyberSheetProps) => {
+export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function CyberSheet({
+  workbook,
+  sheetName,
+  commandManager,
+  rendererOptions,
+  style,
+  physicsOptions,
+  zoom,
+  viewMode = 'normal',
+  fontFamily,
+  fontSize,
+  onRendererReady,
+  onSelectionChange,
+  enableCustomComponents = true,
+}, ref) {
   const cyberSheetConfig = useCyberSheetConfig();
   const effectiveFontFamily = fontFamily ?? cyberSheetConfig.fonts.defaultFamily;
   const effectiveFontSize = fontSize ?? cyberSheetConfig.fonts.defaultSize;
   const containerRef = useRef(null as any);
   const rendererRef = useRef(null as any);
   const sheetRef = useRef(undefined as any);
+  const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
+  const [overlayTick, setOverlayTick] = useState(0);
+  const commandManagerRef = useRef(commandManager);
+  commandManagerRef.current = commandManager;
+  const componentRegistryRef = useRef(new ComponentRegistry());
   const [selections, setSelections] = useState<Array<{ start: { row: number; col: number }; end: { row: number; col: number } }>>([]);
   const selectionsRef = useRef(selections as any);
   useEffect(() => { selectionsRef.current = selections; }, [selections]);
+
+  useEffect(() => {
+    registerRendererLazyBridges(workbook.eventBus, () => rendererRef.current);
+  }, [workbook]);
+
+  useImperativeHandle(ref, () => ({
+    on: workbook.eventBus.on.bind(workbook.eventBus),
+    once: workbook.eventBus.once.bind(workbook.eventBus),
+    off: workbook.eventBus.off.bind(workbook.eventBus),
+    getWorkbook: () => workbook,
+    getActiveSheet: () => sheetRef.current ?? workbook.activeSheet,
+    executeCommand: (command: Command) => {
+      if (!commandManagerRef.current) {
+        throw new Error('CyberSheet executeCommand requires a commandManager prop');
+      }
+      commandManagerRef.current.execute(command);
+    },
+    registerComponent: (id: string, component: RegisteredCellComponent) => {
+      componentRegistryRef.current.register(id, component);
+    },
+    unregisterComponent: (id: string) => {
+      componentRegistryRef.current.unregister(id);
+    },
+    listRegisteredComponents: () => componentRegistryRef.current.list(),
+    setCellComponent: (address: Address, component: CustomCellComponent | null) => {
+      const sheet = sheetRef.current ?? workbook.activeSheet;
+      if (!sheet) return;
+      const apply = () => sheet.setCellComponent(address, component ?? undefined);
+      if (commandManagerRef.current) {
+        commandManagerRef.current.execute(new SetCellComponentCommand(sheet, address, component ?? undefined));
+      } else {
+        apply();
+      }
+      rendererRef.current?.invalidateRange(address.row, address.col, address.row, address.col);
+      rendererRef.current?.scheduleRedraw?.();
+    },
+    getCellComponent: (address: Address) => {
+      const sheet = sheetRef.current ?? workbook.activeSheet;
+      return sheet?.getCellComponent(address);
+    },
+    clearCellComponent: (address: Address) => {
+      const sheet = sheetRef.current ?? workbook.activeSheet;
+      if (!sheet) return;
+      if (commandManagerRef.current) {
+        commandManagerRef.current.execute(new SetCellComponentCommand(sheet, address, undefined));
+      } else {
+        sheet.clearCellComponent(address);
+      }
+      rendererRef.current?.invalidateRange(address.row, address.col, address.row, address.col);
+      rendererRef.current?.scheduleRedraw?.();
+    },
+  }), [workbook]);
+
   useEffect(() => {
     if (!onSelectionChange || selections.length === 0) return;
     const active = selections[selections.length - 1];
     onSelectionChange(active);
   }, [onSelectionChange, selections]);
+
   // Physics state
   const velRef = useRef({ vx: 0, vy: 0 } as any);
   const lastWheelTimeRef = useRef(0 as any);
@@ -81,6 +172,7 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     const el = containerRef.current!;
     const r = new CanvasRenderer(el, sheetRef.current, rendererOptions);
     rendererRef.current = r;
+    setOverlayTick((value) => value + 1);
     if (typeof zoom === 'number' && typeof (r as any).setZoom === 'function') {
       try { (r as any).setZoom(zoom); } catch {}
     }
@@ -88,6 +180,7 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
       try { (r as any).setViewMode(viewMode); } catch {}
     }
     try { onRendererReady?.(r); } catch {}
+    reactivateRendererLazyBridges(workbook.eventBus);
     return () => { r.dispose(); rendererRef.current = null; };
   }, [workbook, sheetName]);
 
@@ -96,8 +189,8 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     const r = rendererRef.current as CanvasRenderer | null;
     if (!r || typeof r.onSelectionChange !== 'function') return;
     
-    const unsubscribe = r.onSelectionChange((selections) => {
-      setSelections(selections);
+    const unsubscribe = r.onSelectionChange((nextSelections) => {
+      setSelections(nextSelections);
     });
     
     return () => unsubscribe.dispose();
@@ -607,5 +700,24 @@ export const CyberSheet = ({ workbook, sheetName, rendererOptions, style, physic
     };
   }, [rendererRef.current, sheetRef.current, p.allowTouch, p.touchPanWithTwoFingers, p.kineticScroll, p.selectionInertia]);
 
-  return <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%', ...style }} />;
-};
+  return (
+    <>
+      <div
+        ref={(node) => {
+          containerRef.current = node;
+          setOverlayHost(node);
+        }}
+        style={{ position: 'relative', width: '100%', height: '100%', ...style }}
+      />
+      <CustomCellOverlay
+        key={overlayTick}
+        container={overlayHost}
+        sheet={sheetRef.current ?? workbook.activeSheet}
+        renderer={rendererRef.current}
+        registry={componentRegistryRef.current}
+        zoom={typeof zoom === 'number' ? zoom : 1}
+        enabled={enableCustomComponents}
+      />
+    </>
+  );
+});

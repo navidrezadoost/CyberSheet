@@ -1,6 +1,8 @@
 import { Worksheet } from './worksheet';
 import { IFormulaEngine } from './types';
 import { StyleCache } from './StyleCache';
+import { EventBus } from './EventBus';
+import { setupWorkbookLazyBridges, type WorkbookEventBridgeManager } from './eventBridge';
 import { PivotRegistry, PivotRegistryImpl } from './PivotRegistry';
 import type { PivotId } from './PivotRegistry';
 import { PivotSnapshotStore } from './PivotSnapshotStore';
@@ -40,6 +42,13 @@ export class Workbook {
     }
   );
   private pivotAnchorIndex = new PivotAnchorIndexImpl(); // Phase 32
+  readonly eventBus = new EventBus();
+  private eventBridgeManager?: WorkbookEventBridgeManager;
+
+  private ensureLazyEventBridgeRegistration(): void {
+    if (this.eventBridgeManager) return;
+    this.eventBridgeManager = setupWorkbookLazyBridges(this);
+  }
 
   getStyleCache(): StyleCache {
     return this.styleCache;
@@ -411,6 +420,9 @@ export class Workbook {
       ws.name,
       (listener) => { const d = ws.on(listener); return () => d.dispose(); }
     );
+
+    this.ensureLazyEventBridgeRegistration();
+    this.eventBridgeManager?.wireSheet(ws);
 
     return ws;
   }

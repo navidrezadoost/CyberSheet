@@ -5,6 +5,8 @@
  */
 
 import React from 'react';
+import { getVisibleRibbonTabLabels, isTabEnabled } from '../config/appConfig';
+import { useCyberSheetAppConfig } from '../config/CyberSheetConfigContext';
 
 export interface RibbonTabsProps {
   activeTab: string;
@@ -12,41 +14,17 @@ export interface RibbonTabsProps {
   onFileClick?: () => void;
 }
 
-/**
- * RibbonTabs - Tab navigation for ribbon
- * 
- * Provides Excel-style tabs for switching between different ribbon views:
- * - Home
- * - Insert
- * - Page Layout
- * - Formulas
- * - Data
- * - Review
- * - View
- * - Automate
- * - Help
- */
 export const RibbonTabs: React.FC<RibbonTabsProps> = ({
   activeTab,
   onTabChange,
   onFileClick,
 }) => {
-  const tabs = [
-    'Home',
-    'Insert',
-    'Page Layout',
-    'Formulas',
-    'Data',
-    'Review',
-    'View',
-    'Automate',
-    'Help',
-  ];
+  const appConfig = useCyberSheetAppConfig();
+  const tabs = getVisibleRibbonTabLabels(appConfig);
 
   return (
     <nav className="ribbon-tabs" style={{ display: 'flex', alignItems: 'stretch' }}>
-      {/* File button - green, opens backstage */}
-      {onFileClick && (
+      {appConfig.allowOpen && onFileClick && (
         <button
           className="ribbon-tab file-tab"
           onClick={onFileClick}
@@ -72,3 +50,5 @@ export const RibbonTabs: React.FC<RibbonTabsProps> = ({
     </nav>
   );
 };
+
+export { isTabEnabled };

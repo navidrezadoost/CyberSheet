@@ -1,4 +1,4 @@
-import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset, isHyperlinkVisited, HYPERLINK_COLOR, HYPERLINK_VISITED_COLOR } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset, isHyperlinkVisited, HYPERLINK_COLOR, HYPERLINK_VISITED_COLOR, ConditionalFormattingEngine, type ConditionalFormattingRule, type ConditionalFormattingResult, type DataBarRender, type IconRender, renderIconOnCanvas } from '@cyber-sheet/core';
 import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
@@ -67,6 +67,8 @@ export class CanvasRenderer {
   private valueFmtCache = new Map<string, string>();
   private plugins: RenderPlugin[] = [];
   private heatmapRange: { min: number; max: number } | null = null;
+  private cfEngine = new ConditionalFormattingEngine();
+  private cachedCFRules: ConditionalFormattingRule[] = [];
   private hoveredCell: Address | null = null;
   private clickStartTime = 0;
   private clickStartCell: Address | null = null;
@@ -165,11 +167,13 @@ export class CanvasRenderer {
       try { this.autoSizeColumns(cfg); } catch {}
     }
     this.setupEventListeners();
+    this.cachedCFRules = sheet.getConditionalFormattingRules?.() ?? [];
     // Invalidate distinct value cache on relevant sheet events
     this.sheet.on((ev: SheetEvents) => {
       const t = (ev as any).type;
       if (t === 'cell-changed') this.clearValueCacheForColumn((ev as any).address.col);
       else if (t === 'sheet-mutated' || t === 'filter-changed') {
+        this.cachedCFRules = this.sheet.getConditionalFormattingRules?.() ?? [];
         this.clearValueCacheForColumn();
         this.gridLinesNeedRedraw = true;
         this.scheduleRedraw();
@@ -187,6 +191,9 @@ export class CanvasRenderer {
         const a = (ev as any).address; this.invalidateRange(a.row, a.col, a.row, a.col);
       } else if (t === 'comment-added' || t === 'comment-updated' || t === 'comment-deleted' || t === 'icon-changed') {
         const a = (ev as any).address; this.invalidateRange(a.row, a.col, a.row, a.col);
+      } else if (t === 'cell-component-changed') {
+        const a = (ev as any).address; this.invalidateRange(a.row, a.col, a.row, a.col);
+        this.scheduleRedraw();
       }
     });
     this.redraw();
@@ -434,6 +441,145 @@ export class CanvasRenderer {
     if (!color) return defaultColor;
     if (typeof color === 'string') return color;
     return resolveExcelColor(color, { defaultColor });
+  }
+
+  private applyConditionalFormatting(
+    value: unknown,
+    addr: Address,
+    baseStyle?: CellStyle,
+  ): { result?: ConditionalFormattingResult; style?: CellStyle } {
+    if (!this.cachedCFRules.length) return { style: baseStyle };
+
+    const result = this.cfEngine.applyRules(value as any, this.cachedCFRules, {
+      address: addr,
+      valueRange: this.heatmapRange ?? undefined,
+    });
+
+    const mergedStyle = result.style
+      ? { ...(baseStyle ?? {}), ...result.style }
+      : baseStyle;
+    return { result, style: mergedStyle };
+  }
+
+  private renderConditionalDataBar(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    dataBar: DataBarRender,
+  ) {
+    const margin = 3;
+    const barHeight = Math.max(4, h - margin * 2);
+    const barWidth = Math.max(0, (w - margin * 2) * Math.min(1, Math.max(0, dataBar.percent)));
+
+    ctx.save();
+    if (dataBar.gradient) {
+      const grad = ctx.createLinearGradient(x, y, x + barWidth, y);
+      grad.addColorStop(0, dataBar.color);
+      grad.addColorStop(1, this.applyAlpha(dataBar.color, 0.65));
+      ctx.fillStyle = grad;
+    } else {
+      ctx.fillStyle = dataBar.color;
+    }
+    ctx.fillRect(x + margin, y + (h - barHeight) / 2, barWidth, barHeight);
+    ctx.restore();
+  }
+
+  private renderConditionalIcon(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    icon: IconRender,
+  ) {
+    const size = Math.min(14, h - 4);
+    const px = x + 4;
+    const py = y + (h - size) / 2;
+    ctx.save();
+    renderIconOnCanvas(ctx, icon.iconSet, icon.iconIndex, px, py, size);
+    ctx.restore();
+  }
+
+  private renderCustomCellIcon(
+    ctx: CanvasRenderingContext2D,
+    component: import('@cyber-sheet/core').CustomCellComponent,
+    x: number,
+    y: number,
+    drawW: number,
+    drawH: number,
+  ) {
+    const size = (component.size ?? 16) * this.zoom;
+    const pad = 2 * this.zoom;
+    let ix = x + pad;
+    let iy = y + pad;
+
+    switch (component.position) {
+      case 'right':
+        ix = x + drawW - size - pad;
+        iy = y + (drawH - size) / 2;
+        break;
+      case 'overlay':
+        ix = x + (drawW - size) / 2;
+        iy = y + (drawH - size) / 2;
+        break;
+      case 'left':
+      default:
+        ix = x + pad;
+        iy = y + (drawH - size) / 2;
+        break;
+    }
+
+    const iconType = (component.props?.iconType as string | undefined)
+      ?? (typeof component.props?.source === 'string' && component.props.source.startsWith('http') ? 'url' : 'emoji');
+    const source = String(component.props?.source ?? component.id);
+
+    ctx.save();
+    if (iconType === 'emoji') {
+      ctx.font = `${size}px ${this.theme.fontFamily}`;
+      ctx.fillText(source, ix, iy + size - 4);
+    } else if (iconType === 'builtin') {
+      if (source === 'warning') {
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.moveTo(ix + size / 2, iy);
+        ctx.lineTo(ix + size, iy + size);
+        ctx.lineTo(ix, iy + size);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#0078d4';
+        ctx.beginPath();
+        ctx.arc(ix + size / 2, iy + size / 2, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (iconType === 'url') {
+      const cacheKey = `img:${source}`;
+      let img = (this as any)._imageCache?.get(cacheKey);
+      if (!img) {
+        img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = source;
+        (this as any)._imageCache = (this as any)._imageCache || new Map();
+        (this as any)._imageCache.set(cacheKey, img);
+        img.onload = () => { this.invalidateRect(x, y, drawW, drawH); };
+      }
+      if (img.complete && img.naturalWidth) {
+        ctx.drawImage(img, ix, iy, size, size);
+      }
+    }
+    ctx.restore();
+  }
+
+  private applyAlpha(color: string, alpha: number): string {
+    if (color.startsWith('#') && color.length === 7) {
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    return color;
   }
   
   /**
@@ -809,8 +955,11 @@ export class CanvasRenderer {
             }
           }
           const v = this.sheet.getCellValue(addr);
-          const style: CellStyle | undefined = this.sheet.getCellStyle(addr);
+          let style: CellStyle | undefined = this.sheet.getCellStyle(addr);
           const hyperlink = this.sheet.getHyperlink?.(addr);
+
+          const { result: cfResult, style: cfStyle } = this.applyConditionalFormatting(v, addr, style);
+          style = cfStyle;
 
           // Phase 1 UI: Validate style is interned (dev mode only)
           // Prevents ecosystem integration drift (React, XLSX, toolbar mutations)
@@ -846,6 +995,11 @@ export class CanvasRenderer {
             ctx.fillStyle = fillColor;
             ctx.fillRect(x + 1, y + 1, (merged ? spanW : cw) - 2, (merged ? spanH : rh) - 2);
           }
+
+          if (isAnchor && cfResult?.dataBar) {
+            this.renderConditionalDataBar(ctx, x, y, merged ? spanW : cw, merged ? spanH : rh, cfResult.dataBar);
+          }
+
           if (style?.border) {
             const bw = merged ? spanW : cw; const bh = merged ? spanH : rh;
             if (!merged || isAnchor) {
@@ -1115,6 +1269,10 @@ export class CanvasRenderer {
 
           // Comment indicator (small red triangle top-right) if comments exist
           const cellObj = (this.sheet as any).getCell?.(addr);
+          if (isAnchor && cfResult?.icon) {
+            this.renderConditionalIcon(ctx, x, y, merged ? spanW : cw, merged ? spanH : rh, cfResult.icon);
+          }
+
           if (cellObj?.comments?.length) {
             const drawW = merged ? spanW : cw; const drawH = merged ? spanH : rh;
             ctx.save();
@@ -1181,6 +1339,17 @@ export class CanvasRenderer {
               }
             }
             ctx.restore();
+          }
+
+          if (cellObj?.customComponent?.type === 'icon') {
+            this.renderCustomCellIcon(
+              ctx,
+              cellObj.customComponent,
+              x,
+              y,
+              merged ? spanW : cw,
+              merged ? spanH : rh,
+            );
           }
           x += this.sheet.getColumnWidth(col) * this.zoom; col++;
         }
@@ -2057,6 +2226,13 @@ export class CanvasRenderer {
   }
 
   // ==================== Navigation API ====================
+
+  /**
+   * Viewport rectangle for a cell range (null when fully off-screen).
+   */
+  getRangeRect(r1: number, c1: number, r2: number, c2: number): { x: number; y: number; w: number; h: number } | null {
+    return this.rectForRange(r1, c1, r2, c2);
+  }
 
   /**
    * Get cell bounds in viewport coordinates

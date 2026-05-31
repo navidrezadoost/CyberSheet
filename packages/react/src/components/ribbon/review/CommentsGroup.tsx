@@ -162,10 +162,10 @@ export const CommentsGroup: React.FC<CommentsGroupProps> = ({
           {showCommentsDropdown && (
             <div style={dropdownMenuStyle}>
               <button onClick={() => handleShowComments('show')} style={menuItemStyle}>
-                Show All Comments
+                Open Comments Panel
               </button>
               <button onClick={() => handleShowComments('hide')} style={menuItemStyle}>
-                Hide All Comments
+                Close Comments Panel
               </button>
               <div style={dividerStyle} />
               <button onClick={() => handleShowComments('showIndicator')} style={menuItemStyle}>

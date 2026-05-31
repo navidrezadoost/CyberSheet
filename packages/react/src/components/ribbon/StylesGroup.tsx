@@ -14,14 +14,32 @@
  */
 
 import { StylesGroupIcon1 } from '@cyber-sheet/icons/react';
-import React, { useState, useRef, useEffect } from 'react';
-import type { Address, Range } from '@cyber-sheet/core';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import type { Address, Range, Worksheet, CommandManager, ConditionalFormattingRule } from '@cyber-sheet/core';
+import { BatchCommand, ToggleAutoFilterCommand } from '@cyber-sheet/core';
 import type { FormattingController } from '@cyber-sheet/core';
 import { getCellStyle } from '@cyber-sheet/core';
 import { CellStylesGallery } from '../CellStylesGallery';
+import { QuickConditionalRuleDialog } from '../dialogs/QuickConditionalRuleDialog';
+import { CreateTableDialog } from '../dialogs/CreateTableDialog';
+import { ConditionalFormattingManagerDialog } from '../dialogs/ConditionalFormattingManagerDialog';
+import {
+  addConditionalRule,
+  applyPreviewRules,
+  buildGalleryRule,
+  clearAllConditionalRules,
+  clearRulesFromRange,
+  needsQuickRuleDialog,
+  normalizeRange,
+  restoreConditionalRules,
+  toQuickRuleKind,
+  type QuickRuleKind,
+} from '../../utils/conditionalFormattingRibbon';
 
 export interface StylesGroupProps {
   formattingController: FormattingController;
+  worksheet?: Worksheet | null;
+  commandManager?: CommandManager;
   selectedCells: Address[];
   currentRange?: Range;
   onStyleChange?: () => void;
@@ -83,8 +101,7 @@ const CF_HIGHLIGHT_RULES = [
   { id: 'equalTo', label: 'Equal To...', icon: '=' },
   { id: 'textContains', label: 'Text that Contains...', icon: 'A' },
   { id: 'dateOccurring', label: 'A Date Occurring...', icon: '📅' },
-  { id: 'duplicateValues', label: 'Duplicate Values', icon: '⚬⚬' },
-  { id: 'uniqueValues', label: 'Unique Values', icon: '⚬' },
+  { id: 'duplicateValues', label: 'Duplicate Values...', icon: '⚬⚬' },
 ];
 
 /**
@@ -198,25 +215,59 @@ const CELL_STYLES: CellStylePreset[] = [
 
 export const StylesGroup: React.FC<StylesGroupProps> = ({
   formattingController,
+  worksheet,
+  commandManager,
   selectedCells,
   currentRange,
   onStyleChange,
 }) => {
   const [showCFMenu, setShowCFMenu] = useState(false);
   const [showCFSubmenu, setShowCFSubmenu] = useState<string | null>(null);
+  const [showClearRulesMenu, setShowClearRulesMenu] = useState(false);
   const [showTableStylesMenu, setShowTableStylesMenu] = useState(false);
   const [showCellStylesMenu, setShowCellStylesMenu] = useState(false);
+  const [quickRuleKind, setQuickRuleKind] = useState<QuickRuleKind | null>(null);
+  const [showRulesManager, setShowRulesManager] = useState(false);
+  const [openBuilderOnMount, setOpenBuilderOnMount] = useState(false);
+  const [pendingTableStyle, setPendingTableStyle] = useState<TableStyle | null>(null);
+  const previewRulesRef = useRef<ConditionalFormattingRule[] | null>(null);
   
   const cfMenuRef = useRef(null);
   const tableStylesMenuRef = useRef(null);
   const cellStylesMenuRef = useRef(null);
 
-  // Close dropdowns when clicking outside
+  const effectiveRange = React.useMemo(() => {
+    if (currentRange?.start && currentRange?.end) {
+      return normalizeRange(currentRange);
+    }
+    if (selectedCells.length > 0) {
+      return normalizeRange({
+        start: selectedCells[0]!,
+        end: selectedCells[selectedCells.length - 1]!,
+      });
+    }
+    return null;
+  }, [currentRange, selectedCells]);
+
+  const notifyChange = useCallback(() => {
+    onStyleChange?.();
+  }, [onStyleChange]);
+
+  const clearPreview = useCallback(() => {
+    if (!worksheet || !previewRulesRef.current) return;
+    restoreConditionalRules(worksheet, previewRulesRef.current);
+    previewRulesRef.current = null;
+    notifyChange();
+  }, [worksheet, notifyChange]);
+
+  // Close dropdowns when clicking outside (use click, not mousedown, so item clicks fire first)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (cfMenuRef.current && !(cfMenuRef.current as HTMLElement).contains(e.target as Node)) {
         setShowCFMenu(false);
         setShowCFSubmenu(null);
+        setShowClearRulesMenu(false);
+        clearPreview();
       }
       if (tableStylesMenuRef.current && !(tableStylesMenuRef.current as HTMLElement).contains(e.target as Node)) {
         setShowTableStylesMenu(false);
@@ -226,41 +277,103 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [clearPreview]);
 
-  /**
-   * Handle conditional formatting rule selection
-   */
-  const handleCFRule = (category: string, ruleId: string) => {
-    // TODO: Open dialog to configure rule parameters
-    // For now, just log the selection
-    console.log(`Selected CF rule: ${category}/${ruleId}`);
+  const previewGalleryRule = useCallback((category: 'dataBars' | 'colorScales' | 'iconSets', ruleId: string) => {
+    if (!worksheet || !effectiveRange) return;
+    const rule = buildGalleryRule(category, ruleId);
+    if (!rule) return;
+    if (!previewRulesRef.current) {
+      previewRulesRef.current = worksheet.getConditionalFormattingRules();
+    }
+    applyPreviewRules(worksheet, effectiveRange, [rule]);
+    notifyChange();
+  }, [worksheet, effectiveRange, notifyChange]);
+
+  const applyGalleryRule = useCallback((category: 'dataBars' | 'colorScales' | 'iconSets', ruleId: string) => {
+    if (!worksheet || !effectiveRange || !commandManager) return;
+    clearPreview();
+    const rule = buildGalleryRule(category, ruleId);
+    if (!rule) return;
+    addConditionalRule(worksheet, commandManager, effectiveRange, rule);
     setShowCFMenu(false);
     setShowCFSubmenu(null);
-    onStyleChange?.();
-  };
+    notifyChange();
+  }, [worksheet, effectiveRange, commandManager, clearPreview, notifyChange]);
 
-  /**
-   * Handle table style selection
-   */
-  const handleTableStyle = (styleId: string) => {
-    const tableStyle = TABLE_STYLES.find((s) => s.id === styleId);
-    if (!tableStyle || !currentRange || selectedCells.length === 0) {
-      setShowTableStylesMenu(false);
+  const handleCFRule = (category: string, ruleId: string) => {
+    if (!worksheet || !effectiveRange) return;
+
+    if (category === 'dataBars' || category === 'colorScales' || category === 'iconSets') {
+      applyGalleryRule(category, ruleId);
       return;
     }
 
-    formattingController.applyTableStyle(currentRange, {
-      headerRowColor: tableStyle.headerRowColor,
-      firstRowStripedColor: tableStyle.firstRowStripedColor,
-      secondRowStripedColor: tableStyle.secondRowStripedColor,
-      borderColor: '#BFBFBF',
-    });
+    if (needsQuickRuleDialog(category)) {
+      const kind = toQuickRuleKind(category, ruleId);
+      if (kind) {
+        setQuickRuleKind(kind);
+        setShowCFMenu(false);
+        setShowCFSubmenu(null);
+      }
+      return;
+    }
+  };
 
+  const handleQuickRuleApply = (rule: ConditionalFormattingRule) => {
+    if (!worksheet || !effectiveRange || !commandManager) return;
+    addConditionalRule(worksheet, commandManager, effectiveRange, rule);
+    notifyChange();
+  };
+
+  const handleClearRules = (scope: 'selection' | 'sheet') => {
+    if (!worksheet || !commandManager) return;
+    if (scope === 'sheet') {
+      clearAllConditionalRules(worksheet, commandManager);
+    } else if (effectiveRange) {
+      clearRulesFromRange(worksheet, commandManager, effectiveRange);
+    }
+    setShowCFMenu(false);
+    setShowClearRulesMenu(false);
+    notifyChange();
+  };
+
+  const handleTableStylePick = (styleId: string) => {
+    const tableStyle = TABLE_STYLES.find((s) => s.id === styleId);
+    if (!tableStyle || !worksheet) {
+      setShowTableStylesMenu(false);
+      return;
+    }
+    setPendingTableStyle(tableStyle);
     setShowTableStylesMenu(false);
-    onStyleChange?.();
+  };
+
+  const handleCreateTable = (range: Range, hasHeaders: boolean) => {
+    if (!pendingTableStyle || !commandManager) return;
+
+    const commands = [
+      formattingController.createTableStyleCommand(range, {
+        headerRowColor: pendingTableStyle.headerRowColor,
+        firstRowStripedColor: pendingTableStyle.firstRowStripedColor,
+        secondRowStripedColor: pendingTableStyle.secondRowStripedColor,
+        borderColor: '#BFBFBF',
+      }),
+    ];
+
+    if (hasHeaders && worksheet) {
+      commands.push(new ToggleAutoFilterCommand(worksheet, range, true));
+    }
+
+    commandManager.execute(
+      commands.length === 1
+        ? commands[0]!
+        : new BatchCommand(commands, 'Format as Table'),
+    );
+
+    setPendingTableStyle(null);
+    notifyChange();
   };
 
   /**
@@ -314,6 +427,30 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     animation: 'slideDown 200ms ease-out',
   };
 
+  const cfMainDropdownStyles: React.CSSProperties = {
+    ...dropdownStyles,
+    overflow: 'visible',
+    overflowY: 'visible',
+    maxHeight: 'none',
+    zIndex: 10050,
+  };
+
+  const submenuFlyoutStyles: React.CSSProperties = {
+    position: 'absolute',
+    left: '100%',
+    top: 0,
+    marginLeft: '-2px',
+    background: '#fff',
+    border: '1px solid #d0d0d0',
+    borderRadius: '4px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    zIndex: 10051,
+    minWidth: '250px',
+    maxHeight: '500px',
+    overflowY: 'auto',
+    animation: 'slideDown 200ms ease-out',
+  };
+
   const menuItemStyles: React.CSSProperties = {
     padding: '8px 12px',
     cursor: 'pointer',
@@ -324,6 +461,41 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     justifyContent: 'space-between',
     transition: 'background 150ms ease',
   };
+
+  const handleSubmenuMouseLeave = (
+    event: React.MouseEvent<HTMLDivElement>,
+    category: string,
+  ) => {
+    const related = event.relatedTarget as Node | null;
+    if (!related || !event.currentTarget.contains(related)) {
+      setShowCFSubmenu((current) => (current === category ? null : current));
+    }
+  };
+
+  const renderCFMenuItem = (category: string, label: string) => (
+    <div
+      key={category}
+      style={{ position: 'relative' }}
+      data-cf-submenu-root={category}
+      onMouseEnter={() => setShowCFSubmenu(category)}
+      onMouseLeave={(event) => handleSubmenuMouseLeave(event, category)}
+    >
+      <div
+        style={{
+          ...menuItemStyles,
+          background: showCFSubmenu === category ? '#e3f2fd' : undefined,
+        }}
+      >
+        <span>{label}</span>
+        <span>▶</span>
+      </div>
+      {showCFSubmenu === category && (
+        <div data-submenu={category} style={submenuFlyoutStyles}>
+          {renderCFSubmenu(category)}
+        </div>
+      )}
+    </div>
+  );
 
   // Render CF category submenu
   const renderCFSubmenu = (category: string) => {
@@ -354,13 +526,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     }
 
     return (
-      <div style={{
-        ...dropdownStyles,
-        left: '100%',
-        top: 0,
-        marginTop: 0,
-        marginLeft: '4px',
-      }}>
+      <div>
         <div style={{
           padding: '10px 12px',
           fontWeight: 600,
@@ -377,12 +543,22 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
               ...menuItemStyles,
               borderBottom: index === rules.length - 1 ? 'none' : '1px solid #f0f0f0',
             }}
-            onClick={() => handleCFRule(category, rule.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleCFRule(category, rule.id);
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
             onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#e3f2fd';
+              (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
+              if (category === 'dataBars' || category === 'colorScales' || category === 'iconSets') {
+                previewGalleryRule(category, rule.id);
+              }
             }}
             onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-              (e.target as HTMLElement).style.backgroundColor = '#fff';
+              (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
+              if (category === 'dataBars' || category === 'colorScales' || category === 'iconSets') {
+                clearPreview();
+              }
             }}
           >
             {category === 'dataBars' && 'color' in rule && (
@@ -437,6 +613,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
       maxHeight: '108px',
       boxSizing: 'border-box',
       position: 'relative',
+      overflow: 'visible',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingBottom: '16px' }}>
       {/* Row 1: Conditional Formatting */}
@@ -452,121 +629,115 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
         </button>
 
         {showCFMenu && (
-          <div style={dropdownStyles}>
-            {/* Highlight Cells Rules */}
-            <div
-              style={{ ...menuItemStyles, position: 'relative' }}
-              onMouseEnter={() => setShowCFSubmenu('highlight')}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                const related = e.relatedTarget as HTMLElement;
-                if (!related || !related.closest('[data-submenu="highlight"]')) {
-                  setShowCFSubmenu(null);
-                }
-              }}
-            >
-              <span>Highlight Cells Rules</span>
-              <span>▶</span>
-              {showCFSubmenu === 'highlight' && (
-                <div data-submenu="highlight">
-                  {renderCFSubmenu('highlight')}
-                </div>
-              )}
-            </div>
-
-            {/* Top/Bottom Rules */}
-            <div
-              style={{ ...menuItemStyles, position: 'relative' }}
-              onMouseEnter={() => setShowCFSubmenu('topBottom')}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                const related = e.relatedTarget as HTMLElement;
-                if (!related || !related.closest('[data-submenu="topBottom"]')) {
-                  setShowCFSubmenu(null);
-                }
-              }}
-            >
-              <span>Top/Bottom Rules</span>
-              <span>▶</span>
-              {showCFSubmenu === 'topBottom' && (
-                <div data-submenu="topBottom">
-                  {renderCFSubmenu('topBottom')}
-                </div>
-              )}
-            </div>
-
-            {/* Data Bars */}
-            <div
-              style={{ ...menuItemStyles, position: 'relative' }}
-              onMouseEnter={() => setShowCFSubmenu('dataBars')}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                const related = e.relatedTarget as HTMLElement;
-                if (!related || !related.closest('[data-submenu="dataBars"]')) {
-                  setShowCFSubmenu(null);
-                }
-              }}
-            >
-              <span>Data Bars</span>
-              <span>▶</span>
-              {showCFSubmenu === 'dataBars' && (
-                <div data-submenu="dataBars">
-                  {renderCFSubmenu('dataBars')}
-                </div>
-              )}
-            </div>
-
-            {/* Color Scales */}
-            <div
-              style={{ ...menuItemStyles, position: 'relative' }}
-              onMouseEnter={() => setShowCFSubmenu('colorScales')}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                const related = e.relatedTarget as HTMLElement;
-                if (!related || !related.closest('[data-submenu="colorScales"]')) {
-                  setShowCFSubmenu(null);
-                }
-              }}
-            >
-              <span>Color Scales</span>
-              <span>▶</span>
-              {showCFSubmenu === 'colorScales' && (
-                <div data-submenu="colorScales">
-                  {renderCFSubmenu('colorScales')}
-                </div>
-              )}
-            </div>
-
-            {/* Icon Sets */}
-            <div
-              style={{ ...menuItemStyles, position: 'relative' }}
-              onMouseEnter={() => setShowCFSubmenu('iconSets')}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                const related = e.relatedTarget as HTMLElement;
-                if (!related || !related.closest('[data-submenu="iconSets"]')) {
-                  setShowCFSubmenu(null);
-                }
-              }}
-            >
-              <span>Icon Sets</span>
-              <span>▶</span>
-              {showCFSubmenu === 'iconSets' && (
-                <div data-submenu="iconSets">
-                  {renderCFSubmenu('iconSets')}
-                </div>
-              )}
-            </div>
+          <div
+            style={cfMainDropdownStyles}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {renderCFMenuItem('highlight', 'Highlight Cells Rules')}
+            {renderCFMenuItem('topBottom', 'Top/Bottom Rules')}
+            {renderCFMenuItem('dataBars', 'Data Bars')}
+            {renderCFMenuItem('colorScales', 'Color Scales')}
+            {renderCFMenuItem('iconSets', 'Icon Sets')}
 
             <div style={{ height: '1px', background: '#e0e0e0', margin: '4px 0' }} />
+
+            <div
+              style={menuItemStyles}
+              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                setShowCFSubmenu(null);
+                clearPreview();
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowCFMenu(false);
+                setOpenBuilderOnMount(true);
+                setShowRulesManager(true);
+              }}
+            >
+              <span>New Rule...</span>
+            </div>
+
+            <div
+              style={{ ...menuItemStyles, position: 'relative' }}
+              onMouseEnter={() => {
+                setShowCFSubmenu(null);
+                clearPreview();
+                setShowClearRulesMenu(true);
+              }}
+              onMouseLeave={(event) => {
+                const related = event.relatedTarget as Node | null;
+                if (!related || !event.currentTarget.contains(related)) {
+                  setShowClearRulesMenu(false);
+                }
+              }}
+            >
+              <span>Clear Rules</span>
+              <span>▶</span>
+              {showClearRulesMenu && (
+                <div
+                  data-submenu="clear-rules"
+                  style={{
+                    ...submenuFlyoutStyles,
+                    minWidth: 220,
+                  }}
+                >
+                  <div
+                    style={menuItemStyles}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleClearRules('selection');
+                    }}
+                    onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
+                    }}
+                    onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
+                    }}
+                  >
+                    Clear Rules from Selected Cells
+                  </div>
+                  <div
+                    style={{ ...menuItemStyles, borderBottom: 'none' }}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleClearRules('sheet');
+                    }}
+                    onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
+                    }}
+                    onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
+                    }}
+                  >
+                    Clear Rules from Entire Sheet
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Manage Rules */}
             <div
               style={{ ...menuItemStyles, borderBottom: 'none' }}
-              onClick={() => {
-                console.log('Open Manage Rules dialog');
-                setShowCFMenu(false);
-              }}
               onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = '#e3f2fd';
+                setShowCFSubmenu(null);
+                setShowClearRulesMenu(false);
+                clearPreview();
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
               }}
               onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = '#fff';
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
+              }}
+              onClick={() => {
+                setShowCFMenu(false);
+                setOpenBuilderOnMount(false);
+                setShowRulesManager(true);
               }}
             >
               <span>Manage Rules...</span>
@@ -622,7 +793,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
                         overflow: 'hidden',
                         transition: 'transform 150ms ease, box-shadow 150ms ease',
                       }}
-                      onClick={() => handleTableStyle(style.id)}
+                      onClick={() => handleTableStylePick(style.id)}
                       onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
                         (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
                         (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
@@ -702,6 +873,41 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
           }
         `}
       </style>
+
+      {quickRuleKind && (
+        <QuickConditionalRuleDialog
+          isOpen={Boolean(quickRuleKind)}
+          kind={quickRuleKind}
+          onClose={() => setQuickRuleKind(null)}
+          onApply={handleQuickRuleApply}
+        />
+      )}
+
+      {worksheet && pendingTableStyle && (
+        <CreateTableDialog
+          isOpen={Boolean(pendingTableStyle)}
+          worksheet={worksheet}
+          selection={effectiveRange}
+          styleName={pendingTableStyle.name}
+          onClose={() => setPendingTableStyle(null)}
+          onConfirm={handleCreateTable}
+        />
+      )}
+
+      {worksheet && showRulesManager && commandManager && (
+        <ConditionalFormattingManagerDialog
+          isOpen={showRulesManager}
+          worksheet={worksheet}
+          commandManager={commandManager}
+          selectedRange={effectiveRange}
+          openBuilderOnMount={openBuilderOnMount}
+          onClose={() => {
+            setShowRulesManager(false);
+            setOpenBuilderOnMount(false);
+          }}
+          onRulesChanged={notifyChange}
+        />
+      )}
     </div>
   );
 };

@@ -69,7 +69,6 @@ export const InsertTab: React.FC<InsertTabProps> = ({
 
   const handleInsertPivotTable = () => {
     onInsertPivotTable?.();
-    console.log('Insert PivotTable');
   };
 
   const handleInsertPicture = () => {

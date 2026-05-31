@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import type { Address, Range, Worksheet } from '@cyber-sheet/core';
 import {
   ArrowUndoRegular,
@@ -44,7 +44,8 @@ import { ClipboardGroup } from './ClipboardGroup';
 import { StylesGroup } from './StylesGroup';
 import { CellsGroup } from './CellsGroup';
 import { EditingGroup } from './EditingGroup';
-import { useCyberSheetConfig } from '../../config/globalConfig';
+import { useCyberSheetConfig, useCyberSheetAppConfig } from '../../config/CyberSheetConfigContext';
+import { isHomeGroupEnabled } from '../../config/appConfig';
 import type { SelectionState, CommandManager, StyleState, ColorValue } from './types';
 import type { Fill } from './fillTypes';
 import { NO_FILL, solidFill } from './fillTypes';
@@ -68,6 +69,7 @@ export interface HomeTabProps {
   onDeleteSheet?: () => void;
   onRequestRenameSheet?: () => void;
   onFilter?: (action: 'toggle' | 'clear' | 'reapply') => void;
+  formattingController?: FormattingController | null;
 }
 
 /**
@@ -110,10 +112,14 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   onDeleteSheet,
   onRequestRenameSheet,
   onFilter,
+  formattingController: formattingControllerProp,
 }) => {
   const [showCustomSortDialog, setShowCustomSortDialog] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
+  const [formatPainterActive, setFormatPainterActive] = useState(false);
+  const formatPainterSourceRef = useRef<string | null>(null);
   const cyberSheetConfig = useCyberSheetConfig();
+  const appConfig = useCyberSheetAppConfig();
 
   useEffect(() => {
     setStyleVersion((version) => version + 1);
@@ -148,9 +154,56 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   }, [range]);
 
   const formattingController = useMemo(() => {
+    if (formattingControllerProp) return formattingControllerProp;
     if (!worksheet) return null;
     return new FormattingController(worksheet, commandManager as any);
-  }, [worksheet, commandManager]);
+  }, [formattingControllerProp, worksheet, commandManager]);
+
+  const selectionKey = useMemo(
+    () => selectedAddresses.map((addr) => `${addr.row},${addr.col}`).sort().join('|'),
+    [selectedAddresses],
+  );
+
+  const handleFormatPainterActivate = useCallback((active: boolean) => {
+    setFormatPainterActive(active);
+    if (active) {
+      formatPainterSourceRef.current = selectionKey;
+    } else {
+      formatPainterSourceRef.current = null;
+      document.body.classList.remove('format-painter-active');
+    }
+  }, [selectionKey]);
+
+  useEffect(() => {
+    if (!formattingController?.isFormatPainterActive()) {
+      if (formatPainterActive) {
+        setFormatPainterActive(false);
+        document.body.classList.remove('format-painter-active');
+      }
+      return;
+    }
+
+    if (selectedAddresses.length === 0) return;
+
+    const sourceKey = formatPainterSourceRef.current;
+    if (!sourceKey || selectionKey === sourceKey) return;
+
+    formattingController.applyFormat(selectedAddresses);
+    setStyleVersion((version) => version + 1);
+    onAfterCommand?.();
+
+    if (!formattingController.isFormatPainterActive()) {
+      setFormatPainterActive(false);
+      formatPainterSourceRef.current = null;
+      document.body.classList.remove('format-painter-active');
+    }
+  }, [
+    selectionKey,
+    selectedAddresses,
+    formattingController,
+    formatPainterActive,
+    onAfterCommand,
+  ]);
 
   const activeStyle = useMemo(() => {
     if (!worksheet || !range) return {};
@@ -515,6 +568,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 
   return (
     <div className="ribbon-content">
+      {isHomeGroupEnabled(appConfig, 'clipboard') && (
+      <>
       {/* ==================== Clipboard Group ==================== */}
       <ClipboardGroup
         worksheet={worksheet as any}
@@ -524,6 +579,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         selectedCells={selectedAddresses}
         currentRange={range ?? undefined}
         onAfterClipboard={onAfterCommand}
+        formatPainterActive={formatPainterActive}
+        onFormatPainterActivate={handleFormatPainterActivate}
       />
 
       {/* ==================== Undo/Redo Group ==================== */}
@@ -545,10 +602,14 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           />
         </RibbonRow>
       </RibbonGroup>
+      </>
+      )}
 
-      {/* ==================== Font Group ==================== */}
+      {(isHomeGroupEnabled(appConfig, 'font') || isHomeGroupEnabled(appConfig, 'number')) && (
       <RibbonGroup title="Font" showDialogLauncher onDialogLauncherClick={() => console.log('Font dialog')}>
         <div className="font-group-content">
+          {isHomeGroupEnabled(appConfig, 'font') && (
+          <>
           {/* Column 1: Font dropdowns */}
           <div className="font-dropdowns-column">
             <RibbonSelect
@@ -614,16 +675,21 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               />
             </div>
           </div>
+          </>
+          )}
           
           {/* Column 3: Number format */}
+          {isHomeGroupEnabled(appConfig, 'number') && (
           <NumberFormatButton
             numberFormat={selectionStyle?.numberFormat}
             onApply={handleNumberFormatApply}
           />
+          )}
         </div>
       </RibbonGroup>
+      )}
 
-      {/* ==================== Alignment Group ==================== */}
+      {isHomeGroupEnabled(appConfig, 'alignment') && (
       <RibbonGroup title="Alignment">
         <AlignmentGroup
           horizontalAlign={selectionStyle?.horizontalAlign}
@@ -638,16 +704,20 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           canMerge={canMerge}
         />
       </RibbonGroup>
+      )}
 
-      {/* ==================== Styles Group ==================== */}
+      {isHomeGroupEnabled(appConfig, 'styles') && (
       <StylesGroup
         formattingController={formattingController as any}
+        worksheet={worksheet ?? undefined}
+        commandManager={commandManager}
         selectedCells={selectedAddresses}
         currentRange={range ?? undefined}
         onStyleChange={onAfterCommand}
       />
+      )}
 
-      {/* ==================== Cells Group ==================== */}
+      {isHomeGroupEnabled(appConfig, 'cells') && (
       <CellsGroup
         formattingController={formattingController as any}
         selectedCells={selectedAddresses}
@@ -657,8 +727,9 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         onFormatOperation={handleFormatOperation}
         onStructureChange={onAfterCommand}
       />
+      )}
 
-      {/* ==================== Editing Group ==================== */}
+      {isHomeGroupEnabled(appConfig, 'editing') && (
       <EditingGroup
         formattingController={formattingController as any}
         selectedCells={selectedAddresses}
@@ -670,6 +741,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         onFilter={onFilter}
         onOpenFindReplace={onOpenFindReplace}
       />
+      )}
 
       {showCustomSortDialog && customSortRange && (
         <CustomSortDialog

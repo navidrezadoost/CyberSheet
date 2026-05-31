@@ -32,6 +32,10 @@ export interface RibbonProps {
   onFilter?: (action: 'toggle' | 'clear' | 'reapply') => void;
   onDataCommand?: (command: any) => void;
   selectedCells?: Address[];
+  onInsertPivotTable?: () => void;
+  onInsertTable?: () => void;
+  formattingController?: import('@cyber-sheet/core').FormattingController | null;
+  onReviewCommand?: (command: any) => void;
 }
 
 /**
@@ -73,6 +77,10 @@ export const Ribbon: React.FC<RibbonProps> = ({
   onFilter,
   onDataCommand,
   selectedCells = [],
+  onInsertPivotTable,
+  onInsertTable,
+  formattingController,
+  onReviewCommand,
 }) => {
   // Set up global keyboard shortcuts (single entry point)
   useKeyboardShortcuts({
@@ -98,14 +106,15 @@ export const Ribbon: React.FC<RibbonProps> = ({
           onDeleteSheet={onDeleteSheet}
           onRequestRenameSheet={onRequestRenameSheet}
           onFilter={onFilter}
+          formattingController={formattingController}
         />
       )}
       
       {activeTab === 'Insert' && (
         <InsertTab 
           drawingLayer={drawingLayer}
-          onInsertTable={() => console.log('Insert table')}
-          onInsertPivotTable={() => console.log('Insert pivot table')}
+          onInsertTable={onInsertTable}
+          onInsertPivotTable={onInsertPivotTable}
           onInsertPicture={() => console.log('Insert picture')}
           onInsertShape={(type) => console.log('Insert shape:', type)}
           onInsertIcon={() => console.log('Insert icon')}
@@ -175,7 +184,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
         <ReviewTab 
           workbook={workbook}
           selectedCells={selection ? [selection.start] : []}
-          onCommand={(cmd) => console.log('Review command:', cmd)}
+          onCommand={onReviewCommand}
         />
       )}
       

@@ -11,7 +11,7 @@
  * - Paste dropdown with smooth animation
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { Address, Range, Worksheet } from '@cyber-sheet/core';
 import { FormattingController, CommandManager, ClipboardService } from '@cyber-sheet/core';
 import {
@@ -31,6 +31,7 @@ export interface ClipboardGroupProps {
   onAfterClipboard?: () => void;
   onCutComplete?: (range: Range) => void;
   onFormatPainterActivate?: (active: boolean) => void;
+  formatPainterActive?: boolean;
   onCut?: () => void;
   onCopy?: () => void;
   onPaste?: () => void;
@@ -46,12 +47,22 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
   onAfterClipboard,
   onCutComplete,
   onFormatPainterActivate,
+  formatPainterActive: formatPainterActiveProp,
   onCut,
   onCopy,
   onPaste,
 }) => {
   const [showPasteMenu, setShowPasteMenu] = useState(false);
-  const [formatPainterActive, setFormatPainterActive] = useState(false);
+  const [formatPainterActiveInternal, setFormatPainterActiveInternal] = useState(false);
+  const formatPainterClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const formatPainterActive = formatPainterActiveProp ?? formatPainterActiveInternal;
+
+  const setFormatPainterActive = (active: boolean) => {
+    if (formatPainterActiveProp === undefined) {
+      setFormatPainterActiveInternal(active);
+    }
+    onFormatPainterActivate?.(active);
+  };
   const [clipboardHasContent, setClipboardHasContent] = useState(false);
 
   const getRange = (): Range | null => {
@@ -108,26 +119,41 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     onPaste?.();
   };
 
+  const deactivateFormatPainter = () => {
+    formattingController.clearFormatPainter();
+    setFormatPainterActive(false);
+    document.body.classList.remove('format-painter-active');
+  };
+
   const handleFormatPainter = (persistent: boolean = false) => {
     if (formatPainterActive) {
-      // Cancel format painter
-      formattingController.clearFormatPainter();
-      setFormatPainterActive(false);
-      onFormatPainterActivate?.(false);
+      deactivateFormatPainter();
     } else {
-      // Activate format painter
       formattingController.copyFormat(selectedCells, persistent);
       setFormatPainterActive(true);
-      onFormatPainterActivate?.(true);
-      
-      // Cursor changes to paintbrush (CSS class applied)
       document.body.classList.add('format-painter-active');
-      
-      if (!persistent) {
-        // Single-click mode: auto-deactivate after one use
-        // This would be handled by the renderer/cell click handler
-      }
     }
+  };
+
+  const handleFormatPainterClick = () => {
+    if (formatPainterClickTimerRef.current) {
+      clearTimeout(formatPainterClickTimerRef.current);
+    }
+    formatPainterClickTimerRef.current = setTimeout(() => {
+      handleFormatPainter(false);
+      formatPainterClickTimerRef.current = null;
+    }, 250);
+  };
+
+  const handleFormatPainterDoubleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (formatPainterClickTimerRef.current) {
+      clearTimeout(formatPainterClickTimerRef.current);
+      formatPainterClickTimerRef.current = null;
+    }
+    formattingController.copyFormat(selectedCells, true);
+    setFormatPainterActive(true);
+    document.body.classList.add('format-painter-active');
   };
 
   // === Styles ===
@@ -319,8 +345,8 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
             backgroundColor: formatPainterActive ? '#e3f2fd' : undefined,
             borderColor: formatPainterActive ? '#2196f3' : undefined,
           }}
-          onClick={() => handleFormatPainter(false)}
-          onDoubleClick={() => handleFormatPainter(true)}
+          onClick={handleFormatPainterClick}
+          onDoubleClick={handleFormatPainterDoubleClick}
           disabled={selectedCells.length === 0}
           title="Format Painter - Click once for single use, double-click to stay active"
         >

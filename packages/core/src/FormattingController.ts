@@ -16,6 +16,7 @@
 import type { Address, Range, CellStyle } from './types';
 import type { Worksheet } from './worksheet';
 import type { Command, CommandManager } from './CommandManager';
+import { BatchCommand } from './CommandManager';
 import type { ClipboardService, ClipboardPayload } from './ClipboardService';
 
 /**
@@ -687,10 +688,8 @@ export class FormattingController {
     
     for (const addr of addresses) {
       const style = this.worksheet.getCellStyle(addr);
-      if (style) {
-        const key = `${addr.row},${addr.col}`;
-        this.formatPainterState.sourceStyles.set(key, { ...style });
-      }
+      const key = `${addr.row},${addr.col}`;
+      this.formatPainterState.sourceStyles.set(key, style ? { ...style } : {});
     }
     
     this.formatPainterState.isActive = true;
@@ -715,12 +714,12 @@ export class FormattingController {
       this.commandManager.execute(cmd);
     } else {
       // Multiple sources: apply pattern (tile source styles over target)
-      // This is a simplified implementation; full Excel behavior is more complex
-      for (let i = 0; i < targetAddresses.length; i++) {
-        const style = sourceStyles[i % sourceStyles.length];
-        const cmd = new SetStyleCommand(this.worksheet, targetAddresses[i], style);
-        this.commandManager.execute(cmd);
-      }
+      const commands = targetAddresses.map((addr, index) => {
+        const style = sourceStyles[index % sourceStyles.length];
+        return new SetStyleCommand(this.worksheet, addr, style);
+      });
+      const cmd = new BatchCommand(commands, 'Format Painter');
+      this.commandManager.execute(cmd);
     }
     
     // Clear format painter if not persistent
@@ -789,9 +788,9 @@ export class FormattingController {
   }
 
   /**
-   * Apply Format as Table styling to a range in a single undo step.
+   * Build a single undo step for Format as Table styling.
    */
-  applyTableStyle(
+  createTableStyleCommand(
     range: Range,
     options: {
       headerRowColor: string;
@@ -799,7 +798,7 @@ export class FormattingController {
       secondRowStripedColor: string;
       borderColor?: string;
     }
-  ): void {
+  ): Command {
     const startRow = Math.min(range.start.row, range.end.row);
     const endRow = Math.max(range.start.row, range.end.row);
     const startCol = Math.min(range.start.col, range.end.col);
@@ -811,8 +810,6 @@ export class FormattingController {
         addresses.push({ row, col });
       }
     }
-
-    if (addresses.length === 0) return;
 
     const borderColor = options.borderColor ?? '#BFBFBF';
 
@@ -849,6 +846,35 @@ export class FormattingController {
     });
 
     cmd.description = 'Format as table';
-    this.commandManager.execute(cmd);
+    return cmd;
+  }
+
+  /**
+   * Apply Format as Table styling to a range in a single undo step.
+   */
+  applyTableStyle(
+    range: Range,
+    options: {
+      headerRowColor: string;
+      firstRowStripedColor: string;
+      secondRowStripedColor: string;
+      borderColor?: string;
+    }
+  ): void {
+    const startRow = Math.min(range.start.row, range.end.row);
+    const endRow = Math.max(range.start.row, range.end.row);
+    const startCol = Math.min(range.start.col, range.end.col);
+    const endCol = Math.max(range.start.col, range.end.col);
+
+    const addresses: Address[] = [];
+    for (let row = startRow; row <= endRow; row++) {
+      for (let col = startCol; col <= endCol; col++) {
+        addresses.push({ row, col });
+      }
+    }
+
+    if (addresses.length === 0) return;
+
+    this.commandManager.execute(this.createTableStyleCommand(range, options));
   }
 }

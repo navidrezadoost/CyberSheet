@@ -47,6 +47,7 @@ const ExcelAppDemo = () => {
       workbook={workbook}
       fileName="Book1.xlsx"
       onSave={() => console.log('Save clicked')}
+      onWorkbookLoaded={setWorkbook}
     />
   );
 };

@@ -14,6 +14,8 @@
 
 import type { Address, CellValue, ExtendedCellValue, CellStyle } from './types';
 import type { Worksheet } from './worksheet';
+import type { EventBus } from './EventBus';
+import { getCommandEventType } from './eventBridge';
 import { GraphInvariantValidator } from './dag/GraphInvariantValidator';
 import { GraphTransformationValidator } from './dag/GraphTransformationValidator';
 import type { AddressTransform } from './dag/AddressTransform';
@@ -297,13 +299,19 @@ export class CommandManager {
   private redoStack: Command[] = [];
   private maxHistorySize: number;
   private changeListeners = new Set<() => void>();
+  private eventBus?: EventBus;
   
   /** Optional worksheet reference for DAG validation (DEV/TEST only) */
   private worksheet?: Worksheet;
   
-  constructor(maxHistorySize: number = 100, worksheet?: Worksheet) {
+  constructor(maxHistorySize: number = 100, worksheet?: Worksheet, eventBus?: EventBus) {
     this.maxHistorySize = maxHistorySize;
     this.worksheet = worksheet;
+    this.eventBus = eventBus;
+  }
+
+  setEventBus(eventBus: EventBus | undefined): void {
+    this.eventBus = eventBus;
   }
   
   /**
@@ -344,6 +352,11 @@ export class CommandManager {
     // Clear redo stack when new command executed
     this.redoStack = [];
     this.notifyChange();
+    this.eventBus?.emit('command-execute', {
+      commandType: getCommandEventType(command),
+      description: command.description,
+      command,
+    });
   }
 
   /**
@@ -396,6 +409,11 @@ export class CommandManager {
     }
 
     this.notifyChange();
+    this.eventBus?.emit('command-undo', {
+      commandType: getCommandEventType(command),
+      description: command.description,
+      command,
+    });
     return true;
   }
   
@@ -432,6 +450,11 @@ export class CommandManager {
     }
 
     this.notifyChange();
+    this.eventBus?.emit('command-redo', {
+      commandType: getCommandEventType(command),
+      description: command.description,
+      command,
+    });
     return true;
   }
   
