@@ -5,7 +5,7 @@
  * Supports undo/redo for delete, copy/paste, move, resize, rotate.
  */
 
-import type { DrawingLayer, DrawingObject } from '../DrawingLayer';
+import type { DrawingLayer, DrawingObject, FormControlObject, FormControlProperties } from '../DrawingLayer';
 
 export interface Command {
   execute(): void;
@@ -166,6 +166,95 @@ export class RotateDrawingObjectCommand implements Command {
   
   undo(): void {
     this.drawingLayer.rotateObject(this.objectId, -this.degrees);
+  }
+}
+
+/**
+ * AddDrawingObjectCommand — insert a floating object with undo support.
+ */
+export class AddDrawingObjectCommand implements Command {
+  description?: string;
+
+  constructor(
+    private drawingLayer: DrawingLayer,
+    private object: DrawingObject,
+  ) {
+    this.description = `Insert ${object.type}`;
+  }
+
+  execute(): void {
+    this.drawingLayer.addObject(this.object);
+    this.drawingLayer.selectObject(this.object.id);
+  }
+
+  undo(): void {
+    this.drawingLayer.removeObject(this.object.id);
+  }
+}
+
+export interface FormControlFormatUpdates {
+  linkedCell?: string;
+  size?: { width: number; height: number };
+  locked?: boolean;
+  visible?: boolean;
+  altText?: string;
+  anchor?: DrawingObject['anchor'];
+  controlProperties?: Partial<FormControlProperties>;
+}
+
+/**
+ * FormatFormControlCommand — apply Format Control dialog changes with undo.
+ */
+export class FormatFormControlCommand implements Command {
+  description = 'Format Control';
+  private readonly before: DrawingObject;
+  private readonly after: DrawingObject;
+
+  constructor(
+    private drawingLayer: DrawingLayer,
+    objectId: string,
+    updates: FormControlFormatUpdates,
+  ) {
+    const obj = drawingLayer.getObject(objectId);
+    if (!obj) {
+      throw new Error(`Form control not found: ${objectId}`);
+    }
+    this.before = JSON.parse(JSON.stringify(obj));
+    this.after = FormatFormControlCommand.mergeUpdates(this.before, updates);
+  }
+
+  private static mergeUpdates(
+    source: DrawingObject,
+    updates: FormControlFormatUpdates,
+  ): DrawingObject {
+    const next = JSON.parse(JSON.stringify(source)) as FormControlObject;
+    if (updates.size) next.size = { ...updates.size };
+    if (updates.locked !== undefined) next.locked = updates.locked;
+    if (updates.visible !== undefined) next.visible = updates.visible;
+    if (updates.altText !== undefined) next.altText = updates.altText;
+    if (updates.anchor) next.anchor = { ...updates.anchor };
+    if (updates.linkedCell !== undefined) next.linkedCell = updates.linkedCell;
+    if (updates.controlProperties) {
+      next.controlProperties = {
+        ...next.controlProperties,
+        ...updates.controlProperties,
+      };
+    }
+    return next;
+  }
+
+  execute(): void {
+    this.apply(this.after);
+  }
+
+  undo(): void {
+    this.apply(this.before);
+  }
+
+  private apply(obj: DrawingObject): void {
+    const existing = this.drawingLayer.getObject(obj.id);
+    if (!existing) return;
+    this.drawingLayer.updateObject(obj.id, obj);
   }
 }
 

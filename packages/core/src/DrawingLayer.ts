@@ -100,6 +100,15 @@ export interface ShapeObject extends DrawingObject {
   };
 }
 
+export interface IconObject extends DrawingObject {
+  type: 'icon';
+  iconId: string;
+  svgContent: string;
+  viewBox: string;
+  fillColor: string;
+  loadedImage?: HTMLImageElement;
+}
+
 export type FormControlType =
   | 'checkbox' | 'button' | 'comboBox' | 'listBox'
   | 'spinButton' | 'scrollBar' | 'optionButton' | 'groupBox' | 'label';
@@ -118,6 +127,11 @@ export interface FormControlProperties {
   pageChange?: number;
   buttonText?: string;
   macroName?: string;
+  threeDShading?: boolean;
+  lockText?: boolean;
+  mixed?: boolean;
+  altTextTitle?: string;
+  altTextDescription?: string;
 }
 
 export interface FormControlObject extends DrawingObject {
@@ -127,9 +141,19 @@ export interface FormControlObject extends DrawingObject {
   controlProperties: FormControlProperties;
 }
 
+export interface WordArtStyle {
+  presetId: string;
+  gradientFrom: string;
+  gradientTo: string;
+  outlineColor?: string;
+  outlineWidth?: number;
+  shadow?: boolean;
+}
+
 export interface TextBoxObject extends DrawingObject {
   type: 'textBox';
   text: string;
+  wordArtStyle?: WordArtStyle;
   textStyle: {
     fontFamily: string;
     fontSize: number;
@@ -389,6 +413,14 @@ export class DrawingLayer {
     if (!obj || obj.locked) return;
 
     obj.rotation = (obj.rotation + degrees) % 360;
+    this.eventEmitter.emit('changed');
+  }
+
+  setObjectRotation(id: string, degrees: number): void {
+    const obj = this.objects.get(id);
+    if (!obj || obj.locked) return;
+
+    obj.rotation = ((degrees % 360) + 360) % 360;
     this.eventEmitter.emit('changed');
   }
 

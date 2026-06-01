@@ -28,6 +28,11 @@ import {
   unpackKey,
 } from './dag/DependencyGraph';
 import { FORMAT_VERSION, type WorksheetSnapshot } from './persistence/SnapshotCodec';
+import {
+  cloneHeaderFooterSettings,
+  DEFAULT_HEADER_FOOTER,
+  type HeaderFooterSettings,
+} from './headerFooter';
 export type { WorksheetSnapshot } from './persistence/SnapshotCodec';
 
 export class Worksheet {
@@ -78,6 +83,8 @@ export class Worksheet {
   private worksheetId: string;
   /** Reference to SpreadsheetEngine for E2 invariant enforcement */
   private _engine?: { isMutating(): boolean };
+  /** Per-sheet header and footer text (left / center / right sections). */
+  private headerFooter: HeaderFooterSettings = cloneHeaderFooterSettings(DEFAULT_HEADER_FOOTER);
   rowCount: number;
   colCount: number;
 
@@ -486,6 +493,15 @@ export class Worksheet {
 
   getConditionalFormattingRules(): ConditionalFormattingRule[] {
     return this.conditionalRules.slice();
+  }
+
+  getHeaderFooter(): HeaderFooterSettings {
+    return cloneHeaderFooterSettings(this.headerFooter);
+  }
+
+  setHeaderFooter(settings: HeaderFooterSettings): void {
+    this.headerFooter = cloneHeaderFooterSettings(settings);
+    this.events.emit({ type: 'header-footer-changed', settings: this.getHeaderFooter() });
   }
 
   // ── Data Validation ──────────────────────────────────────────────────────

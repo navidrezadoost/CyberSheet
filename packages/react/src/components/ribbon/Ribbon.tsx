@@ -1,5 +1,9 @@
 import React from 'react';
-import type { ClipboardService, DrawingLayer, Address } from '@cyber-sheet/core';
+import type { ClipboardService, DrawingLayer, Address, Worksheet } from '@cyber-sheet/core';
+import type { PictureInsertTemplate } from '../DrawingCanvas';
+import type { IconInsertTemplate } from '../../utils/createDrawingObject';
+import type { FormControlInsertTemplate } from '../../utils/formControlFactory';
+import type { TextBoxInsertTemplate } from '../../utils/textBoxFactory';
 import { HomeTab } from './HomeTab';
 import { InsertTab } from './insert/InsertTab';
 import { PageLayoutTab } from './pagelayout/PageLayoutTab';
@@ -36,6 +40,15 @@ export interface RibbonProps {
   onInsertTable?: () => void;
   formattingController?: import('@cyber-sheet/core').FormattingController | null;
   onReviewCommand?: (command: any) => void;
+  worksheet?: Worksheet;
+  onDrawingChange?: () => void;
+  onBeginShapeInsert?: (shapeType: string) => void;
+  onBeginPictureInsert?: (template: PictureInsertTemplate) => void;
+  onBeginIconInsert?: (template: IconInsertTemplate) => void;
+  onBeginFormControlInsert?: (template: FormControlInsertTemplate) => void;
+  onBeginTextBoxInsert?: (template: TextBoxInsertTemplate) => void;
+  onInsertHeaderFooter?: () => void;
+  onInsertWordArt?: () => void;
 }
 
 /**
@@ -81,6 +94,15 @@ export const Ribbon: React.FC<RibbonProps> = ({
   onInsertTable,
   formattingController,
   onReviewCommand,
+  worksheet,
+  onDrawingChange,
+  onBeginShapeInsert,
+  onBeginPictureInsert,
+  onBeginIconInsert,
+  onBeginFormControlInsert,
+  onBeginTextBoxInsert,
+  onInsertHeaderFooter,
+  onInsertWordArt,
 }) => {
   // Set up global keyboard shortcuts (single entry point)
   useKeyboardShortcuts({
@@ -112,21 +134,18 @@ export const Ribbon: React.FC<RibbonProps> = ({
       
       {activeTab === 'Insert' && (
         <InsertTab 
+          worksheet={worksheet}
           drawingLayer={drawingLayer}
           onInsertTable={onInsertTable}
           onInsertPivotTable={onInsertPivotTable}
-          onInsertPicture={() => console.log('Insert picture')}
-          onInsertShape={(type) => console.log('Insert shape:', type)}
-          onInsertIcon={() => console.log('Insert icon')}
-          onInsertControl={(type) => console.log('Insert control:', type)}
-          onInsertTextBox={() => console.log('Insert text box')}
-          onInsertHeaderFooter={() => console.log('Insert header/footer')}
-          onInsertWordArt={() => console.log('Insert WordArt')}
-          onInsertChart={(type) => console.log('Insert chart:', type)}
-          onInsertSparkline={(type) => console.log('Insert sparkline:', type)}
-          onInsertHyperlink={onInsertHyperlink}
-          onInsertEquation={() => console.log('Insert equation')}
-          onInsertSymbol={() => console.log('Insert symbol')}
+          onDrawingChange={onDrawingChange}
+          onBeginShapeInsert={onBeginShapeInsert}
+          onBeginPictureInsert={onBeginPictureInsert}
+          onBeginIconInsert={onBeginIconInsert}
+          onBeginFormControlInsert={onBeginFormControlInsert}
+          onBeginTextBoxInsert={onBeginTextBoxInsert}
+          onInsertHeaderFooter={onInsertHeaderFooter}
+          onInsertWordArt={onInsertWordArt}
         />
       )}
       

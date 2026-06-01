@@ -1,4 +1,4 @@
-import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset, isHyperlinkVisited, HYPERLINK_COLOR, HYPERLINK_VISITED_COLOR, ConditionalFormattingEngine, type ConditionalFormattingRule, type ConditionalFormattingResult, type DataBarRender, type IconRender, renderIconOnCanvas } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset, isHyperlinkVisited, HYPERLINK_COLOR, HYPERLINK_VISITED_COLOR, ConditionalFormattingEngine, type ConditionalFormattingRule, type ConditionalFormattingResult, type DataBarRender, type IconRender, renderIconOnCanvas, expandHeaderFooterText, sectionHasContent, type HeaderFooterSection } from '@cyber-sheet/core';
 import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
@@ -193,6 +193,8 @@ export class CanvasRenderer {
         const a = (ev as any).address; this.invalidateRange(a.row, a.col, a.row, a.col);
       } else if (t === 'cell-component-changed') {
         const a = (ev as any).address; this.invalidateRange(a.row, a.col, a.row, a.col);
+        this.scheduleRedraw();
+      } else if (t === 'header-footer-changed') {
         this.scheduleRedraw();
       }
     });
@@ -1539,15 +1541,94 @@ export class CanvasRenderer {
           ctx.fillRect(pageX, pageY, pageW, metrics.marginTopPx + metrics.headerPx);
           ctx.fillRect(pageX, pageY + pageH - metrics.marginBottomPx - metrics.footerPx, pageW, metrics.marginBottomPx + metrics.footerPx);
 
-          ctx.fillStyle = '#666666';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('Header', pageX + pageW / 2, pageY + (metrics.marginTopPx + metrics.headerPx) / 2);
-          ctx.fillText('Footer', pageX + pageW / 2, pageY + pageH - (metrics.marginBottomPx + metrics.footerPx) / 2);
+          const headerFooter = this.sheet.getHeaderFooter?.() ?? {
+            header: { left: '', center: '', right: '' },
+            footer: { left: '', center: '', right: '' },
+          };
+          const pageNumber = pi * colStarts.length + pj + 1;
+          const totalPages = rowStarts.length * colStarts.length;
+          const expandCtx = {
+            page: pageNumber,
+            pages: totalPages,
+            sheetName: this.sheet.name,
+            fileName: 'Workbook',
+          };
+
+          const headerBandY = pageY + metrics.marginTopPx;
+          const headerBandH = metrics.headerPx;
+          const footerBandY = pageY + pageH - metrics.marginBottomPx - metrics.footerPx;
+          const footerBandH = metrics.footerPx;
+
+          this.drawHeaderFooterBand(
+            ctx,
+            pageX,
+            pageW,
+            headerBandY,
+            headerBandH,
+            headerFooter.header,
+            expandCtx,
+            'Header',
+          );
+          this.drawHeaderFooterBand(
+            ctx,
+            pageX,
+            pageW,
+            footerBandY,
+            footerBandH,
+            headerFooter.footer,
+            expandCtx,
+            'Footer',
+          );
         }
       }
     }
 
+    ctx.restore();
+  }
+
+  private drawHeaderFooterBand(
+    ctx: CanvasRenderingContext2D,
+    pageX: number,
+    pageW: number,
+    bandY: number,
+    bandH: number,
+    section: HeaderFooterSection,
+    expandCtx: { page: number; pages: number; sheetName: string; fileName: string },
+    placeholder: 'Header' | 'Footer',
+  ): void {
+    ctx.save();
+    ctx.fillStyle = '#333333';
+    ctx.font = `10px ${this.theme.fontFamily}`;
+    ctx.textBaseline = 'middle';
+
+    const padding = 8 * this.zoom;
+    const centerY = bandY + bandH / 2;
+
+    if (!sectionHasContent(section)) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#666666';
+      ctx.fillText(placeholder, pageX + pageW / 2, centerY);
+      ctx.restore();
+      return;
+    }
+
+    const left = expandHeaderFooterText(section.left, expandCtx);
+    const center = expandHeaderFooterText(section.center, expandCtx);
+    const right = expandHeaderFooterText(section.right, expandCtx);
+
+    ctx.fillStyle = '#333333';
+    if (left) {
+      ctx.textAlign = 'left';
+      ctx.fillText(left, pageX + padding, centerY);
+    }
+    if (center) {
+      ctx.textAlign = 'center';
+      ctx.fillText(center, pageX + pageW / 2, centerY);
+    }
+    if (right) {
+      ctx.textAlign = 'right';
+      ctx.fillText(right, pageX + pageW - padding, centerY);
+    }
     ctx.restore();
   }
 

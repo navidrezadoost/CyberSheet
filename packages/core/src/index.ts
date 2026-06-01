@@ -46,6 +46,7 @@ export * from './commands/CellComponentCommands';
 export * from './commands/ViewCommands';
 export * from './commands/ReviewCommands';
 export * from './PageLayoutController';
+export * from './headerFooter';
 export * from './NameManager';
 export * from './CalculationController';
 export * from './CellLayout';

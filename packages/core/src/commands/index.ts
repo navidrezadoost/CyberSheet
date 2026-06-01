@@ -76,5 +76,6 @@ export {
   MoveDrawingObjectCommand,
   ResizeDrawingObjectCommand,
   RotateDrawingObjectCommand,
+  AddDrawingObjectCommand,
   GroupDrawingObjectsCommand,
 } from './DrawingCommands';

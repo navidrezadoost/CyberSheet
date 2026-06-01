@@ -13,7 +13,7 @@ export function isComposingEvent(event: KeyboardEvent): boolean {
 }
 
 /** Primary modifier: Ctrl on Windows/Linux, Cmd on Mac. */
-export function hasCtrlOrMeta(event: KeyboardEvent): boolean {
+export function hasCtrlOrMeta(event: { ctrlKey: boolean; metaKey: boolean }): boolean {
   const isMac =
     typeof navigator !== 'undefined' &&
     /Mac|iPhone|iPad|iPod/.test(navigator.platform);

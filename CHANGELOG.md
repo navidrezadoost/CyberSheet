@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Insert Tab: Illustrations, Form Controls, Text Box, Header & Footer, and WordArt (May 30, 2026)
+
+**Excel-like Insert tab drawing tools with crosshair placement, undo, inline editing, and page layout headers/footers**
+
+#### Illustrations (Shapes, Pictures, Icons)
+- ✅ **Shapes gallery** with categories, thumbnails, and crosshair insert via `AddDrawingObjectCommand`
+- ✅ **Pictures** from file picker with aspect-ratio sizing and drag-to-place
+- ✅ **Icons** gallery with preset SVG icons and default 48×48 placement
+- ✅ Drawing canvas overlay: selection handles, move/resize/rotate, click-through to cells when deselected
+- ✅ Spec: `docs/INSERT_ILLUSTRATIONS_SPEC.md`
+
+#### Form Controls (FC.1)
+- ✅ Insert **Checkbox**, **Option Button**, **List Box**, **Combo Box**, **Label**, **Group Box**, **Button**, **Spinner**, **Scroll Bar**
+- ✅ Checkbox toggle on click; **option button mutual exclusion** within Group Box / sheet scope
+- ✅ **Format Control** dialog (Control, Size, Protection, Properties, Alt Text tabs) with linked-cell range picker
+- ✅ `FormatFormControlCommand` for undoable property updates
+- ✅ Spec: `docs/FORM_CONTROLS_SPEC.md`
+
+#### Text group
+- ✅ **Text Box** — crosshair insert, inline typing, auto-edit after insert, double-click to edit
+- ✅ **Header & Footer** — switches to Page Layout view, dialog with left/center/right sections and insert codes (`&[Page]`, `&[Date]`, etc.)
+- ✅ **WordArt** — style gallery (gradient, outline, shadow presets), crosshair insert, stylized canvas rendering
+- ✅ Per-sheet header/footer model on `Worksheet` with `SetHeaderFooterCommand` (undoable)
+- ✅ Page Layout overlay renders actual header/footer text per page band
+
+#### Drawing layer & interaction fixes
+- ✅ Deselect shapes/icons/pictures/form controls when clicking outside the drawing canvas or changing cell selection
+- ✅ Fixed `hasCtrlOrMeta` for mouse events (was incorrectly using `isCtrlLetter`)
+- ✅ Fixed import paths in `ExcelApp.tsx` and `startIconInsert` template ref bug
+
+#### New files
+- `docs/FORM_CONTROLS_SPEC.md`, `docs/INSERT_ILLUSTRATIONS_SPEC.md`
+- `packages/core/src/headerFooter.ts`
+- `packages/react/src/utils/createDrawingObject.ts`, `drawingGridSnap.ts`, `formControlFactory.ts`, `formatControlApply.ts`, `optionButtonGroup.ts`, `parseA1Reference.ts`, `textBoxFactory.ts`, `wordArtFactory.ts`
+- `packages/react/src/components/dialogs/FormatControlDialog.tsx`, `HeaderFooterDialog.tsx`, `WordArtGalleryDialog.tsx`
+- `packages/react/src/components/ribbon/insert/IconGallery.tsx`, `ShapeThumbnail.tsx`
+- `packages/react/src/icons/`, `packages/react/src/shapes/`
+
 ### Added - Phase 6: Embedder API, Integration Docs, and Insert Tab Fixes (May 30, 2026)
 
 **Formal embedder surface: events, config, comments, custom components, file loading, and documentation**

@@ -6,76 +6,27 @@
  */
 
 import React, { useState } from 'react';
-import type { DrawingLayer, FormControlObject } from '@cyber-sheet/core';
+import type { FormControlType } from '@cyber-sheet/core';
+import {
+  createFormControlTemplate,
+  type FormControlInsertTemplate,
+} from '../../../utils/formControlFactory';
 
 export interface FormsGroupProps {
-  drawingLayer?: DrawingLayer;
   onInsertControl?: (controlType: string) => void;
-  onObjectChange?: () => void;
+  onBeginFormControlInsert?: (template: FormControlInsertTemplate) => void;
 }
 
 export const FormsGroup: React.FC<FormsGroupProps> = ({
-  drawingLayer,
   onInsertControl,
-  onObjectChange,
+  onBeginFormControlInsert,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Handle checkbox insertion
-  const handleInsertCheckbox = () => {
-    if (!drawingLayer) return;
-    
-    const checkbox: FormControlObject = {
-      id: `checkbox_${Date.now()}`,
-      type: 'formControl',
-      name: 'Checkbox',
-      controlType: 'checkbox',
-      position: { x: 100, y: 100 },
-      size: { width: 120, height: 24 },
-      rotation: 0,
-      zIndex: drawingLayer.getAllObjects().length + 1,
-      locked: false,
-      visible: true,
-      altText: 'Checkbox',
-      linkedCell: undefined,
-      controlProperties: {
-        enabled: true,
-        printObject: true,
-        checked: false,
-        label: 'Checkbox',
-      },
-    };
-    drawingLayer.addObject(checkbox);
-    onObjectChange?.();
-    onInsertControl?.('checkbox');
-  };
-
-  // Handle button insertion
-  const handleInsertButton = () => {
-    if (!drawingLayer) return;
-    
-    const button: FormControlObject = {
-      id: `button_${Date.now()}`,
-      type: 'formControl',
-      name: 'Button',
-      controlType: 'button',
-      position: { x: 100, y: 100 },
-      size: { width: 80, height: 28 },
-      rotation: 0,
-      zIndex: drawingLayer.getAllObjects().length + 1,
-      locked: false,
-      visible: true,
-      altText: 'Button',
-      linkedCell: undefined,
-      controlProperties: {
-        enabled: true,
-        printObject: true,
-        buttonText: 'Button',
-      },
-    };
-    drawingLayer.addObject(button);
-    onObjectChange?.();
-    onInsertControl?.('button');
+  const beginInsert = (controlType: FormControlType) => {
+    setShowDropdown(false);
+    onBeginFormControlInsert?.(createFormControlTemplate(controlType));
+    onInsertControl?.(controlType);
   };
 
   const groupStyle: React.CSSProperties = {
@@ -143,7 +94,7 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
     gap: 8,
   };
 
-  const controls = [
+  const controls: { type: FormControlType; icon: string; label: string }[] = [
     { type: 'checkbox', icon: '☑', label: 'Checkbox' },
     { type: 'button', icon: '🔘', label: 'Button' },
     { type: 'comboBox', icon: '▾', label: 'Combo Box' },
@@ -158,10 +109,9 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
   return (
     <div style={groupStyle}>
       <div style={buttonContainerStyle}>
-        {/* Checkbox - Primary button */}
         <button
           style={buttonStyle}
-          onClick={handleInsertCheckbox}
+          onClick={() => beginInsert('checkbox')}
           onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
             (e.currentTarget as HTMLButtonElement).style.background = '#E8E8E8';
             (e.currentTarget as HTMLButtonElement).style.borderColor = '#D1D1D1';
@@ -175,7 +125,6 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
           <span>Checkbox</span>
         </button>
 
-        {/* More Controls Dropdown */}
         <div style={{ position: 'relative' }}>
           <button
             style={{
@@ -205,10 +154,7 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
                     ...dropdownItemStyle,
                     borderBottom: index === controls.length - 1 ? 'none' : '1px solid #F0F0F0',
                   }}
-                  onClick={() => {
-                    setShowDropdown(false);
-                    onInsertControl?.(control.type);
-                  }}
+                  onClick={() => beginInsert(control.type)}
                   onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
                     (e.currentTarget as HTMLDivElement).style.background = '#E8F4FD';
                   }}

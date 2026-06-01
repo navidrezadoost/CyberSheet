@@ -14,6 +14,8 @@
 import type { Command } from '../CommandManager';
 import type { Workbook } from '../workbook';
 import type { Address } from '../types';
+import type { Worksheet } from '../worksheet';
+import type { HeaderFooterSettings } from '../headerFooter';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -340,6 +342,30 @@ export class SetViewModeCommand implements Command {
     if (!sheet) return 'normal';
 
     return (sheet as any).viewMode || 'normal';
+  }
+}
+
+/**
+ * SetHeaderFooterCommand: Update worksheet header and footer text
+ */
+export class SetHeaderFooterCommand implements Command {
+  description = 'Set Header and Footer';
+
+  private previousSettings: HeaderFooterSettings;
+
+  constructor(
+    private worksheet: Worksheet,
+    private settings: HeaderFooterSettings,
+  ) {
+    this.previousSettings = worksheet.getHeaderFooter();
+  }
+
+  execute(): void {
+    this.worksheet.setHeaderFooter(this.settings);
+  }
+
+  undo(): void {
+    this.worksheet.setHeaderFooter(this.previousSettings);
   }
 }
 

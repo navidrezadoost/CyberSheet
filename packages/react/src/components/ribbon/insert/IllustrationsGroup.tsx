@@ -6,8 +6,13 @@
  */
 
 import React, { useState, useRef } from 'react';
-import type { DrawingLayer, ShapeObject, PictureObject } from '@cyber-sheet/core';
+import type { DrawingLayer } from '@cyber-sheet/core';
+import type { PictureInsertTemplate } from '../../DrawingCanvas';
 import { ShapeGallery } from './ShapeGallery';
+import { IconGallery } from './IconGallery';
+import { loadIconImage, type IconDefinition } from '../../../icons/icon-catalog';
+import { createIconInsertTemplate } from '../../../utils/createDrawingObject';
+import type { IconInsertTemplate } from '../../../utils/createDrawingObject';
 
 export interface IllustrationsGroupProps {
   drawingLayer?: DrawingLayer;
@@ -15,90 +20,77 @@ export interface IllustrationsGroupProps {
   onInsertShape?: (shapeType: string) => void;
   onInsertIcon?: () => void;
   onObjectChange?: () => void;
+  onBeginShapeInsert?: (shapeType: string) => void;
+  onBeginPictureInsert?: (template: PictureInsertTemplate) => void;
+  onBeginIconInsert?: (template: IconInsertTemplate) => void;
 }
 
 export const IllustrationsGroup: React.FC<IllustrationsGroupProps> = ({
-  drawingLayer,
   onInsertPicture,
   onInsertShape,
   onInsertIcon,
-  onObjectChange,
+  onBeginShapeInsert,
+  onBeginPictureInsert,
+  onBeginIconInsert,
 }) => {
   const [showPictureDropdown, setShowPictureDropdown] = useState(false);
   const [shapeGalleryOpen, setShapeGalleryOpen] = useState(false);
+  const [iconGalleryOpen, setIconGalleryOpen] = useState(false);
   const shapesButtonRef = useRef(null as HTMLButtonElement | null);
+  const iconsButtonRef = useRef(null as HTMLButtonElement | null);
   const fileInputRef = useRef(null as HTMLInputElement | null);
 
-  // Handle shape selection from gallery
   const handleSelectShape = (shapeType: string) => {
-    if (!drawingLayer) return;
-    
-    const shape: ShapeObject = {
-      id: `shape_${Date.now()}`,
-      type: 'shape',
-      name: shapeType,
-      shapeType: shapeType as any,
-      position: { x: 100, y: 100 },
-      size: { width: 100, height: 80 },
-      rotation: 0,
-      zIndex: drawingLayer.getAllObjects().length + 1,
-      locked: false,
-      visible: true,
-      altText: shapeType,
-      fill: { type: 'solid', color: '#4472C4', transparency: 0 },
-      line: { color: '#4472C4', width: 1, style: 'solid' },
-    };
-    
-    drawingLayer.addObject(shape);
-    onObjectChange?.();
+    setShapeGalleryOpen(false);
+    onBeginShapeInsert?.(shapeType);
     onInsertShape?.(shapeType);
   };
 
-  // Handle picture upload
+  const handleSelectIcon = async (iconDef: IconDefinition) => {
+    setIconGalleryOpen(false);
+    try {
+      const loadedImage = await loadIconImage(iconDef);
+      const template = createIconInsertTemplate(iconDef, loadedImage);
+      onBeginIconInsert?.(template);
+      onInsertIcon?.();
+    } catch {
+      const template = createIconInsertTemplate(iconDef);
+      onBeginIconInsert?.(template);
+      onInsertIcon?.();
+    }
+  };
+
   const handlePictureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !drawingLayer) return;
-    
+    if (!file) return;
+
     const reader = new FileReader();
     reader.onload = () => {
-      const picture: PictureObject = {
-        id: `pic_${Date.now()}`,
+      const template: PictureInsertTemplate = {
         type: 'picture',
         name: file.name,
         source: reader.result as string,
         sourceType: 'dataUri',
         naturalWidth: 0,
         naturalHeight: 0,
-        position: { x: 100, y: 100 },
-        size: { width: 200, height: 150 },
         rotation: 0,
-        zIndex: drawingLayer.getAllObjects().length + 1,
         locked: false,
         visible: true,
         altText: file.name,
       };
-      
-      // Load image to get natural dimensions
+
       const img = new Image();
       img.onload = () => {
-        picture.naturalWidth = img.naturalWidth;
-        picture.naturalHeight = img.naturalHeight;
-        (picture as any).loadedImage = img;
-        const maxDim = 400;
-        if (img.naturalWidth > maxDim || img.naturalHeight > maxDim) {
-          const ratio = Math.min(maxDim / img.naturalWidth, maxDim / img.naturalHeight);
-          picture.size = { width: img.naturalWidth * ratio, height: img.naturalHeight * ratio };
-        } else {
-          picture.size = { width: img.naturalWidth, height: img.naturalHeight };
-        }
-        drawingLayer.addObject(picture);
-        onObjectChange?.();
+        template.naturalWidth = img.naturalWidth;
+        template.naturalHeight = img.naturalHeight;
+        template.loadedImage = img;
+        onBeginPictureInsert?.(template);
+        onInsertPicture?.();
       };
       img.src = reader.result as string;
     };
     reader.readAsDataURL(file);
-    
-    // Reset input
+
     e.target.value = '';
   };
 
@@ -163,69 +155,6 @@ export const IllustrationsGroup: React.FC<IllustrationsGroupProps> = ({
     fontFamily: 'Segoe UI, Arial, sans-serif',
     borderBottom: '1px solid #F0F0F0',
   };
-
-  const shapeGalleryStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    background: '#FFFFFF',
-    border: '1px solid #D1D1D1',
-    borderRadius: 3,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    zIndex: 1000,
-    minWidth: 300,
-    maxHeight: 400,
-    overflow: 'auto',
-    marginTop: 2,
-    padding: 8,
-  };
-
-  const shapeCategoryStyle: React.CSSProperties = {
-    marginBottom: 12,
-  };
-
-  const shapeCategoryTitleStyle: React.CSSProperties = {
-    fontSize: 11,
-    fontWeight: 600,
-    color: '#444',
-    marginBottom: 6,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-  };
-
-  const shapeGridStyle: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(6, 1fr)',
-    gap: 4,
-  };
-
-  const shapeButtonStyle: React.CSSProperties = {
-    width: 40,
-    height: 40,
-    border: '1px solid #D1D1D1',
-    background: 'transparent',
-    cursor: 'pointer',
-    borderRadius: 3,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 20,
-  };
-
-  const basicShapes = [
-    { type: 'rectangle', icon: '▭' },
-    { type: 'oval', icon: '⭕' },
-    { type: 'triangle', icon: '△' },
-    { type: 'diamond', icon: '◇' },
-    { type: 'pentagon', icon: '⬟' },
-    { type: 'hexagon', icon: '⬢' },
-  ];
-
-  const arrows = [
-    { type: 'rightArrow', icon: '➡' },
-    { type: 'leftArrow', icon: '⬅' },
-    { type: 'upArrow', icon: '⬆' },
-    { type: 'downArrow', icon: '⬇' },
-  ];
 
   const handleButtonHover = (e: React.MouseEvent<HTMLButtonElement>, isEnter: boolean): void => {
     const btn = e.currentTarget as HTMLButtonElement;
@@ -327,19 +256,26 @@ export const IllustrationsGroup: React.FC<IllustrationsGroupProps> = ({
 
         {/* Icons */}
         <button
+          ref={iconsButtonRef}
           style={buttonStyle}
-          onClick={() => onInsertIcon?.()}
+          onClick={() => setIconGalleryOpen(true)}
           onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
           onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
         >
           <span style={iconStyle}>⭐</span>
           <span>Icons</span>
         </button>
+
+        <IconGallery
+          isOpen={iconGalleryOpen}
+          onClose={() => setIconGalleryOpen(false)}
+          onSelectIcon={handleSelectIcon}
+          triggerRef={iconsButtonRef}
+        />
       </div>
 
       <div style={labelStyle}>Illustrations</div>
 
-      {/* Hidden file input for picture upload */}
       <input
         ref={fileInputRef}
         type="file"

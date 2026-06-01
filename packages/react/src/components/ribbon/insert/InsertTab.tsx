@@ -6,7 +6,11 @@
  */
 
 import React, { useState } from 'react';
-import type { DrawingLayer, Worksheet } from '@cyber-sheet/core';
+import type { DrawingLayer, Worksheet, PictureObject } from '@cyber-sheet/core';
+import type { PictureInsertTemplate } from '../../DrawingCanvas';
+import type { IconInsertTemplate } from '../../../utils/createDrawingObject';
+import type { FormControlInsertTemplate } from '../../../utils/formControlFactory';
+import type { TextBoxInsertTemplate } from '../../../utils/textBoxFactory';
 import { ChartDialog } from '../../ChartDialog';
 import type { ChartType, ChartCreateParams } from '@cyber-sheet/core';
 
@@ -38,6 +42,11 @@ export interface InsertTabProps {
   onInsertEquation?: () => void;
   onInsertSymbol?: () => void;
   onDrawingChange?: () => void;
+  onBeginShapeInsert?: (shapeType: string) => void;
+  onBeginPictureInsert?: (template: PictureInsertTemplate) => void;
+  onBeginIconInsert?: (template: IconInsertTemplate) => void;
+  onBeginFormControlInsert?: (template: FormControlInsertTemplate) => void;
+  onBeginTextBoxInsert?: (template: TextBoxInsertTemplate) => void;
 }
 
 export const InsertTab: React.FC<InsertTabProps> = ({
@@ -58,6 +67,11 @@ export const InsertTab: React.FC<InsertTabProps> = ({
   onInsertEquation,
   onInsertSymbol,
   onDrawingChange,
+  onBeginShapeInsert,
+  onBeginPictureInsert,
+  onBeginIconInsert,
+  onBeginFormControlInsert,
+  onBeginTextBoxInsert,
 }) => {  // Chart dialog state
   const [showChartDialog, setShowChartDialog] = useState(false);
   const [selectedChartType, setSelectedChartType] = useState<ChartType>('bar');
@@ -177,26 +191,27 @@ export const InsertTab: React.FC<InsertTabProps> = ({
         onInsertShape={handleInsertShape}
         onInsertIcon={handleInsertIcon}
         onObjectChange={onDrawingChange}
+        onBeginShapeInsert={onBeginShapeInsert}
+        onBeginPictureInsert={onBeginPictureInsert}
+        onBeginIconInsert={onBeginIconInsert}
       />
 
       <div className="ribbon-tab-divider" />
 
       {/* 3. Forms */}
       <FormsGroup
-        drawingLayer={drawingLayer}
         onInsertControl={handleInsertControl}
-        onObjectChange={onDrawingChange}
+        onBeginFormControlInsert={onBeginFormControlInsert}
       />
 
       <div className="ribbon-tab-divider" />
 
       {/* 4. Text */}
       <TextGroup
-        drawingLayer={drawingLayer}
         onInsertTextBox={handleInsertTextBox}
+        onBeginTextBoxInsert={onBeginTextBoxInsert}
         onInsertHeaderFooter={onInsertHeaderFooter}
         onInsertWordArt={onInsertWordArt}
-        onObjectChange={onDrawingChange}
       />
 
       <div className="ribbon-tab-divider" />

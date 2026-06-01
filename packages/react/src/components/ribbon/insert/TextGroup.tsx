@@ -2,60 +2,31 @@
  * TextGroup.tsx
  *
  * Insert Tab - Text Group
- * Contains: Text Box, Header & Footer, WordArt, Signature Line, Object
+ * Contains: Text Box, Header & Footer, WordArt
  */
 
 import React from 'react';
-import type { DrawingLayer, TextBoxObject } from '@cyber-sheet/core';
+import { createTextBoxTemplate } from '../../../utils/textBoxFactory';
+import type { TextBoxInsertTemplate } from '../../../utils/textBoxFactory';
 
 export interface TextGroupProps {
-  drawingLayer?: DrawingLayer;
   onInsertTextBox?: () => void;
+  onBeginTextBoxInsert?: (template: TextBoxInsertTemplate) => void;
   onInsertHeaderFooter?: () => void;
   onInsertWordArt?: () => void;
-  onObjectChange?: () => void;
 }
 
 export const TextGroup: React.FC<TextGroupProps> = ({
-  drawingLayer,
   onInsertTextBox,
+  onBeginTextBoxInsert,
   onInsertHeaderFooter,
   onInsertWordArt,
-  onObjectChange,
 }) => {
-  // Handle text box insertion
-  const handleInsertTextBox = () => {
-    if (!drawingLayer) return;
-    
-    const textBox: TextBoxObject = {
-      id: `textbox_${Date.now()}`,
-      type: 'textBox',
-      name: 'Text Box',
-      text: 'Text Box',
-      position: { x: 100, y: 100 },
-      size: { width: 150, height: 60 },
-      rotation: 0,
-      zIndex: drawingLayer.getAllObjects().length + 1,
-      locked: false,
-      visible: true,
-      altText: 'Text Box',
-      textStyle: {
-        fontFamily: 'Calibri',
-        fontSize: 11,
-        color: '#000000',
-        bold: false,
-        italic: false,
-        underline: false,
-        align: 'left',
-        valign: 'top',
-      },
-      fill: { type: 'solid', color: '#FFFFFF', transparency: 0 },
-      border: { color: '#000000', width: 1, style: 'solid' },
-    };
-    drawingLayer.addObject(textBox);
-    onObjectChange?.();
+  const beginTextBoxInsert = () => {
+    onBeginTextBoxInsert?.(createTextBoxTemplate());
     onInsertTextBox?.();
   };
+
   const groupStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -112,7 +83,7 @@ export const TextGroup: React.FC<TextGroupProps> = ({
       <div style={buttonContainerStyle}>
         <button
           style={buttonStyle}
-          onClick={handleInsertTextBox}
+          onClick={beginTextBoxInsert}
           onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
           onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
         >
@@ -127,7 +98,7 @@ export const TextGroup: React.FC<TextGroupProps> = ({
           onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
         >
           <span style={iconStyle}>📄</span>
-          <span>Header &<br/>Footer</span>
+          <span>Header &<br />Footer</span>
         </button>
 
         <button

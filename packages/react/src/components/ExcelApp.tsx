@@ -8,7 +8,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { Workbook, CellComment } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
-import { CommandManager, DrawingLayer, ClipboardService, ClearCellsCommand, FormulaEngine, DropdownList, FileOperations, SetViewModeCommand, FormattingController, SetHyperlinkCommand, getDefaultHyperlinkScreenTip, SortCommand, ToggleAutoFilterCommand, ClearFilterCommand, type ViewMode, type InsertCellsMode, type DeleteCellsMode, type Address, type CellHyperlink } from '@cyber-sheet/core';
+import { CommandManager, DrawingLayer, ClipboardService, ClearCellsCommand, FormulaEngine, DropdownList, FileOperations, SetViewModeCommand, SetHeaderFooterCommand, FormattingController, SetHyperlinkCommand, getDefaultHyperlinkScreenTip, SortCommand, ToggleAutoFilterCommand, ClearFilterCommand, FormatFormControlCommand, type ViewMode, type InsertCellsMode, type DeleteCellsMode, type Address, type CellHyperlink, type FormControlObject, type HeaderFooterSettings } from '@cyber-sheet/core';
 import { loadXlsxFromArrayBuffer } from '@cyber-sheet/io-xlsx';
 import { TitleBar } from './TitleBar';
 import { RibbonTabs } from './RibbonTabs';
@@ -17,14 +17,28 @@ import { FormulaBar } from '../FormulaBar';
 import { CyberSheet } from '../CyberSheet';
 import { SheetTabs } from '../SheetTabs';
 import { StatusBar } from './StatusBar';
-import { DrawingCanvas } from './DrawingCanvas';
+import { DrawingCanvas, type DrawingCanvasHandle, type PictureInsertTemplate } from './DrawingCanvas';
+import type { IconInsertTemplate } from '../utils/createDrawingObject';
+import type { FormControlInsertTemplate } from '../utils/formControlFactory';
+import type { TextBoxInsertTemplate } from '../utils/textBoxFactory';
+import { createWordArtTemplate } from '../utils/wordArtFactory';
 import { CellEditOverlay } from './CellEditOverlay';
 import { CutRangeOverlay } from './CutRangeOverlay';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { MiniToolbar } from './MiniToolbar';
 import FormatCellsDialog, { FormattingChanges } from './dialogs/FormatCellsDialog/FormatCellsDialog';
+import { FormatControlDialog } from './dialogs/FormatControlDialog';
+import { getFormControlDefaultSize } from '../utils/formControlFactory';
+import {
+  afterFormatControlApplied,
+  buildFormControlFormatUpdates,
+  type FormControlDialogDraft,
+} from '../utils/formatControlApply';
+import { formatAddressA1 } from '../utils/parseA1Reference';
 import FindReplaceDialog from './dialogs/FindReplaceDialog';
 import { CellCommentDialog } from './dialogs/CellCommentDialog';
+import { HeaderFooterDialog } from './dialogs/HeaderFooterDialog';
+import { WordArtGalleryDialog } from './dialogs/WordArtGalleryDialog';
 import { CommentPanel } from './CommentPanel';
 import { InsertHyperlinkDialog, type InsertHyperlinkDialogResult } from './dialogs/InsertHyperlinkDialog';
 import { InsertDeleteCellsDialog } from './dialogs/InsertDeleteCellsDialog';
@@ -229,6 +243,16 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   
   // Format Cells dialog state
   const [isFormatDialogOpen, setIsFormatDialogOpen] = useState<boolean>(false);
+
+  // Format Control dialog state
+  const [formatControlObjectId, setFormatControlObjectId] = useState<string | null>(null);
+  const [formControlContextMenu, setFormControlContextMenu] = useState<{
+    objectId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [formControlCellLinkPicker, setFormControlCellLinkPicker] = useState(false);
+  const [pickedFormControlCellLink, setPickedFormControlCellLink] = useState<string | null>(null);
   
   // Find/Replace dialog state
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState<boolean>(false);
@@ -241,6 +265,8 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     address: { row: number; col: number };
     comments: CellComment[];
   } | null>(null);
+  const [headerFooterDialogOpen, setHeaderFooterDialogOpen] = useState(false);
+  const [wordArtGalleryOpen, setWordArtGalleryOpen] = useState(false);
   const [showCommentPanel, setShowCommentPanel] = useState(appConfig.showCommentPanel);
   const [hyperlinkDialog, setHyperlinkDialog] = useState<{
     address: Address;
@@ -747,6 +773,64 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
   // Create drawing layer instance
   const drawingLayer = useMemo(() => new DrawingLayer(), []);
+  const drawingCanvasRef = useRef<DrawingCanvasHandle>(null);
+
+  const handleDrawingChange = useCallback(() => {
+    renderer?.scheduleRedraw?.();
+  }, [renderer]);
+
+  const clearDrawingSelection = useCallback(() => {
+    if (drawingLayer.getSelectedIds().length === 0) return;
+    drawingLayer.deselectAll();
+  }, [drawingLayer]);
+
+  const handleBeginShapeInsert = useCallback((shapeType: string) => {
+    drawingCanvasRef.current?.startShapeInsert(shapeType);
+  }, []);
+
+  const handleBeginPictureInsert = useCallback((template: PictureInsertTemplate) => {
+    drawingCanvasRef.current?.startPictureInsert(template);
+  }, []);
+
+  const handleBeginIconInsert = useCallback((template: IconInsertTemplate) => {
+    drawingCanvasRef.current?.startIconInsert(template);
+  }, []);
+
+  const handleBeginFormControlInsert = useCallback((template: FormControlInsertTemplate) => {
+    drawingCanvasRef.current?.startFormControlInsert(template);
+  }, []);
+
+  const handleBeginTextBoxInsert = useCallback((template: TextBoxInsertTemplate) => {
+    drawingCanvasRef.current?.startTextBoxInsert(template);
+  }, []);
+
+  const handleBeginWordArtInsert = useCallback((template: TextBoxInsertTemplate) => {
+    drawingCanvasRef.current?.startWordArtInsert(template);
+  }, []);
+
+  const openFormatControlDialog = useCallback((objectId: string) => {
+    setFormControlContextMenu(null);
+    setPickedFormControlCellLink(null);
+    setFormatControlObjectId(objectId);
+  }, []);
+
+  const handleApplyFormatControl = useCallback(
+    (draft: FormControlDialogDraft) => {
+      if (!formatControlObjectId) return;
+      const updates = buildFormControlFormatUpdates(draft);
+      commandManager.execute(
+        new FormatFormControlCommand(drawingLayer, formatControlObjectId, updates),
+      );
+      afterFormatControlApplied(
+        formatControlObjectId,
+        draft,
+        drawingLayer,
+        workbook.activeSheet,
+      );
+      handleDrawingChange();
+    },
+    [formatControlObjectId, commandManager, drawingLayer, workbook, handleDrawingChange],
+  );
   
   // Create clipboard service instance
   const clipboardService = useMemo(() => new ClipboardService(), []);
@@ -886,6 +970,28 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     renderer?.setViewMode(mode);
   }, [workbook, commandManager, renderer]);
 
+  const handleInsertHeaderFooter = useCallback(() => {
+    handleViewModeChange('pageLayout');
+    setHeaderFooterDialogOpen(true);
+  }, [handleViewModeChange]);
+
+  const handleSaveHeaderFooter = useCallback((settings: HeaderFooterSettings) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet) return;
+    commandManager.execute(new SetHeaderFooterCommand(sheet, settings));
+    setHeaderFooterDialogOpen(false);
+    renderer?.scheduleRedraw?.();
+  }, [workbook, commandManager, renderer]);
+
+  const handleInsertWordArt = useCallback(() => {
+    setWordArtGalleryOpen(true);
+  }, []);
+
+  const handleWordArtPresetSelected = useCallback((presetId: string) => {
+    setWordArtGalleryOpen(false);
+    handleBeginWordArtInsert(createWordArtTemplate(presetId));
+  }, [handleBeginWordArtInsert]);
+
   const handleInsertSheet = useCallback(() => {
     const newName = createUniqueSheetName(workbook);
     workbook.addSheet(newName);
@@ -941,6 +1047,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
   // Handle selection change
   const handleSelectionChange = useCallback((sel: any) => {
+    clearDrawingSelection();
     console.log('🔄 handleSelectionChange called, sel:', sel, 'inCellEdit:', inCellEdit);
     // If in edit mode and user clicks a different cell, commit the edit first
     if (inCellEdit) {
@@ -990,7 +1097,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         setFormulaBarValue(formula || String(value));
       }
     }
-  }, [workbook, isEditingFormula, inCellEdit, renderer, appConfig]);
+  }, [workbook, isEditingFormula, inCellEdit, renderer, appConfig, clearDrawingSelection]);
   const handleFormulaSubmit = useCallback((formula: string) => {
     if (!selectedCell || !canEditCellValue(appConfig, formula)) return;
     
@@ -2203,6 +2310,27 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     };
   }, [renderer, isPickingReference]);
 
+  // Form Control dialog — cell link range picker
+  useEffect(() => {
+    if (!renderer || !formControlCellLinkPicker) return;
+
+    const sheet = renderer['sheet'];
+    if (!sheet || typeof sheet.on !== 'function') return;
+
+    const handleCellClick = (event: { type: string; event?: { address?: Address } }) => {
+      if (event.type !== 'cell-click') return;
+      const { address } = event.event ?? {};
+      if (!address) return;
+
+      setPickedFormControlCellLink(formatAddressA1(address));
+      setFormControlCellLinkPicker(false);
+      setFormatControlObjectId((id) => id);
+    };
+
+    const subscription = sheet.on(handleCellClick);
+    return () => subscription.dispose();
+  }, [renderer, formControlCellLinkPicker]);
+
   // Ctrl+Click on a hyperlinked cell opens the link (Excel behavior)
   useEffect(() => {
     if (!renderer) return;
@@ -2371,6 +2499,15 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         onInsertTable={handleInsertTable}
         formattingController={formattingController}
         onReviewCommand={handleReviewCommand}
+        worksheet={workbook.activeSheet}
+        onDrawingChange={handleDrawingChange}
+        onBeginShapeInsert={handleBeginShapeInsert}
+        onBeginPictureInsert={handleBeginPictureInsert}
+        onBeginIconInsert={handleBeginIconInsert}
+        onBeginFormControlInsert={handleBeginFormControlInsert}
+        onBeginTextBoxInsert={handleBeginTextBoxInsert}
+        onInsertHeaderFooter={handleInsertHeaderFooter}
+        onInsertWordArt={handleInsertWordArt}
       />
         </>
       )}
@@ -2458,14 +2595,20 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           style={{ width: '100%', height: '100%' }}
         />
         <DrawingCanvas
+          ref={drawingCanvasRef}
           drawingLayer={drawingLayer}
           canvasWidth={viewportWidth}
           canvasHeight={viewportHeight}
           scrollLeft={scrollLeft}
           scrollTop={scrollTop}
           zoom={zoom / 100}
+          worksheet={workbook.activeSheet}
           commandManager={commandManager}
-          onObjectChange={() => {}}
+          onObjectChange={handleDrawingChange}
+          onFormControlContextMenu={(objectId, x, y) => {
+            setFormControlContextMenu({ objectId, x, y });
+          }}
+          suspendInteraction={formControlCellLinkPicker}
         />
 
         {/* Cut Range Visual Indication */}
@@ -2804,6 +2947,76 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         />
       )}
 
+      {/* Form Control context menu */}
+      {formControlContextMenu && (
+        <ContextMenu
+          x={formControlContextMenu.x}
+          y={formControlContextMenu.y}
+          items={[
+            {
+              id: 'format-control',
+              label: 'Format Control…',
+              onClick: () => openFormatControlDialog(formControlContextMenu.objectId),
+            },
+          ]}
+          onClose={() => setFormControlContextMenu(null)}
+        />
+      )}
+
+      {/* Format Control Dialog */}
+      {formatControlObjectId && !formControlCellLinkPicker && (() => {
+        const fc = drawingLayer.getObject(formatControlObjectId) as FormControlObject | undefined;
+        if (!fc || fc.type !== 'formControl') return null;
+        return (
+          <FormatControlDialog
+            isOpen
+            control={fc}
+            drawingLayer={drawingLayer}
+            defaultSize={getFormControlDefaultSize(fc.controlType)}
+            pickedCellLink={pickedFormControlCellLink}
+            onClose={() => {
+              setFormatControlObjectId(null);
+              setPickedFormControlCellLink(null);
+            }}
+            onApply={handleApplyFormatControl}
+            onPickCellLink={() => {
+              setFormControlCellLinkPicker(true);
+              setFormatControlObjectId(formatControlObjectId);
+            }}
+          />
+        );
+      })()}
+
+      {formControlCellLinkPicker && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#fff',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            padding: '8px 16px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            zIndex: 10025,
+            fontFamily: 'Segoe UI, sans-serif',
+            fontSize: 13,
+          }}
+        >
+          Select a cell for the link, then click to confirm.
+          <button
+            type="button"
+            style={{ marginLeft: 12, padding: '4px 10px', cursor: 'pointer' }}
+            onClick={() => {
+              setFormControlCellLinkPicker(false);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Context Menu */}
       {appConfig.showContextMenu && contextMenu && (
         <ContextMenu
@@ -3021,6 +3234,22 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           onDelete={handleCommentDialogDelete}
         />
       )}
+
+      <HeaderFooterDialog
+        isOpen={headerFooterDialogOpen}
+        settings={workbook.activeSheet?.getHeaderFooter() ?? {
+          header: { left: '', center: '', right: '' },
+          footer: { left: '', center: '', right: '' },
+        }}
+        onClose={() => setHeaderFooterDialogOpen(false)}
+        onSave={handleSaveHeaderFooter}
+      />
+
+      <WordArtGalleryDialog
+        isOpen={wordArtGalleryOpen}
+        onClose={() => setWordArtGalleryOpen(false)}
+        onSelectPreset={handleWordArtPresetSelected}
+      />
 
       {hyperlinkDialog && (
         <InsertHyperlinkDialog

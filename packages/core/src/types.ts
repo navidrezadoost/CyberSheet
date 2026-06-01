@@ -553,6 +553,7 @@ export type SheetEvents =
   | { type: 'col-shown'; col: number }
   | { type: 'sheet-protection-changed'; before: SheetProtectionOptions | null; after: SheetProtectionOptions | null }
   | { type: 'freeze-panes-changed'; before: FreezeState | null; after: FreezeState | null }
+  | { type: 'header-footer-changed'; settings: import('./headerFooter').HeaderFooterSettings }
   | { type: 'cycle-detected'; cycles: import('./dag/DependencyGraph').CycleDiagnostic[] };
 
 export interface IFormulaEngine {
