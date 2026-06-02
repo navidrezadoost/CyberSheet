@@ -15,6 +15,7 @@ export {
   TextToColumnsCommand,
   GroupOutlineCommand,
   UngroupOutlineCommand,
+  AutoSumCommand,
 } from './DataCommands';
 
 export type {
@@ -22,6 +23,7 @@ export type {
   SortLevel,
   DataValidationRule,
   FilterState,
+  AutoSumPlan,
 } from './DataCommands';
 
 // View Commands

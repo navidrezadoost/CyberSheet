@@ -2316,38 +2316,12 @@ export class CanvasRenderer {
   }
 
   /**
-   * Get cell bounds in viewport coordinates
+   * Get cell bounds in viewport coordinates (includes zoom).
    */
   getCellBounds(addr: Address): { x: number; y: number; width: number; height: number } | null {
-    const { firstRow, firstCol, xOffset, yOffset } = this.visibleRange();
-    
-    // Check if cell is in visible range
-    if (addr.row < firstRow || addr.col < firstCol) return null;
-    
-    let x = xOffset;
-    let y = yOffset;
-    
-    // Calculate X position
-    for (let c = firstCol; c < addr.col; c++) {
-      x += this.sheet.getColumnWidth(c);
-    }
-    
-    // Calculate Y position
-    for (let r = firstRow; r < addr.row; r++) {
-      y += this.sheet.getRowHeight(r);
-    }
-    
-    const width = this.sheet.getColumnWidth(addr.col);
-    const height = this.sheet.getRowHeight(addr.row);
-    
-    // Check if fully visible
-    const viewport = this.getViewportSize();
-    if (x + width > this.options.headerWidth + viewport.width || 
-        y + height > this.options.headerHeight + viewport.height) {
-      return null; // Partially off-screen
-    }
-    
-    return { x, y, width, height };
+    const rect = this.rectForRange(addr.row, addr.col, addr.row, addr.col);
+    if (!rect) return null;
+    return { x: rect.x, y: rect.y, width: rect.w, height: rect.h };
   }
 
   /**

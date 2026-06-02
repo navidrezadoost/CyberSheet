@@ -30,7 +30,6 @@ import {
   unhideColumnsNearRange,
   unhideRowsNearRange,
 } from '../../utils/formatOperations';
-
 import { RibbonGroup } from './RibbonGroup';
 import { RibbonButton } from './RibbonButton';
 import { RibbonSelect } from './RibbonSelect';
@@ -70,6 +69,7 @@ export interface HomeTabProps {
   onRequestRenameSheet?: () => void;
   onFilter?: (action: 'toggle' | 'clear' | 'reapply') => void;
   formattingController?: FormattingController | null;
+  onAutoSum?: (functionType: string) => void;
 }
 
 /**
@@ -113,6 +113,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   onRequestRenameSheet,
   onFilter,
   formattingController: formattingControllerProp,
+  onAutoSum,
 }) => {
   const [showCustomSortDialog, setShowCustomSortDialog] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
@@ -734,7 +735,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         formattingController={formattingController as any}
         selectedCells={selectedAddresses}
         currentRange={range ?? undefined}
-        onAutoSum={(fn) => console.log('AutoSum:', fn)}
+        onAutoSum={onAutoSum}
         onFill={(dir) => console.log('Fill:', dir)}
         onClear={handleClear}
         onSort={handleSort}

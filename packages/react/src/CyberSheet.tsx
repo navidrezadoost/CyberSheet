@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Workbook, Worksheet, autoFill, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, SetCellComponentCommand } from '@cyber-sheet/core';
 import { ComponentRegistry, CustomCellOverlay, type CustomCellComponentRenderProps, type RegisteredCellComponent } from './customComponents';
 // Import locally to ensure dev picks up latest CanvasRenderer implementation
@@ -74,7 +74,10 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
   const containerRef = useRef(null as any);
   const rendererRef = useRef(null as any);
   const sheetRef = useRef(undefined as any);
+  const overlayHostRef = useRef<HTMLElement | null>(null);
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
   const [overlayTick, setOverlayTick] = useState(0);
   const commandManagerRef = useRef(commandManager);
   commandManagerRef.current = commandManager;
@@ -136,10 +139,17 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
   }), [workbook]);
 
   useEffect(() => {
-    if (!onSelectionChange || selections.length === 0) return;
+    if (!onSelectionChangeRef.current || selections.length === 0) return;
     const active = selections[selections.length - 1];
-    onSelectionChange(active);
-  }, [onSelectionChange, selections]);
+    onSelectionChangeRef.current(active);
+  }, [selections]);
+
+  const setContainerRef = useCallback((node: HTMLDivElement | null) => {
+    containerRef.current = node;
+    if (overlayHostRef.current === node) return;
+    overlayHostRef.current = node;
+    setOverlayHost(node);
+  }, []);
 
   // Physics state
   const velRef = useRef({ vx: 0, vy: 0 } as any);
@@ -703,10 +713,7 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
   return (
     <>
       <div
-        ref={(node) => {
-          containerRef.current = node;
-          setOverlayHost(node);
-        }}
+        ref={setContainerRef}
         style={{ position: 'relative', width: '100%', height: '100%', ...style }}
       />
       <CustomCellOverlay

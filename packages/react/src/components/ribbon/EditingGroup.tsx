@@ -360,15 +360,29 @@ export const EditingGroup: React.FC<EditingGroupProps> = ({
       {/* Row 1: AutoSum, Fill, Clear, Sort & Filter */}
       <div style={{ display: 'flex', gap: '2px' }}>
         {/* AutoSum Dropdown */}
-        <div style={{ position: 'relative' }} ref={autoSumMenuRef}>
+        <div style={{ position: 'relative', display: 'flex' }} ref={autoSumMenuRef}>
           <button
             className="cs-custom-group-button"
-            style={{ minWidth: '90px' }}
-            onClick={() => setShowAutoSumMenu(!showAutoSumMenu)}
-            title="AutoSum"
+            style={{ minWidth: '68px', borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+            onClick={() => onAutoSum?.('SUM')}
+            title="AutoSum (Alt+=)"
           >
             <span style={{ fontSize: '16px', marginRight: '4px' }}>Σ</span>
             <span>AutoSum</span>
+          </button>
+          <button
+            className="cs-custom-group-button"
+            style={{
+              minWidth: '18px',
+              padding: '0 4px',
+              borderTopLeftRadius: 0,
+              borderBottomLeftRadius: 0,
+              borderLeft: '1px solid #d0d0d0',
+            }}
+            onClick={() => setShowAutoSumMenu(!showAutoSumMenu)}
+            title="AutoSum options"
+            aria-label="AutoSum options"
+          >
             <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 

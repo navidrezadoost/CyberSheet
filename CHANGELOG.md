@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - AutoSum and Formula Editing Enhancements (June 2, 2026)
+
+**AutoSum function with intelligent range detection and formula editing improvements**
+
+#### AutoSum Function (E.1)
+- ✅ **AutoSum command** with support for SUM, AVERAGE, COUNT, MAX, MIN functions
+- ✅ **Intelligent range detection**: scans up/down/left/right for numeric data from active cell
+- ✅ Smart detection of contiguous numeric ranges separated by blank cells
+- ✅ **Undo/Redo support** via `AutoSumCommand` for all formula insertions
+- ✅ Multi-cell AutoSum via `autoSumMultipleSelection()` for selected ranges
+- ✅ Utility: `autoSum.ts` with range detection algorithms and formula generation
+
+#### Formula Editing Improvements
+- ✅ **forestula editing utilities** in new `formulaEdit.ts` module
+- ✅ Enhanced **A1 reference parsing** with `parseA1Reference.ts` improvements
+- ✅ **FormulaBar** improvements for multi-cell operations
+- ✅ Formula Engine refinements for cell reference handling
+
+#### UI and Component Updates
+- ✅ **CellEditOverlay** refactored for cleaner formula and data editing
+- ✅ **ExcelApp** improvements for formula state management
+- ✅ **Ribbon** and **EditingGroup** updates for AutoSum button integration
+- ✅ **CanvasRenderer** improvements for cell value display
+
+#### New Files
+- `packages/react/src/utils/autoSum.ts` — AutoSum range detection and planning
+- `packages/react/src/utils/formulaEdit.ts` — Formula editing utilities
+
 ### Added - Insert Tab: Illustrations, Form Controls, Text Box, Header & Footer, and WordArt (May 30, 2026)
 
 **Excel-like Insert tab drawing tools with crosshair placement, undo, inline editing, and page layout headers/footers**

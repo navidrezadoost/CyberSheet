@@ -660,3 +660,66 @@ export class UngroupOutlineCommand implements Command {
     }
   }
 }
+
+// ─── AutoSum Command ───────────────────────────────────────────────────────
+
+export interface AutoSumPlan {
+  outputCell: Address;
+  formula: string;
+}
+
+interface AutoSumCellSnapshot {
+  addr: Address;
+  formula: string;
+  value: CellValue;
+}
+
+/**
+ * AutoSumCommand: Insert SUM/AVERAGE/COUNT/MAX/MIN formulas for detected ranges.
+ */
+export class AutoSumCommand implements Command {
+  description = 'AutoSum';
+
+  private readonly snapshots: AutoSumCellSnapshot[];
+
+  constructor(
+    private worksheet: Worksheet,
+    private plans: AutoSumPlan[],
+  ) {
+    this.snapshots = plans.map((plan) => {
+      const cell = worksheet.getCell(plan.outputCell);
+      return {
+        addr: plan.outputCell,
+        formula: cell?.formula ?? '',
+        value: cell?.value ?? null,
+      };
+    });
+  }
+
+  execute(): void {
+    for (const plan of this.plans) {
+      this.worksheet.setCellFormula(plan.outputCell, plan.formula);
+    }
+    this.recalculate();
+  }
+
+  undo(): void {
+    for (const snap of this.snapshots) {
+      if (snap.formula) {
+        this.worksheet.setCellFormula(snap.addr, snap.formula, snap.value);
+      } else {
+        this.worksheet.setCellFormula(snap.addr, '');
+        this.worksheet.setCellValue(snap.addr, snap.value);
+      }
+    }
+    this.recalculate();
+  }
+
+  private recalculate(): void {
+    try {
+      this.worksheet.autoRecalculate();
+    } catch {
+      // Formula engine may not be attached in some embed configurations.
+    }
+  }
+}

@@ -35,6 +35,12 @@ import {
   type FormControlDialogDraft,
 } from '../utils/formatControlApply';
 import { formatAddressA1 } from '../utils/parseA1Reference';
+import {
+  formatSelectionAsReference,
+  isFormulaEditValue,
+  mergePointReference,
+} from '../utils/formulaEdit';
+import { executeAutoSum, type AutoSumFunction } from '../utils/autoSum';
 import FindReplaceDialog from './dialogs/FindReplaceDialog';
 import { CellCommentDialog } from './dialogs/CellCommentDialog';
 import { HeaderFooterDialog } from './dialogs/HeaderFooterDialog';
@@ -221,7 +227,8 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     cell: { row: number; col: number };
     bounds: { x: number; y: number; width: number; height: number };
     initialValue: string;
-    currentValue: string; // Track the current value being edited
+    currentValue: string;
+    cursorPosition: number;
   } | null>(null);
   
   // Debug: Log when edit mode changes
@@ -329,6 +336,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const inCellEditRef = useRef(inCellEdit);
   const isEditingFormulaRef = useRef(isEditingFormula);
   const formulaBarValueRef = useRef(formulaBarValue);
+  const formulaBarCursorRef = useRef(0);
   const isPickingReferenceRef = useRef(isPickingReference);
   const isFindReplaceOpenRef = useRef(isFindReplaceOpen);
   // Context menu selection: captured at menu open time and frozen until menu closes
@@ -768,8 +776,12 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     });
   }, [renderer, executeFilterStateCommand]);
 
-  // Create formula engine for autocomplete
+  // Create formula engine for autocomplete and formula evaluation
   const formulaEngine = useMemo(() => new FormulaEngine(), []);
+
+  useEffect(() => {
+    workbook.setFormulaEngine(formulaEngine);
+  }, [workbook, formulaEngine]);
 
   // Create drawing layer instance
   const drawingLayer = useMemo(() => new DrawingLayer(), []);
@@ -992,6 +1004,38 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     handleBeginWordArtInsert(createWordArtTemplate(presetId));
   }, [handleBeginWordArtInsert]);
 
+  const handleAutoSum = useCallback((functionType: string) => {
+    if (functionType.toLowerCase() === 'more') return;
+
+    const sheet = workbook.activeSheet;
+    if (!sheet || !selection?.start || !selection?.end) return;
+
+    const range = normalizeRange({ start: selection.start, end: selection.end });
+    const activeCell = { row: selection.start.row, col: selection.start.col };
+    const fn = functionType.toUpperCase() as AutoSumFunction;
+
+    const outputCells = executeAutoSum(commandManager, sheet, range, activeCell, fn);
+    if (outputCells.length === 0) return;
+
+    for (const addr of outputCells) {
+      renderer?.invalidateRange(addr.row, addr.col, addr.row, addr.col);
+    }
+    renderer?.redraw?.();
+
+    const target = outputCells[outputCells.length - 1];
+    setSelection({ start: target, end: target });
+    setSelectedCell(target);
+    renderer?.setSelection?.({ start: target, end: target });
+
+    const cell = sheet.getCell(target);
+    const value = cell?.value ?? '';
+    const formula = cell?.formula ?? '';
+    setCellValue(value);
+    setCellFormula(formula);
+    setFormulaBarValue(formula || String(value ?? ''));
+    setHistoryVersion((version) => version + 1);
+  }, [workbook, selection, commandManager, renderer]);
+
   const handleInsertSheet = useCallback(() => {
     const newName = createUniqueSheetName(workbook);
     workbook.addSheet(newName);
@@ -1045,47 +1089,141 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     setZoom(clampedZoom);
   }, []);
 
+  // Cancel in-cell edit
+  const cancelInCellEdit = useCallback(() => {
+    setInCellEdit(null);
+    setIsPickingReference(false);
+  }, []);
+
+  const applyEditedCellValue = useCallback((address: Address, value: string) => {
+    const sheet = workbook.activeSheet;
+    if (!sheet || !renderer) return;
+
+    if (value.startsWith('=')) {
+      sheet.setCellFormula(address, value);
+      try {
+        sheet.autoRecalculate();
+      } catch {
+        // Formula engine may not be attached.
+      }
+    } else {
+      sheet.setCellFormula(address, '');
+      sheet.setCellValue(address, value);
+    }
+
+    renderer.invalidateRange(address.row, address.col, address.row, address.col);
+    renderer.redraw?.();
+  }, [workbook, renderer]);
+
+  const syncFormulaDraft = useCallback((value: string, cursor: number) => {
+    setFormulaBarValue(value);
+    setCellFormula(value.startsWith('=') ? value : '');
+    setCellValue(value.startsWith('=') ? '' : value);
+    setIsPickingReference(isFormulaEditValue(value));
+    formulaBarCursorRef.current = cursor;
+  }, []);
+
+  const insertFormulaReference = useCallback((start: Address, end: Address) => {
+    const pickedRef = formatSelectionAsReference(start, end);
+    const pickedIsRange = start.row !== end.row || start.col !== end.col;
+
+    if (inCellEditRef.current) {
+      const edit = inCellEditRef.current;
+      const cursor = edit.cursorPosition ?? edit.currentValue.length;
+      const merged = mergePointReference(edit.currentValue, cursor, pickedRef, pickedIsRange);
+      setInCellEdit((prev) =>
+        prev
+          ? {
+              ...prev,
+              initialValue: merged.text,
+              currentValue: merged.text,
+              cursorPosition: merged.cursor,
+            }
+          : null,
+      );
+      syncFormulaDraft(merged.text, merged.cursor);
+      return;
+    }
+
+    if (isEditingFormulaRef.current) {
+      const current = formulaBarValueRef.current;
+      const cursor = formulaBarCursorRef.current ?? current.length;
+      const merged = mergePointReference(current, cursor, pickedRef, pickedIsRange);
+      syncFormulaDraft(merged.text, merged.cursor);
+    }
+  }, [syncFormulaDraft]);
+
+  const handleFormulaBarValueChange = useCallback((value: string) => {
+    setFormulaBarValue(value);
+    setCellFormula(value.startsWith('=') ? value : '');
+    setCellValue(value.startsWith('=') ? '' : value);
+    setIsPickingReference(isFormulaEditValue(value));
+    if (inCellEditRef.current) {
+      setInCellEdit((prev) =>
+        prev
+          ? {
+              ...prev,
+              initialValue: value,
+              currentValue: value,
+              cursorPosition: formulaBarCursorRef.current,
+            }
+          : null,
+      );
+    }
+  }, []);
+
+  const handleFormulaBarCursorChange = useCallback((position: number) => {
+    if (formulaBarCursorRef.current === position) return;
+    formulaBarCursorRef.current = position;
+    if (inCellEditRef.current && inCellEditRef.current.cursorPosition !== position) {
+      setInCellEdit((prev) => (prev ? { ...prev, cursorPosition: position } : null));
+    }
+  }, []);
+
   // Handle selection change
   const handleSelectionChange = useCallback((sel: any) => {
     clearDrawingSelection();
-    console.log('🔄 handleSelectionChange called, sel:', sel, 'inCellEdit:', inCellEdit);
-    // If in edit mode and user clicks a different cell, commit the edit first
+
+    if (
+      isPickingReferenceRef.current &&
+      (inCellEditRef.current || isEditingFormulaRef.current)
+    ) {
+      insertFormulaReference(sel.start, sel.end);
+      setSelection(sel);
+      return;
+    }
+
     if (inCellEdit) {
-      const isDifferentCell = sel.start.row !== inCellEdit.cell.row || sel.start.col !== inCellEdit.cell.col;
-      console.log('📝 In edit mode, isDifferentCell:', isDifferentCell);
+      const isDifferentCell =
+        sel.start.row !== inCellEdit.cell.row || sel.start.col !== inCellEdit.cell.col;
       if (isDifferentCell) {
-        console.log('💾 Committing edit before changing selection, value:', inCellEdit.currentValue);
-        // Commit the current edit with the actual typed value
-        const sheet = workbook.activeSheet;
-        const value = inCellEdit.currentValue;
-        if (sheet && renderer && canEditCellValue(appConfig, value)) {
-          const address = { row: inCellEdit.cell.row, col: inCellEdit.cell.col };
-          
-          // Update cell value/formula in worksheet
-          if (value.startsWith('=')) {
-            sheet.setCellFormula(address, value);
-          } else {
-            sheet.setCellValue(address, value);
-          }
-          
-          // Invalidate the cell
-          renderer.invalidateRange(address.row, address.col, address.row, address.col);
-          renderer.scheduleRedraw();
-        }
+        applyEditedCellValue(
+          { row: inCellEdit.cell.row, col: inCellEdit.cell.col },
+          inCellEdit.currentValue,
+        );
         setInCellEdit(null);
+        inCellEditRef.current = null;
         setIsPickingReference(false);
-        // Now proceed with selection update below
+        isPickingReferenceRef.current = false;
       } else {
-        // Same cell, stay in edit mode
         return;
       }
     }
-    
+
+    if (isEditingFormula && !isPickingReferenceRef.current) {
+      const formula = formulaBarValueRef.current;
+      const editCell = selectedCellRef.current;
+      if (editCell && canEditCellValue(appConfig, formula)) {
+        applyEditedCellValue({ row: editCell.row, col: editCell.col }, formula);
+      }
+      setIsEditingFormula(false);
+      isEditingFormulaRef.current = false;
+    }
+
     setSelection(sel);
     setSelectedCell({ row: sel.start.row, col: sel.start.col });
-    
-    // Only update cell value/formula if NOT editing (to preserve formula being typed)
-    if (!isEditingFormula) {
+
+    if (!inCellEditRef.current && !isEditingFormulaRef.current) {
       const sheet = workbook.activeSheet;
       if (sheet) {
         const address = { row: sel.start.row, col: sel.start.col };
@@ -1097,22 +1235,26 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         setFormulaBarValue(formula || String(value));
       }
     }
-  }, [workbook, isEditingFormula, inCellEdit, renderer, appConfig, clearDrawingSelection]);
+  }, [
+    workbook,
+    isEditingFormula,
+    inCellEdit,
+    appConfig,
+    clearDrawingSelection,
+    insertFormulaReference,
+    applyEditedCellValue,
+  ]);
+
   const handleFormulaSubmit = useCallback((formula: string) => {
     if (!selectedCell || !canEditCellValue(appConfig, formula)) return;
-    
-    const sheet = workbook.activeSheet;
-    if (sheet) {
-      const address = { row: selectedCell.row, col: selectedCell.col };
-      if (formula.startsWith('=')) {
-        sheet.setCellFormula(address, formula);
-      } else {
-        sheet.setCellValue(address, formula);
-      }
-    }
+
+    applyEditedCellValue({ row: selectedCell.row, col: selectedCell.col }, formula);
+    setCellFormula(formula.startsWith('=') ? formula : '');
+    setCellValue(formula.startsWith('=') ? '' : formula);
+    setFormulaBarValue(formula);
     setIsEditingFormula(false);
     setIsPickingReference(false);
-  }, [workbook, selectedCell, appConfig]);
+  }, [selectedCell, appConfig, applyEditedCellValue]);
 
   const handleFormulaEditModeChange = useCallback((editing: boolean) => {
     if (editing && !canStartCellEdit(appConfig)) return;
@@ -1122,70 +1264,44 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   // Start in-cell editing
   const startInCellEdit = useCallback((cell: { row: number; col: number }, initialValue?: string) => {
     if (!canStartCellEdit(appConfig)) return;
-    console.log('🚀 [START_IN_CELL_EDIT CALLBACK] called for', cell, 'initialValue:', initialValue);
-    console.trace('Call stack:');
     debugEdit('🚀 startInCellEdit called:', cell, 'renderer:', !!renderer);
     if (!renderer) return;
-    
+
     const bounds = renderer.getCellBounds({ row: cell.row, col: cell.col });
     debugEdit('📏 Cell bounds:', bounds);
     if (!bounds) return;
 
-    // Determine the value to edit
     let value: string;
     if (initialValue !== undefined) {
-      // If initialValue is explicitly provided (even if empty string), use it
       value = initialValue;
     } else {
-      // Otherwise, use existing cell content
       const sheet = workbook.activeSheet;
       const cellData = sheet?.getCell({ row: cell.row, col: cell.col });
       value = cellData?.formula || String(cellData?.value || '');
     }
 
-    // Make sure formula bar is not in edit mode
     setIsEditingFormula(false);
-
     setInCellEdit({
       cell,
       bounds,
       initialValue: value,
-      currentValue: value, // Initialize current value same as initial
+      currentValue: value,
+      cursorPosition: value.length,
     });
-
-    // Enable reference picking if editing a formula
-    setIsPickingReference(value.startsWith('='));
-  }, [renderer, workbook, appConfig]);
+    syncFormulaDraft(value, value.length);
+  }, [renderer, workbook, appConfig, syncFormulaDraft]);
 
   // Commit in-cell edit
   const commitInCellEdit = useCallback((value: string) => {
     if (!inCellEdit || !canEditCellValue(appConfig, value)) return;
 
-    const sheet = workbook.activeSheet;
-    if (sheet && renderer) {
-      const address = { row: inCellEdit.cell.row, col: inCellEdit.cell.col };
-      
-      // Update cell value/formula in worksheet
-      if (value.startsWith('=')) {
-        sheet.setCellFormula(address, value);
-      } else {
-        sheet.setCellValue(address, value);
-      }
-      
-      // Invalidate only the affected cell region for efficient redraw
-      if (typeof renderer.invalidateRange === 'function') {
-        renderer.invalidateRange(address.row, address.col, address.row, address.col);
-      }
-    }
+    applyEditedCellValue({ row: inCellEdit.cell.row, col: inCellEdit.cell.col }, value);
+    setCellFormula(value.startsWith('=') ? value : '');
+    setCellValue(value.startsWith('=') ? '' : value);
+    setFormulaBarValue(value);
     setInCellEdit(null);
     setIsPickingReference(false);
-  }, [inCellEdit, workbook, renderer, appConfig]);
-
-  // Cancel in-cell edit
-  const cancelInCellEdit = useCallback(() => {
-    setInCellEdit(null);
-    setIsPickingReference(false);
-  }, []);
+  }, [inCellEdit, appConfig, applyEditedCellValue]);
 
   const applyInsertDelete = useCallback((
     type: 'insert' | 'delete',
@@ -1626,8 +1742,9 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         bounds,
         initialValue: value,
         currentValue: value,
+        cursorPosition: value.length,
       });
-      setIsPickingReference(value.startsWith('='));
+      syncFormulaDraft(value, value.length);
       console.log('✅ Edit mode activated');
       
       // Reset flag after a short delay
@@ -1643,7 +1760,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       console.log('🧹 Double-click listener cleanup');
       disposable.dispose();
     };
-  }, [renderer, workbook, appConfig]);
+  }, [renderer, workbook, appConfig, syncFormulaDraft]);
 
   // Comment + hyperlink hover tooltips
   useEffect(() => {
@@ -1791,6 +1908,9 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       if (e.code === 'Escape' && inCellEdit) {
         e.preventDefault();
         setInCellEdit(null);
+        inCellEditRef.current = null;
+        setIsPickingReference(false);
+        isPickingReferenceRef.current = false;
         return;
       }
       
@@ -1913,6 +2033,22 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       if (isCtrlPhysicalKey(e, 'Digit1')) {
         e.preventDefault();
         setIsFormatDialogOpen(true);
+        return;
+      }
+
+      // Alt+= (AutoSum)
+      if (
+        !isInInput &&
+        e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.shiftKey &&
+        selection?.start &&
+        selection?.end &&
+        (e.code === 'Equal' || e.code === 'NumpadAdd')
+      ) {
+        e.preventDefault();
+        handleAutoSum('SUM');
         return;
       }
 
@@ -2210,8 +2346,9 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
             bounds,
             initialValue: value,
             currentValue: value,
+            cursorPosition: value.length,
           });
-          setIsPickingReference(value.startsWith('='));
+          syncFormulaDraft(value, value.length);
         }
         return;
       }
@@ -2252,8 +2389,9 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
             bounds,
             initialValue: typedCharacter,
             currentValue: typedCharacter,
+            cursorPosition: typedCharacter.length,
           });
-          setIsPickingReference(typedCharacter === '=');
+          syncFormulaDraft(typedCharacter, typedCharacter.length);
         }
       }
     };
@@ -2264,51 +2402,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       console.log('🧹 Keyboard handler effect cleanup - removing listener');
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [workbook, renderer, clipboardService, commandManager, onSave, openCommentEditorForAddress, openHyperlinkEditorForAddress, navigateHyperlink, recomputeHeaderFilterIcons, executeFilterStateCommand, formattingController, selectionAddresses, openInsertDeleteDialog, copySelection, cutSelection, pasteAtSelection, inCellEdit, handleInsertSheet, appConfig]);
-
-  // Handle cell click when in reference picking mode
-  useEffect(() => {
-    console.log('🎯 [CELL-CLICK HANDLER EFFECT] Running, isPickingReference:', isPickingReference);
-    if (!renderer || !isPickingReference) return;
-
-    const sheet = renderer['sheet'];
-    if (!sheet || typeof sheet.on !== 'function') return;
-
-    const handleCellClick = (event: any) => {
-      if (event.type !== 'cell-click') return;
-      console.log('📍 [CELL-CLICK HANDLER] Cell clicked in reference picking mode', event.event?.address);
-      const { address } = event.event;
-      if (!address) return;
-      
-      // Convert row/col to Excel-style reference (e.g., A1, B2)
-      const colLetter = String.fromCharCode(65 + address.col);
-      const rowNumber = address.row + 1;
-      const cellRef = `${colLetter}${rowNumber}`;
-      
-      // Insert cell reference into formula
-      if (isEditingFormulaRef.current) {
-        // Update formula bar value with appended reference
-        setCellFormula(formulaBarValueRef.current + cellRef);
-      } else if (inCellEditRef.current) {
-        // Insert into in-cell editor by updating the initial value
-        const newValue = inCellEditRef.current.initialValue + cellRef;
-        setInCellEdit(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            initialValue: newValue,
-            currentValue: newValue,
-          };
-        });
-      }
-    };
-
-    const subscription = sheet.on(handleCellClick);
-
-    return () => {
-      subscription.dispose();
-    };
-  }, [renderer, isPickingReference]);
+  }, [workbook, renderer, clipboardService, commandManager, onSave, openCommentEditorForAddress, openHyperlinkEditorForAddress, navigateHyperlink, recomputeHeaderFilterIcons, executeFilterStateCommand, formattingController, selectionAddresses, openInsertDeleteDialog, copySelection, cutSelection, pasteAtSelection, handleInsertSheet, handleAutoSum, appConfig, syncFormulaDraft]);
 
   // Form Control dialog — cell link range picker
   useEffect(() => {
@@ -2508,6 +2602,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         onBeginTextBoxInsert={handleBeginTextBoxInsert}
         onInsertHeaderFooter={handleInsertHeaderFooter}
         onInsertWordArt={handleInsertWordArt}
+        onAutoSum={handleAutoSum}
       />
         </>
       )}
@@ -2519,10 +2614,12 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           cellValue={cellValue}
           cellFormula={cellFormula}
           onFormulaSubmit={handleFormulaSubmit}
-          onValueChange={setFormulaBarValue}
+          onValueChange={handleFormulaBarValueChange}
+          onCursorChange={handleFormulaBarCursorChange}
           isEditing={isEditingFormula}
           onEditModeChange={handleFormulaEditModeChange}
           onReferencePickingChange={setIsPickingReference}
+          isPickingReference={isPickingReference}
           functionRegistry={formulaEngine.functions}
         />
       )}
@@ -2642,24 +2739,44 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
                 e.stopPropagation();
                 // Get the current value from the input before committing
                 const inputElement = e.currentTarget.querySelector('input');
-                const currentValue = inputElement?.value || inCellEdit.initialValue;
+                const currentValue = inputElement?.value || inCellEdit.currentValue;
                 commitInCellEdit(currentValue);
               }
             }}
           >
             <CellEditOverlay
               cell={inCellEdit.cell}
-              initialValue={inCellEdit.initialValue}
+              value={inCellEdit.currentValue}
               bounds={inCellEdit.bounds}
+              cursorPosition={inCellEdit.cursorPosition}
               onCommit={commitInCellEdit}
               onCancel={cancelInCellEdit}
               onValueChange={(newValue) => {
-                // Track the current value as user types
-                setInCellEdit(prev => prev ? { ...prev, currentValue: newValue } : null);
+                const cursor = formulaBarCursorRef.current;
+                setInCellEdit((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        currentValue: newValue,
+                        initialValue: newValue,
+                        cursorPosition: cursor,
+                      }
+                    : null,
+                );
+                syncFormulaDraft(newValue, cursor);
+              }}
+              onCursorChange={(position) => {
+                if (formulaBarCursorRef.current === position) return;
+                formulaBarCursorRef.current = position;
+                setInCellEdit((prev) =>
+                  prev && prev.cursorPosition !== position
+                    ? { ...prev, cursorPosition: position }
+                    : prev,
+                );
               }}
               isPickingReference={isPickingReference}
               onReferencePickingChange={setIsPickingReference}
-              zoom={zoom / 100}
+              fontSize={cyberSheetConfig.fonts.defaultSize}
             />
           </div>
         )}

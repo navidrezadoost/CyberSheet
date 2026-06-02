@@ -1304,7 +1304,7 @@ export class FormulaEngine {
 
   /**
    * Parses cell reference (e.g., "A1" -> {row: 1, col: 1})
-   * Returns 1-based Address per type contract
+   * Returns 1-based Address per worksheet contract.
    */
   private parseCellReference(ref: string): Address {
     const match = ref.match(/^([A-Z]+)(\d+)$/i);
@@ -1317,11 +1317,8 @@ export class FormulaEngine {
     for (let i = 0; i < colStr.length; i++) {
       col = col * 26 + (colStr.charCodeAt(i) - 65 + 1);
     }
-    // Return 0-based coordinates (A1 = row 0, col 0)
-    const row = parseInt(rowStr, 10) - 1; // Excel rows are 1-based, internal is 0-based
-    col = col - 1; // Excel cols are 1-based (A=1), internal is 0-based (A=0)
 
-    return { row, col };
+    return { row: parseInt(rowStr, 10), col };
   }
 
   /**

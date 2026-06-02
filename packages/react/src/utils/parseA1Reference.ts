@@ -1,5 +1,12 @@
 import type { Address } from '@cyber-sheet/core';
 
+/** Format a Range as an A1 reference (e.g. `B2:D5`). */
+export function formatRangeA1(range: { start: Address; end: Address }): string {
+  const start = formatAddressA1(range.start);
+  const end = formatAddressA1(range.end);
+  return start === end ? start : `${start}:${end}`;
+}
+
 /** Parse an A1-style reference (e.g. `$A$1`, `B5`) to a 1-based Address. */
 export function parseA1Reference(ref: string): Address | null {
   const match = ref.replace(/\$/g, '').trim().match(/^([A-Za-z]+)(\d+)$/);

@@ -27,6 +27,10 @@ export interface FormulaBarProps {
   onEditModeChange: (editing: boolean) => void;
   /** Callback when reference picking mode changes  */
   onReferencePickingChange?: (picking: boolean) => void;
+  /** Whether the user is picking cell references for a formula */
+  isPickingReference?: boolean;
+  /** Cursor position in the formula input */
+  onCursorChange?: (position: number) => void;
   /** Optional validation error message */
   validationError?: string;
   /** Callback when user navigates to a cell via name box */
@@ -55,6 +59,8 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   isEditing,
   onEditModeChange,
   onReferencePickingChange,
+  onCursorChange,
+  isPickingReference = false,
   validationError,
   onNavigateToCell,
   onInsertFunction,
@@ -79,14 +85,14 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     
     if (!isEditing) {
       setInputValue(newValue);
-    } else if (isEditing && cellFormula && cellFormula !== inputValue) {
+    } else if (isEditing && newValue !== inputValue) {
       // Update during editing if formula changed externally (cell reference picking)
-      setInputValue(cellFormula);
-      // Move cursor to end
+      setInputValue(newValue);
+      const len = newValue.length;
+      setCursorPosition(len);
       if (inputRef.current) {
         setTimeout(() => {
           if (inputRef.current) {
-            const len = inputRef.current.value.length;
             inputRef.current.selectionStart = len;
             inputRef.current.selectionEnd = len;
           }
@@ -112,6 +118,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     
     // Update cursor position
     setCursorPosition(e.target.selectionStart || 0);
+    onCursorChange?.(e.target.selectionStart || 0);
     
     // Enable reference picking mode if typing a formula
     const isFormula = value.startsWith('=');
@@ -199,9 +206,10 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   };
 
   const handleInputClick = () => {
-    // Update cursor position and show suggestions if typing a formula
     if (inputRef.current && inputValue.startsWith('=')) {
-      setCursorPosition(inputRef.current.selectionStart || 0);
+      const pos = inputRef.current.selectionStart || 0;
+      setCursorPosition(pos);
+      onCursorChange?.(pos);
       setShowSuggestions(true);
       // Update panel position
       if (containerRef.current) {
@@ -215,6 +223,11 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     // Don't blur if clicking on suggestions dropdown
     const relatedTarget = e.relatedTarget as HTMLElement;
     if (relatedTarget && relatedTarget.closest('.formula-suggestions')) {
+      return;
+    }
+
+    // Keep editing while picking cell references on the grid
+    if (isPickingReference) {
       return;
     }
     
@@ -554,11 +567,14 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
         <input
           ref={inputRef}
           type="text"
+          className="formula-bar-input"
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={handleInputFocus}
           onClick={handleInputClick}
+          onKeyUp={() => onCursorChange?.(inputRef.current?.selectionStart || 0)}
+          onSelect={() => onCursorChange?.(inputRef.current?.selectionStart || 0)}
           onBlur={handleInputBlur}
           placeholder="Type = to start a formula (e.g., =SUM(A1:A10), =AVERAGE(B1:B5), =A1+B1*2)"
           style={{ ...inputStyles, width: '100%' }}

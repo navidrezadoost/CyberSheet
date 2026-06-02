@@ -49,6 +49,7 @@ export interface RibbonProps {
   onBeginTextBoxInsert?: (template: TextBoxInsertTemplate) => void;
   onInsertHeaderFooter?: () => void;
   onInsertWordArt?: () => void;
+  onAutoSum?: (functionType: string) => void;
 }
 
 /**
@@ -103,6 +104,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
   onBeginTextBoxInsert,
   onInsertHeaderFooter,
   onInsertWordArt,
+  onAutoSum,
 }) => {
   // Set up global keyboard shortcuts (single entry point)
   useKeyboardShortcuts({
@@ -129,6 +131,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
           onRequestRenameSheet={onRequestRenameSheet}
           onFilter={onFilter}
           formattingController={formattingController}
+          onAutoSum={onAutoSum}
         />
       )}
       
@@ -166,7 +169,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
       {activeTab === 'Formulas' && (
         <FormulasTab 
           onInsertFunction={() => console.log('Insert function')}
-          onAutoSum={(type) => console.log('AutoSum:', type)}
+          onAutoSum={onAutoSum}
           onSelectFunction={(category, fn) => console.log('Function:', category, fn)}
           onNameManager={() => console.log('Name manager')}
           onDefineName={() => console.log('Define name')}
