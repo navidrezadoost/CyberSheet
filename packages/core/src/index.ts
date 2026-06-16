@@ -69,5 +69,13 @@ export * from './providers/HttpObservability';
 export * from './providers/AlphaVantageDriver';
 export * from './providers/MetricsCollector';
 
+// Worker infrastructure
+export * from './worker/EngineWorkerProtocol';
+export * from './worker/WorkerEngineProxy';
+export * from './worker/EngineWorkerHost';
+export * from './worker/FormulaWorkerProtocol';
+export * from './worker/FormulaWorkerProxy';
+export * from './worker/FormulaWorkerHost';
+
 // General Search API (Phase 1: Core Search)
 export * from './types/search-types';

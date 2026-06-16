@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 8: Industrial-Scale Storage, Lazy Formula Evaluation, and Worker Rendering (June 16, 2026)
+
+**Columnar cell storage, viewport-driven formula recalculation, and Web Worker formula batches**
+
+#### Phase 8.1 — Columnar Cell Store
+- Added `ColumnarCellStore` behind the `ICellStore` boundary for sparse, column-oriented worksheet storage.
+- Wired `Worksheet` and snapshot loading to use the new storage foundation.
+- Added focused storage tests for set/get/delete, sparse iteration, and snapshot restore behavior.
+
+#### Phase 8.2 — Lazy DAG Evaluation
+- Added dirty-cell querying and lazy `evaluateIfNeeded()` / `evaluateBatch()` APIs on `Worksheet`.
+- Added DAG subset evaluation so visible dirty cells and their dirty prerequisites recalculate while off-screen dependents remain dirty.
+- Updated canvas rendering to request visible formula cells before drawing.
+
+#### Phase 8.3 — Formula Worker and Renderer Integration
+- Added formula worker protocol, host, proxy, and worker entrypoint with transferable `Float64Array` result batches.
+- Wired the React app shell and canvas renderer to lazily create a formula worker, batch visible dirty cells, and fall back to main-thread evaluation for small batches or worker errors.
+- Added focused tests for storage, lazy evaluation, worker communication, and renderer worker batching.
+
 ### Added - AutoSum and Formula Editing Enhancements (June 2, 2026)
 
 **AutoSum function with intelligent range detection and formula editing improvements**

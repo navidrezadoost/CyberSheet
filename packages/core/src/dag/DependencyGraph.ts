@@ -532,9 +532,96 @@ export class DependencyGraph {
     return { order, cycleNodes };
   }
 
+  /**
+   * Compute an evaluation order for only the requested dirty cells and any
+   * dirty formula predecessors they need.
+   *
+   * This is the lazy-evaluation boundary used by renderers: off-screen dirty
+   * dependents remain in dirtySet, while visible dirty cells and their dirty
+   * prerequisites are evaluated in dependency order.
+   */
+  getEvalOrderFor(requested: Iterable<NodeKey>): { order: NodeKey[]; cycleNodes: Set<NodeKey>; selected: Set<NodeKey> } {
+    const selected = new Set<NodeKey>();
+    const stack: NodeKey[] = [];
+
+    for (const node of requested) {
+      if (this.dirtySet.has(node) && !selected.has(node)) {
+        selected.add(node);
+        stack.push(node);
+      }
+    }
+
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      const preds = this.predecessors.get(node);
+      if (!preds) continue;
+      for (const pred of preds) {
+        if (this.dirtySet.has(pred) && !selected.has(pred)) {
+          selected.add(pred);
+          stack.push(pred);
+        }
+      }
+    }
+
+    if (selected.size === 0) {
+      return { order: [], cycleNodes: new Set(), selected };
+    }
+
+    const inDegree = new Map<NodeKey, number>();
+    for (const node of selected) inDegree.set(node, 0);
+    for (const node of selected) {
+      const sucSet = this.successors.get(node);
+      if (!sucSet) continue;
+      for (const suc of sucSet) {
+        if (selected.has(suc)) {
+          inDegree.set(suc, (inDegree.get(suc) ?? 0) + 1);
+        }
+      }
+    }
+
+    const queue: NodeKey[] = [];
+    for (const [node, deg] of inDegree) {
+      if (deg === 0) queue.push(node);
+    }
+
+    const order: NodeKey[] = [];
+    const inOrder = new Set<NodeKey>();
+    let head = 0;
+    while (head < queue.length) {
+      const node = queue[head++];
+      order.push(node);
+      inOrder.add(node);
+      const sucSet = this.successors.get(node);
+      if (!sucSet) continue;
+      for (const suc of sucSet) {
+        if (!selected.has(suc)) continue;
+        const newDeg = (inDegree.get(suc) ?? 0) - 1;
+        inDegree.set(suc, newDeg);
+        if (newDeg === 0) queue.push(suc);
+      }
+    }
+
+    const cycleNodes = new Set<NodeKey>();
+    for (const node of selected) {
+      if (!inOrder.has(node)) cycleNodes.add(node);
+    }
+
+    return { order, cycleNodes, selected };
+  }
+
   /** Clear the dirty set after evaluation completes. */
   clearDirty(): void {
     this.dirtySet.clear();
+  }
+
+  /** Clear selected nodes from the dirty set after a lazy evaluation pass. */
+  clearDirtyNodes(nodes: Iterable<NodeKey>): void {
+    for (const node of nodes) this.dirtySet.delete(node);
+  }
+
+  /** True if a node is currently dirty. */
+  isDirty(node: NodeKey): boolean {
+    return this.dirtySet.has(node);
   }
 
   // ── Cycle detection — Iterative Tarjan SCC (CLRS §22.5) ─────────────────
@@ -866,6 +953,48 @@ export class RecalcCoordinator {
 
     this.graph.clearDirty();
     return { evaluated: order.length, cycles: cycleDiags };
+  }
+
+  /**
+   * Evaluate only the requested dirty cells and their dirty prerequisites.
+   * Other dirty cells remain dirty for a later viewport/query.
+   */
+  recalcSubset(requested: Iterable<NodeKey>, evaluate: EvalFn): RecalcResult {
+    if (this.graph.dirtySet.size === 0) return { evaluated: 0, cycles: [] };
+
+    const { order, cycleNodes } = this.graph.getEvalOrderFor(requested);
+
+    for (const key of order) {
+      evaluate(key);
+    }
+
+    const cycleDiags: CycleDiagnostic[] = [];
+    if (cycleNodes.size > 0) {
+      const sccs = this.graph.findCycles();
+      for (const scc of sccs) {
+        const selectedCycle = scc.some(key => cycleNodes.has(key));
+        if (!selectedCycle) continue;
+        const cells = scc.map(k => unpackKey(k));
+        cycleDiags.push({
+          cycle: scc,
+          cells,
+          message: `Circular reference: ${cells.map(a => `R${a.row}C${a.col}`).join(' → ')}`,
+        });
+      }
+    }
+
+    this.graph.clearDirtyNodes(order);
+    return { evaluated: order.length, cycles: cycleDiags };
+  }
+
+  /** True if a packed node is currently dirty. */
+  isDirty(key: NodeKey): boolean {
+    return this.graph.isDirty(key);
+  }
+
+  /** Clear specific dirty keys after external/off-thread evaluation. */
+  clearDirtyKeys(keys: Iterable<NodeKey>): void {
+    this.graph.clearDirtyNodes(keys);
   }
 
   // ── Volatile registration (Phase 5) ─────────────────────────────────────

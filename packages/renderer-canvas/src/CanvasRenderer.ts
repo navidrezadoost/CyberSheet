@@ -1,4 +1,4 @@
-import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset, isHyperlinkVisited, HYPERLINK_COLOR, HYPERLINK_VISITED_COLOR, ConditionalFormattingEngine, type ConditionalFormattingRule, type ConditionalFormattingResult, type DataBarRender, type IconRender, renderIconOnCanvas, expandHeaderFooterText, sectionHasContent, type HeaderFooterSection } from '@cyber-sheet/core';
+import { Worksheet, Address, CellStyle, CellEvent, SheetEvents, resolveExcelColor, ExcelColorSpec, Emitter, assertInternedStyle, computeVerticalOffset, isHyperlinkVisited, HYPERLINK_COLOR, HYPERLINK_VISITED_COLOR, ConditionalFormattingEngine, type ConditionalFormattingRule, type ConditionalFormattingResult, type DataBarRender, type IconRender, renderIconOnCanvas, expandHeaderFooterText, sectionHasContent, type HeaderFooterSection, type CellValue } from '@cyber-sheet/core';
 import { TextMeasureCache } from './TextMeasureCache';
 import { Theme, ExcelLightTheme, mergeTheme, ThemePresetName, resolveThemePreset } from './Theme';
 import { FormatCache } from './FormatCache';
@@ -30,6 +30,16 @@ export type CanvasRendererOptions = {
   };
   onRequestColumnFilterMenu?: (info: { col: number; anchor: { x: number; y: number };
     values: Array<{ value: string; count: number }>; apply: (selected: string[]) => void; clear: () => void; }) => void;
+  formulaWorker?: FormulaWorkerBridge;
+  formulaWorkerFactory?: () => FormulaWorkerBridge;
+  formulaWorkerThreshold?: number;
+};
+
+export type FormulaWorkerBridge = {
+  setCellValue(row: number, col: number, value: CellValue): Promise<void>;
+  setCellFormula(row: number, col: number, formula: string, displayValue?: CellValue): Promise<void>;
+  evaluateBatch(addresses: Address[]): Promise<{ values: Float64Array; evaluated: number; hasCycles: boolean }>;
+  terminate?: () => void;
 };
 
 export type RenderStage = 'background' | 'grid' | 'headers' | 'cells' | 'selection' | 'overlays' | 'after';
@@ -91,6 +101,8 @@ export class CanvasRenderer {
   private gridLinesCanvas: HTMLCanvasElement | null = null; // Static gridlines rendered once
   private gridLinesNeedRedraw = true; // Flag to redraw gridlines on scroll/resize
   private viewMode: ViewMode = 'normal';
+  private readonly workerPendingCells = new Set<string>();
+  private formulaWorker?: FormulaWorkerBridge;
   
   // Distinct value cache per column for filter menus
 
@@ -149,7 +161,11 @@ export class CanvasRenderer {
       debug: options.debug ?? false,
       onRender: options.onRender,
       locale: options.locale ?? undefined,
+      formulaWorker: options.formulaWorker,
+      formulaWorkerFactory: options.formulaWorkerFactory,
+      formulaWorkerThreshold: options.formulaWorkerThreshold ?? 10,
     } as Required<CanvasRendererOptions>;
+    this.formulaWorker = options.formulaWorker;
     this.theme = mergeTheme(ExcelLightTheme, this.options.theme);
     this.canvas = document.createElement('canvas');
     const ctx = this.canvas.getContext('2d');
@@ -197,6 +213,9 @@ export class CanvasRenderer {
       } else if (t === 'header-footer-changed') {
         this.scheduleRedraw();
       }
+      if (t === 'cell-changed') {
+        this.syncFormulaWorkerCell((ev as any).address, (ev as any).cell);
+      }
     });
     this.redraw();
   }
@@ -209,6 +228,10 @@ export class CanvasRenderer {
     }
     this.resizeObserver?.disconnect();
     this.removeEventListeners();
+    if (this.formulaWorker && this.formulaWorker !== this.options.formulaWorker) {
+      this.formulaWorker.terminate?.();
+      this.formulaWorker = undefined;
+    }
     this.canvas.remove();
   }
 
@@ -785,9 +808,99 @@ export class CanvasRenderer {
     return { firstRow, firstCol: col, xOffset: x, yOffset: y, firstRowIndex: rowIndex };
   }
 
+  private getVisibleCellAddresses(): Address[] {
+    const addresses: Address[] = [];
+    const viewport = this.getViewportSize();
+    const width = viewport.width + this.options.headerWidth;
+    const height = viewport.height + this.options.headerHeight;
+    const visRows = this.getVisibleRows();
+    const { firstCol, xOffset, yOffset, firstRowIndex } = this.visibleRange();
+
+    let y = yOffset;
+    let rowIndex = firstRowIndex ?? 0;
+    while (y < height && rowIndex < visRows.length) {
+      const row = visRows[rowIndex];
+      let x = xOffset;
+      let col = firstCol;
+      while (x < width && col <= this.sheet.colCount) {
+        addresses.push({ row, col });
+        x += this.sheet.getColumnWidth(col) * this.zoom;
+        col++;
+      }
+      y += this.sheet.getRowHeight(row) * this.zoom;
+      rowIndex++;
+    }
+
+    return addresses;
+  }
+
+  private evaluateVisibleFormulaCells(): void {
+    const visibleAddresses = this.getVisibleCellAddresses();
+    const isDirty = (this.sheet as any).isDirty;
+    const dirtyAddresses = typeof isDirty === 'function'
+      ? visibleAddresses.filter(addr => isDirty.call(this.sheet, addr))
+      : visibleAddresses;
+    if (dirtyAddresses.length === 0) return;
+
+    const worker = this.getFormulaWorker(true);
+    const threshold = this.options.formulaWorkerThreshold;
+    if (!worker || dirtyAddresses.length < threshold) {
+      const evaluateBatch = (this.sheet as any).evaluateBatch;
+      if (typeof evaluateBatch === 'function') evaluateBatch.call(this.sheet, dirtyAddresses);
+      return;
+    }
+
+    const pending = dirtyAddresses.filter(addr => {
+      const key = `${addr.row}:${addr.col}`;
+      if (this.workerPendingCells.has(key)) return false;
+      this.workerPendingCells.add(key);
+      return true;
+    });
+    if (pending.length === 0) return;
+
+    worker.evaluateBatch(pending).then(result => {
+      const applyFormulaResults = (this.sheet as any).applyFormulaResults;
+      if (typeof applyFormulaResults === 'function') {
+        applyFormulaResults.call(this.sheet, pending, result.values);
+      }
+    }).catch(error => {
+      console.warn('Formula worker batch failed; falling back to main-thread evaluation.', error);
+      const evaluateBatch = (this.sheet as any).evaluateBatch;
+      if (typeof evaluateBatch === 'function') evaluateBatch.call(this.sheet, pending);
+    }).finally(() => {
+      for (const addr of pending) this.workerPendingCells.delete(`${addr.row}:${addr.col}`);
+      this.scheduleRedraw();
+    });
+  }
+
+  private syncFormulaWorkerCell(addr: Address, cell: { value?: unknown; formula?: string }): void {
+    const worker = this.getFormulaWorker(!!cell.formula);
+    if (!worker) return;
+    if (cell.formula) {
+      worker.setCellFormula(addr.row, addr.col, cell.formula, typeof cell.value === 'number' || typeof cell.value === 'string' || typeof cell.value === 'boolean' || cell.value === null ? cell.value : undefined).catch(() => {});
+    } else {
+      const value = typeof cell.value === 'number' || typeof cell.value === 'string' || typeof cell.value === 'boolean' || cell.value === null ? cell.value : null;
+      worker.setCellValue(addr.row, addr.col, value).catch(() => {});
+    }
+  }
+
+  private getFormulaWorker(create: boolean): FormulaWorkerBridge | undefined {
+    if (this.formulaWorker) return this.formulaWorker;
+    if (!create) return undefined;
+    const factory = this.options.formulaWorkerFactory;
+    if (typeof factory !== 'function') return undefined;
+    try {
+      this.formulaWorker = factory();
+    } catch (error) {
+      console.warn('Failed to create formula worker; using main-thread formula evaluation.', error);
+    }
+    return this.formulaWorker;
+  }
+
   redraw() {
     console.log('🎨 [CanvasRenderer] redraw() called, dirty rect:', this.dirty, 'dirtyCells:', this.dirtyCells.size);
     const t0 = performance.now();
+    this.evaluateVisibleFormulaCells();
     
     // OPTIMIZATION: Dirty-cell-only rendering
     // If gridlines don't need redraw and we have a small set of dirty cells,

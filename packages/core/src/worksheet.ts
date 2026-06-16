@@ -13,7 +13,7 @@ import {
   styleMatchesFormat,
 } from './search-engine';
 import type { ICellStore } from './storage/ICellStore';
-import { CellStoreV1 } from './storage/CellStoreV1';
+import { ColumnarCellStore } from './storage/ColumnarCellStore';
 import type { IMergeStore } from './storage/MergeStore';
 import { MergeStoreV1, MergeConflictError } from './storage/MergeStore';
 import type { IVisibilityStore } from './storage/VisibilityStore';
@@ -25,6 +25,7 @@ import {
   type RecalcResult,
   type IterativeRecalcResult,
   type RecalcIterationPolicy,
+  packKey,
   unpackKey,
 } from './dag/DependencyGraph';
 import { FORMAT_VERSION, type WorksheetSnapshot } from './persistence/SnapshotCodec';
@@ -38,7 +39,7 @@ export type { WorksheetSnapshot } from './persistence/SnapshotCodec';
 export class Worksheet {
   readonly name: string;
   /** Cell store — ICellStore boundary; swap implementation without touching any other Worksheet code. */
-  private cells: ICellStore = new CellStoreV1();
+  private cells: ICellStore = new ColumnarCellStore();
   private colWidths = new Map<number, number>(); // px
   private rowHeights = new Map<number, number>(); // px
   /** Data validation rules, keyed by "row:col". */
@@ -951,6 +952,11 @@ export class Worksheet {
     return this.recalcCoordinator.dirtyCount;
   }
 
+  /** Return true when the given cell is currently awaiting recalculation. */
+  isDirty(addr: Address): boolean {
+    return this.recalcCoordinator.isDirty(packKey(addr.row, addr.col));
+  }
+
   /**
    * Run a full recalculation pass in topological order.
    *
@@ -993,33 +999,94 @@ export class Worksheet {
     }
 
     return this.recalc((nodeKey) => {
-      const { row, col } = unpackKey(nodeKey);
-      const cell = this.cells.get(row, col);
-      
-      if (!cell?.formula) return; // Skip non-formula cells
-      
-      try {
-        const result = (this.formulaEngine as any).evaluate(cell.formula, {
-          worksheet: this as any,
-          currentCell: { row, col },
-        });
-        
-        // Update cell value with evaluated result
-        // Handle Error, Array, and primitive types
-        if (result && typeof result === 'object' && 'message' in result && result instanceof Error) {
-          cell.value = result.message; // Store error as string
-        } else if (Array.isArray(result)) {
-          // For spilled arrays, store the array (SpillEngine will handle display)
-          cell.value = result as any;
-        } else {
-          cell.value = result as CellValue;
-        }
-      } catch (error) {
-        // Evaluation error - store as #ERROR!
-        cell.value = '#ERROR!';
-        console.error(`Formula evaluation error at ${row}:${col}:`, error);
-      }
+      this.evaluateFormulaNode(nodeKey);
     });
+  }
+
+  /**
+   * Lazily evaluate a dirty formula cell only when its value is requested.
+   *
+   * If the cell is clean, returns the cached value without touching the DAG.
+   * If the cell is dirty, evaluates the dirty subset needed for this address
+   * and leaves unrelated off-screen dirty cells untouched.
+   */
+  evaluateIfNeeded(addr: Address): Cell['value'] | undefined {
+    if (!this.formulaEngine) return this.getCellValue(addr);
+    const key = packKey(addr.row, addr.col);
+    if (!this.recalcCoordinator.isDirty(key)) return this.getCellValue(addr);
+
+    const result = this.recalcCoordinator.recalcSubset([key], nodeKey => {
+      this.evaluateFormulaNode(nodeKey);
+    });
+    if (result.cycles.length > 0) {
+      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+    }
+    return this.getCellValue(addr);
+  }
+
+  /**
+   * Lazily evaluate all requested dirty cells as a single topologically sorted
+   * batch. Intended for renderer viewport reads and scroll updates.
+   */
+  evaluateBatch(addresses: Address[]): RecalcResult {
+    if (!this.formulaEngine || addresses.length === 0) {
+      return { evaluated: 0, cycles: [] };
+    }
+
+    const keys = addresses.map(addr => packKey(addr.row, addr.col));
+    const result = this.recalcCoordinator.recalcSubset(keys, nodeKey => {
+      this.evaluateFormulaNode(nodeKey);
+    });
+    if (result.cycles.length > 0) {
+      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+    }
+    return result;
+  }
+
+  /**
+   * Apply formula results produced off-thread without firing cell mutation
+   * events or marking the formula cells dirty again.
+   */
+  applyFormulaResults(addresses: Address[], values: Float64Array): void {
+    const clearKeys: number[] = [];
+    const count = Math.min(addresses.length, values.length);
+    for (let i = 0; i < count; i++) {
+      const value = values[i];
+      if (Number.isNaN(value)) continue;
+      const addr = addresses[i];
+      const cell = this.cells.get(addr.row, addr.col);
+      if (!cell?.formula) continue;
+      cell.value = value;
+      clearKeys.push(packKey(addr.row, addr.col));
+    }
+    this.recalcCoordinator.clearDirtyKeys(clearKeys);
+  }
+
+  private evaluateFormulaNode(nodeKey: number): CellValue {
+    const { row, col } = unpackKey(nodeKey);
+    const cell = this.cells.get(row, col);
+
+    if (!cell?.formula) return cell?.value as CellValue ?? null;
+
+    try {
+      const result = (this.formulaEngine as any).evaluate(cell.formula, {
+        worksheet: this as any,
+        currentCell: { row, col },
+      });
+
+      if (result && typeof result === 'object' && 'message' in result && result instanceof Error) {
+        cell.value = result.message;
+      } else if (Array.isArray(result)) {
+        cell.value = result as any;
+      } else {
+        cell.value = result as CellValue;
+      }
+    } catch (error) {
+      cell.value = '#ERROR!';
+      console.error(`Formula evaluation error at ${row}:${col}:`, error);
+    }
+
+    return cell.value as CellValue;
   }
 
   /**
@@ -2105,7 +2172,7 @@ export class Worksheet {
    */
   applySnapshot(snapshot: WorksheetSnapshot): void {
     // ── Reset all stores ──────────────────────────────────────────────────
-    this.cells          = new CellStoreV1();
+    this.cells          = new ColumnarCellStore();
     this.mergeStore     = new MergeStoreV1();
     this.visibilityStore = new VisibilityStoreV1();
     this.dag.clearAll();

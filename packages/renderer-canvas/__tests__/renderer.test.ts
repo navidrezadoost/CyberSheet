@@ -76,4 +76,40 @@ describe('CanvasRenderer', () => {
     expect(sheet.getRowHeight(2)).toBe(startHeight + 20);
     expect(sheet.getRowHeight(sheet.rowCount)).toBe(startHeight + 20);
   });
+
+  it('uses formula worker batches for large visible dirty sets', async () => {
+    const container = document.createElement('div');
+    const workbook = new Workbook();
+    const sheet = workbook.addSheet('Sheet1');
+    sheet.setCellValue({ row: 1, col: 1 }, 5);
+    sheet.setCellFormula({ row: 1, col: 2 }, '=A1*2');
+    sheet.registerDependencies({ row: 1, col: 2 }, [{ row: 1, col: 1 }]);
+
+    const worker = {
+      setCellValue: jest.fn().mockResolvedValue(undefined),
+      setCellFormula: jest.fn().mockResolvedValue(undefined),
+      evaluateBatch: jest.fn().mockResolvedValue({
+        values: new Float64Array([10]),
+        evaluated: 1,
+        hasCycles: false,
+      }),
+      terminate: jest.fn(),
+    };
+
+    const renderer = new CanvasRenderer(container, sheet, {
+      debug: false,
+      formulaWorkerThreshold: 1,
+      formulaWorkerFactory: () => worker,
+    });
+
+    (renderer as any).evaluateVisibleFormulaCells();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(worker.evaluateBatch).toHaveBeenCalledWith([{ row: 1, col: 2 }]);
+    expect(sheet.getCellValue({ row: 1, col: 2 })).toBe(10);
+
+    renderer.dispose();
+    expect(worker.terminate).toHaveBeenCalled();
+  });
 });

@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Workbook, Worksheet, autoFill, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, SetCellComponentCommand } from '@cyber-sheet/core';
+import { Workbook, Worksheet, autoFill, FormulaWorkerProxy, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, SetCellComponentCommand } from '@cyber-sheet/core';
 import { ComponentRegistry, CustomCellOverlay, type CustomCellComponentRenderProps, type RegisteredCellComponent } from './customComponents';
 // Import locally to ensure dev picks up latest CanvasRenderer implementation
 import { CanvasRenderer, CanvasRendererOptions, type ViewMode } from '../../renderer-canvas/src';
@@ -180,7 +180,15 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
     sheetRef.current = sheetName ? workbook.getSheet(sheetName) : workbook.activeSheet;
     if (!sheetRef.current) return;
     const el = containerRef.current!;
-    const r = new CanvasRenderer(el, sheetRef.current, rendererOptions);
+    const effectiveRendererOptions: CanvasRendererOptions = {
+      ...(rendererOptions ?? {}),
+      formulaWorkerFactory: rendererOptions?.formulaWorker || rendererOptions?.formulaWorkerFactory
+        ? rendererOptions.formulaWorkerFactory
+        : () => new FormulaWorkerProxy(
+            new Worker(new URL('../../core/src/worker/formula-worker.ts', import.meta.url), { type: 'module' })
+          ),
+    };
+    const r = new CanvasRenderer(el, sheetRef.current, effectiveRendererOptions);
     rendererRef.current = r;
     setOverlayTick((value) => value + 1);
     if (typeof zoom === 'number' && typeof (r as any).setZoom === 'function') {
