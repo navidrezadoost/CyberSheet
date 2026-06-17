@@ -86,6 +86,9 @@ export class Worksheet {
   private _engine?: { isMutating(): boolean };
   /** Per-sheet header and footer text (left / center / right sections). */
   private headerFooter: HeaderFooterSettings = cloneHeaderFooterSettings(DEFAULT_HEADER_FOOTER);
+  private progressiveLoadTotalRows = 0;
+  private progressiveLoadDone = true;
+  private readonly progressiveLoadedRows = new Set<number>();
   rowCount: number;
   colCount: number;
 
@@ -105,6 +108,49 @@ export class Worksheet {
 
   on(listener: (e: SheetEvents) => void) {
     return this.events.on(listener);
+  }
+
+  beginProgressiveLoad(totalRows = this.rowCount): void {
+    this.progressiveLoadTotalRows = totalRows;
+    this.progressiveLoadDone = false;
+    this.progressiveLoadedRows.clear();
+    this.events.emit({
+      type: 'progressive-load-changed',
+      loadedRows: 0,
+      totalRows,
+      done: false,
+    });
+  }
+
+  markRowsLoaded(startRow: number, endRow: number): void {
+    if (endRow < startRow) return;
+    for (let row = Math.max(1, startRow); row <= endRow; row++) {
+      this.progressiveLoadedRows.add(row);
+    }
+    this.events.emit({
+      type: 'progressive-load-changed',
+      loadedRows: this.progressiveLoadedRows.size,
+      totalRows: this.progressiveLoadTotalRows || this.rowCount,
+      done: this.progressiveLoadDone,
+    });
+  }
+
+  finishProgressiveLoad(): void {
+    this.progressiveLoadDone = true;
+    this.events.emit({
+      type: 'progressive-load-changed',
+      loadedRows: this.progressiveLoadedRows.size,
+      totalRows: this.progressiveLoadTotalRows || this.rowCount,
+      done: true,
+    });
+  }
+
+  isProgressiveLoading(): boolean {
+    return !this.progressiveLoadDone;
+  }
+
+  isRowLoaded(row: number): boolean {
+    return this.progressiveLoadDone || this.progressiveLoadedRows.has(row);
   }
 
   /**

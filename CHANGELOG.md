@@ -24,7 +24,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Phase 8.3 — Formula Worker and Renderer Integration
 - Added formula worker protocol, host, proxy, and worker entrypoint with transferable `Float64Array` result batches.
 - Wired the React app shell and canvas renderer to lazily create a formula worker, batch visible dirty cells, and fall back to main-thread evaluation for small batches or worker errors.
+- Hydrated formula workers with existing worksheet state before the first batch so formulas can resolve precedent values off-thread.
 - Added focused tests for storage, lazy evaluation, worker communication, and renderer worker batching.
+
+#### Phase 8.4 — Progressive XLSX Loading
+- Added worker-backed progressive XLSX loading with 500-row chunks and immediate workbook creation.
+- Added worksheet row-loading state and `progressive-load-changed` events so renderers can distinguish loaded and unloaded regions.
+- Updated ExcelApp file open and drag/drop flows to use progressive loading while chunks continue to append in the background.
+- Added canvas loading placeholders for unloaded visible rows.
+
+#### Phase 8.5 — Viewport Hit Testing
+- Added cached cumulative row and column offsets for visible rows and sheet columns.
+- Replaced scan-based pixel-to-cell conversion, header hit testing, range rectangles, visible range lookup, and scroll-to-cell calculations with binary-search based lookups.
+- Added renderer coverage for cached pixel-to-cell mapping with variable row heights and column widths.
 
 ### Added - AutoSum and Formula Editing Enhancements (June 2, 2026)
 

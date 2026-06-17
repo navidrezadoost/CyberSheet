@@ -740,7 +740,13 @@ export class LightweightXLSXParser {
       const styleIndex = parseInt(cellAttrs.get('s') || '0');
       
       // Value
-      const valueText = cellAttrs.get('_text') || '';
+      const cellBody = cellAttrs.get('_text') || '';
+      const formulaText = this.extractElementText(cellBody, 'f');
+      const valueText = this.extractElementText(cellBody, 'v') ?? this.extractElementText(cellBody, 't') ?? cellBody;
+
+      if (options.includeFormulas !== false && formulaText) {
+        cell.formula = formulaText.startsWith('=') ? formulaText : `=${formulaText}`;
+      }
       
       if (type === 's') {
         // Shared string
@@ -787,6 +793,11 @@ export class LightweightXLSXParser {
     }
     
     return { row, col };
+  }
+
+  private extractElementText(xml: string, tagName: string): string | null {
+    const match = xml.match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`));
+    return match ? match[1] : null;
   }
   
   /**

@@ -28,6 +28,9 @@ export interface ImportOptions extends XLSXParseOptions {
   
   /** Memory limit in MB (auto-throttle parsing) */
   memoryLimit?: number;
+
+  /** Number of worksheet rows yielded per progressive chunk */
+  chunkRows?: number;
 }
 
 export interface ImportResult {
@@ -327,7 +330,7 @@ export async function* streamXLSX(
     }
     
     // Parse sheet in chunks
-    const chunkSize = 100; // rows per chunk
+    const chunkSize = options.chunkRows ?? 500;
     const dims = metadata.sheetDimensions.get(sheetName) || { rows: 1000, cols: 26 };
     
     for (let startRow = 1; startRow <= dims.rows; startRow += chunkSize) {

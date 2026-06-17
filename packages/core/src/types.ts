@@ -535,6 +535,7 @@ export type SheetEvents =
   | { type: 'autofilter-range-changed'; before: AutoFilterRange | null; after: AutoFilterRange | null }
   | { type: 'sort-applied'; startRow: number; startCol: number; endRow: number; endCol: number; keys: SortKey[] }
   | { type: 'sheet-mutated' }
+  | { type: 'progressive-load-changed'; loadedRows: number; totalRows: number; done: boolean }
   | { type: 'cell-click'; event: CellEvent }
   | { type: 'cell-double-click'; event: CellEvent }
   | { type: 'cell-right-click'; event: CellEvent }

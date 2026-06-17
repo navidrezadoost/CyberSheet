@@ -9,6 +9,7 @@ export * from './import';
 export * from './LightweightParser';
 export * from './CommentParser';
 export * from './export';
+export * from './progressive';
 
 type FetchLike = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 

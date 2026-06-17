@@ -103,6 +103,11 @@ export class CanvasRenderer {
   private viewMode: ViewMode = 'normal';
   private readonly workerPendingCells = new Set<string>();
   private formulaWorker?: FormulaWorkerBridge;
+  private formulaWorkerHydrated = false;
+  private layoutCacheDirty = true;
+  private visibleRowsCache: number[] = [];
+  private rowTopsCache: number[] = [0];
+  private colLeftsCache: number[] = [0];
   
   // Distinct value cache per column for filter menus
 
@@ -189,6 +194,7 @@ export class CanvasRenderer {
       const t = (ev as any).type;
       if (t === 'cell-changed') this.clearValueCacheForColumn((ev as any).address.col);
       else if (t === 'sheet-mutated' || t === 'filter-changed') {
+        this.invalidateLayoutCache();
         this.cachedCFRules = this.sheet.getConditionalFormattingRules?.() ?? [];
         this.clearValueCacheForColumn();
         this.gridLinesNeedRedraw = true;
@@ -197,8 +203,10 @@ export class CanvasRenderer {
         t === 'row-hidden' ||
         t === 'row-shown' ||
         t === 'col-hidden' ||
-        t === 'col-shown'
+        t === 'col-shown' ||
+        t === 'progressive-load-changed'
       ) {
+        if (t !== 'progressive-load-changed') this.invalidateLayoutCache();
         this.gridLinesNeedRedraw = true;
         this.scheduleRedraw();
       }
@@ -335,17 +343,83 @@ export class CanvasRenderer {
   }
   // Visible rows considering filters (fallback to all rows)
   private getVisibleRows(): number[] {
-    const anySheet: any = this.sheet as any;
-    if (typeof anySheet.getVisibleRowIndices === 'function') return anySheet.getVisibleRowIndices();
-    return Array.from({ length: this.sheet.rowCount }, (_, i) => i + 1);
+    this.ensureLayoutCache();
+    return this.visibleRowsCache;
   }
+
+  private invalidateLayoutCache(): void {
+    this.layoutCacheDirty = true;
+  }
+
+  private ensureLayoutCache(): void {
+    if (!this.layoutCacheDirty) return;
+
+    const anySheet: any = this.sheet as any;
+    const rows: number[] = typeof anySheet.getVisibleRowIndices === 'function'
+      ? anySheet.getVisibleRowIndices()
+      : Array.from({ length: this.sheet.rowCount }, (_, i) => i + 1);
+
+    const rowTops = new Array(rows.length + 1);
+    rowTops[0] = 0;
+    for (let i = 0; i < rows.length; i++) {
+      rowTops[i + 1] = rowTops[i] + this.sheet.getRowHeight(rows[i]) * this.zoom;
+    }
+
+    const colLefts = new Array(this.sheet.colCount + 1);
+    colLefts[0] = 0;
+    for (let col = 1; col <= this.sheet.colCount; col++) {
+      colLefts[col] = colLefts[col - 1] + this.sheet.getColumnWidth(col) * this.zoom;
+    }
+
+    this.visibleRowsCache = rows;
+    this.rowTopsCache = rowTops;
+    this.colLeftsCache = colLefts;
+    this.layoutCacheDirty = false;
+  }
+
+  private upperBound(values: number[], target: number): number {
+    let lo = 0;
+    let hi = values.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (values[mid] <= target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  private lowerBound(values: number[], target: number): number {
+    let lo = 0;
+    let hi = values.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (values[mid] < target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  private columnIndexAt(contentX: number): number | null {
+    this.ensureLayoutCache();
+    if (contentX < 0 || contentX >= this.colLeftsCache[this.sheet.colCount]) return null;
+    const col = this.upperBound(this.colLeftsCache, contentX);
+    return col >= 1 && col <= this.sheet.colCount ? col : null;
+  }
+
+  private visibleRowIndexAt(contentY: number): number | null {
+    this.ensureLayoutCache();
+    if (contentY < 0 || contentY >= this.rowTopsCache[this.visibleRowsCache.length]) return null;
+    const rowIndex = this.upperBound(this.rowTopsCache, contentY) - 1;
+    return rowIndex >= 0 && rowIndex < this.visibleRowsCache.length ? rowIndex : null;
+  }
+
   // The full content size based on row/column sizes (excluding headers), in CSS pixels.
   getContentSize(): { width: number; height: number } {
-    let w = 0; for (let c = 1; c <= this.sheet.colCount; c++) w += this.sheet.getColumnWidth(c) * this.zoom;
-    let h = 0; 
-    const visRows = this.getVisibleRows();
-    for (const r of visRows) h += this.sheet.getRowHeight(r) * this.zoom;
-    return { width: w, height: h };
+    this.ensureLayoutCache();
+    return {
+      width: this.colLeftsCache[this.sheet.colCount] ?? 0,
+      height: this.rowTopsCache[this.visibleRowsCache.length] ?? 0,
+    };
   }
   // The maximum scroll offsets allowed (content minus viewport), never negative.
   getMaxScroll(): { x: number; y: number } {
@@ -371,6 +445,7 @@ export class CanvasRenderer {
     const z = Math.min(4, Math.max(0.25, factor));
     if (z === this.zoom) return;
     this.zoom = z;
+    this.invalidateLayoutCache();
     this.invalidateRect(0, 0, this.canvas.width / this.dpr, this.canvas.height / this.dpr);
   }
   getZoom() { return this.zoom; }
@@ -787,24 +862,14 @@ export class CanvasRenderer {
   }
 
   private visibleRange(): { firstRow: number; firstCol: number; xOffset: number; yOffset: number; firstRowIndex?: number } {
-    let x = this.options.headerWidth;
-    let y = this.options.headerHeight;
-    let col = 1;
-    const rows = this.getVisibleRows();
-    let rowIndex = 0;
-    let sx = this.scrollX;
-    let sy = this.scrollY;
-    while (sx > 0 && col <= this.sheet.colCount) {
-      const w = this.sheet.getColumnWidth(col) * this.zoom;
-      if (sx < w) { x -= sx; break; }
-      sx -= w; col++; x = this.options.headerWidth;
-    }
-    while (sy > 0 && rowIndex < rows.length) {
-      const rh = this.sheet.getRowHeight(rows[rowIndex]) * this.zoom;
-      if (sy < rh) { y -= sy; break; }
-      sy -= rh; rowIndex++; y = this.options.headerHeight;
-    }
-    const firstRow = rows[rowIndex] ?? 1;
+    this.ensureLayoutCache();
+    const col = this.columnIndexAt(this.scrollX) ?? this.sheet.colCount;
+    const rowIndex = this.visibleRowIndexAt(this.scrollY) ?? Math.max(0, this.visibleRowsCache.length - 1);
+    const colLeft = this.colLeftsCache[col - 1] ?? 0;
+    const rowTop = this.rowTopsCache[rowIndex] ?? 0;
+    const x = this.options.headerWidth - (this.scrollX - colLeft);
+    const y = this.options.headerHeight - (this.scrollY - rowTop);
+    const firstRow = this.visibleRowsCache[rowIndex] ?? 1;
     return { firstRow, firstCol: col, xOffset: x, yOffset: y, firstRowIndex: rowIndex };
   }
 
@@ -884,13 +949,38 @@ export class CanvasRenderer {
     }
   }
 
+  private hydrateFormulaWorker(worker: FormulaWorkerBridge): void {
+    if (this.formulaWorkerHydrated) return;
+    this.formulaWorkerHydrated = true;
+
+    const forEachNonEmptyCell = (this.sheet as any).forEachNonEmptyCell;
+    if (typeof forEachNonEmptyCell !== 'function') return;
+
+    forEachNonEmptyCell.call(this.sheet, (row: number, col: number, cell: { value?: unknown; formula?: string }) => {
+      const value = typeof cell.value === 'number' || typeof cell.value === 'string' || typeof cell.value === 'boolean' || cell.value === null
+        ? cell.value
+        : null;
+
+      if (cell.formula) {
+        worker.setCellFormula(row, col, cell.formula, value).catch(() => {});
+      } else {
+        worker.setCellValue(row, col, value).catch(() => {});
+      }
+    });
+  }
+
   private getFormulaWorker(create: boolean): FormulaWorkerBridge | undefined {
-    if (this.formulaWorker) return this.formulaWorker;
+    if (this.formulaWorker) {
+      this.hydrateFormulaWorker(this.formulaWorker);
+      return this.formulaWorker;
+    }
     if (!create) return undefined;
     const factory = this.options.formulaWorkerFactory;
     if (typeof factory !== 'function') return undefined;
     try {
-      this.formulaWorker = factory();
+      const worker = factory();
+      this.formulaWorker = worker;
+      this.hydrateFormulaWorker(worker);
     } catch (error) {
       console.warn('Failed to create formula worker; using main-thread formula evaluation.', error);
     }
@@ -1072,6 +1162,9 @@ export class CanvasRenderer {
           const v = this.sheet.getCellValue(addr);
           let style: CellStyle | undefined = this.sheet.getCellStyle(addr);
           const hyperlink = this.sheet.getHyperlink?.(addr);
+          const rowLoaded = typeof (this.sheet as any).isRowLoaded === 'function'
+            ? (this.sheet as any).isRowLoaded(row)
+            : true;
 
           const { result: cfResult, style: cfStyle } = this.applyConditionalFormatting(v, addr, style);
           style = cfStyle;
@@ -1113,6 +1206,17 @@ export class CanvasRenderer {
 
           if (isAnchor && cfResult?.dataBar) {
             this.renderConditionalDataBar(ctx, x, y, merged ? spanW : cw, merged ? spanH : rh, cfResult.dataBar);
+          }
+
+          if (isAnchor && !rowLoaded) {
+            const w = merged ? spanW : cw;
+            const h = merged ? spanH : rh;
+            ctx.save();
+            ctx.fillStyle = '#F3F4F6';
+            ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+            ctx.fillStyle = '#D1D5DB';
+            ctx.fillRect(x + 8, y + Math.max(6, h / 2 - 3), Math.max(12, w - 16), 6);
+            ctx.restore();
           }
 
           if (style?.border) {
@@ -1532,20 +1636,15 @@ export class CanvasRenderer {
   }
 
   private sheetXForCol(col: number): number {
-    const { headerWidth } = this.options;
-    let x = headerWidth;
-    for (let c = 1; c < col; c++) x += this.sheet.getColumnWidth(c) * this.zoom;
-    return x - this.scrollX;
+    this.ensureLayoutCache();
+    const clampedCol = Math.max(1, Math.min(col, this.sheet.colCount + 1));
+    return this.options.headerWidth + (this.colLeftsCache[clampedCol - 1] ?? 0) - this.scrollX;
   }
 
   private sheetYForRow(row: number): number {
-    const { headerHeight } = this.options;
-    let y = headerHeight;
-    for (const r of this.getVisibleRows()) {
-      if (r >= row) break;
-      y += this.sheet.getRowHeight(r) * this.zoom;
-    }
-    return y - this.scrollY;
+    this.ensureLayoutCache();
+    const rowIndex = this.lowerBound(this.visibleRowsCache, row);
+    return this.options.headerHeight + (this.rowTopsCache[rowIndex] ?? 0) - this.scrollY;
   }
 
   private getPageBreakPositions(): { rowBreaks: number[]; colBreaks: number[] } {
@@ -1746,16 +1845,18 @@ export class CanvasRenderer {
   }
 
   private rectForRange(r1: number, c1: number, r2: number, c2: number): { x: number; y: number; w: number; h: number } | null {
+    this.ensureLayoutCache();
     const { headerHeight, headerWidth } = this.options;
-    let x = headerWidth - this.scrollX; // starting x of col 1 relative to viewport
-    for (let c = 1; c < c1; c++) x += this.sheet.getColumnWidth(c) * this.zoom;
-    // Y based on visible rows only
-    const vis = this.getVisibleRows();
-    let y = headerHeight - this.scrollY;
-    for (const r of vis) { if (r >= r1) break; y += this.sheet.getRowHeight(r) * this.zoom; }
-    let w = 0; for (let c = c1; c <= c2; c++) w += this.sheet.getColumnWidth(c) * this.zoom;
-    let h = 0; for (const r of vis) { if (r < r1) continue; if (r > r2) break; h += this.sheet.getRowHeight(r) * this.zoom; }
-    const vx = x; const vy = y;
+    const firstRowIndex = this.lowerBound(this.visibleRowsCache, r1);
+    const lastRowIndexExclusive = this.upperBound(this.visibleRowsCache, r2);
+    if (firstRowIndex >= lastRowIndexExclusive) return null;
+
+    const leftCol = Math.max(1, Math.min(c1, this.sheet.colCount));
+    const rightCol = Math.max(leftCol, Math.min(c2, this.sheet.colCount));
+    const vx = headerWidth - this.scrollX + this.colLeftsCache[leftCol - 1];
+    const vy = headerHeight - this.scrollY + this.rowTopsCache[firstRowIndex];
+    const w = this.colLeftsCache[rightCol] - this.colLeftsCache[leftCol - 1];
+    const h = this.rowTopsCache[lastRowIndexExclusive] - this.rowTopsCache[firstRowIndex];
     if (vx + w < headerWidth || vy + h < headerHeight) return null; // off-screen
     return { x: vx, y: vy, w, h };
   }
@@ -1778,51 +1879,11 @@ export class CanvasRenderer {
     const y = clientY - rect.top;
     const { headerHeight, headerWidth } = this.options;
     if (x < headerWidth || y < headerHeight) return null;
-    
-    // Calculate starting positions accounting for scroll offset
-    let col = 1;
-    let scrollRemainX = this.scrollX;
-    // Skip columns that are scrolled out of view
-    while (scrollRemainX > 0 && col <= this.sheet.colCount) {
-      const w = this.sheet.getColumnWidth(col) * this.zoom;
-      if (scrollRemainX < w) break;
-      scrollRemainX -= w;
-      col++;
-    }
-    
-    const visRows = this.getVisibleRows();
-    let rowIndex = 0;
-    let scrollRemainY = this.scrollY;
-    // Skip rows that are scrolled out of view
-    while (scrollRemainY > 0 && rowIndex < visRows.length) {
-      const h = this.sheet.getRowHeight(visRows[rowIndex]) * this.zoom;
-      if (scrollRemainY < h) break;
-      scrollRemainY -= h;
-      rowIndex++;
-    }
-    
-    // Now walk from the first visible cell, starting with partial offsets
-    let cx = headerWidth - scrollRemainX;
-    let cy = headerHeight - scrollRemainY;
-    
-    // Find column
-    while (cx <= x && col <= this.sheet.colCount) {
-      const w = this.sheet.getColumnWidth(col) * this.zoom;
-      if (x < cx + w) break;
-      cx += w;
-      col++;
-    }
-    
-    // Find row
-    while (cy <= y && rowIndex < visRows.length) {
-      const h = this.sheet.getRowHeight(visRows[rowIndex]) * this.zoom;
-      if (y < cy + h) break;
-      cy += h;
-      rowIndex++;
-    }
-    
-    const row = visRows[rowIndex];
-    if (col > this.sheet.colCount || row == null) return null;
+
+    const col = this.columnIndexAt(x - headerWidth + this.scrollX);
+    const rowIndex = this.visibleRowIndexAt(y - headerHeight + this.scrollY);
+    const row = rowIndex == null ? undefined : this.visibleRowsCache[rowIndex];
+    if (col == null || row == null) return null;
     return { row, col };
   }
 
@@ -1868,28 +1929,26 @@ export class CanvasRenderer {
     
     if (y <= headerHeight && x >= headerWidth) {
       // Column header area - check resize handles first
-      let cx = headerWidth - this.scrollX; let col = 1;
-      while (cx < this.canvas.width / this.dpr && col <= this.sheet.colCount) {
-        const w = this.sheet.getColumnWidth(col) * this.zoom;
-        const edge = cx + w;
-        if (Math.abs(x - edge) <= threshold) return { type: 'col-resize', col };
-        if (x >= cx && x < cx + w) return { type: 'header-col', col };
-        cx += w; col++;
-      }
-      return null;
+      const contentX = x - headerWidth + this.scrollX;
+      const col = this.columnIndexAt(contentX);
+      if (col == null) return null;
+      const left = this.colLeftsCache[col - 1];
+      const right = this.colLeftsCache[col];
+      if (col > 1 && Math.abs(contentX - left) <= threshold) return { type: 'col-resize', col: col - 1 };
+      if (Math.abs(contentX - right) <= threshold) return { type: 'col-resize', col };
+      return { type: 'header-col', col };
     }
     if (x <= headerWidth && y >= headerHeight) {
       // Row header area - check resize handles first
-      let cy = headerHeight - this.scrollY; const vis = this.getVisibleRows(); let idx = 0;
-      while (cy < this.canvas.height / this.dpr && idx < vis.length) {
-        const row = vis[idx];
-        const h = this.sheet.getRowHeight(row) * this.zoom;
-        const edge = cy + h;
-        if (Math.abs(y - edge) <= threshold) return { type: 'row-resize', row };
-        if (y >= cy && y < cy + h) return { type: 'header-row', row };
-        cy += h; idx++;
-      }
-      return null;
+      const contentY = y - headerHeight + this.scrollY;
+      const rowIndex = this.visibleRowIndexAt(contentY);
+      if (rowIndex == null) return null;
+      const row = this.visibleRowsCache[rowIndex];
+      const top = this.rowTopsCache[rowIndex];
+      const bottom = this.rowTopsCache[rowIndex + 1];
+      if (rowIndex > 0 && Math.abs(contentY - top) <= threshold) return { type: 'row-resize', row: this.visibleRowsCache[rowIndex - 1] };
+      if (Math.abs(contentY - bottom) <= threshold) return { type: 'row-resize', row };
+      return { type: 'header-row', row };
     }
     const addr = this.cellAt(clientX, clientY);
     return addr ? { type: 'cell', addr } : null;
@@ -2441,15 +2500,16 @@ export class CanvasRenderer {
    * Scroll to make a cell visible
    */
   scrollToCell(addr: Address, align: 'start' | 'center' | 'end' | 'nearest' = 'nearest'): void {
+    this.ensureLayoutCache();
     // Calculate cell position in content space
-    let cellX = 0;
-    for (let c = 1; c < addr.col; c++) cellX += this.sheet.getColumnWidth(c) * this.zoom;
-    
-    let cellY = 0;
-    for (let r = 1; r < addr.row; r++) cellY += this.sheet.getRowHeight(r) * this.zoom;
-    
-    const cellWidth = this.sheet.getColumnWidth(addr.col) * this.zoom;
-    const cellHeight = this.sheet.getRowHeight(addr.row) * this.zoom;
+    const col = Math.max(1, Math.min(addr.col, this.sheet.colCount));
+    const rowIndex = this.lowerBound(this.visibleRowsCache, addr.row);
+    if (rowIndex >= this.visibleRowsCache.length || this.visibleRowsCache[rowIndex] !== addr.row) return;
+
+    const cellX = this.colLeftsCache[col - 1];
+    const cellY = this.rowTopsCache[rowIndex];
+    const cellWidth = this.colLeftsCache[col] - this.colLeftsCache[col - 1];
+    const cellHeight = this.rowTopsCache[rowIndex + 1] - this.rowTopsCache[rowIndex];
     const viewport = this.getViewportSize();
     
     let newScrollX = this.scrollX;
@@ -2494,26 +2554,16 @@ export class CanvasRenderer {
    * Get currently visible cell range
    */
   getVisibleRange(): { start: Address; end: Address } {
-    const { firstRow, firstCol, firstRowIndex } = this.visibleRange();
+    const { firstRow, firstCol } = this.visibleRange();
     const viewport = this.getViewportSize();
-    const vis = this.getVisibleRows();
-    let idx = firstRowIndex ?? 0;
-    let y = this.options.headerHeight;
-    while (y < viewport.height + this.options.headerHeight && idx < vis.length) {
-      y += this.sheet.getRowHeight(vis[idx]) * this.zoom; idx++;
-    }
-    const lastRow = vis[Math.min(idx, vis.length - 1)] ?? firstRow;
-    
-    let lastCol = firstCol;
-    let x = this.options.headerWidth;
-    while (x < viewport.width + this.options.headerWidth && lastCol <= this.sheet.colCount) {
-      x += this.sheet.getColumnWidth(lastCol) * this.zoom;
-      lastCol++;
-    }
+    this.ensureLayoutCache();
+    const lastRowIndex = this.visibleRowIndexAt(this.scrollY + viewport.height) ?? Math.max(0, this.visibleRowsCache.length - 1);
+    const lastRow = this.visibleRowsCache[Math.min(lastRowIndex, this.visibleRowsCache.length - 1)] ?? firstRow;
+    const lastCol = this.columnIndexAt(this.scrollX + viewport.width) ?? this.sheet.colCount;
     
     return {
       start: { row: firstRow, col: firstCol },
-      end: { row: lastRow, col: Math.min(lastCol, this.sheet.colCount) },
+      end: { row: lastRow, col: lastCol },
     };
   }
 }

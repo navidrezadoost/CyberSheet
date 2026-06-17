@@ -9,7 +9,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import type { Workbook, CellComment } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 import { CommandManager, DrawingLayer, ClipboardService, ClearCellsCommand, FormulaEngine, DropdownList, FileOperations, SetViewModeCommand, SetHeaderFooterCommand, FormattingController, SetHyperlinkCommand, getDefaultHyperlinkScreenTip, SortCommand, ToggleAutoFilterCommand, ClearFilterCommand, FormatFormControlCommand, type ViewMode, type InsertCellsMode, type DeleteCellsMode, type Address, type CellHyperlink, type FormControlObject, type HeaderFooterSettings } from '@cyber-sheet/core';
-import { loadXlsxFromArrayBuffer } from '@cyber-sheet/io-xlsx';
+import { loadXlsxProgressivelyFromArrayBuffer } from '@cyber-sheet/io-xlsx';
 import { TitleBar } from './TitleBar';
 import { RibbonTabs } from './RibbonTabs';
 import { Ribbon } from '../components/ribbon/Ribbon';
@@ -890,8 +890,9 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const newWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
-      applyLoadedWorkbook(newWorkbook);
+      const session = await loadXlsxProgressivelyFromArrayBuffer(arrayBuffer);
+      applyLoadedWorkbook(session.workbook);
+      session.done.catch((err) => console.error('Progressive XLSX load failed:', err));
     } catch (err) {
       console.error('Failed to load dropped file:', err);
       alert('Failed to load file. Please ensure it is a valid XLSX file.');
