@@ -7,22 +7,22 @@
 }
 
 :root {
-  --excel-green: #217346;
-  --excel-green-dark: #185c37;
-  --ribbon-bg: #f3f3f3;
-  --ribbon-border: #d1d1d1;
+  --excel-green: #0f9d58;
+  --excel-green-dark: #0b7a43;
+  --ribbon-bg: #ffffff;
+  --ribbon-border: #dadce0;
   --tab-active: #ffffff;
-  --tab-hover: #e5e5e5;
-  --text-primary: #333333;
-  --text-secondary: #666666;
+  --tab-hover: #f1f3f4;
+  --text-primary: #202124;
+  --text-secondary: #5f6368;
   --border-light: #e0e0e0;
-  --border-medium: #c8c8c8;
-  --accent-blue: #0078d4;
-  --status-bg: #217346;
+  --border-medium: #dadce0;
+  --accent-blue: #1a73e8;
+  --status-bg: #ffffff;
 }
 
 body {
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   font-size: 12px;
   color: var(--text-primary);
   background: #ffffff;
@@ -33,7 +33,9 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  min-width: 960px;
   width: 100vw;
+  background: #ffffff;
 }
 
 /* ===== Title Bar ===== */
@@ -41,10 +43,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 32px;
-  background: var(--excel-green);
-  padding: 0 4px;
-  color: white;
+  height: 46px;
+  background: #ffffff;
+  padding: 0 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-medium);
   -webkit-app-region: drag;
 }
 
@@ -52,19 +55,20 @@ body {
 .title-bar-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   -webkit-app-region: no-drag;
 }
 
 .title-bar-center {
   flex: 1;
   text-align: center;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 400;
 }
 
 .file-name {
-  opacity: 0.95;
+  opacity: 1;
+  color: var(--text-primary);
 }
 
 .title-btn {
@@ -73,22 +77,23 @@ body {
   justify-content: center;
   background: transparent;
   border: none;
-  color: white;
+  color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 2px;
-  height: 24px;
+  padding: 0 7px;
+  border-radius: 50%;
+  height: 28px;
+  min-width: 25px;
 }
 
 .title-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #f1f3f4;
 }
 
 .quick-access-toolbar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-left: 8px;
+  gap: 4px;
+  margin-left: 7px;
 }
 
 .qat-btn {
@@ -97,15 +102,15 @@ body {
   gap: 4px;
   background: transparent;
   border: none;
-  color: white;
+  color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 2px;
+  padding: 4px 7px;
+  border-radius: 3px;
   font-size: 11px;
 }
 
 .qat-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #f1f3f4;
 }
 
 .qat-label {
@@ -115,18 +120,18 @@ body {
 .toggle-switch {
   width: 28px;
   height: 14px;
-  background: rgba(255, 255, 255, 0.3);
+  background: #dadce0;
   border-radius: 7px;
   position: relative;
   transition: background 0.2s;
 }
 
 .toggle-switch::after {
-  content: '';
+  content: "";
   position: absolute;
   width: 10px;
   height: 10px;
-  background: white;
+  background: #ffffff;
   border-radius: 50%;
   top: 2px;
   left: 2px;
@@ -134,7 +139,7 @@ body {
 }
 
 .toggle-switch.active {
-  background: rgba(255, 255, 255, 0.6);
+  background: #a7dfbe;
 }
 
 .toggle-switch.active::after {
@@ -153,10 +158,11 @@ body {
 }
 
 .user-avatar {
-  width: 24px;
-  height: 24px;
+  width: 29px;
+  height: 29px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: #e8eaed;
+  color: #5f6368;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -167,58 +173,71 @@ body {
 }
 
 .user-avatar:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: #dfe1e5;
 }
 
 .window-btn {
   width: 46px;
-  height: 32px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  color: white;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
 }
 
 .window-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #f1f3f4;
 }
 
 .window-btn.close:hover {
-  background: #c42b1c;
+  background: #ea4335;
+  color: white;
 }
 
 /* ===== Ribbon Tabs ===== */
 .ribbon-tabs {
   display: flex;
-  align-items: flex-end;
-  height: 28px;
-  background: var(--excel-green);
-  padding: 0 4px;
+  align-items: center;
+  height: 29px;
+  background: #ffffff;
+  padding: 0 4px 0 38px;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-medium);
 }
 
 .ribbon-tab {
-  padding: 6px 14px;
+  padding: 5px 7px;
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 12px;
-  border-radius: 3px 3px 0 0;
+  border-radius: 3px;
   transition: all 0.1s;
 }
 
 .ribbon-tab:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--tab-hover);
 }
 
 .ribbon-tab.active {
-  background: var(--ribbon-bg);
-  color: var(--text-primary);
+  background: #e8f0fe;
+  color: #1967d2;
+}
+
+.ribbon-tab.file-tab {
+  background: var(--excel-green) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  border-radius: 3px;
+}
+
+.ribbon-tab.file-tab:hover {
+  background: var(--excel-green-dark) !important;
 }
 
 /* ===== Ribbon (imported from ribbon.css) ===== */
@@ -227,9 +246,55 @@ body {
 /* ===== Spreadsheet Area ===== */
 .spreadsheet-area {
   flex: 1;
-  background: #e8e8e8;
+  background: #ffffff;
   display: flex;
   overflow: hidden;
+}
+
+.excel-app canvas {
+  outline: none !important;
+  border: 0;
+}
+
+.cell-edit-overlay-input,
+.cell-edit-overlay-input:focus,
+.cell-edit-overlay-input:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.formula-bar {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-medium);
+  background: #ffffff;
+}
+
+.formula-bar input,
+.formula-bar .formula-bar-input {
+  height: 25px;
+  border: 1px solid var(--border-medium);
+  border-radius: 3px;
+  padding: 0 9px;
+  outline: none;
+  color: #3c4043;
+  background: #ffffff;
+}
+
+.formula-bar input::placeholder,
+.formula-bar .formula-bar-input::placeholder {
+  color: #5f6368;
+}
+
+.formula-bar button {
+  color: var(--text-secondary);
+}
+
+.formula-bar button:hover {
+  background: #f1f3f4;
 }
 
 .spreadsheet-placeholder {
@@ -244,10 +309,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 24px;
-  background: var(--status-bg);
-  padding: 0 8px;
-  color: white;
+  height: 31px;
+  background: #ffffff;
+  padding: 0 11px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-medium);
 }
 
 .status-left,
@@ -255,7 +321,7 @@ body {
 .status-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .status-text {
@@ -282,16 +348,16 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 .view-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: #f1f3f4;
+  color: var(--text-primary);
 }
 
 .view-btn.active {
-  color: white;
+  color: var(--text-primary);
 }
 
 .zoom-controls {
@@ -306,13 +372,13 @@ body {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: white;
+  color: var(--text-secondary);
   font-size: 14px;
   border-radius: 2px;
 }
 
 .zoom-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #f1f3f4;
 }
 
 .zoom-slider {
@@ -320,7 +386,7 @@ body {
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.3);
+  background: #dadce0;
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -331,7 +397,7 @@ body {
   appearance: none;
   width: 12px;
   height: 12px;
-  background: white;
+  background: #9aa0a6;
   border-radius: 50%;
   cursor: pointer;
 }
@@ -339,7 +405,7 @@ body {
 .zoom-slider::-moz-range-thumb {
   width: 12px;
   height: 12px;
-  background: white;
+  background: #9aa0a6;
   border-radius: 50%;
   cursor: pointer;
   border: none;

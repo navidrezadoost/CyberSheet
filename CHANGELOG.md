@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Spreadsheet UI Refresh and Selection Utilities
+
+- Added a shared selection-addressing helper so ribbon and app-shell formatting actions use the same bounded expansion logic.
+- Added a more Excel-like spreadsheet chrome and cell theme, including updated title bar, ribbon, formula bar, grid, headers, and selection styling.
+- Added a dedicated regression suite for clear-cell undo/redo stability and formatting performance on large selections.
+
+### Fixed - Undo/Redo Stability and TS6 Compatibility
+
+- Fixed clear-cell undo/redo behavior so clearing formulas and values no longer wipes unrelated sheet state.
+- Fixed renderer and worksheet mutation paths to keep batch formatting and selection invalidation stable.
+- Removed deprecated `baseUrl` usage from package TypeScript configs to clear the TS6 migration blocker.
+
 ### Added - Core Engine Row/Column Management, Styling, and History (#93)
 
 - Added native worksheet APIs for inserting rows/columns and reordering row/column blocks, including sparse cell remapping and structural formula reference updates.

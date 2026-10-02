@@ -8,7 +8,7 @@
  * - Self-contained service instantiation (FormattingController, ClipboardService)
  */
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import {
   FormattingController,
   ClipboardService,
@@ -43,28 +43,29 @@ import {
   UnprotectWorkbookCommand,
   SpellCheckCommand,
   ToggleTrackChangesCommand,
-} from '@cyber-sheet/core';
+} from "@cyber-sheet/core";
 import type {
   Address,
+  AddressRange,
   Worksheet,
   SelectionStyleSummary,
-} from '@cyber-sheet/core';
+} from "@cyber-sheet/core";
 
-import { ClipboardGroup } from './ClipboardGroup';
-import { FontGroup } from './FontGroup';
-import { AlignmentGroupV2 } from './AlignmentGroupV2';
-import { NumberFormatGroup } from './NumberFormatGroup';
-import { StylesGroup } from './StylesGroup';
-import { CellsGroup } from './CellsGroup';
-import { EditingGroup } from './EditingGroup';
-import { InsertTab } from './insert/InsertTab';
-import { PageLayoutTab } from './pagelayout/PageLayoutTab';
-import { FormulasTab } from './formulas/FormulasTab';
-import { DataTab } from './data/DataTab';
-import { ViewTab } from './view/ViewTab';
-import { ReviewTab } from './review/ReviewTab';
-import { RibbonSelect } from './RibbonSelect';
-import './ribbon.css';
+import { ClipboardGroup } from "./ClipboardGroup";
+import { FontGroup } from "./FontGroup";
+import { AlignmentGroupV2 } from "./AlignmentGroupV2";
+import { NumberFormatGroup } from "./NumberFormatGroup";
+import { StylesGroup } from "./StylesGroup";
+import { CellsGroup } from "./CellsGroup";
+import { EditingGroup } from "./EditingGroup";
+import { InsertTab } from "./insert/InsertTab";
+import { PageLayoutTab } from "./pagelayout/PageLayoutTab";
+import { FormulasTab } from "./formulas/FormulasTab";
+import { DataTab } from "./data/DataTab";
+import { ViewTab } from "./view/ViewTab";
+import { ReviewTab } from "./review/ReviewTab";
+import { RibbonSelect } from "./RibbonSelect";
+import "./ribbon.css";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -87,34 +88,41 @@ export interface ExcelRibbonProps {
   onStyleChange?: () => void;
 }
 
-type RibbonTab = 'home' | 'insert' | 'pageLayout' | 'formulas' | 'data' | 'review' | 'view';
+type RibbonTab =
+  | "home"
+  | "insert"
+  | "pageLayout"
+  | "formulas"
+  | "data"
+  | "review"
+  | "view";
 
 const RIBBON_TABS: { id: RibbonTab; label: string }[] = [
-  { id: 'home',       label: 'Home' },
-  { id: 'insert',     label: 'Insert' },
-  { id: 'pageLayout', label: 'Page Layout' },
-  { id: 'formulas',   label: 'Formulas' },
-  { id: 'data',       label: 'Data' },
-  { id: 'review',     label: 'Review' },
-  { id: 'view',       label: 'View' },
+  { id: "home", label: "Home" },
+  { id: "insert", label: "Insert" },
+  { id: "pageLayout", label: "Page Layout" },
+  { id: "formulas", label: "Formulas" },
+  { id: "data", label: "Data" },
+  { id: "review", label: "Review" },
+  { id: "view", label: "View" },
 ];
 
 // ─── Empty style summary fallback ─────────────────────────────────────────
 
 const EMPTY_STYLE: SelectionStyleSummary = {
-  fontFamily: { value: 'Calibri', isMixed: false },
-  fontSize:   { value: 11,        isMixed: false },
-  bold:       { value: false,     isMixed: false },
-  italic:     { value: false,     isMixed: false },
-  underline:  { value: false,     isMixed: false },
-  strikethrough: { value: false,  isMixed: false },
-  color:      { value: '#000000', isMixed: false },
-  align:      { value: 'left',    isMixed: false },
-  valign:     { value: 'bottom',  isMixed: false },
-  wrap:       { value: false,     isMixed: false },
-  fill:       { value: undefined, isMixed: false },
-  border:     { value: undefined, isMixed: false },
-  numberFormat: { value: 'General', isMixed: false },
+  fontFamily: { value: "Calibri", isMixed: false },
+  fontSize: { value: 11, isMixed: false },
+  bold: { value: false, isMixed: false },
+  italic: { value: false, isMixed: false },
+  underline: { value: false, isMixed: false },
+  strikethrough: { value: false, isMixed: false },
+  color: { value: "#000000", isMixed: false },
+  align: { value: "left", isMixed: false },
+  valign: { value: "bottom", isMixed: false },
+  wrap: { value: false, isMixed: false },
+  fill: { value: undefined, isMixed: false },
+  border: { value: undefined, isMixed: false },
+  numberFormat: { value: "General", isMixed: false },
 };
 
 // ─── Noop CommandManager ───────────────────────────────────────────────────
@@ -139,7 +147,7 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
   onStructureChange,
   onStyleChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<RibbonTab>('home');
+  const [activeTab, setActiveTab] = useState<RibbonTab>("home");
 
   // Drawing layer for Insert tab
   const drawingLayer = useMemo(() => new DrawingLayer(), []);
@@ -159,14 +167,34 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
   // Derive selected cells list
   const cells = useMemo(
     () => (selectedCells || [selectedCell]) as Address[],
-    [selectedCells, selectedCell]
+    [selectedCells, selectedCell],
   );
+
+  const selectedRanges = useMemo<AddressRange[]>(() => {
+    if (cells.length === 0) return [];
+    let startRow = cells[0]!.row;
+    let endRow = cells[0]!.row;
+    let startCol = cells[0]!.col;
+    let endCol = cells[0]!.col;
+
+    for (const cell of cells) {
+      if (cell.row < startRow) startRow = cell.row;
+      if (cell.row > endRow) endRow = cell.row;
+      if (cell.col < startCol) startCol = cell.col;
+      if (cell.col > endCol) endCol = cell.col;
+    }
+
+    return [{ startRow, endRow, startCol, endCol }];
+  }, [cells]);
 
   // ── Services ──────────────────────────────────────────────────────────────
 
   const formattingController = useMemo(() => {
     if (!worksheet) return null;
-    return new FormattingController(worksheet, commandManager as any) as FormattingController | null;
+    return new FormattingController(
+      worksheet,
+      commandManager as any,
+    ) as FormattingController | null;
   }, [worksheet, commandManager]);
 
   const clipboardService = useMemo(() => new ClipboardService(), []);
@@ -180,19 +208,25 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
       const style = (cell as any)?.style;
       if (!style) return EMPTY_STYLE;
       return {
-        fontFamily:   { value: style.font?.name       ?? 'Calibri',   isMixed: false },
-        fontSize:     { value: style.font?.size        ?? 11,          isMixed: false },
-        bold:         { value: style.font?.bold        ?? false,       isMixed: false },
-        italic:       { value: style.font?.italic      ?? false,       isMixed: false },
-        underline:    { value: style.font?.underline   ?? false,       isMixed: false },
-        strikethrough:{ value: style.font?.strikethrough ?? false,     isMixed: false },
-        color:        { value: style.font?.color       ?? '#000000',   isMixed: false },
-        align:        { value: style.alignment?.horizontal ?? 'left',  isMixed: false },
-        valign:       { value: style.alignment?.vertical   ?? 'bottom',isMixed: false },
-        wrap:         { value: style.alignment?.wrapText   ?? false,   isMixed: false },
-        fill:         { value: style.fill,                             isMixed: false },
-        border:       { value: style.border,                           isMixed: false },
-        numberFormat: { value: style.numFmt ?? 'General',             isMixed: false },
+        fontFamily: { value: style.font?.name ?? "Calibri", isMixed: false },
+        fontSize: { value: style.font?.size ?? 11, isMixed: false },
+        bold: { value: style.font?.bold ?? false, isMixed: false },
+        italic: { value: style.font?.italic ?? false, isMixed: false },
+        underline: { value: style.font?.underline ?? false, isMixed: false },
+        strikethrough: {
+          value: style.font?.strikethrough ?? false,
+          isMixed: false,
+        },
+        color: { value: style.font?.color ?? "#000000", isMixed: false },
+        align: { value: style.alignment?.horizontal ?? "left", isMixed: false },
+        valign: {
+          value: style.alignment?.vertical ?? "bottom",
+          isMixed: false,
+        },
+        wrap: { value: style.alignment?.wrapText ?? false, isMixed: false },
+        fill: { value: style.fill, isMixed: false },
+        border: { value: style.border, isMixed: false },
+        numberFormat: { value: style.numFmt ?? "General", isMixed: false },
       } as SelectionStyleSummary;
     } catch {
       return EMPTY_STYLE;
@@ -200,63 +234,70 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
   }, [worksheet, selectedCell, cells]);
 
   // ── Style/Structure change callbacks ──────────────────────────────────────
-  const handleStyleChange  = useCallback(() => onStyleChange?.(),    [onStyleChange]);
-  const handleStructureCh  = useCallback(() => onStructureChange?.(), [onStructureChange]);
+  const handleStyleChange = useCallback(
+    () => onStyleChange?.(),
+    [onStyleChange],
+  );
+  const handleStructureCh = useCallback(
+    () => onStructureChange?.(),
+    [onStructureChange],
+  );
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
   const ribbonContainerStyle: React.CSSProperties = {
-    background: '#FFFFFF',
-    borderBottom: '1px solid #D9D9D9',
-    userSelect: 'none',
+    background: "#FFFFFF",
+    borderBottom: "1px solid #D9D9D9",
+    userSelect: "none",
     flexShrink: 0,
   };
 
   const tabBarStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'stretch',
-    background: '#F0F0F0',
-    borderBottom: '1px solid #D9D9D9',
+    display: "flex",
+    alignItems: "stretch",
+    background: "#F0F0F0",
+    borderBottom: "1px solid #D9D9D9",
     height: 30,
     paddingLeft: 4,
     gap: 0,
   };
 
   const getTabStyle = (tab: RibbonTab): React.CSSProperties => ({
-    padding: '0 14px',
-    border: 'none',
-    background: activeTab === tab ? '#FFFFFF' : 'transparent',
-    color: activeTab === tab ? '#000000' : '#444444',
+    padding: "0 14px",
+    border: "none",
+    background: activeTab === tab ? "#FFFFFF" : "transparent",
+    color: activeTab === tab ? "#000000" : "#444444",
     fontSize: 11,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
+    fontFamily: "Segoe UI, Arial, sans-serif",
     fontWeight: activeTab === tab ? 600 : 400,
-    cursor: 'pointer',
-    borderBottom: activeTab === tab ? '2px solid #0078D4' : '2px solid transparent',
-    borderTop: '2px solid transparent',
-    borderLeft: 'none',
-    borderRight: 'none',
-    whiteSpace: 'nowrap',
-    transition: 'background 80ms, color 80ms',
+    cursor: "pointer",
+    borderBottom:
+      activeTab === tab ? "2px solid #0078D4" : "2px solid transparent",
+    borderTop: "2px solid transparent",
+    borderLeft: "none",
+    borderRight: "none",
+    whiteSpace: "nowrap",
+    transition: "background 80ms, color 80ms",
     marginBottom: -1,
     flexShrink: 0,
   });
 
   const contentAreaStyle: React.CSSProperties = {
-    background: '#F0F0F0',
-    padding: '4px 6px',
-    display: 'flex',
-    alignItems: 'center',
+    background: "#F0F0F0",
+    padding: "4px 6px",
+    display: "flex",
+    alignItems: "center",
     gap: 0,
     minHeight: 66,
-    overflowX: 'auto',
+    overflowX: "auto",
   };
 
   const placeholderStyle: React.CSSProperties = {
-    padding: '12px 24px',
-    color: '#888',
+    padding: "12px 24px",
+    color: "#888",
     fontSize: 12,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-    fontStyle: 'italic',
+    fontFamily: "Segoe UI, Arial, sans-serif",
+    fontStyle: "italic",
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -269,16 +310,16 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
         {onFileClick && (
           <button
             style={{
-              padding: '0 14px',
-              border: 'none',
-              background: '#217346',
-              color: '#FFFFFF',
+              padding: "0 14px",
+              border: "none",
+              background: "#217346",
+              color: "#FFFFFF",
               fontSize: 11,
-              fontFamily: 'Segoe UI, Arial, sans-serif',
+              fontFamily: "Segoe UI, Arial, sans-serif",
               fontWeight: 600,
-              cursor: 'pointer',
-              borderBottom: '2px solid transparent',
-              borderTop: '2px solid transparent',
+              cursor: "pointer",
+              borderBottom: "2px solid transparent",
+              borderTop: "2px solid transparent",
               flexShrink: 0,
               marginBottom: -1,
             }}
@@ -295,12 +336,14 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
             onClick={() => setActiveTab(id)}
             onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
               if (activeTab !== id) {
-                (e.currentTarget as HTMLButtonElement).style.background = '#E8E8E8';
+                (e.currentTarget as HTMLButtonElement).style.background =
+                  "#E8E8E8";
               }
             }}
             onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
               if (activeTab !== id) {
-                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.background =
+                  "transparent";
               }
             }}
           >
@@ -310,7 +353,7 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
       </div>
 
       {/* ── Content ── */}
-      {activeTab === 'home' ? (
+      {activeTab === "home" ? (
         <div style={contentAreaStyle}>
           {/* 1. Clipboard */}
           {formattingController && worksheet ? (
@@ -372,7 +415,7 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
           {formattingController ? (
             <StylesGroup
               formattingController={formattingController}
-              selectedCells={cells}
+              selectedRanges={selectedRanges}
               onStyleChange={handleStyleChange}
             />
           ) : null}
@@ -396,320 +439,363 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
               formattingController={formattingController}
               selectedCells={cells}
               onEditOperation={(op, params) => {
-                console.log('Edit operation:', op, params);
+                console.log("Edit operation:", op, params);
                 handleStyleChange();
               }}
             />
           ) : null}
         </div>
-      ) : activeTab === 'insert' ? (
+      ) : activeTab === "insert" ? (
         <InsertTab
           worksheet={worksheet}
           drawingLayer={drawingLayer}
-          onInsertTable={() => console.log('Insert Table')}
-          onInsertPivotTable={() => console.log('Insert PivotTable')}
-          onInsertPicture={() => console.log('Insert Picture')}
-          onInsertShape={(type) => console.log('Insert Shape:', type)}
-          onInsertIcon={() => console.log('Insert Icon')}
-          onInsertControl={(type) => console.log('Insert Control:', type)}
-          onInsertTextBox={() => console.log('Insert Text Box')}
-          onInsertHeaderFooter={() => console.log('Insert Header/Footer')}
-          onInsertWordArt={() => console.log('Insert WordArt')}
-          onInsertChart={(type) => console.log('Insert Chart:', type)}
-          onInsertSparkline={(type) => console.log('Insert Sparkline:', type)}
-          onInsertHyperlink={() => console.log('Insert Hyperlink')}
-          onInsertEquation={() => console.log('Insert Equation')}
-          onInsertSymbol={() => console.log('Insert Symbol')}
+          onInsertTable={() => console.log("Insert Table")}
+          onInsertPivotTable={() => console.log("Insert PivotTable")}
+          onInsertPicture={() => console.log("Insert Picture")}
+          onInsertShape={(type) => console.log("Insert Shape:", type)}
+          onInsertIcon={() => console.log("Insert Icon")}
+          onInsertControl={(type) => console.log("Insert Control:", type)}
+          onInsertTextBox={() => console.log("Insert Text Box")}
+          onInsertHeaderFooter={() => console.log("Insert Header/Footer")}
+          onInsertWordArt={() => console.log("Insert WordArt")}
+          onInsertChart={(type) => console.log("Insert Chart:", type)}
+          onInsertSparkline={(type) => console.log("Insert Sparkline:", type)}
+          onInsertHyperlink={() => console.log("Insert Hyperlink")}
+          onInsertEquation={() => console.log("Insert Equation")}
+          onInsertSymbol={() => console.log("Insert Symbol")}
           onDrawingChange={handleStyleChange}
         />
-      ) : activeTab === 'pageLayout' ? (
+      ) : activeTab === "pageLayout" ? (
         <PageLayoutTab
           onThemeChange={(theme) => {
             pageLayoutController.setTheme(theme);
-            console.log('Theme changed:', theme);
+            console.log("Theme changed:", theme);
           }}
           onColorsChange={(colors) => {
             pageLayoutController.setColorTheme(colors);
-            console.log('Colors changed:', colors);
+            console.log("Colors changed:", colors);
           }}
-          onFontsChange={() => console.log('Fonts clicked')}
-          onEffectsChange={() => console.log('Effects clicked')}
+          onFontsChange={() => console.log("Fonts clicked")}
+          onEffectsChange={() => console.log("Effects clicked")}
           onMarginsChange={(margins) => {
-            if (margins === 'Normal' || margins === 'Wide' || margins === 'Narrow') {
+            if (
+              margins === "Normal" ||
+              margins === "Wide" ||
+              margins === "Narrow"
+            ) {
               pageLayoutController.setMarginPreset(margins);
             }
-            console.log('Margins changed:', margins);
+            console.log("Margins changed:", margins);
           }}
           onOrientationChange={(orientation) => {
             pageLayoutController.setOrientation(orientation);
-            console.log('Orientation changed:', orientation);
+            console.log("Orientation changed:", orientation);
           }}
           onSizeChange={(size) => {
             pageLayoutController.setPaperSize(size);
-            console.log('Size changed:', size);
+            console.log("Size changed:", size);
           }}
-          onPrintAreaSet={() => console.log('Print Area set')}
+          onPrintAreaSet={() => console.log("Print Area set")}
           onBreaksInsert={(breakType) => {
-            if (breakType === 'page') {
+            if (breakType === "page") {
               pageLayoutController.insertPageBreak();
             } else {
               pageLayoutController.removeAllPageBreaks();
             }
-            console.log('Break:', breakType);
+            console.log("Break:", breakType);
           }}
-          onBackgroundSet={() => console.log('Background set')}
-          onPrintTitlesSet={() => console.log('Print Titles set')}
+          onBackgroundSet={() => console.log("Background set")}
+          onPrintTitlesSet={() => console.log("Print Titles set")}
           onWidthChange={(width) => {
             pageLayoutController.setFitToWidth(width);
-            console.log('Width changed:', width);
+            console.log("Width changed:", width);
           }}
           onHeightChange={(height) => {
             pageLayoutController.setFitToHeight(height);
-            console.log('Height changed:', height);
+            console.log("Height changed:", height);
           }}
           onScaleChange={(scale) => {
             pageLayoutController.setScale(scale);
-            console.log('Scale changed:', scale);
+            console.log("Scale changed:", scale);
           }}
           onGridlinesViewChange={(visible) => {
             const current = pageLayoutController.getPageSetup();
             pageLayoutController.setGridlines(visible, current.gridlines.print);
-            console.log('Gridlines view:', visible);
+            console.log("Gridlines view:", visible);
           }}
           onGridlinesPrintChange={(print) => {
             const current = pageLayoutController.getPageSetup();
             pageLayoutController.setGridlines(current.gridlines.view, print);
-            console.log('Gridlines print:', print);
+            console.log("Gridlines print:", print);
           }}
           onHeadingsViewChange={(visible) => {
             const current = pageLayoutController.getPageSetup();
             pageLayoutController.setHeadings(visible, current.headings.print);
-            console.log('Headings view:', visible);
+            console.log("Headings view:", visible);
           }}
           onHeadingsPrintChange={(print) => {
             const current = pageLayoutController.getPageSetup();
             pageLayoutController.setHeadings(current.headings.view, print);
-            console.log('Headings print:', print);
+            console.log("Headings print:", print);
           }}
         />
-      ) : activeTab === 'formulas' ? (
+      ) : activeTab === "formulas" ? (
         <FormulasTab
           // Function Library
-          onInsertFunction={() => console.log('Insert Function dialog')}
-          onAutoSum={(type) => console.log('AutoSum:', type)}
+          onInsertFunction={() => console.log("Insert Function dialog")}
+          onAutoSum={(type) => console.log("AutoSum:", type)}
           onSelectFunction={(category, func) => {
-            console.log('Select function:', category, func);
+            console.log("Select function:", category, func);
           }}
           // Defined Names
-          onNameManager={() => console.log('Name Manager dialog')}
-          onDefineName={() => console.log('Define Name dialog')}
-          onApplyNames={() => console.log('Apply Names dialog')}
+          onNameManager={() => console.log("Name Manager dialog")}
+          onDefineName={() => console.log("Define Name dialog")}
+          onApplyNames={() => console.log("Apply Names dialog")}
           onUseInFormula={(name) => {
-            console.log('Use in formula:', name);
+            console.log("Use in formula:", name);
           }}
-          onCreateFromSelection={() => console.log('Create from Selection dialog')}
+          onCreateFromSelection={() =>
+            console.log("Create from Selection dialog")
+          }
           definedNames={nameManager.getAllNames().map((n: any) => n.name)}
           // Formula Auditing
-          onTracePrecedents={() => console.log('Trace Precedents')}
-          onTraceDependents={() => console.log('Trace Dependents')}
-          onRemoveArrows={(type) => console.log('Remove Arrows:', type)}
+          onTracePrecedents={() => console.log("Trace Precedents")}
+          onTraceDependents={() => console.log("Trace Dependents")}
+          onRemoveArrows={(type) => console.log("Remove Arrows:", type)}
           onShowFormulas={(show) => {
             setShowFormulas(show);
-            console.log('Show Formulas:', show);
+            console.log("Show Formulas:", show);
           }}
-          onErrorChecking={() => console.log('Error Checking dialog')}
-          onTraceError={() => console.log('Trace Error')}
-          onCircularReferences={() => console.log('Circular References')}
-          onEvaluateFormula={() => console.log('Evaluate Formula dialog')}
-          onWatchWindow={() => console.log('Watch Window')}
+          onErrorChecking={() => console.log("Error Checking dialog")}
+          onTraceError={() => console.log("Trace Error")}
+          onCircularReferences={() => console.log("Circular References")}
+          onEvaluateFormula={() => console.log("Evaluate Formula dialog")}
+          onWatchWindow={() => console.log("Watch Window")}
           showFormulas={showFormulas}
           // Calculation
           onCalculationModeChange={(mode) => {
             calculationController.setMode(mode);
-            console.log('Calculation mode:', mode);
+            console.log("Calculation mode:", mode);
           }}
           onCalculateNow={() => {
             calculationController.calculateNow();
-            console.log('Calculate Now (F9)');
+            console.log("Calculate Now (F9)");
           }}
           onCalculateSheet={() => {
             calculationController.calculateSheet();
-            console.log('Calculate Sheet (Shift+F9)');
+            console.log("Calculate Sheet (Shift+F9)");
           }}
           calculationMode={calculationController.getMode()}
         />
-      ) : activeTab === 'data' ? (
+      ) : activeTab === "data" ? (
         <DataTab
           workbook={workbook}
           selectedCells={cells}
           onCommand={(command) => {
-            console.log('Data tab command:', command);
-            
+            console.log("Data tab command:", command);
+
             const sheet = worksheet || workbook?.activeSheet;
             if (!sheet || !commandManager) return;
 
             try {
               switch (command.type) {
-                case 'sort':
+                case "sort":
                   commandManager.execute(
-                    new SortCommand(sheet, command.range, command.sortBy, command.hasHeaders)
+                    new SortCommand(
+                      sheet,
+                      command.range,
+                      command.sortBy,
+                      command.hasHeaders,
+                    ),
                   );
                   break;
-                
-                case 'toggleAutoFilter':
+
+                case "toggleAutoFilter":
                   commandManager.execute(
-                    new ToggleAutoFilterCommand(sheet, command.range, command.enabled ?? true)
+                    new ToggleAutoFilterCommand(
+                      sheet,
+                      command.range,
+                      command.enabled ?? true,
+                    ),
                   );
                   break;
-                
-                case 'clearFilter':
+
+                case "clearFilter":
+                  commandManager.execute(new ClearFilterCommand(sheet));
+                  break;
+
+                case "setDataValidation":
                   commandManager.execute(
-                    new ClearFilterCommand(sheet)
+                    new SetDataValidationCommand(
+                      sheet,
+                      command.range,
+                      command.rule,
+                    ),
                   );
                   break;
-                
-                case 'setDataValidation':
+
+                case "clearDataValidation":
                   commandManager.execute(
-                    new SetDataValidationCommand(sheet, command.range, command.rule)
+                    new ClearDataValidationCommand(sheet, command.range),
                   );
                   break;
-                
-                case 'clearDataValidation':
+
+                case "removeDuplicates":
                   commandManager.execute(
-                    new ClearDataValidationCommand(sheet, command.range)
+                    new RemoveDuplicatesCommand(
+                      sheet,
+                      command.range,
+                      command.compareColumns,
+                      command.hasHeaders,
+                    ),
                   );
                   break;
-                
-                case 'removeDuplicates':
+
+                case "textToColumns":
                   commandManager.execute(
-                    new RemoveDuplicatesCommand(sheet, command.range, command.compareColumns, command.hasHeaders)
+                    new TextToColumnsCommand(
+                      sheet,
+                      command.range,
+                      command.delimiter,
+                      command.dataType,
+                    ),
                   );
                   break;
-                
-                case 'textToColumns':
+
+                case "group":
                   commandManager.execute(
-                    new TextToColumnsCommand(sheet, command.range, command.delimiter, command.dataType)
+                    new GroupOutlineCommand(sheet, command.range, command.axis),
                   );
                   break;
-                
-                case 'group':
+
+                case "ungroup":
                   commandManager.execute(
-                    new GroupOutlineCommand(sheet, command.range, command.axis)
+                    new UngroupOutlineCommand(
+                      sheet,
+                      command.range,
+                      command.axis,
+                    ),
                   );
                   break;
-                
-                case 'ungroup':
-                  commandManager.execute(
-                    new UngroupOutlineCommand(sheet, command.range, command.axis)
-                  );
-                  break;
-                
+
                 default:
-                  console.warn('Unknown Data command:', command.type);
+                  console.warn("Unknown Data command:", command.type);
               }
-              
+
               onStructureChange?.();
             } catch (error) {
-              console.error('Data command error:', error);
+              console.error("Data command error:", error);
             }
           }}
         />
-      ) : activeTab === 'review' ? (
+      ) : activeTab === "review" ? (
         <ReviewTab
           workbook={workbook}
           selectedCells={cells}
           onCommand={(command) => {
-            console.log('Review tab command:', command);
-            
+            console.log("Review tab command:", command);
+
             const sheet = worksheet || workbook?.activeSheet;
             if (!commandManager) return;
 
             try {
               switch (command.type) {
-                case 'newComment':
-                case 'addComment':
+                case "newComment":
+                case "addComment":
                   if (sheet && command.cell && command.text) {
                     commandManager.execute(
-                      new AddCommentCommand(sheet, command.cell, command.text, command.author)
+                      new AddCommentCommand(
+                        sheet,
+                        command.cell,
+                        command.text,
+                        command.author,
+                      ),
                     );
                   }
                   break;
-                
-                case 'deleteComment':
+
+                case "deleteComment":
                   if (sheet && command.cell) {
                     commandManager.execute(
-                      new DeleteCommentCommand(sheet, command.cell)
+                      new DeleteCommentCommand(sheet, command.cell),
                     );
                   }
                   break;
-                
-                case 'toggleComments':
+
+                case "toggleComments":
                   if (sheet && command.option) {
                     commandManager.execute(
-                      new ToggleCommentsVisibilityCommand(sheet, command.option)
+                      new ToggleCommentsVisibilityCommand(
+                        sheet,
+                        command.option,
+                      ),
                     );
                   }
                   break;
-                
-                case 'protectSheet':
+
+                case "protectSheet":
                   if (sheet && command.options) {
                     commandManager.execute(
-                      new ProtectSheetCommand(sheet, command.options)
+                      new ProtectSheetCommand(sheet, command.options),
                     );
                   }
                   break;
-                
-                case 'unprotectSheet':
+
+                case "unprotectSheet":
                   if (sheet) {
                     commandManager.execute(
-                      new UnprotectSheetCommand(sheet, command.password)
+                      new UnprotectSheetCommand(sheet, command.password),
                     );
                   }
                   break;
-                
-                case 'protectWorkbook':
+
+                case "protectWorkbook":
                   if (workbook && command.options) {
                     commandManager.execute(
-                      new ProtectWorkbookCommand(workbook, command.options)
+                      new ProtectWorkbookCommand(workbook, command.options),
                     );
                   }
                   break;
-                
-                case 'unprotectWorkbook':
+
+                case "unprotectWorkbook":
                   if (workbook) {
                     commandManager.execute(
-                      new UnprotectWorkbookCommand(workbook, command.password)
+                      new UnprotectWorkbookCommand(workbook, command.password),
                     );
                   }
                   break;
-                
-                case 'checkSpelling':
-                  if (sheet && command.corrections && command.corrections.length > 0) {
+
+                case "checkSpelling":
+                  if (
+                    sheet &&
+                    command.corrections &&
+                    command.corrections.length > 0
+                  ) {
                     commandManager.execute(
-                      new SpellCheckCommand(sheet, command.corrections)
+                      new SpellCheckCommand(sheet, command.corrections),
                     );
                   }
                   break;
-                
-                case 'trackChanges':
-                  if (workbook && typeof command.enabled === 'boolean') {
+
+                case "trackChanges":
+                  if (workbook && typeof command.enabled === "boolean") {
                     commandManager.execute(
-                      new ToggleTrackChangesCommand(workbook, command.enabled)
+                      new ToggleTrackChangesCommand(workbook, command.enabled),
                     );
                   }
                   break;
-                
+
                 default:
-                  console.warn('Unknown Review command:', command.type);
+                  console.warn("Unknown Review command:", command.type);
               }
-              
+
               onStructureChange?.();
             } catch (error) {
-              console.error('Review command error:', error);
+              console.error("Review command error:", error);
             }
           }}
         />
-      ) : activeTab === 'view' ? (
+      ) : activeTab === "view" ? (
         <ViewTab
           workbook={workbook}
           selectedCells={cells}
@@ -723,22 +809,23 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
             const sheet = worksheet || workbook?.activeSheet;
             if (sheet && commandManager) {
               commandManager.execute(
-                new SetViewModeCommand(workbook, view as 'normal' | 'pageBreak' | 'pageLayout')
+                new SetViewModeCommand(
+                  workbook,
+                  view as "normal" | "pageBreak" | "pageLayout",
+                ),
               );
             }
           }}
           onZoomChange={(zoom) => {
             const sheet = worksheet || workbook?.activeSheet;
             if (sheet && commandManager) {
-              commandManager.execute(
-                new SetZoomCommand(workbook, zoom)
-              );
+              commandManager.execute(new SetZoomCommand(workbook, zoom));
             }
           }}
           onToggleShow={(option, value) => {
             if (workbook && commandManager) {
               commandManager.execute(
-                new ToggleShowOptionCommand(workbook, option, value)
+                new ToggleShowOptionCommand(workbook, option, value),
               );
             }
           }}
@@ -750,64 +837,64 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
                 end: cells[cells.length - 1] || cells[0],
               };
               commandManager.execute(
-                new ZoomToSelectionCommand(workbook, selectionRange)
+                new ZoomToSelectionCommand(workbook, selectionRange),
               );
             }
           }}
           onCustomViews={() => {
-            console.log('Custom Views dialog');
+            console.log("Custom Views dialog");
             // TODO: Open custom views manager dialog
           }}
           onCommand={(command) => {
-            console.log('View tab command:', command);
-            
+            console.log("View tab command:", command);
+
             if (!workbook || !commandManager) return;
 
             try {
               switch (command.type) {
-                case 'freezePanes':
+                case "freezePanes":
                   commandManager.execute(
-                    new FreezePanesCommand(workbook, command.freezeType, command.cell)
+                    new FreezePanesCommand(
+                      workbook,
+                      command.freezeType,
+                      command.cell,
+                    ),
                   );
                   break;
-                
-                case 'splitWindow':
+
+                case "splitWindow":
                   commandManager.execute(
-                    new SplitWindowCommand(workbook, command.cell)
+                    new SplitWindowCommand(workbook, command.cell),
                   );
                   break;
-                
-                case 'hideWindow':
+
+                case "hideWindow":
+                  commandManager.execute(new HideWindowCommand(workbook));
+                  break;
+
+                case "newWindow":
+                  commandManager.execute(new NewWindowCommand(workbook));
+                  break;
+
+                case "arrangeWindows":
                   commandManager.execute(
-                    new HideWindowCommand(workbook)
+                    new ArrangeWindowsCommand(workbook, command.layout),
                   );
                   break;
-                
-                case 'newWindow':
-                  commandManager.execute(
-                    new NewWindowCommand(workbook)
-                  );
-                  break;
-                
-                case 'arrangeWindows':
-                  commandManager.execute(
-                    new ArrangeWindowsCommand(workbook, command.layout)
-                  );
-                  break;
-                
+
                 default:
-                  console.warn('Unknown View command:', command.type);
+                  console.warn("Unknown View command:", command.type);
               }
-              
+
               onStructureChange?.();
             } catch (error) {
-              console.error('View command error:', error);
+              console.error("View command error:", error);
             }
           }}
         />
       ) : (
         <div style={placeholderStyle}>
-          {RIBBON_TABS.find(t => t.id === activeTab)?.label} tab — coming soon
+          {RIBBON_TABS.find((t) => t.id === activeTab)?.label} tab — coming soon
         </div>
       )}
     </div>
@@ -817,41 +904,67 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
 // ─── Sub-components ────────────────────────────────────────────────────────
 
 const GroupDivider: React.FC = () => (
-  <div style={{
-    width: 1,
-    background: '#D9D9D9',
-    margin: '4px 6px',
-    alignSelf: 'stretch',
-    flexShrink: 0,
-  }} />
+  <div
+    style={{
+      width: 1,
+      background: "#D9D9D9",
+      margin: "4px 6px",
+      alignSelf: "stretch",
+      flexShrink: 0,
+    }}
+  />
 );
 
 /** Lightweight clipboard placeholder when core services aren't available */
 const ClipboardPlaceholder: React.FC = () => {
   const btnStyle: React.CSSProperties = {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    gap: 2, padding: '4px 8px', border: '1px solid transparent',
-    background: 'transparent', cursor: 'pointer', borderRadius: 2,
-    fontSize: 10, color: '#333', fontFamily: 'Segoe UI, sans-serif',
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
+    padding: "4px 8px",
+    border: "1px solid transparent",
+    background: "transparent",
+    cursor: "pointer",
+    borderRadius: 2,
+    fontSize: 10,
+    color: "#333",
+    fontFamily: "Segoe UI, sans-serif",
     minWidth: 44,
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 4px' }}>
-      <div style={{ display: 'flex', gap: 2 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        padding: "0 4px",
+      }}
+    >
+      <div style={{ display: "flex", gap: 2 }}>
         <button style={{ ...btnStyle, minWidth: 56, fontSize: 11 }}>
           <span style={{ fontSize: 18 }}>📋</span>
           <span>Paste</span>
         </button>
       </div>
-      <div style={{ display: 'flex', gap: 1 }}>
-        {['✂️ Cut', '📄 Copy', '🖌 Format'].map(label => (
+      <div style={{ display: "flex", gap: 1 }}>
+        {["✂️ Cut", "📄 Copy", "🖌 Format"].map((label) => (
           <button key={label} style={btnStyle}>
-            <span style={{ fontSize: 13 }}>{label.split(' ')[0]}</span>
-            <span>{label.split(' ').slice(1).join(' ')}</span>
+            <span style={{ fontSize: 13 }}>{label.split(" ")[0]}</span>
+            <span>{label.split(" ").slice(1).join(" ")}</span>
           </button>
         ))}
       </div>
-      <div style={{ fontSize: 9, color: '#888', textAlign: 'center', marginTop: 1 }}>Clipboard</div>
+      <div
+        style={{
+          fontSize: 9,
+          color: "#888",
+          textAlign: "center",
+          marginTop: 1,
+        }}
+      >
+        Clipboard
+      </div>
     </div>
   );
 };
@@ -859,28 +972,65 @@ const ClipboardPlaceholder: React.FC = () => {
 /** Lightweight font placeholder */
 const FontPlaceholder: React.FC = () => {
   const btnStyle: React.CSSProperties = {
-    width: 24, height: 22, border: '1px solid transparent',
-    background: 'transparent', cursor: 'pointer', borderRadius: 2,
-    fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 24,
+    height: 22,
+    border: "1px solid transparent",
+    background: "transparent",
+    cursor: "pointer",
+    borderRadius: 2,
+    fontSize: 12,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 4px' }}>
-      <div style={{ display: 'flex', gap: 2 }}>
-        <RibbonSelect value="Calibri" options={['Calibri']} onChange={() => {}} width={110} ariaLabel="Font family" />
-        <RibbonSelect value={11} options={[11]} onChange={() => {}} width={42} ariaLabel="Font size" />
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+        padding: "0 4px",
+      }}
+    >
+      <div style={{ display: "flex", gap: 2 }}>
+        <RibbonSelect
+          value="Calibri"
+          options={["Calibri"]}
+          onChange={() => {}}
+          width={110}
+          ariaLabel="Font family"
+        />
+        <RibbonSelect
+          value={11}
+          options={[11]}
+          onChange={() => {}}
+          width={42}
+          ariaLabel="Font size"
+        />
       </div>
-      <div style={{ display: 'flex', gap: 1 }}>
+      <div style={{ display: "flex", gap: 1 }}>
         {[
-          { label: <b>B</b>, title: 'Bold' },
-          { label: <i>I</i>, title: 'Italic' },
-          { label: <u>U</u>, title: 'Underline' },
-          { label: '🎨', title: 'Font Color' },
-          { label: '🪣', title: 'Fill Color' },
+          { label: <b>B</b>, title: "Bold" },
+          { label: <i>I</i>, title: "Italic" },
+          { label: <u>U</u>, title: "Underline" },
+          { label: "🎨", title: "Font Color" },
+          { label: "🪣", title: "Fill Color" },
         ].map(({ label, title }) => (
-          <button key={title} title={title} style={btnStyle}>{label}</button>
+          <button key={title} title={title} style={btnStyle}>
+            {label}
+          </button>
         ))}
       </div>
-      <div style={{ fontSize: 9, color: '#888', textAlign: 'center', marginTop: 1 }}>Font</div>
+      <div
+        style={{
+          fontSize: 9,
+          color: "#888",
+          textAlign: "center",
+          marginTop: 1,
+        }}
+      >
+        Font
+      </div>
     </div>
   );
 };

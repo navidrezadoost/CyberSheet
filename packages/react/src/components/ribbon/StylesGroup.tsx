@@ -1,28 +1,34 @@
 /**
  * StylesGroup.tsx
- * 
+ *
  * Styles group for Home ribbon tab
  * Provides conditional formatting, Format as Table, and Cell Styles
- * 
+ *
  * Microinteractions:
  * - Format gallery hover highlights
  * - Data bars animate on application
  * - Color scales pulse on first application
  * - Icon sets animate in sequence
- * 
+ *
  * Phase 3: Excel 365-Level Styles Controls
  */
 
-import { StylesGroupIcon1 } from '@cyber-sheet/icons/react';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { Address, Range, Worksheet, CommandManager, ConditionalFormattingRule } from '@cyber-sheet/core';
-import { BatchCommand, ToggleAutoFilterCommand } from '@cyber-sheet/core';
-import type { FormattingController } from '@cyber-sheet/core';
-import { getCellStyle } from '@cyber-sheet/core';
-import { CellStylesGallery } from '../CellStylesGallery';
-import { QuickConditionalRuleDialog } from '../dialogs/QuickConditionalRuleDialog';
-import { CreateTableDialog } from '../dialogs/CreateTableDialog';
-import { ConditionalFormattingManagerDialog } from '../dialogs/ConditionalFormattingManagerDialog';
+import { StylesGroupIcon1 } from "@cyber-sheet/icons/react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import type {
+  AddressRange,
+  Range,
+  Worksheet,
+  CommandManager,
+  ConditionalFormattingRule,
+} from "@cyber-sheet/core";
+import { BatchCommand, ToggleAutoFilterCommand } from "@cyber-sheet/core";
+import type { FormattingController } from "@cyber-sheet/core";
+import { getCellStyle } from "@cyber-sheet/core";
+import { CellStylesGallery } from "../CellStylesGallery";
+import { QuickConditionalRuleDialog } from "../dialogs/QuickConditionalRuleDialog";
+import { CreateTableDialog } from "../dialogs/CreateTableDialog";
+import { ConditionalFormattingManagerDialog } from "../dialogs/ConditionalFormattingManagerDialog";
 import {
   addConditionalRule,
   applyPreviewRules,
@@ -34,13 +40,13 @@ import {
   restoreConditionalRules,
   toQuickRuleKind,
   type QuickRuleKind,
-} from '../../utils/conditionalFormattingRibbon';
+} from "../../utils/conditionalFormattingRibbon";
 
 export interface StylesGroupProps {
   formattingController: FormattingController;
   worksheet?: Worksheet | null;
   commandManager?: CommandManager;
-  selectedCells: Address[];
+  selectedRanges: AddressRange[];
   currentRange?: Range;
   onStyleChange?: () => void;
 }
@@ -50,7 +56,12 @@ export interface StylesGroupProps {
  */
 export interface ConditionalFormatRule {
   id: string;
-  type: 'highlightCells' | 'topBottom' | 'dataBars' | 'colorScales' | 'iconSets';
+  type:
+    | "highlightCells"
+    | "topBottom"
+    | "dataBars"
+    | "colorScales"
+    | "iconSets";
   condition: string;
   format: any;
   priority: number;
@@ -63,7 +74,7 @@ export interface ConditionalFormatRule {
 export interface TableStyle {
   id: string;
   name: string;
-  category: 'Light' | 'Medium' | 'Dark';
+  category: "Light" | "Medium" | "Dark";
   headerRowColor: string;
   firstRowStripedColor: string;
   secondRowStripedColor: string;
@@ -78,7 +89,12 @@ export interface TableStyle {
 export interface CellStylePreset {
   id: string;
   name: string;
-  category: 'Good/Bad/Neutral' | 'Data & Model' | 'Titles & Headings' | 'Themed Cell Styles' | 'Number Format';
+  category:
+    | "Good/Bad/Neutral"
+    | "Data & Model"
+    | "Titles & Headings"
+    | "Themed Cell Styles"
+    | "Number Format";
   style: {
     fontFamily?: string;
     fontSize?: number;
@@ -95,63 +111,91 @@ export interface CellStylePreset {
  * Conditional formatting highlight rules
  */
 const CF_HIGHLIGHT_RULES = [
-  { id: 'greaterThan', label: 'Greater Than...', icon: '>' },
-  { id: 'lessThan', label: 'Less Than...', icon: '<' },
-  { id: 'between', label: 'Between...', icon: '⇔' },
-  { id: 'equalTo', label: 'Equal To...', icon: '=' },
-  { id: 'textContains', label: 'Text that Contains...', icon: 'A' },
-  { id: 'dateOccurring', label: 'A Date Occurring...', icon: '📅' },
-  { id: 'duplicateValues', label: 'Duplicate Values...', icon: '⚬⚬' },
+  { id: "greaterThan", label: "Greater Than...", icon: ">" },
+  { id: "lessThan", label: "Less Than...", icon: "<" },
+  { id: "between", label: "Between...", icon: "⇔" },
+  { id: "equalTo", label: "Equal To...", icon: "=" },
+  { id: "textContains", label: "Text that Contains...", icon: "A" },
+  { id: "dateOccurring", label: "A Date Occurring...", icon: "📅" },
+  { id: "duplicateValues", label: "Duplicate Values...", icon: "⚬⚬" },
 ];
 
 /**
  * Top/Bottom rules
  */
 const CF_TOP_BOTTOM_RULES = [
-  { id: 'top10', label: 'Top 10 Items...', icon: '🔟' },
-  { id: 'top10Percent', label: 'Top 10%...', icon: '%' },
-  { id: 'bottom10', label: 'Bottom 10 Items...', icon: '🔟' },
-  { id: 'bottom10Percent', label: 'Bottom 10%...', icon: '%' },
-  { id: 'aboveAverage', label: 'Above Average...', icon: '↑' },
-  { id: 'belowAverage', label: 'Below Average...', icon: '↓' },
+  { id: "top10", label: "Top 10 Items...", icon: "🔟" },
+  { id: "top10Percent", label: "Top 10%...", icon: "%" },
+  { id: "bottom10", label: "Bottom 10 Items...", icon: "🔟" },
+  { id: "bottom10Percent", label: "Bottom 10%...", icon: "%" },
+  { id: "aboveAverage", label: "Above Average...", icon: "↑" },
+  { id: "belowAverage", label: "Below Average...", icon: "↓" },
 ];
 
 /**
  * Data bar styles
  */
 const CF_DATA_BAR_STYLES = [
-  { id: 'blueDataBar', label: 'Blue Data Bar', color: '#4472C4' },
-  { id: 'greenDataBar', label: 'Green Data Bar', color: '#70AD47' },
-  { id: 'redDataBar', label: 'Red Data Bar', color: '#FF0000' },
-  { id: 'orangeDataBar', label: 'Orange Data Bar', color: '#ED7D31' },
-  { id: 'lightBlueDataBar', label: 'Light Blue Data Bar', color: '#5B9BD5' },
-  { id: 'purpleDataBar', label: 'Purple Data Bar', color: '#7030A0' },
+  { id: "blueDataBar", label: "Blue Data Bar", color: "#4472C4" },
+  { id: "greenDataBar", label: "Green Data Bar", color: "#70AD47" },
+  { id: "redDataBar", label: "Red Data Bar", color: "#FF0000" },
+  { id: "orangeDataBar", label: "Orange Data Bar", color: "#ED7D31" },
+  { id: "lightBlueDataBar", label: "Light Blue Data Bar", color: "#5B9BD5" },
+  { id: "purpleDataBar", label: "Purple Data Bar", color: "#7030A0" },
 ];
 
 /**
  * Color scale presets
  */
 const CF_COLOR_SCALES = [
-  { id: 'greenYellowRed', label: 'Green - Yellow - Red', colors: ['#63BE7B', '#FFEB84', '#F8696B'] },
-  { id: 'redYellowGreen', label: 'Red - Yellow - Green', colors: ['#F8696B', '#FFEB84', '#63BE7B'] },
-  { id: 'greenWhiteRed', label: 'Green - White - Red', colors: ['#63BE7B', '#FFFFFF', '#F8696B'] },
-  { id: 'redWhiteGreen', label: 'Red - White - Green', colors: ['#F8696B', '#FFFFFF', '#63BE7B'] },
-  { id: 'blueWhiteRed', label: 'Blue - White - Red', colors: ['#5A8AC6', '#FFFFFF', '#F8696B'] },
-  { id: 'redWhiteBlue', label: 'Red - White - Blue', colors: ['#F8696B', '#FFFFFF', '#5A8AC6'] },
+  {
+    id: "greenYellowRed",
+    label: "Green - Yellow - Red",
+    colors: ["#63BE7B", "#FFEB84", "#F8696B"],
+  },
+  {
+    id: "redYellowGreen",
+    label: "Red - Yellow - Green",
+    colors: ["#F8696B", "#FFEB84", "#63BE7B"],
+  },
+  {
+    id: "greenWhiteRed",
+    label: "Green - White - Red",
+    colors: ["#63BE7B", "#FFFFFF", "#F8696B"],
+  },
+  {
+    id: "redWhiteGreen",
+    label: "Red - White - Green",
+    colors: ["#F8696B", "#FFFFFF", "#63BE7B"],
+  },
+  {
+    id: "blueWhiteRed",
+    label: "Blue - White - Red",
+    colors: ["#5A8AC6", "#FFFFFF", "#F8696B"],
+  },
+  {
+    id: "redWhiteBlue",
+    label: "Red - White - Blue",
+    colors: ["#F8696B", "#FFFFFF", "#5A8AC6"],
+  },
 ];
 
 /**
  * Icon set options
  */
 const CF_ICON_SETS = [
-  { id: 'threeArrows', label: '3 Arrows', icons: ['↑', '→', '↓'] },
-  { id: 'threeArrowsGray', label: '3 Arrows (Gray)', icons: ['↑', '→', '↓'] },
-  { id: 'threeTriangles', label: '3 Triangles', icons: ['▲', '▶', '▼'] },
-  { id: 'threeFlags', label: '3 Flags', icons: ['🚩', '🟨', '⚐'] },
-  { id: 'threeTrafficLights', label: '3 Traffic Lights', icons: ['🔴', '🟡', '🟢'] },
-  { id: 'threeStars', label: '3 Stars', icons: ['★', '☆', '✩'] },
-  { id: 'fourArrows', label: '4 Arrows', icons: ['↑', '↗', '→', '↓'] },
-  { id: 'fiveArrows', label: '5 Arrows', icons: ['↑', '↗', '→', '↘', '↓'] },
+  { id: "threeArrows", label: "3 Arrows", icons: ["↑", "→", "↓"] },
+  { id: "threeArrowsGray", label: "3 Arrows (Gray)", icons: ["↑", "→", "↓"] },
+  { id: "threeTriangles", label: "3 Triangles", icons: ["▲", "▶", "▼"] },
+  { id: "threeFlags", label: "3 Flags", icons: ["🚩", "🟨", "⚐"] },
+  {
+    id: "threeTrafficLights",
+    label: "3 Traffic Lights",
+    icons: ["🔴", "🟡", "🟢"],
+  },
+  { id: "threeStars", label: "3 Stars", icons: ["★", "☆", "✩"] },
+  { id: "fourArrows", label: "4 Arrows", icons: ["↑", "↗", "→", "↓"] },
+  { id: "fiveArrows", label: "5 Arrows", icons: ["↑", "↗", "→", "↘", "↓"] },
 ];
 
 /**
@@ -159,31 +203,178 @@ const CF_ICON_SETS = [
  */
 const TABLE_STYLES: TableStyle[] = [
   // Light styles (7)
-  { id: 'light1', name: 'Table Style Light 1', category: 'Light', headerRowColor: '#4472C4', firstRowStripedColor: '#FFFFFF', secondRowStripedColor: '#F2F2F2' },
-  { id: 'light2', name: 'Table Style Light 2', category: 'Light', headerRowColor: '#ED7D31', firstRowStripedColor: '#FFFFFF', secondRowStripedColor: '#F2F2F2' },
-  { id: 'light3', name: 'Table Style Light 3', category: 'Light', headerRowColor: '#A5A5A5', firstRowStripedColor: '#FFFFFF', secondRowStripedColor: '#F2F2F2' },
-  { id: 'light4', name: 'Table Style Light 4', category: 'Light', headerRowColor: '#FFC000', firstRowStripedColor: '#FFFFFF', secondRowStripedColor: '#F2F2F2' },
-  { id: 'light5', name: 'Table Style Light 5', category: 'Light', headerRowColor: '#5B9BD5', firstRowStripedColor: '#FFFFFF', secondRowStripedColor: '#F2F2F2' },
-  { id: 'light6', name: 'Table Style Light 6', category: 'Light', headerRowColor: '#70AD47', firstRowStripedColor: '#FFFFFF', secondRowStripedColor: '#F2F2F2' },
-  { id: 'light7', name: 'Table Style Light 7', category: 'Light', headerRowColor: '#7030A0', firstRowStripedColor: '#FFFFFF', secondRowStripedColor: '#F2F2F2' },
-  
+  {
+    id: "light1",
+    name: "Table Style Light 1",
+    category: "Light",
+    headerRowColor: "#4472C4",
+    firstRowStripedColor: "#FFFFFF",
+    secondRowStripedColor: "#F2F2F2",
+  },
+  {
+    id: "light2",
+    name: "Table Style Light 2",
+    category: "Light",
+    headerRowColor: "#ED7D31",
+    firstRowStripedColor: "#FFFFFF",
+    secondRowStripedColor: "#F2F2F2",
+  },
+  {
+    id: "light3",
+    name: "Table Style Light 3",
+    category: "Light",
+    headerRowColor: "#A5A5A5",
+    firstRowStripedColor: "#FFFFFF",
+    secondRowStripedColor: "#F2F2F2",
+  },
+  {
+    id: "light4",
+    name: "Table Style Light 4",
+    category: "Light",
+    headerRowColor: "#FFC000",
+    firstRowStripedColor: "#FFFFFF",
+    secondRowStripedColor: "#F2F2F2",
+  },
+  {
+    id: "light5",
+    name: "Table Style Light 5",
+    category: "Light",
+    headerRowColor: "#5B9BD5",
+    firstRowStripedColor: "#FFFFFF",
+    secondRowStripedColor: "#F2F2F2",
+  },
+  {
+    id: "light6",
+    name: "Table Style Light 6",
+    category: "Light",
+    headerRowColor: "#70AD47",
+    firstRowStripedColor: "#FFFFFF",
+    secondRowStripedColor: "#F2F2F2",
+  },
+  {
+    id: "light7",
+    name: "Table Style Light 7",
+    category: "Light",
+    headerRowColor: "#7030A0",
+    firstRowStripedColor: "#FFFFFF",
+    secondRowStripedColor: "#F2F2F2",
+  },
+
   // Medium styles (7)
-  { id: 'medium1', name: 'Table Style Medium 1', category: 'Medium', headerRowColor: '#4472C4', firstRowStripedColor: '#D9E2F3', secondRowStripedColor: '#FFFFFF' },
-  { id: 'medium2', name: 'Table Style Medium 2', category: 'Medium', headerRowColor: '#ED7D31', firstRowStripedColor: '#FCE4D6', secondRowStripedColor: '#FFFFFF' },
-  { id: 'medium3', name: 'Table Style Medium 3', category: 'Medium', headerRowColor: '#A5A5A5', firstRowStripedColor: '#EDEDED', secondRowStripedColor: '#FFFFFF' },
-  { id: 'medium4', name: 'Table Style Medium 4', category: 'Medium', headerRowColor: '#FFC000', firstRowStripedColor: '#FFE699', secondRowStripedColor: '#FFFFFF' },
-  { id: 'medium5', name: 'Table Style Medium 5', category: 'Medium', headerRowColor: '#5B9BD5', firstRowStripedColor: '#DDEBF7', secondRowStripedColor: '#FFFFFF' },
-  { id: 'medium6', name: 'Table Style Medium 6', category: 'Medium', headerRowColor: '#70AD47', firstRowStripedColor: '#E2EFDA', secondRowStripedColor: '#FFFFFF' },
-  { id: 'medium7', name: 'Table Style Medium 7', category: 'Medium', headerRowColor: '#7030A0', firstRowStripedColor: '#E4DFEC', secondRowStripedColor: '#FFFFFF' },
-  
+  {
+    id: "medium1",
+    name: "Table Style Medium 1",
+    category: "Medium",
+    headerRowColor: "#4472C4",
+    firstRowStripedColor: "#D9E2F3",
+    secondRowStripedColor: "#FFFFFF",
+  },
+  {
+    id: "medium2",
+    name: "Table Style Medium 2",
+    category: "Medium",
+    headerRowColor: "#ED7D31",
+    firstRowStripedColor: "#FCE4D6",
+    secondRowStripedColor: "#FFFFFF",
+  },
+  {
+    id: "medium3",
+    name: "Table Style Medium 3",
+    category: "Medium",
+    headerRowColor: "#A5A5A5",
+    firstRowStripedColor: "#EDEDED",
+    secondRowStripedColor: "#FFFFFF",
+  },
+  {
+    id: "medium4",
+    name: "Table Style Medium 4",
+    category: "Medium",
+    headerRowColor: "#FFC000",
+    firstRowStripedColor: "#FFE699",
+    secondRowStripedColor: "#FFFFFF",
+  },
+  {
+    id: "medium5",
+    name: "Table Style Medium 5",
+    category: "Medium",
+    headerRowColor: "#5B9BD5",
+    firstRowStripedColor: "#DDEBF7",
+    secondRowStripedColor: "#FFFFFF",
+  },
+  {
+    id: "medium6",
+    name: "Table Style Medium 6",
+    category: "Medium",
+    headerRowColor: "#70AD47",
+    firstRowStripedColor: "#E2EFDA",
+    secondRowStripedColor: "#FFFFFF",
+  },
+  {
+    id: "medium7",
+    name: "Table Style Medium 7",
+    category: "Medium",
+    headerRowColor: "#7030A0",
+    firstRowStripedColor: "#E4DFEC",
+    secondRowStripedColor: "#FFFFFF",
+  },
+
   // Dark styles (7)
-  { id: 'dark1', name: 'Table Style Dark 1', category: 'Dark', headerRowColor: '#2E75B5', firstRowStripedColor: '#4472C4', secondRowStripedColor: '#2E5C8A' },
-  { id: 'dark2', name: 'Table Style Dark 2', category: 'Dark', headerRowColor: '#C65911', firstRowStripedColor: '#ED7D31', secondRowStripedColor: '#A64B1F' },
-  { id: 'dark3', name: 'Table Style Dark 3', category: 'Dark', headerRowColor: '#7F7F7F', firstRowStripedColor: '#A5A5A5', secondRowStripedColor: '#595959' },
-  { id: 'dark4', name: 'Table Style Dark 4', category: 'Dark', headerRowColor: '#BF9000', firstRowStripedColor: '#FFC000', secondRowStripedColor: '#997300' },
-  { id: 'dark5', name: 'Table Style Dark 5', category: 'Dark', headerRowColor: '#2E75B5', firstRowStripedColor: '#5B9BD5', secondRowStripedColor: '#1F4E78' },
-  { id: 'dark6', name: 'Table Style Dark 6', category: 'Dark', headerRowColor: '#548235', firstRowStripedColor: '#70AD47', secondRowStripedColor: '#3F6826' },
-  { id: 'dark7', name: 'Table Style Dark 7', category: 'Dark', headerRowColor: '#5B2C91', firstRowStripedColor: '#7030A0', secondRowStripedColor: '#3D1E61' },
+  {
+    id: "dark1",
+    name: "Table Style Dark 1",
+    category: "Dark",
+    headerRowColor: "#2E75B5",
+    firstRowStripedColor: "#4472C4",
+    secondRowStripedColor: "#2E5C8A",
+  },
+  {
+    id: "dark2",
+    name: "Table Style Dark 2",
+    category: "Dark",
+    headerRowColor: "#C65911",
+    firstRowStripedColor: "#ED7D31",
+    secondRowStripedColor: "#A64B1F",
+  },
+  {
+    id: "dark3",
+    name: "Table Style Dark 3",
+    category: "Dark",
+    headerRowColor: "#7F7F7F",
+    firstRowStripedColor: "#A5A5A5",
+    secondRowStripedColor: "#595959",
+  },
+  {
+    id: "dark4",
+    name: "Table Style Dark 4",
+    category: "Dark",
+    headerRowColor: "#BF9000",
+    firstRowStripedColor: "#FFC000",
+    secondRowStripedColor: "#997300",
+  },
+  {
+    id: "dark5",
+    name: "Table Style Dark 5",
+    category: "Dark",
+    headerRowColor: "#2E75B5",
+    firstRowStripedColor: "#5B9BD5",
+    secondRowStripedColor: "#1F4E78",
+  },
+  {
+    id: "dark6",
+    name: "Table Style Dark 6",
+    category: "Dark",
+    headerRowColor: "#548235",
+    firstRowStripedColor: "#70AD47",
+    secondRowStripedColor: "#3F6826",
+  },
+  {
+    id: "dark7",
+    name: "Table Style Dark 7",
+    category: "Dark",
+    headerRowColor: "#5B2C91",
+    firstRowStripedColor: "#7030A0",
+    secondRowStripedColor: "#3D1E61",
+  },
 ];
 
 /**
@@ -191,33 +382,131 @@ const TABLE_STYLES: TableStyle[] = [
  */
 const CELL_STYLES: CellStylePreset[] = [
   // Good/Bad/Neutral
-  { id: 'good', name: 'Good', category: 'Good/Bad/Neutral', style: { backgroundColor: '#C6EFCE', color: '#006100' } },
-  { id: 'bad', name: 'Bad', category: 'Good/Bad/Neutral', style: { backgroundColor: '#FFC7CE', color: '#9C0006' } },
-  { id: 'neutral', name: 'Neutral', category: 'Good/Bad/Neutral', style: { backgroundColor: '#FFEB9C', color: '#9C6500' } },
-  
+  {
+    id: "good",
+    name: "Good",
+    category: "Good/Bad/Neutral",
+    style: { backgroundColor: "#C6EFCE", color: "#006100" },
+  },
+  {
+    id: "bad",
+    name: "Bad",
+    category: "Good/Bad/Neutral",
+    style: { backgroundColor: "#FFC7CE", color: "#9C0006" },
+  },
+  {
+    id: "neutral",
+    name: "Neutral",
+    category: "Good/Bad/Neutral",
+    style: { backgroundColor: "#FFEB9C", color: "#9C6500" },
+  },
+
   // Data & Model
-  { id: 'calculation', name: 'Calculation', category: 'Data & Model', style: { backgroundColor: '#F2F2F2', color: '#FA7D00', bold: true } },
-  { id: 'checkCell', name: 'Check Cell', category: 'Data & Model', style: { backgroundColor: '#A5A5A5', color: '#FFFFFF', bold: true } },
-  { id: 'input', name: 'Input', category: 'Data & Model', style: { backgroundColor: '#FFCC99', color: '#3F3F76' } },
-  { id: 'linkedCell', name: 'Linked Cell', category: 'Data & Model', style: { backgroundColor: '#FFCC99', color: '#FA7D00' } },
-  { id: 'note', name: 'Note', category: 'Data & Model', style: { backgroundColor: '#FFFFCC', color: '#000000', border: { top: '1px solid #B2B2B2', bottom: '1px solid #B2B2B2', left: '1px solid #B2B2B2', right: '1px solid #B2B2B2' } } },
-  { id: 'output', name: 'Output', category: 'Data & Model', style: { backgroundColor: '#F2F2F2', color: '#3F3F3F', bold: true } },
-  { id: 'warningText', name: 'Warning Text', category: 'Data & Model', style: { color: '#FF0000' } },
-  
+  {
+    id: "calculation",
+    name: "Calculation",
+    category: "Data & Model",
+    style: { backgroundColor: "#F2F2F2", color: "#FA7D00", bold: true },
+  },
+  {
+    id: "checkCell",
+    name: "Check Cell",
+    category: "Data & Model",
+    style: { backgroundColor: "#A5A5A5", color: "#FFFFFF", bold: true },
+  },
+  {
+    id: "input",
+    name: "Input",
+    category: "Data & Model",
+    style: { backgroundColor: "#FFCC99", color: "#3F3F76" },
+  },
+  {
+    id: "linkedCell",
+    name: "Linked Cell",
+    category: "Data & Model",
+    style: { backgroundColor: "#FFCC99", color: "#FA7D00" },
+  },
+  {
+    id: "note",
+    name: "Note",
+    category: "Data & Model",
+    style: {
+      backgroundColor: "#FFFFCC",
+      color: "#000000",
+      border: {
+        top: "1px solid #B2B2B2",
+        bottom: "1px solid #B2B2B2",
+        left: "1px solid #B2B2B2",
+        right: "1px solid #B2B2B2",
+      },
+    },
+  },
+  {
+    id: "output",
+    name: "Output",
+    category: "Data & Model",
+    style: { backgroundColor: "#F2F2F2", color: "#3F3F3F", bold: true },
+  },
+  {
+    id: "warningText",
+    name: "Warning Text",
+    category: "Data & Model",
+    style: { color: "#FF0000" },
+  },
+
   // Titles & Headings
-  { id: 'heading1', name: 'Heading 1', category: 'Titles & Headings', style: { fontSize: 15, bold: true, color: '#4472C4', border: { bottom: '#4472C4' } } },
-  { id: 'heading2', name: 'Heading 2', category: 'Titles & Headings', style: { fontSize: 13, bold: true, color: '#4472C4' } },
-  { id: 'heading3', name: 'Heading 3', category: 'Titles & Headings', style: { fontSize: 11, bold: true, color: '#4472C4' } },
-  { id: 'heading4', name: 'Heading 4', category: 'Titles & Headings', style: { fontSize: 11, bold: true, color: '#000000' } },
-  { id: 'title', name: 'Title', category: 'Titles & Headings', style: { fontSize: 18, bold: true, color: '#4472C4' } },
-  { id: 'total', name: 'Total', category: 'Titles & Headings', style: { bold: true, color: '#4472C4', border: { top: '#4472C4', bottom: '#4472C4' } } },
+  {
+    id: "heading1",
+    name: "Heading 1",
+    category: "Titles & Headings",
+    style: {
+      fontSize: 15,
+      bold: true,
+      color: "#4472C4",
+      border: { bottom: "#4472C4" },
+    },
+  },
+  {
+    id: "heading2",
+    name: "Heading 2",
+    category: "Titles & Headings",
+    style: { fontSize: 13, bold: true, color: "#4472C4" },
+  },
+  {
+    id: "heading3",
+    name: "Heading 3",
+    category: "Titles & Headings",
+    style: { fontSize: 11, bold: true, color: "#4472C4" },
+  },
+  {
+    id: "heading4",
+    name: "Heading 4",
+    category: "Titles & Headings",
+    style: { fontSize: 11, bold: true, color: "#000000" },
+  },
+  {
+    id: "title",
+    name: "Title",
+    category: "Titles & Headings",
+    style: { fontSize: 18, bold: true, color: "#4472C4" },
+  },
+  {
+    id: "total",
+    name: "Total",
+    category: "Titles & Headings",
+    style: {
+      bold: true,
+      color: "#4472C4",
+      border: { top: "#4472C4", bottom: "#4472C4" },
+    },
+  },
 ];
 
 export const StylesGroup: React.FC<StylesGroupProps> = ({
   formattingController,
   worksheet,
   commandManager,
-  selectedCells,
+  selectedRanges,
   currentRange,
   onStyleChange,
 }) => {
@@ -226,12 +515,16 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
   const [showClearRulesMenu, setShowClearRulesMenu] = useState(false);
   const [showTableStylesMenu, setShowTableStylesMenu] = useState(false);
   const [showCellStylesMenu, setShowCellStylesMenu] = useState(false);
-  const [quickRuleKind, setQuickRuleKind] = useState<QuickRuleKind | null>(null);
+  const [quickRuleKind, setQuickRuleKind] = useState<QuickRuleKind | null>(
+    null,
+  );
   const [showRulesManager, setShowRulesManager] = useState(false);
   const [openBuilderOnMount, setOpenBuilderOnMount] = useState(false);
-  const [pendingTableStyle, setPendingTableStyle] = useState<TableStyle | null>(null);
+  const [pendingTableStyle, setPendingTableStyle] = useState<TableStyle | null>(
+    null,
+  );
   const previewRulesRef = useRef<ConditionalFormattingRule[] | null>(null);
-  
+
   const cfMenuRef = useRef(null);
   const tableStylesMenuRef = useRef(null);
   const cellStylesMenuRef = useRef(null);
@@ -240,14 +533,16 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     if (currentRange?.start && currentRange?.end) {
       return normalizeRange(currentRange);
     }
-    if (selectedCells.length > 0) {
+    if (selectedRanges.length > 0) {
+      const first = selectedRanges[0]!;
+      const last = selectedRanges[selectedRanges.length - 1]!;
       return normalizeRange({
-        start: selectedCells[0]!,
-        end: selectedCells[selectedCells.length - 1]!,
+        start: { row: first.startRow, col: first.startCol },
+        end: { row: last.endRow, col: last.endCol },
       });
     }
     return null;
-  }, [currentRange, selectedCells]);
+  }, [currentRange, selectedRanges]);
 
   const notifyChange = useCallback(() => {
     onStyleChange?.();
@@ -263,50 +558,69 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
   // Close dropdowns when clicking outside (use click, not mousedown, so item clicks fire first)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (cfMenuRef.current && !(cfMenuRef.current as HTMLElement).contains(e.target as Node)) {
+      if (
+        cfMenuRef.current &&
+        !(cfMenuRef.current as HTMLElement).contains(e.target as Node)
+      ) {
         setShowCFMenu(false);
         setShowCFSubmenu(null);
         setShowClearRulesMenu(false);
         clearPreview();
       }
-      if (tableStylesMenuRef.current && !(tableStylesMenuRef.current as HTMLElement).contains(e.target as Node)) {
+      if (
+        tableStylesMenuRef.current &&
+        !(tableStylesMenuRef.current as HTMLElement).contains(e.target as Node)
+      ) {
         setShowTableStylesMenu(false);
       }
-      if (cellStylesMenuRef.current && !(cellStylesMenuRef.current as HTMLElement).contains(e.target as Node)) {
+      if (
+        cellStylesMenuRef.current &&
+        !(cellStylesMenuRef.current as HTMLElement).contains(e.target as Node)
+      ) {
         setShowCellStylesMenu(false);
       }
     };
 
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
   }, [clearPreview]);
 
-  const previewGalleryRule = useCallback((category: 'dataBars' | 'colorScales' | 'iconSets', ruleId: string) => {
-    if (!worksheet || !effectiveRange) return;
-    const rule = buildGalleryRule(category, ruleId);
-    if (!rule) return;
-    if (!previewRulesRef.current) {
-      previewRulesRef.current = worksheet.getConditionalFormattingRules();
-    }
-    applyPreviewRules(worksheet, effectiveRange, [rule]);
-    notifyChange();
-  }, [worksheet, effectiveRange, notifyChange]);
+  const previewGalleryRule = useCallback(
+    (category: "dataBars" | "colorScales" | "iconSets", ruleId: string) => {
+      if (!worksheet || !effectiveRange) return;
+      const rule = buildGalleryRule(category, ruleId);
+      if (!rule) return;
+      if (!previewRulesRef.current) {
+        previewRulesRef.current = worksheet.getConditionalFormattingRules();
+      }
+      applyPreviewRules(worksheet, effectiveRange, [rule]);
+      notifyChange();
+    },
+    [worksheet, effectiveRange, notifyChange],
+  );
 
-  const applyGalleryRule = useCallback((category: 'dataBars' | 'colorScales' | 'iconSets', ruleId: string) => {
-    if (!worksheet || !effectiveRange || !commandManager) return;
-    clearPreview();
-    const rule = buildGalleryRule(category, ruleId);
-    if (!rule) return;
-    addConditionalRule(worksheet, commandManager, effectiveRange, rule);
-    setShowCFMenu(false);
-    setShowCFSubmenu(null);
-    notifyChange();
-  }, [worksheet, effectiveRange, commandManager, clearPreview, notifyChange]);
+  const applyGalleryRule = useCallback(
+    (category: "dataBars" | "colorScales" | "iconSets", ruleId: string) => {
+      if (!worksheet || !effectiveRange || !commandManager) return;
+      clearPreview();
+      const rule = buildGalleryRule(category, ruleId);
+      if (!rule) return;
+      addConditionalRule(worksheet, commandManager, effectiveRange, rule);
+      setShowCFMenu(false);
+      setShowCFSubmenu(null);
+      notifyChange();
+    },
+    [worksheet, effectiveRange, commandManager, clearPreview, notifyChange],
+  );
 
   const handleCFRule = (category: string, ruleId: string) => {
     if (!worksheet || !effectiveRange) return;
 
-    if (category === 'dataBars' || category === 'colorScales' || category === 'iconSets') {
+    if (
+      category === "dataBars" ||
+      category === "colorScales" ||
+      category === "iconSets"
+    ) {
       applyGalleryRule(category, ruleId);
       return;
     }
@@ -328,9 +642,9 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     notifyChange();
   };
 
-  const handleClearRules = (scope: 'selection' | 'sheet') => {
+  const handleClearRules = (scope: "selection" | "sheet") => {
     if (!worksheet || !commandManager) return;
-    if (scope === 'sheet') {
+    if (scope === "sheet") {
       clearAllConditionalRules(worksheet, commandManager);
     } else if (effectiveRange) {
       clearRulesFromRange(worksheet, commandManager, effectiveRange);
@@ -358,7 +672,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
         headerRowColor: pendingTableStyle.headerRowColor,
         firstRowStripedColor: pendingTableStyle.firstRowStripedColor,
         secondRowStripedColor: pendingTableStyle.secondRowStripedColor,
-        borderColor: '#BFBFBF',
+        borderColor: "#BFBFBF",
       }),
     ];
 
@@ -369,7 +683,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     commandManager.execute(
       commands.length === 1
         ? commands[0]!
-        : new BatchCommand(commands, 'Format as Table'),
+        : new BatchCommand(commands, "Format as Table"),
     );
 
     setPendingTableStyle(null);
@@ -380,7 +694,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
    * Handle cell style selection from gallery
    */
   const handleCellStyle = (styleId: string) => {
-    if (selectedCells.length === 0) {
+    if (selectedRanges.length === 0) {
       setShowCellStylesMenu(false);
       return;
     }
@@ -388,7 +702,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     const style = getCellStyle(styleId);
     if (!style) return;
 
-    formattingController.applyCellStylePreset(selectedCells, style);
+    formattingController.applyCellStylePresetInRanges(selectedRanges, style);
 
     setShowCellStylesMenu(false);
     onStyleChange?.();
@@ -396,70 +710,70 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
 
   // Common styles
   const buttonStyles: React.CSSProperties = {
-    border: '1px solid #d0d0d0',
-    background: '#fff',
-    padding: '6px 12px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: '90px',
-    height: '28px',
-    borderRadius: '3px',
-    transition: 'all 150ms ease',
+    border: "1px solid #d0d0d0",
+    background: "#fff",
+    padding: "6px 12px",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontFamily: "system-ui, -apple-system, sans-serif",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: "90px",
+    height: "28px",
+    borderRadius: "3px",
+    transition: "all 150ms ease",
   };
 
   const dropdownStyles: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
+    position: "absolute",
+    top: "100%",
     left: 0,
-    marginTop: '4px',
-    background: '#fff',
-    border: '1px solid #d0d0d0',
-    borderRadius: '4px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    marginTop: "4px",
+    background: "#fff",
+    border: "1px solid #d0d0d0",
+    borderRadius: "4px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
     zIndex: 1000,
-    minWidth: '250px',
-    maxHeight: '500px',
-    overflowY: 'auto',
-    animation: 'slideDown 200ms ease-out',
+    minWidth: "250px",
+    maxHeight: "500px",
+    overflowY: "auto",
+    animation: "slideDown 200ms ease-out",
   };
 
   const cfMainDropdownStyles: React.CSSProperties = {
     ...dropdownStyles,
-    overflow: 'visible',
-    overflowY: 'visible',
-    maxHeight: 'none',
+    overflow: "visible",
+    overflowY: "visible",
+    maxHeight: "none",
     zIndex: 10050,
   };
 
   const submenuFlyoutStyles: React.CSSProperties = {
-    position: 'absolute',
-    left: '100%',
+    position: "absolute",
+    left: "100%",
     top: 0,
-    marginLeft: '-2px',
-    background: '#fff',
-    border: '1px solid #d0d0d0',
-    borderRadius: '4px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    marginLeft: "-2px",
+    background: "#fff",
+    border: "1px solid #d0d0d0",
+    borderRadius: "4px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
     zIndex: 10051,
-    minWidth: '250px',
-    maxHeight: '500px',
-    overflowY: 'auto',
-    animation: 'slideDown 200ms ease-out',
+    minWidth: "250px",
+    maxHeight: "500px",
+    overflowY: "auto",
+    animation: "slideDown 200ms ease-out",
   };
 
   const menuItemStyles: React.CSSProperties = {
-    padding: '8px 12px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    borderBottom: '1px solid #f0f0f0',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    transition: 'background 150ms ease',
+    padding: "8px 12px",
+    cursor: "pointer",
+    fontSize: "13px",
+    borderBottom: "1px solid #f0f0f0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    transition: "background 150ms ease",
   };
 
   const handleSubmenuMouseLeave = (
@@ -475,7 +789,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
   const renderCFMenuItem = (category: string, label: string) => (
     <div
       key={category}
-      style={{ position: 'relative' }}
+      style={{ position: "relative" }}
       data-cf-submenu-root={category}
       onMouseEnter={() => setShowCFSubmenu(category)}
       onMouseLeave={(event) => handleSubmenuMouseLeave(event, category)}
@@ -483,7 +797,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
       <div
         style={{
           ...menuItemStyles,
-          background: showCFSubmenu === category ? '#e3f2fd' : undefined,
+          background: showCFSubmenu === category ? "#e3f2fd" : undefined,
         }}
       >
         <span>{label}</span>
@@ -500,40 +814,42 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
   // Render CF category submenu
   const renderCFSubmenu = (category: string) => {
     let rules: any[] = [];
-    let title = '';
+    let title = "";
 
     switch (category) {
-      case 'highlight':
+      case "highlight":
         rules = CF_HIGHLIGHT_RULES;
-        title = 'Highlight Cells Rules';
+        title = "Highlight Cells Rules";
         break;
-      case 'topBottom':
+      case "topBottom":
         rules = CF_TOP_BOTTOM_RULES;
-        title = 'Top/Bottom Rules';
+        title = "Top/Bottom Rules";
         break;
-      case 'dataBars':
+      case "dataBars":
         rules = CF_DATA_BAR_STYLES;
-        title = 'Data Bars';
+        title = "Data Bars";
         break;
-      case 'colorScales':
+      case "colorScales":
         rules = CF_COLOR_SCALES;
-        title = 'Color Scales';
+        title = "Color Scales";
         break;
-      case 'iconSets':
+      case "iconSets":
         rules = CF_ICON_SETS;
-        title = 'Icon Sets';
+        title = "Icon Sets";
         break;
     }
 
     return (
       <div>
-        <div style={{
-          padding: '10px 12px',
-          fontWeight: 600,
-          fontSize: '12px',
-          color: '#666',
-          borderBottom: '2px solid #e0e0e0',
-        }}>
+        <div
+          style={{
+            padding: "10px 12px",
+            fontWeight: 600,
+            fontSize: "12px",
+            color: "#666",
+            borderBottom: "2px solid #e0e0e0",
+          }}
+        >
           {title}
         </div>
         {rules.map((rule, index) => (
@@ -541,7 +857,8 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
             key={rule.id}
             style={{
               ...menuItemStyles,
-              borderBottom: index === rules.length - 1 ? 'none' : '1px solid #f0f0f0',
+              borderBottom:
+                index === rules.length - 1 ? "none" : "1px solid #f0f0f0",
             }}
             onClick={(event) => {
               event.stopPropagation();
@@ -549,52 +866,72 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
             }}
             onMouseDown={(event) => event.stopPropagation()}
             onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
-              if (category === 'dataBars' || category === 'colorScales' || category === 'iconSets') {
+              (e.currentTarget as HTMLElement).style.backgroundColor =
+                "#e3f2fd";
+              if (
+                category === "dataBars" ||
+                category === "colorScales" ||
+                category === "iconSets"
+              ) {
                 previewGalleryRule(category, rule.id);
               }
             }}
             onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
-              if (category === 'dataBars' || category === 'colorScales' || category === 'iconSets') {
+              (e.currentTarget as HTMLElement).style.backgroundColor = "#fff";
+              if (
+                category === "dataBars" ||
+                category === "colorScales" ||
+                category === "iconSets"
+              ) {
                 clearPreview();
               }
             }}
           >
-            {category === 'dataBars' && 'color' in rule && (
-              <div style={{
-                width: '80px',
-                height: '14px',
-                background: `linear-gradient(to right, ${rule.color} 70%, transparent 70%)`,
-                marginRight: '8px',
-                border: '1px solid #ddd',
-              }} />
+            {category === "dataBars" && "color" in rule && (
+              <div
+                style={{
+                  width: "80px",
+                  height: "14px",
+                  background: `linear-gradient(to right, ${rule.color} 70%, transparent 70%)`,
+                  marginRight: "8px",
+                  border: "1px solid #ddd",
+                }}
+              />
             )}
-            {category === 'colorScales' && 'colors' in rule && (
-              <div style={{ display: 'flex', gap: '2px', marginRight: '8px' }}>
+            {category === "colorScales" && "colors" in rule && (
+              <div style={{ display: "flex", gap: "2px", marginRight: "8px" }}>
                 {rule.colors.map((color: string, i: number) => (
                   <div
                     key={i}
                     style={{
-                      width: '24px',
-                      height: '14px',
+                      width: "24px",
+                      height: "14px",
                       backgroundColor: color,
-                      border: '1px solid #ddd',
+                      border: "1px solid #ddd",
                     }}
                   />
                 ))}
               </div>
             )}
-            {category === 'iconSets' && 'icons' in rule && (
-              <div style={{ display: 'flex', gap: '2px', marginRight: '8px', fontSize: '14px' }}>
+            {category === "iconSets" && "icons" in rule && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "2px",
+                  marginRight: "8px",
+                  fontSize: "14px",
+                }}
+              >
                 {rule.icons.map((icon: string, i: number) => (
                   <span key={i}>{icon}</span>
                 ))}
               </div>
             )}
             <span style={{ flex: 1 }}>{rule.label}</span>
-            {('icon' in rule) && (
-              <span style={{ marginLeft: '8px', opacity: 0.6 }}>{rule.icon}</span>
+            {"icon" in rule && (
+              <span style={{ marginLeft: "8px", opacity: 0.6 }}>
+                {rule.icon}
+              </span>
             )}
           </div>
         ))}
@@ -603,261 +940,331 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '4px',
-      padding: '3px 6px 0 6px',
-      borderRight: '1px solid #d0d0d0',
-      minHeight: '108px',
-      maxHeight: '108px',
-      boxSizing: 'border-box',
-      position: 'relative',
-      overflow: 'visible',
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingBottom: '16px' }}>
-      {/* Row 1: Conditional Formatting */}
-      <div style={{ position: 'relative' }} ref={cfMenuRef}>
-        <button
-          className="cs-custom-group-button"
-          onClick={() => setShowCFMenu(!showCFMenu)}
-          title="Conditional Formatting"
-        >
-          <span style={{ fontSize: '11px' }}>Conditional</span>
-          <span style={{ fontSize: '11px' }}>Formatting</span>
-          <span className="cs-custom-button-dropdown-arrow">▼</span>
-        </button>
-
-        {showCFMenu && (
-          <div
-            style={cfMainDropdownStyles}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "4px",
+        padding: "3px 6px 0 6px",
+        borderRight: "1px solid #d0d0d0",
+        minHeight: "108px",
+        maxHeight: "108px",
+        boxSizing: "border-box",
+        position: "relative",
+        overflow: "visible",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "4px",
+          paddingBottom: "16px",
+        }}
+      >
+        {/* Row 1: Conditional Formatting */}
+        <div style={{ position: "relative" }} ref={cfMenuRef}>
+          <button
+            className="cs-custom-group-button"
+            onClick={() => setShowCFMenu(!showCFMenu)}
+            title="Conditional Formatting"
           >
-            {renderCFMenuItem('highlight', 'Highlight Cells Rules')}
-            {renderCFMenuItem('topBottom', 'Top/Bottom Rules')}
-            {renderCFMenuItem('dataBars', 'Data Bars')}
-            {renderCFMenuItem('colorScales', 'Color Scales')}
-            {renderCFMenuItem('iconSets', 'Icon Sets')}
+            <span style={{ fontSize: "11px" }}>Conditional</span>
+            <span style={{ fontSize: "11px" }}>Formatting</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
+          </button>
 
-            <div style={{ height: '1px', background: '#e0e0e0', margin: '4px 0' }} />
-
+          {showCFMenu && (
             <div
-              style={menuItemStyles}
-              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                setShowCFSubmenu(null);
-                clearPreview();
-                (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowCFMenu(false);
-                setOpenBuilderOnMount(true);
-                setShowRulesManager(true);
-              }}
+              style={cfMainDropdownStyles}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
             >
-              <span>New Rule...</span>
-            </div>
+              {renderCFMenuItem("highlight", "Highlight Cells Rules")}
+              {renderCFMenuItem("topBottom", "Top/Bottom Rules")}
+              {renderCFMenuItem("dataBars", "Data Bars")}
+              {renderCFMenuItem("colorScales", "Color Scales")}
+              {renderCFMenuItem("iconSets", "Icon Sets")}
 
-            <div
-              style={{ ...menuItemStyles, position: 'relative' }}
-              onMouseEnter={() => {
-                setShowCFSubmenu(null);
-                clearPreview();
-                setShowClearRulesMenu(true);
-              }}
-              onMouseLeave={(event) => {
-                const related = event.relatedTarget as Node | null;
-                if (!related || !event.currentTarget.contains(related)) {
-                  setShowClearRulesMenu(false);
-                }
-              }}
-            >
-              <span>Clear Rules</span>
-              <span>▶</span>
-              {showClearRulesMenu && (
-                <div
-                  data-submenu="clear-rules"
-                  style={{
-                    ...submenuFlyoutStyles,
-                    minWidth: 220,
-                  }}
-                >
+              <div
+                style={{
+                  height: "1px",
+                  background: "#e0e0e0",
+                  margin: "4px 0",
+                }}
+              />
+
+              <div
+                style={menuItemStyles}
+                onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                  setShowCFSubmenu(null);
+                  clearPreview();
+                  (e.currentTarget as HTMLElement).style.backgroundColor =
+                    "#e3f2fd";
+                }}
+                onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor =
+                    "#fff";
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowCFMenu(false);
+                  setOpenBuilderOnMount(true);
+                  setShowRulesManager(true);
+                }}
+              >
+                <span>New Rule...</span>
+              </div>
+
+              <div
+                style={{ ...menuItemStyles, position: "relative" }}
+                onMouseEnter={() => {
+                  setShowCFSubmenu(null);
+                  clearPreview();
+                  setShowClearRulesMenu(true);
+                }}
+                onMouseLeave={(event) => {
+                  const related = event.relatedTarget as Node | null;
+                  if (!related || !event.currentTarget.contains(related)) {
+                    setShowClearRulesMenu(false);
+                  }
+                }}
+              >
+                <span>Clear Rules</span>
+                <span>▶</span>
+                {showClearRulesMenu && (
                   <div
-                    style={menuItemStyles}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleClearRules('selection');
-                    }}
-                    onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
-                    }}
-                    onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
+                    data-submenu="clear-rules"
+                    style={{
+                      ...submenuFlyoutStyles,
+                      minWidth: 220,
                     }}
                   >
-                    Clear Rules from Selected Cells
-                  </div>
-                  <div
-                    style={{ ...menuItemStyles, borderBottom: 'none' }}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleClearRules('sheet');
-                    }}
-                    onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
-                    }}
-                    onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
-                    }}
-                  >
-                    Clear Rules from Entire Sheet
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Manage Rules */}
-            <div
-              style={{ ...menuItemStyles, borderBottom: 'none' }}
-              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                setShowCFSubmenu(null);
-                setShowClearRulesMenu(false);
-                clearPreview();
-                (e.currentTarget as HTMLElement).style.backgroundColor = '#e3f2fd';
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
-              }}
-              onClick={() => {
-                setShowCFMenu(false);
-                setOpenBuilderOnMount(false);
-                setShowRulesManager(true);
-              }}
-            >
-              <span>Manage Rules...</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Row 2: Format as Table */}
-      <div style={{ position: 'relative' }} ref={tableStylesMenuRef}>
-        <button
-          className="cs-custom-group-button"
-          onClick={() => setShowTableStylesMenu(!showTableStylesMenu)}
-          title="Format as Table"
-        >
-          <StylesGroupIcon1 />
-          <span style={{ fontSize: '11px' }}>Format as</span>
-          <span style={{ fontSize: '11px' }}>Table</span>
-          <span className="cs-custom-button-dropdown-arrow">▼</span>
-        </button>
-
-        {showTableStylesMenu && (
-          <div style={{
-            ...dropdownStyles,
-            minWidth: '400px',
-            maxHeight: '450px',
-          }}>
-            {/* Table Styles Gallery */}
-            {['Light', 'Medium', 'Dark'].map(category => (
-              <div key={category}>
-                <div style={{
-                  padding: '8px 12px',
-                  fontWeight: 600,
-                  fontSize: '11px',
-                  color: '#666',
-                  background: '#f5f5f5',
-                }}>
-                  {category}
-                </div>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '8px',
-                  padding: '12px',
-                }}>
-                  {TABLE_STYLES.filter(s => s.category === category).map(style => (
                     <div
-                      key={style.id}
-                      style={{
-                        cursor: 'pointer',
-                        border: '1px solid #d0d0d0',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                        transition: 'transform 150ms ease, box-shadow 150ms ease',
+                      style={menuItemStyles}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleClearRules("selection");
                       }}
-                      onClick={() => handleTableStylePick(style.id)}
                       onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                        (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
-                        (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          "#e3f2fd";
                       }}
                       onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                        (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
-                        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          "#fff";
                       }}
-                      title={style.name}
                     >
-                      {/* Table preview */}
-                      <div style={{ height: '60px', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ height: '20px', backgroundColor: style.headerRowColor }} />
-                        <div style={{ height: '13px', backgroundColor: style.firstRowStripedColor }} />
-                        <div style={{ height: '13px', backgroundColor: style.secondRowStripedColor }} />
-                        <div style={{ height: '14px', backgroundColor: style.firstRowStripedColor }} />
-                      </div>
+                      Clear Rules from Selected Cells
                     </div>
-                  ))}
-                </div>
+                    <div
+                      style={{ ...menuItemStyles, borderBottom: "none" }}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleClearRules("sheet");
+                      }}
+                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          "#e3f2fd";
+                      }}
+                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          "#fff";
+                      }}
+                    >
+                      Clear Rules from Entire Sheet
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+
+              {/* Manage Rules */}
+              <div
+                style={{ ...menuItemStyles, borderBottom: "none" }}
+                onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                  setShowCFSubmenu(null);
+                  setShowClearRulesMenu(false);
+                  clearPreview();
+                  (e.currentTarget as HTMLElement).style.backgroundColor =
+                    "#e3f2fd";
+                }}
+                onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor =
+                    "#fff";
+                }}
+                onClick={() => {
+                  setShowCFMenu(false);
+                  setOpenBuilderOnMount(false);
+                  setShowRulesManager(true);
+                }}
+              >
+                <span>Manage Rules...</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Row 2: Format as Table */}
+        <div style={{ position: "relative" }} ref={tableStylesMenuRef}>
+          <button
+            className="cs-custom-group-button"
+            onClick={() => setShowTableStylesMenu(!showTableStylesMenu)}
+            title="Format as Table"
+          >
+            <StylesGroupIcon1 />
+            <span style={{ fontSize: "11px" }}>Format as</span>
+            <span style={{ fontSize: "11px" }}>Table</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
+          </button>
+
+          {showTableStylesMenu && (
+            <div
+              style={{
+                ...dropdownStyles,
+                minWidth: "400px",
+                maxHeight: "450px",
+              }}
+            >
+              {/* Table Styles Gallery */}
+              {["Light", "Medium", "Dark"].map((category) => (
+                <div key={category}>
+                  <div
+                    style={{
+                      padding: "8px 12px",
+                      fontWeight: 600,
+                      fontSize: "11px",
+                      color: "#666",
+                      background: "#f5f5f5",
+                    }}
+                  >
+                    {category}
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: "8px",
+                      padding: "12px",
+                    }}
+                  >
+                    {TABLE_STYLES.filter((s) => s.category === category).map(
+                      (style) => (
+                        <div
+                          key={style.id}
+                          style={{
+                            cursor: "pointer",
+                            border: "1px solid #d0d0d0",
+                            borderRadius: "4px",
+                            overflow: "hidden",
+                            transition:
+                              "transform 150ms ease, box-shadow 150ms ease",
+                          }}
+                          onClick={() => handleTableStylePick(style.id)}
+                          onMouseEnter={(
+                            e: React.MouseEvent<HTMLDivElement>,
+                          ) => {
+                            (e.currentTarget as HTMLElement).style.transform =
+                              "scale(1.05)";
+                            (e.currentTarget as HTMLElement).style.boxShadow =
+                              "0 2px 8px rgba(0,0,0,0.15)";
+                          }}
+                          onMouseLeave={(
+                            e: React.MouseEvent<HTMLDivElement>,
+                          ) => {
+                            (e.currentTarget as HTMLElement).style.transform =
+                              "scale(1)";
+                            (e.currentTarget as HTMLElement).style.boxShadow =
+                              "none";
+                          }}
+                          title={style.name}
+                        >
+                          {/* Table preview */}
+                          <div
+                            style={{
+                              height: "60px",
+                              display: "flex",
+                              flexDirection: "column",
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: "20px",
+                                backgroundColor: style.headerRowColor,
+                              }}
+                            />
+                            <div
+                              style={{
+                                height: "13px",
+                                backgroundColor: style.firstRowStripedColor,
+                              }}
+                            />
+                            <div
+                              style={{
+                                height: "13px",
+                                backgroundColor: style.secondRowStripedColor,
+                              }}
+                            />
+                            <div
+                              style={{
+                                height: "14px",
+                                backgroundColor: style.firstRowStripedColor,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Row 3: Cell Styles */}
+        <div style={{ position: "relative" }} ref={cellStylesMenuRef}>
+          <button
+            className="cs-custom-group-button"
+            onClick={() => setShowCellStylesMenu(!showCellStylesMenu)}
+            title="Cell Styles"
+          >
+            <span style={{ fontSize: "11px" }}>Cell Styles</span>
+            <span className="cs-custom-button-dropdown-arrow">▼</span>
+          </button>
+
+          {showCellStylesMenu && (
+            <div style={{ ...dropdownStyles }}>
+              <CellStylesGallery
+                onStyleSelect={handleCellStyle}
+                onClose={() => setShowCellStylesMenu(false)}
+                hoverPreview={false}
+                width="420px"
+                maxHeight="500px"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Row 3: Cell Styles */}
-      <div style={{ position: 'relative' }} ref={cellStylesMenuRef}>
-        <button
-          className="cs-custom-group-button"
-          onClick={() => setShowCellStylesMenu(!showCellStylesMenu)}
-          title="Cell Styles"
-        >
-          <span style={{ fontSize: '11px' }}>Cell Styles</span>
-          <span className="cs-custom-button-dropdown-arrow">▼</span>
-        </button>
-
-        {showCellStylesMenu && (
-          <div style={{ ...dropdownStyles }}>
-            <CellStylesGallery
-              onStyleSelect={handleCellStyle}
-              onClose={() => setShowCellStylesMenu(false)}
-              hoverPreview={false}
-              width="420px"
-              maxHeight="500px"
-            />
-          </div>
-        )}
+      <div
+        style={{
+          fontSize: "11px",
+          color: "#605e5c",
+          textAlign: "center",
+          padding: "2px 4px 0 4px",
+          whiteSpace: "nowrap",
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "16px",
+          lineHeight: "16px",
+        }}
+      >
+        Styles
       </div>
-      </div>
-
-      <div style={{
-        fontSize: '11px',
-        color: '#605e5c',
-        textAlign: 'center',
-        padding: '2px 4px 0 4px',
-        whiteSpace: 'nowrap',
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '16px',
-        lineHeight: '16px',
-      }}>Styles</div>
 
       <style>
         {`

@@ -1,19 +1,26 @@
 /**
  * CutRangeOverlay.tsx
- * 
+ *
  * Renders a marching ants border animation over cut cells
  * to visually indicate which cells will be cleared after paste
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from "react";
 
 export interface CutRangeOverlayProps {
-  cutRange: { start: { row: number; col: number }; end: { row: number; col: number } } | null;
+  cutRange: {
+    start: { row: number; col: number };
+    end: { row: number; col: number };
+  } | null;
   renderer: any; // CanvasRenderer
   zoom: number;
 }
 
-export const CutRangeOverlay: React.FC<CutRangeOverlayProps> = ({ cutRange, renderer, zoom }) => {
+export const CutRangeOverlay: React.FC<CutRangeOverlayProps> = ({
+  cutRange,
+  renderer,
+  zoom,
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const offsetRef = useRef<number>(0);
@@ -28,7 +35,7 @@ export const CutRangeOverlay: React.FC<CutRangeOverlayProps> = ({ cutRange, rend
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     // Get canvas dimensions
@@ -38,8 +45,8 @@ export const CutRangeOverlay: React.FC<CutRangeOverlayProps> = ({ cutRange, rend
     const rect = container.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = rect.height;
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
+    canvas.style.width = rect.width + "px";
+    canvas.style.height = rect.height + "px";
 
     // Animation function
     const animate = () => {
@@ -49,8 +56,14 @@ export const CutRangeOverlay: React.FC<CutRangeOverlayProps> = ({ cutRange, rend
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Get cell bounds for the cut range
-      const startBounds = renderer.getCellBounds?.(cutRange.start.row, cutRange.start.col);
-      const endBounds = renderer.getCellBounds?.(cutRange.end.row, cutRange.end.col);
+      const startBounds = renderer.getCellBounds?.(
+        cutRange.start.row,
+        cutRange.start.col,
+      );
+      const endBounds = renderer.getCellBounds?.(
+        cutRange.end.row,
+        cutRange.end.col,
+      );
 
       if (!startBounds || !endBounds) {
         animationRef.current = requestAnimationFrame(animate);
@@ -60,15 +73,22 @@ export const CutRangeOverlay: React.FC<CutRangeOverlayProps> = ({ cutRange, rend
       // Calculate rectangle
       const x = Math.min(startBounds.x, endBounds.x);
       const y = Math.min(startBounds.y, endBounds.y);
-      const w = Math.max(startBounds.x + startBounds.width, endBounds.x + endBounds.width) - x;
-      const h = Math.max(startBounds.y + startBounds.height, endBounds.y + endBounds.height) - y;
+      const w =
+        Math.max(
+          startBounds.x + startBounds.width,
+          endBounds.x + endBounds.width,
+        ) - x;
+      const h =
+        Math.max(
+          startBounds.y + startBounds.height,
+          endBounds.y + endBounds.height,
+        ) - y;
 
       // Draw marching ants border
       ctx.save();
-      ctx.strokeStyle = '#0078D4'; // Excel blue
+      ctx.strokeStyle = "#1A73E8";
       ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]); // Dash pattern
-      ctx.lineDashOffset = -offsetRef.current; // Animate by offsetting
+      ctx.setLineDash([]);
       ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
       ctx.restore();
 
@@ -95,11 +115,11 @@ export const CutRangeOverlay: React.FC<CutRangeOverlayProps> = ({ cutRange, rend
     <canvas
       ref={canvasRef}
       style={{
-        position: 'absolute',
+        position: "absolute",
         top: 0,
         left: 0,
-        pointerEvents: 'none', // Allow clicks to pass through
-        zIndex: 900 // Above the spreadsheet but below overlays
+        pointerEvents: "none", // Allow clicks to pass through
+        zIndex: 900, // Above the spreadsheet but below overlays
       }}
     />
   );

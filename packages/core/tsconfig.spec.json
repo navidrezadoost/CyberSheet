@@ -3,14 +3,9 @@
   "compilerOptions": {
     "types": ["jest", "node"],
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "@cyber-sheet/renderer-canvas": ["../renderer-canvas/src/index.ts"]
     }
   },
-  "include": [
-    "__tests__/**/*.ts",
-    "src/__tests__/**/*.ts",
-    "test/**/*.ts"
-  ]
+  "include": ["__tests__/**/*.ts", "src/__tests__/**/*.ts", "test/**/*.ts"]
 }

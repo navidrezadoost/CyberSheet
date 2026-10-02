@@ -38,6 +38,14 @@ export interface Command {
    * Optional description for debugging
    */
   description?: string;
+
+  /**
+   * Set to true for commands that can never touch values, formulas or the
+   * dependency graph (e.g. pure formatting). The DEV/TEST DAG invariant
+   * validation walks every formula in the sheet, so skipping it keeps
+   * formatting operations O(changed cells) instead of O(all formulas).
+   */
+  skipGraphValidation?: boolean;
 }
 
 /**
@@ -176,6 +184,7 @@ export class SetValueCommand implements Command {
  * Then temporal stability is proven.
  */
 export class SetStyleCommand implements Command {
+  readonly skipGraphValidation = true;
   private worksheet: Worksheet;
   private addr: Address;
   private previousStyle: CellStyle | undefined;  // Canonical pointer
@@ -215,6 +224,11 @@ export class BatchCommand implements Command {
     this.commands = commands;
     this.description = description;
   }
+
+  /** A batch can skip DAG validation only if every child can. */
+  get skipGraphValidation(): boolean {
+    return this.commands.length > 0 && this.commands.every((c) => c.skipGraphValidation === true);
+  }
   
   execute(): void {
     for (const cmd of this.commands) {
@@ -237,6 +251,7 @@ export class BatchCommand implements Command {
  * No reconstruction during replay.
  */
 export class SetRangeStyleCommand implements Command {
+  readonly skipGraphValidation = true;
   private worksheet: Worksheet;
   private snapshots: CellSnapshot[] = [];
   private range: { start: Address; end: Address };
@@ -324,7 +339,7 @@ export class CommandManager {
     command.execute();
     
     // DEV/TEST only: Validate DAG invariants after command execution
-    if (process.env.NODE_ENV !== 'production' && this.worksheet) {
+    if (process.env.NODE_ENV !== 'production' && this.worksheet && !command.skipGraphValidation) {
       // Access private DAG through worksheet's internal structure
       // This is safe because validators only read state
       const dag = (this.worksheet as any).dag;
@@ -391,7 +406,7 @@ export class CommandManager {
     this.redoStack.push(command);
     
     // DEV/TEST only: Validate DAG invariants after undo
-    if (process.env.NODE_ENV !== 'production' && this.worksheet) {
+    if (process.env.NODE_ENV !== 'production' && this.worksheet && !command.skipGraphValidation) {
       const dag = (this.worksheet as any).dag;
       if (dag) {
         // For transformation commands: Use undo transform for validation
@@ -432,7 +447,7 @@ export class CommandManager {
     this.undoStack.push(command);
     
     // DEV/TEST only: Validate DAG invariants after redo
-    if (process.env.NODE_ENV !== 'production' && this.worksheet) {
+    if (process.env.NODE_ENV !== 'production' && this.worksheet && !command.skipGraphValidation) {
       const dag = (this.worksheet as any).dag;
       if (dag) {
         // For transformation commands: Use forward transform for validation

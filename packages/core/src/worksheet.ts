@@ -1,8 +1,33 @@
-import { Address, Cell, CellStyle, CellComment, CellHyperlink, CellIcon, ColumnFilter, MergedRegion, Range, SheetEvents, IFormulaEngine, type CellValue, type DataValidationRule, type SheetProtectionOptions, type FreezeState, type SortKey, type AutoFilterRange, type CustomCellComponent } from './types';
-import { ConditionalFormattingRule } from './ConditionalFormattingEngine';
-import { Emitter } from './events';
-import { SearchOptions, SearchRange, SearchResult, SpecialCellsOptions, SpecialCellValue } from './types/search-types';
-import { extractReferences } from './utils/formula-reference-extractor';
+import {
+  Address,
+  Cell,
+  CellStyle,
+  CellComment,
+  CellHyperlink,
+  CellIcon,
+  ColumnFilter,
+  MergedRegion,
+  Range,
+  SheetEvents,
+  IFormulaEngine,
+  type CellValue,
+  type DataValidationRule,
+  type SheetProtectionOptions,
+  type FreezeState,
+  type SortKey,
+  type AutoFilterRange,
+  type CustomCellComponent,
+} from "./types";
+import { ConditionalFormattingRule } from "./ConditionalFormattingEngine";
+import { Emitter } from "./events";
+import {
+  SearchOptions,
+  SearchRange,
+  SearchResult,
+  SpecialCellsOptions,
+  SpecialCellValue,
+} from "./types/search-types";
+import { extractReferences } from "./utils/formula-reference-extractor";
 import {
   buildMatcher,
   cellValueToString,
@@ -11,21 +36,21 @@ import {
   isStrictlyAfterRowMajor,
   isStrictlyBeforeRowMajor,
   styleMatchesFormat,
-} from './search-engine';
-import type { ICellStore } from './storage/ICellStore';
-import { ColumnarCellStore } from './storage/ColumnarCellStore';
-import type { IMergeStore } from './storage/MergeStore';
-import { MergeStoreV1, MergeConflictError } from './storage/MergeStore';
-import type { IVisibilityStore } from './storage/VisibilityStore';
-import { VisibilityStoreV1 } from './storage/VisibilityStore';
-import { FormulaShiftingService } from './FormulaShiftingService';
+} from "./search-engine";
+import type { ICellStore } from "./storage/ICellStore";
+import { ColumnarCellStore } from "./storage/ColumnarCellStore";
+import type { IMergeStore } from "./storage/MergeStore";
+import { MergeStoreV1, MergeConflictError } from "./storage/MergeStore";
+import type { IVisibilityStore } from "./storage/VisibilityStore";
+import { VisibilityStoreV1 } from "./storage/VisibilityStore";
+import { FormulaShiftingService } from "./FormulaShiftingService";
 import {
   DrawingLayer,
   type AddPictureOptions,
   type DrawingObject,
   type PictureObject,
   type SerializedDrawingLayer,
-} from './DrawingLayer';
+} from "./DrawingLayer";
 import {
   DependencyGraph,
   RecalcCoordinator,
@@ -35,14 +60,18 @@ import {
   type RecalcIterationPolicy,
   packKey,
   unpackKey,
-} from './dag/DependencyGraph';
-import { FORMAT_VERSION, type WorksheetSnapshot } from './persistence/SnapshotCodec';
+} from "./dag/DependencyGraph";
+import {
+  FORMAT_VERSION,
+  type WorksheetSnapshot,
+} from "./persistence/SnapshotCodec";
+import { isInternedStyle } from "./StyleCache";
 import {
   cloneHeaderFooterSettings,
   DEFAULT_HEADER_FOOTER,
   type HeaderFooterSettings,
-} from './headerFooter';
-export type { WorksheetSnapshot } from './persistence/SnapshotCodec';
+} from "./headerFooter";
+export type { WorksheetSnapshot } from "./persistence/SnapshotCodec";
 
 export const DEFAULT_WORKSHEET_ROWS = 5000;
 export const DEFAULT_WORKSHEET_COLS = 16384;
@@ -101,7 +130,9 @@ export class Worksheet {
   /** Reference to SpreadsheetEngine for E2 invariant enforcement */
   private _engine?: { isMutating(): boolean };
   /** Per-sheet header and footer text (left / center / right sections). */
-  private headerFooter: HeaderFooterSettings = cloneHeaderFooterSettings(DEFAULT_HEADER_FOOTER);
+  private headerFooter: HeaderFooterSettings = cloneHeaderFooterSettings(
+    DEFAULT_HEADER_FOOTER,
+  );
   private progressiveLoadTotalRows = 0;
   private progressiveLoadDone = true;
   private readonly progressiveLoadedRows = new Set<number>();
@@ -112,7 +143,14 @@ export class Worksheet {
   private _inTransaction = false;
   private _pendingEvents: SheetEvents[] = [];
 
-  constructor(name: string, rows = DEFAULT_WORKSHEET_ROWS, cols = DEFAULT_WORKSHEET_COLS, engine?: IFormulaEngine, workbook?: any, spreadsheetEngine?: { isMutating(): boolean }) {
+  constructor(
+    name: string,
+    rows = DEFAULT_WORKSHEET_ROWS,
+    cols = DEFAULT_WORKSHEET_COLS,
+    engine?: IFormulaEngine,
+    workbook?: any,
+    spreadsheetEngine?: { isMutating(): boolean },
+  ) {
     this.name = name;
     this.rowCount = rows;
     this.colCount = cols;
@@ -131,7 +169,7 @@ export class Worksheet {
     this.progressiveLoadDone = false;
     this.progressiveLoadedRows.clear();
     this.events.emit({
-      type: 'progressive-load-changed',
+      type: "progressive-load-changed",
       loadedRows: 0,
       totalRows,
       done: false,
@@ -144,7 +182,7 @@ export class Worksheet {
       this.progressiveLoadedRows.add(row);
     }
     this.events.emit({
-      type: 'progressive-load-changed',
+      type: "progressive-load-changed",
       loadedRows: this.progressiveLoadedRows.size,
       totalRows: this.progressiveLoadTotalRows || this.rowCount,
       done: this.progressiveLoadDone,
@@ -154,7 +192,7 @@ export class Worksheet {
   finishProgressiveLoad(): void {
     this.progressiveLoadDone = true;
     this.events.emit({
-      type: 'progressive-load-changed',
+      type: "progressive-load-changed",
       loadedRows: this.progressiveLoadedRows.size,
       totalRows: this.progressiveLoadTotalRows || this.rowCount,
       done: true,
@@ -177,7 +215,7 @@ export class Worksheet {
     if (this._engine && !this._engine.isMutating()) {
       throw new Error(
         `[E2 INVARIANT VIOLATION] ${operation} called outside engine.run(). ` +
-        'All mutations must occur within the engine.run() callback.'
+          "All mutations must occur within the engine.run() callback.",
       );
     }
   }
@@ -231,20 +269,37 @@ export class Worksheet {
   private _flushEvents(): void {
     if (this._pendingEvents.length === 0) return;
 
-    // For now, emit the last event (aggregate coalescing can be added later)
-    const lastEvent = this._pendingEvents[this._pendingEvents.length - 1];
+    const pending = this._pendingEvents;
     this._pendingEvents = [];
-    this.events.emit(lastEvent);
+
+    // Pure style batches (e.g. formatting 10k cells) must reach listeners for
+    // EVERY cell, otherwise the renderer would only invalidate the last one.
+    // Dedupe per address (last write wins) so each cell is emitted at most once.
+    if (
+      pending.length > 1 &&
+      pending.every((e) => e.type === "style-changed")
+    ) {
+      const latest = new Map<number, SheetEvents>();
+      for (const e of pending) {
+        const a = (e as { address: Address }).address;
+        latest.set(a.row * 65536 + a.col, e);
+      }
+      for (const e of latest.values()) this.events.emit(e);
+      return;
+    }
+
+    // For now, emit the last event (aggregate coalescing can be added later)
+    this.events.emit(pending[pending.length - 1]);
   }
 
   /**
    * Get a cell object (returns IMMUTABLE view to prevent direct mutation).
-   * 
+   *
    * CRITICAL: This returns a frozen object to enforce E2 invariant.
    * Direct mutation of returned cells is impossible:
    *   const cell = ws.getCell(addr);
    *   cell.value = 10;  // ❌ TypeError: Cannot assign to read only property
-   * 
+   *
    * All mutations must go through setCellValue(), setCellFormula(), etc.
    */
   getCell(addr: Address): Readonly<Cell> | undefined {
@@ -252,7 +307,7 @@ export class Worksheet {
     const anchor = this.mergeStore.getAnchor(addr.row, addr.col);
     const { row, col } = anchor ?? addr;
     const cell = this.cells.get(row, col);
-    
+
     // Return frozen copy to prevent direct mutation
     // This closes the "read → mutate via returned object" escape hatch
     return cell ? Object.freeze({ ...cell }) : undefined;
@@ -261,7 +316,7 @@ export class Worksheet {
   /**
    * Get cell by packed NodeKey (used by GraphInvariantValidator).
    * Convenience method for DAG validation.
-   * 
+   *
    * @internal DEV/TEST only
    */
   getCellByKey(nodeKey: number): Readonly<Cell> | undefined {
@@ -290,7 +345,7 @@ export class Worksheet {
 
   /**
    * Internal: Get-or-create cell for mutation.
-   * 
+   *
    * SAFETY: This is called ONLY from public mutation methods that already
    * enforce assertMutating(). The mutation choke point is at the public API
    * boundary, not here. This keeps internal implementation flexible while
@@ -301,11 +356,11 @@ export class Worksheet {
     return this.cells.getOrCreate(resolved.row, resolved.col);
   }
 
-  getCellValue(addr: Address): Cell['value'] {
+  getCellValue(addr: Address): Cell["value"] {
     return this.getCell(addr)?.value ?? null;
   }
 
-  setCellValue(addr: Address, value: Cell['value']): void {
+  setCellValue(addr: Address, value: Cell["value"]): void {
     if (!this._inTransaction) {
       return this.runTransaction(() => this.setCellValue(addr, value));
     }
@@ -319,7 +374,69 @@ export class Worksheet {
     c.value = value;
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this._emitOrBuffer({ type: 'cell-changed', address: addr, cell: { ...c }, previousValue });
+    this._emitOrBuffer({
+      type: "cell-changed",
+      address: addr,
+      cell: { ...c },
+      previousValue,
+    });
+  }
+
+  /**
+   * Clear user-entered cell contents (value + formula).
+   * Keeps style/metadata intact.
+   */
+  clearCellContent(addr: Address): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.clearCellContent(addr));
+    }
+
+    const resolved = this.resolveAnchor(addr);
+    const c = this.cells.get(resolved.row, resolved.col);
+    if (!c) return;
+
+    const hadFormula = typeof c.formula === "string" && c.formula.length > 0;
+    const previousValue = c.value;
+
+    if (previousValue === null && !hadFormula) {
+      return;
+    }
+
+    c.value = null;
+    if ("formula" in c) delete c.formula;
+
+    if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
+    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
+    this._emitOrBuffer({
+      type: "cell-changed",
+      address: addr,
+      cell: { ...c },
+      previousValue,
+    });
+  }
+
+  /**
+   * Clear only formula text while keeping the current cell value.
+   */
+  clearCellFormula(addr: Address): void {
+    if (!this._inTransaction) {
+      return this.runTransaction(() => this.clearCellFormula(addr));
+    }
+
+    const resolved = this.resolveAnchor(addr);
+    const c = this.cells.get(resolved.row, resolved.col);
+    if (!c || c.formula === undefined) return;
+
+    delete c.formula;
+
+    if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
+    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
+    this._emitOrBuffer({
+      type: "cell-changed",
+      address: addr,
+      cell: { ...c },
+      previousValue: c.value,
+    });
   }
 
   /**
@@ -333,36 +450,45 @@ export class Worksheet {
    * @param formula       Formula string, e.g. '=SUM(A1:A10)'
    * @param displayValue  Optional pre-evaluated result (for read-only display)
    */
-  setCellFormula(addr: Address, formula: string, displayValue?: Cell['value']): void {
-    this.assertMutating('setCellFormula');
+  setCellFormula(
+    addr: Address,
+    formula: string,
+    displayValue?: Cell["value"],
+  ): void {
+    this.assertMutating("setCellFormula");
     if (!this._inTransaction) {
-      return this.runTransaction(() => this.setCellFormula(addr, formula, displayValue));
+      return this.runTransaction(() =>
+        this.setCellFormula(addr, formula, displayValue),
+      );
     }
 
     const c = this.ensureCell(addr);
     c.formula = formula;
     if (displayValue !== undefined) c.value = displayValue;
-    
+
     // Phase 3: Automatically extract and register formula dependencies
     try {
       const dependencies = extractReferences(formula, addr);
       this.registerDependencies(addr, dependencies);
     } catch (error) {
       // Dependency extraction failed - log but continue
-      console.warn(`Failed to extract dependencies from formula at ${addr.row}:${addr.col}:`, error);
+      console.warn(
+        `Failed to extract dependencies from formula at ${addr.row}:${addr.col}:`,
+        error,
+      );
     }
-    
+
     if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
     this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this._emitOrBuffer({ type: 'cell-changed', address: addr, cell: { ...c } });
+    this._emitOrBuffer({ type: "cell-changed", address: addr, cell: { ...c } });
   }
 
   /**
    * Set spill source metadata on a cell (used exclusively by SpillEngine).
    * Does NOT fire events (spill is internal bookkeeping).
    */
-  setSpillSource(addr: Address, source: Cell['spillSource']): void {
-    this.assertMutating('setSpillSource');
+  setSpillSource(addr: Address, source: Cell["spillSource"]): void {
+    this.assertMutating("setSpillSource");
     if (!this._inTransaction) {
       return this.runTransaction(() => this.setSpillSource(addr, source));
     }
@@ -370,15 +496,20 @@ export class Worksheet {
     const c = this.ensureCell(addr);
     const before = c.spillSource;
     c.spillSource = source;
-    this._emitOrBuffer({ type: 'spill-source-changed', address: addr, before, after: source });
+    this._emitOrBuffer({
+      type: "spill-source-changed",
+      address: addr,
+      before,
+      after: source,
+    });
   }
 
   /**
    * Set spilledFrom reference on a cell (used exclusively by SpillEngine).
    * Does NOT fire events.
    */
-  setSpilledFrom(addr: Address, from: Cell['spilledFrom']): void {
-    this.assertMutating('setSpilledFrom');
+  setSpilledFrom(addr: Address, from: Cell["spilledFrom"]): void {
+    this.assertMutating("setSpilledFrom");
     if (!this._inTransaction) {
       return this.runTransaction(() => this.setSpilledFrom(addr, from));
     }
@@ -386,7 +517,12 @@ export class Worksheet {
     const c = this.ensureCell(addr);
     const before = c.spilledFrom;
     c.spilledFrom = from;
-    this._emitOrBuffer({ type: 'spill-from-changed', address: addr, before, after: from });
+    this._emitOrBuffer({
+      type: "spill-from-changed",
+      address: addr,
+      before,
+      after: from,
+    });
   }
 
   /**
@@ -394,7 +530,7 @@ export class Worksheet {
    * Sets spillSource to undefined (preserves mono-shape — never delete).
    */
   clearSpillSource(addr: Address): void {
-    this.assertMutating('clearSpillSource');
+    this.assertMutating("clearSpillSource");
     if (!this._inTransaction) {
       return this.runTransaction(() => this.clearSpillSource(addr));
     }
@@ -403,7 +539,12 @@ export class Worksheet {
     if (c) {
       const before = c.spillSource;
       c.spillSource = undefined;
-      this._emitOrBuffer({ type: 'spill-source-changed', address: addr, before, after: undefined });
+      this._emitOrBuffer({
+        type: "spill-source-changed",
+        address: addr,
+        before,
+        after: undefined,
+      });
     }
   }
 
@@ -412,7 +553,7 @@ export class Worksheet {
    * Sets spilledFrom to undefined (preserves mono-shape — never delete).
    */
   clearSpilledFrom(addr: Address): void {
-    this.assertMutating('clearSpilledFrom');
+    this.assertMutating("clearSpilledFrom");
     if (!this._inTransaction) {
       return this.runTransaction(() => this.clearSpilledFrom(addr));
     }
@@ -421,7 +562,12 @@ export class Worksheet {
     if (c) {
       const before = c.spilledFrom;
       c.spilledFrom = undefined;
-      this._emitOrBuffer({ type: 'spill-from-changed', address: addr, before, after: undefined });
+      this._emitOrBuffer({
+        type: "spill-from-changed",
+        address: addr,
+        before,
+        after: undefined,
+      });
     }
   }
 
@@ -432,9 +578,9 @@ export class Worksheet {
   applySpillBatch(
     changes: Array<{
       addr: Address;
-      spillSource?: Cell['spillSource'];
-      spilledFrom?: Cell['spilledFrom'];
-    }>
+      spillSource?: Cell["spillSource"];
+      spilledFrom?: Cell["spilledFrom"];
+    }>,
   ): void {
     if (!this._inTransaction) {
       return this.runTransaction(() => this.applySpillBatch(changes));
@@ -442,8 +588,14 @@ export class Worksheet {
 
     const eventChanges: Array<{
       address: Address;
-      before: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] };
-      after: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] };
+      before: {
+        spillSource?: Cell["spillSource"];
+        spilledFrom?: Cell["spilledFrom"];
+      };
+      after: {
+        spillSource?: Cell["spillSource"];
+        spilledFrom?: Cell["spilledFrom"];
+      };
     }> = [];
 
     // Capture before state for all cells
@@ -455,17 +607,18 @@ export class Worksheet {
       };
 
       // Apply mutation - only create cell if setting metadata (not just clearing)
-      const isSet = change.spillSource !== undefined || change.spilledFrom !== undefined;
-      
+      const isSet =
+        change.spillSource !== undefined || change.spilledFrom !== undefined;
+
       if (isSet || cell) {
         if (!cell && isSet) {
           cell = this.ensureCell(change.addr);
         }
         if (cell) {
-          if ('spillSource' in change) {
+          if ("spillSource" in change) {
             cell.spillSource = change.spillSource;
           }
-          if ('spilledFrom' in change) {
+          if ("spilledFrom" in change) {
             cell.spilledFrom = change.spilledFrom;
           }
         }
@@ -480,11 +633,16 @@ export class Worksheet {
     }
 
     // Emit one batch event
-    this._emitOrBuffer({ type: 'spill-batch-changed', changes: eventChanges });
+    this._emitOrBuffer({ type: "spill-batch-changed", changes: eventChanges });
   }
 
   getDirectCellStyle(addr: Address): CellStyle | undefined {
-    return this.getCell(addr)?.style;
+    // Hot path (formatting, rendering): read the stored style reference directly.
+    // getCell() clones + freezes the whole record, which is wasted work here —
+    // the style itself is already an immutable interned reference.
+    const anchor = this.mergeStore.getAnchor(addr.row, addr.col);
+    const { row, col } = anchor ?? addr;
+    return this.cells.get(row, col)?.style;
   }
 
   getCellStyle(addr: Address): CellStyle | undefined {
@@ -505,10 +663,24 @@ export class Worksheet {
 
     const c = this.ensureCell(addr);
 
-    const internedStyle = this.internStyle(style);
+    // Callers that already hold a canonical style (e.g. batch formatting) skip re-hashing.
+    const internedStyle =
+      style && isInternedStyle(style) ? style : this.internStyle(style);
 
     c.style = internedStyle; // Reference to canonical style (not a copy)
-    this._emitOrBuffer({ type: 'style-changed', address: addr, style: internedStyle });
+    this._emitOrBuffer({
+      type: "style-changed",
+      address: addr,
+      style: internedStyle,
+    });
+  }
+
+  /**
+   * Return the canonical (interned) form of a style without applying it.
+   * Lets batch operations intern each distinct style once.
+   */
+  canonicalStyle(style: CellStyle | undefined): CellStyle | undefined {
+    return style && isInternedStyle(style) ? style : this.internStyle(style);
   }
 
   getRowStyle(row: number): CellStyle | undefined {
@@ -523,7 +695,7 @@ export class Worksheet {
     const internedStyle = this.internStyle(style);
     if (internedStyle) this.rowStyles.set(row, internedStyle);
     else this.rowStyles.delete(row);
-    this._emitOrBuffer({ type: 'sheet-mutated' });
+    this._emitOrBuffer({ type: "sheet-mutated" });
   }
 
   clearRowStyle(row: number): void {
@@ -542,7 +714,7 @@ export class Worksheet {
     const internedStyle = this.internStyle(style);
     if (internedStyle) this.columnStyles.set(col, internedStyle);
     else this.columnStyles.delete(col);
-    this._emitOrBuffer({ type: 'sheet-mutated' });
+    this._emitOrBuffer({ type: "sheet-mutated" });
   }
 
   clearColumnStyle(col: number): void {
@@ -555,16 +727,18 @@ export class Worksheet {
   setConditionalFormattingRules(
     range: Range,
     rules: ConditionalFormattingRule[],
-    options?: { replace?: boolean; source?: 'preset' | 'manual' }
+    options?: { replace?: boolean; source?: "preset" | "manual" },
   ): void;
   setConditionalFormattingRules(
     rangeOrRules: Range | ConditionalFormattingRule[],
-    rulesOrOptions?: ConditionalFormattingRule[] | { replace?: boolean; source?: 'preset' | 'manual' },
-    options?: { replace?: boolean; source?: 'preset' | 'manual' }
+    rulesOrOptions?:
+      | ConditionalFormattingRule[]
+      | { replace?: boolean; source?: "preset" | "manual" },
+    options?: { replace?: boolean; source?: "preset" | "manual" },
   ): void {
     if (Array.isArray(rangeOrRules)) {
       this.conditionalRules = rangeOrRules.slice();
-      this.events.emit({ type: 'sheet-mutated' });
+      this.events.emit({ type: "sheet-mutated" });
       return;
     }
 
@@ -574,7 +748,7 @@ export class Worksheet {
     const replace = opts?.replace ?? true;
 
     const normalizedRange = this.normalizeRange(range);
-    const updatedRules = rules.map(rule => ({
+    const updatedRules = rules.map((rule) => ({
       ...rule,
       ranges: [normalizedRange],
     }));
@@ -585,17 +759,17 @@ export class Worksheet {
       this.conditionalRules = [...this.conditionalRules, ...updatedRules];
     }
 
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   addConditionalFormattingRule(rule: ConditionalFormattingRule): void {
     this.conditionalRules.push(rule);
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   clearConditionalFormatting(): void {
     this.conditionalRules = [];
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   getConditionalFormattingRules(): ConditionalFormattingRule[] {
@@ -608,14 +782,17 @@ export class Worksheet {
 
   setHeaderFooter(settings: HeaderFooterSettings): void {
     this.headerFooter = cloneHeaderFooterSettings(settings);
-    this.events.emit({ type: 'header-footer-changed', settings: this.getHeaderFooter() });
+    this.events.emit({
+      type: "header-footer-changed",
+      settings: this.getHeaderFooter(),
+    });
   }
 
   // ── Data Validation ──────────────────────────────────────────────────────
 
   setDataValidation(addr: Address, rule: DataValidationRule): void {
     this.validationStore.set(`${addr.row}:${addr.col}`, rule);
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   getDataValidation(addr: Address): DataValidationRule | undefined {
@@ -624,13 +801,13 @@ export class Worksheet {
 
   removeDataValidation(addr: Address): void {
     this.validationStore.delete(`${addr.row}:${addr.col}`);
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   getValidationCells(): Address[] {
     const result: Address[] = [];
     for (const key of this.validationStore.keys()) {
-      const [row, col] = key.split(':').map(Number);
+      const [row, col] = key.split(":").map(Number);
       result.push({ row, col });
     }
     return result.sort(compareRowMajor);
@@ -648,14 +825,18 @@ export class Worksheet {
   protectSheet(options: SheetProtectionOptions = {}): void {
     const before = this.sheetProtection;
     this.sheetProtection = options;
-    this.events.emit({ type: 'sheet-protection-changed', before, after: options });
+    this.events.emit({
+      type: "sheet-protection-changed",
+      before,
+      after: options,
+    });
   }
 
   /** Remove sheet protection. */
   unprotectSheet(): void {
     const before = this.sheetProtection;
     this.sheetProtection = null;
-    this.events.emit({ type: 'sheet-protection-changed', before, after: null });
+    this.events.emit({ type: "sheet-protection-changed", before, after: null });
   }
 
   /** Return `true` if the sheet is currently protected. */
@@ -676,21 +857,30 @@ export class Worksheet {
    * Setting both to 0 is equivalent to calling `clearFreezePanes()`.
    */
   setFreezePanes(rows: number, cols: number): void {
-    if (rows < 0 || cols < 0 || !Number.isInteger(rows) || !Number.isInteger(cols)) {
+    if (
+      rows < 0 ||
+      cols < 0 ||
+      !Number.isInteger(rows) ||
+      !Number.isInteger(cols)
+    ) {
       throw new RangeError(
-        `setFreezePanes: rows and cols must be non-negative integers (got ${rows}, ${cols})`
+        `setFreezePanes: rows and cols must be non-negative integers (got ${rows}, ${cols})`,
       );
     }
     const before = this.freezeState;
-    this.freezeState = (rows === 0 && cols === 0) ? null : { rows, cols };
-    this.events.emit({ type: 'freeze-panes-changed', before, after: this.freezeState });
+    this.freezeState = rows === 0 && cols === 0 ? null : { rows, cols };
+    this.events.emit({
+      type: "freeze-panes-changed",
+      before,
+      after: this.freezeState,
+    });
   }
 
   /** Remove all frozen panes. */
   clearFreezePanes(): void {
     const before = this.freezeState;
     this.freezeState = null;
-    this.events.emit({ type: 'freeze-panes-changed', before, after: null });
+    this.events.emit({ type: "freeze-panes-changed", before, after: null });
   }
 
   /** Return the current freeze-pane state, or `null` if no panes are frozen. */
@@ -735,14 +925,22 @@ export class Worksheet {
     let minCol = anchor.col;
     let maxCol = anchor.col;
 
-    const isRowNonEmpty = (row: number, startCol: number, endCol: number): boolean => {
+    const isRowNonEmpty = (
+      row: number,
+      startCol: number,
+      endCol: number,
+    ): boolean => {
       for (let col = startCol; col <= endCol; col++) {
         if (this.getCell({ row, col })) return true;
       }
       return false;
     };
 
-    const isColNonEmpty = (col: number, startRow: number, endRow: number): boolean => {
+    const isColNonEmpty = (
+      col: number,
+      startRow: number,
+      endRow: number,
+    ): boolean => {
       for (let row = startRow; row <= endRow; row++) {
         if (this.getCell({ row, col })) return true;
       }
@@ -779,20 +977,25 @@ export class Worksheet {
   setColumnFilter(col: number, filter: ColumnFilter): void {
     const before = this.filters.get(col) ?? null;
     this.filters.set(col, filter);
-    this.events.emit({ type: 'filter-changed', col, filter, before });
+    this.events.emit({ type: "filter-changed", col, filter, before });
   }
 
   clearColumnFilter(col: number): void {
     const before = this.filters.get(col) ?? null;
     this.filters.delete(col);
-    this.events.emit({ type: 'filter-changed', col, filter: null, before });
+    this.events.emit({ type: "filter-changed", col, filter: null, before });
   }
 
   /** Clear all column filters at once. Emits one `filter-changed` event per cleared column. */
   clearAllFilters(): void {
     for (const [col, filter] of this.filters) {
       this.filters.delete(col);
-      this.events.emit({ type: 'filter-changed', col, filter: null, before: filter });
+      this.events.emit({
+        type: "filter-changed",
+        col,
+        filter: null,
+        before: filter,
+      });
     }
   }
 
@@ -809,7 +1012,9 @@ export class Worksheet {
   }
 
   getVisibleRowIndices(range?: Range): number[] {
-    const rows = range ? { start: range.start.row, end: range.end.row } : { start: 1, end: this.rowCount };
+    const rows = range
+      ? { start: range.start.row, end: range.end.row }
+      : { start: 1, end: this.rowCount };
     const result: number[] = [];
     for (let r = rows.start; r <= rows.end; r++) {
       if (this.isRowHidden(r)) continue;
@@ -820,7 +1025,9 @@ export class Worksheet {
   }
 
   getVisibleColumnIndices(range?: Range): number[] {
-    const cols = range ? { start: range.start.col, end: range.end.col } : { start: 1, end: this.colCount };
+    const cols = range
+      ? { start: range.start.col, end: range.end.col }
+      : { start: 1, end: this.colCount };
     const result: number[] = [];
     for (let c = cols.start; c <= cols.end; c++) {
       if (this.isColHidden(c)) continue;
@@ -850,14 +1057,17 @@ export class Worksheet {
    *                    considered (Excel behaviour for filter dropdowns).
    * @returns           Array of `{ value, count }` sorted descending by count.
    */
-  getDistinctValues(col: number, visibleOnly = false): { value: string; count: number }[] {
+  getDistinctValues(
+    col: number,
+    visibleOnly = false,
+  ): { value: string; count: number }[] {
     const rows = visibleOnly
       ? this.getVisibleRowIndicesExcluding(col)
       : Array.from({ length: this.rowCount }, (_, i) => i + 1);
     const counts = new Map<string, number>();
     for (const row of rows) {
       const v = this.getCell({ row, col })?.value ?? null;
-      const key = v === null ? '' : String(v);
+      const key = v === null ? "" : String(v);
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return [...counts.entries()]
@@ -871,10 +1081,18 @@ export class Worksheet {
    * Mark the auto-filter region (the row bearing the dropdown arrows and the
    * columns it spans).  Purely a UI marker — does not affect filter matching.
    */
-  setAutoFilterRange(headerRow: number, startCol: number, endCol: number): void {
+  setAutoFilterRange(
+    headerRow: number,
+    startCol: number,
+    endCol: number,
+  ): void {
     const before = this.autoFilterRange;
     this.autoFilterRange = { headerRow, startCol, endCol };
-    this.events.emit({ type: 'autofilter-range-changed', before, after: this.autoFilterRange });
+    this.events.emit({
+      type: "autofilter-range-changed",
+      before,
+      after: this.autoFilterRange,
+    });
   }
 
   /** Remove the auto-filter range marker. */
@@ -882,7 +1100,7 @@ export class Worksheet {
     const before = this.autoFilterRange;
     if (before === null) return;
     this.autoFilterRange = null;
-    this.events.emit({ type: 'autofilter-range-changed', before, after: null });
+    this.events.emit({ type: "autofilter-range-changed", before, after: null });
   }
 
   /** Return the current auto-filter range, or `null` if not set. */
@@ -912,9 +1130,12 @@ export class Worksheet {
 
     // Collect all data rows as value snapshots.
     // Use Cell['value'] (CellValue | undefined) from the store directly.
-    const rows: Array<{ rowIndex: number; values: Array<Cell['value'] | null> }> = [];
+    const rows: Array<{
+      rowIndex: number;
+      values: Array<Cell["value"] | null>;
+    }> = [];
     for (let r = start.row; r <= end.row; r++) {
-      const values: Array<Cell['value'] | null> = [];
+      const values: Array<Cell["value"] | null> = [];
       for (let c = start.col; c <= end.col; c++) {
         values.push(this.cells.get(r, c)?.value ?? null);
       }
@@ -928,20 +1149,22 @@ export class Worksheet {
         const ci = key.col - start.col;
         const av = a.values[ci] ?? null;
         const bv = b.values[ci] ?? null;
-        const aBlank = av === null || (typeof av === 'string' && av.trim() === '');
-        const bBlank = bv === null || (typeof bv === 'string' && bv.trim() === '');
+        const aBlank =
+          av === null || (typeof av === "string" && av.trim() === "");
+        const bBlank =
+          bv === null || (typeof bv === "string" && bv.trim() === "");
         // Blanks last — independent of direction.
         if (aBlank && bBlank) continue;
         if (aBlank) return 1;
         if (bBlank) return -1;
-        const cmp = this._compareValues(av, bv, key.type ?? 'text');
-        if (cmp !== 0) return key.dir === 'asc' ? cmp : -cmp;
+        const cmp = this._compareValues(av, bv, key.type ?? "text");
+        if (cmp !== 0) return key.dir === "asc" ? cmp : -cmp;
       }
       return 0;
     });
 
     // Write sorted rows back; use direct store ops to avoid per-cell events.
-    const sortedRows = rows.map(r => r.values);
+    const sortedRows = rows.map((r) => r.values);
     for (let ri = 0; ri < sortedRows.length; ri++) {
       const destRow = start.row + ri;
       for (let ci = 0; ci < numCols; ci++) {
@@ -951,26 +1174,36 @@ export class Worksheet {
           this.cells.delete(destRow, destCol);
         } else {
           const existing = this.cells.get(destRow, destCol);
-          this.cells.set(destRow, destCol, { ...(existing ?? { value: null }), value: v });
+          this.cells.set(destRow, destCol, {
+            ...(existing ?? { value: null }),
+            value: v,
+          });
         }
       }
     }
 
     this.events.emit({
-      type: 'sort-applied',
-      startRow: start.row, startCol: start.col,
-      endRow:   end.row,   endCol:   end.col,
+      type: "sort-applied",
+      startRow: start.row,
+      startCol: start.col,
+      endRow: end.row,
+      endCol: end.col,
       keys,
     });
   }
 
   /** Compare two cell values for sorting. Nulls sort last in all directions. */
-  private _compareValues(a: Cell['value'] | null, b: Cell['value'] | null, type: 'text' | 'number' | 'date'): number {
+  private _compareValues(
+    a: Cell["value"] | null,
+    b: Cell["value"] | null,
+    type: "text" | "number" | "date",
+  ): number {
     if (a === null && b === null) return 0;
-    if (a === null) return 1;  // nulls last
+    if (a === null) return 1; // nulls last
     if (b === null) return -1;
-    if (type === 'number') {
-      const na = Number(a), nb = Number(b);
+    if (type === "number") {
+      const na = Number(a),
+        nb = Number(b);
       return isNaN(na) ? (isNaN(nb) ? 0 : 1) : isNaN(nb) ? -1 : na - nb;
     }
     // text / date: coerce to string
@@ -988,105 +1221,165 @@ export class Worksheet {
     return true;
   }
 
-  private matchesFilter(v: Cell['value'], f: ColumnFilter): boolean {
-    if (f.type === 'empty')      return v === null || v === '';
-    if (f.type === 'notEmpty')   return !(v === null || v === '');
+  private matchesFilter(v: Cell["value"], f: ColumnFilter): boolean {
+    if (f.type === "empty") return v === null || v === "";
+    if (f.type === "notEmpty") return !(v === null || v === "");
     if (v === null) return false;
-    if (f.type === 'in') {
+    if (f.type === "in") {
       const arr = Array.isArray(f.value) ? (f.value as any[]) : [];
-      return arr.some(x => String(x) === String(v));
+      return arr.some((x) => String(x) === String(v));
     }
-    if (f.type === 'equals')      return v === f.value;
-    if (f.type === 'notEquals')   return v !== f.value;
+    if (f.type === "equals") return v === f.value;
+    if (f.type === "notEquals") return v !== f.value;
     const sv = String(v).toLowerCase();
-    const fv = String(f.value ?? '').toLowerCase();
-    if (f.type === 'contains')    return sv.includes(fv);
-    if (f.type === 'notContains') return !sv.includes(fv);
-    if (f.type === 'startsWith')  return sv.startsWith(fv);
-    if (f.type === 'endsWith')    return sv.endsWith(fv);
-    if (typeof v !== 'number') return false;
-    if (f.type === 'gt')  return v >  (f.value as number);
-    if (f.type === 'gte') return v >= (f.value as number);
-    if (f.type === 'lt')  return v <  (f.value as number);
-    if (f.type === 'lte') return v <= (f.value as number);
-    if (f.type === 'between') {
+    const fv = String(f.value ?? "").toLowerCase();
+    if (f.type === "contains") return sv.includes(fv);
+    if (f.type === "notContains") return !sv.includes(fv);
+    if (f.type === "startsWith") return sv.startsWith(fv);
+    if (f.type === "endsWith") return sv.endsWith(fv);
+    if (typeof v !== "number") return false;
+    if (f.type === "gt") return v > (f.value as number);
+    if (f.type === "gte") return v >= (f.value as number);
+    if (f.type === "lt") return v < (f.value as number);
+    if (f.type === "lte") return v <= (f.value as number);
+    if (f.type === "between") {
       const [a, b] = f.value as [number, number];
       return v >= Math.min(a, b) && v <= Math.max(a, b);
     }
     return true;
   }
+  /** Set many row heights at once and notify listeners a single time. */
+  setRowHeights(heights: Iterable<[number, number]>): void {
+    let changed = false;
+    for (const [row, px] of heights) {
+      if (this.rowHeights.get(row) === px) continue;
+      this.rowHeights.set(row, px);
+      changed = true;
+    }
+    if (changed) this.events.emit({ type: "sheet-mutated" });
+  }
 
-  getColumnWidth(col: number): number { return this.colWidths.get(col) ?? 80; }
-  setColumnWidth(col: number, px: number): void { this.colWidths.set(col, px); this.events.emit({ type: 'sheet-mutated' }); }
-  getRowHeight(row: number): number { return this.rowHeights.get(row) ?? 20; }
-  setRowHeight(row: number, px: number): void { this.rowHeights.set(row, px); this.events.emit({ type: 'sheet-mutated' }); }
+  getColumnWidth(col: number): number {
+    return this.colWidths.get(col) ?? 80;
+  }
+  setColumnWidth(col: number, px: number): void {
+    this.colWidths.set(col, px);
+    this.events.emit({ type: "sheet-mutated" });
+  }
+  getRowHeight(row: number): number {
+    return this.rowHeights.get(row) ?? 20;
+  }
+  setRowHeight(row: number, px: number): void {
+    this.rowHeights.set(row, px);
+    this.events.emit({ type: "sheet-mutated" });
+  }
 
   insertRows(rowIndex: number, count = 1): void {
-    this.validateInsertArgs(rowIndex, count, this.rowCount, 'row');
+    this.validateInsertArgs(rowIndex, count, this.rowCount, "row");
     if (!this._inTransaction) {
       return this.runTransaction(() => this.insertRows(rowIndex, count));
     }
 
-    const rowMapper: IndexMapper = row => row >= rowIndex ? row + count : row;
-    const colMapper: IndexMapper = col => col;
+    const rowMapper: IndexMapper = (row) =>
+      row >= rowIndex ? row + count : row;
+    const colMapper: IndexMapper = (col) => col;
     this.remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
-      transformFormula: formula => FormulaShiftingService.adjustForRowInsertion(formula, rowIndex, count),
+      transformFormula: (formula) =>
+        FormulaShiftingService.adjustForRowInsertion(formula, rowIndex, count),
     });
     this.rowCount += count;
-    this._emitOrBuffer({ type: 'sheet-mutated' });
+    this._emitOrBuffer({ type: "sheet-mutated" });
   }
 
   insertColumns(colIndex: number, count = 1): void {
-    this.validateInsertArgs(colIndex, count, this.colCount, 'column');
+    this.validateInsertArgs(colIndex, count, this.colCount, "column");
     if (!this._inTransaction) {
       return this.runTransaction(() => this.insertColumns(colIndex, count));
     }
 
-    const rowMapper: IndexMapper = row => row;
-    const colMapper: IndexMapper = col => col >= colIndex ? col + count : col;
+    const rowMapper: IndexMapper = (row) => row;
+    const colMapper: IndexMapper = (col) =>
+      col >= colIndex ? col + count : col;
     this.remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
-      transformFormula: formula => FormulaShiftingService.adjustForColumnInsertion(formula, colIndex, count),
+      transformFormula: (formula) =>
+        FormulaShiftingService.adjustForColumnInsertion(
+          formula,
+          colIndex,
+          count,
+        ),
     });
     this.colCount += count;
-    this._emitOrBuffer({ type: 'sheet-mutated' });
+    this._emitOrBuffer({ type: "sheet-mutated" });
   }
 
   reorderRows(fromIndex: number, toIndex: number, count = 1): void {
-    this.validateReorderArgs(fromIndex, toIndex, count, this.rowCount, 'row');
-    if (fromIndex === toIndex || (toIndex >= fromIndex && toIndex < fromIndex + count)) return;
+    this.validateReorderArgs(fromIndex, toIndex, count, this.rowCount, "row");
+    if (
+      fromIndex === toIndex ||
+      (toIndex >= fromIndex && toIndex < fromIndex + count)
+    )
+      return;
     if (!this._inTransaction) {
-      return this.runTransaction(() => this.reorderRows(fromIndex, toIndex, count));
+      return this.runTransaction(() =>
+        this.reorderRows(fromIndex, toIndex, count),
+      );
     }
 
-    const rowMapper: IndexMapper = row => FormulaShiftingService.mapReorderedIndex(row, fromIndex, toIndex, count);
-    const colMapper: IndexMapper = col => col;
+    const rowMapper: IndexMapper = (row) =>
+      FormulaShiftingService.mapReorderedIndex(row, fromIndex, toIndex, count);
+    const colMapper: IndexMapper = (col) => col;
     this.remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
-      transformFormula: formula => FormulaShiftingService.adjustForRowReorder(formula, fromIndex, toIndex, count),
+      transformFormula: (formula) =>
+        FormulaShiftingService.adjustForRowReorder(
+          formula,
+          fromIndex,
+          toIndex,
+          count,
+        ),
     });
-    this._emitOrBuffer({ type: 'sheet-mutated' });
+    this._emitOrBuffer({ type: "sheet-mutated" });
   }
 
   reorderColumns(fromIndex: number, toIndex: number, count = 1): void {
-    this.validateReorderArgs(fromIndex, toIndex, count, this.colCount, 'column');
-    if (fromIndex === toIndex || (toIndex >= fromIndex && toIndex < fromIndex + count)) return;
+    this.validateReorderArgs(
+      fromIndex,
+      toIndex,
+      count,
+      this.colCount,
+      "column",
+    );
+    if (
+      fromIndex === toIndex ||
+      (toIndex >= fromIndex && toIndex < fromIndex + count)
+    )
+      return;
     if (!this._inTransaction) {
-      return this.runTransaction(() => this.reorderColumns(fromIndex, toIndex, count));
+      return this.runTransaction(() =>
+        this.reorderColumns(fromIndex, toIndex, count),
+      );
     }
 
-    const rowMapper: IndexMapper = row => row;
-    const colMapper: IndexMapper = col => FormulaShiftingService.mapReorderedIndex(col, fromIndex, toIndex, count);
+    const rowMapper: IndexMapper = (row) => row;
+    const colMapper: IndexMapper = (col) =>
+      FormulaShiftingService.mapReorderedIndex(col, fromIndex, toIndex, count);
     this.remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
-      transformFormula: formula => FormulaShiftingService.adjustForColumnReorder(formula, fromIndex, toIndex, count),
+      transformFormula: (formula) =>
+        FormulaShiftingService.adjustForColumnReorder(
+          formula,
+          fromIndex,
+          toIndex,
+          count,
+        ),
     });
-    this._emitOrBuffer({ type: 'sheet-mutated' });
+    this._emitOrBuffer({ type: "sheet-mutated" });
   }
 
   getDrawingLayer(): DrawingLayer {
@@ -1095,25 +1388,27 @@ export class Worksheet {
 
   insertImage(options: AddPictureOptions): PictureObject {
     const picture = this.drawingLayer.addPicture(options);
-    this._emitOrBuffer({ type: 'sheet-mutated' });
+    this._emitOrBuffer({ type: "sheet-mutated" });
     return picture;
   }
 
   getImages(): PictureObject[] {
     return this.drawingLayer
       .getAllObjects()
-      .filter((obj): obj is PictureObject => obj.type === 'picture');
+      .filter((obj): obj is PictureObject => obj.type === "picture");
   }
 
   deleteImage(id: string): PictureObject | undefined {
     const image = this.drawingLayer.getObject(id);
-    if (!image || image.type !== 'picture') return undefined;
+    if (!image || image.type !== "picture") return undefined;
     const removed = this.drawingLayer.removeObject(id);
-    if (removed) this._emitOrBuffer({ type: 'sheet-mutated' });
+    if (removed) this._emitOrBuffer({ type: "sheet-mutated" });
     return removed as PictureObject | undefined;
   }
 
-  setFormulaEngine(engine?: IFormulaEngine) { this.formulaEngine = engine; }
+  setFormulaEngine(engine?: IFormulaEngine) {
+    this.formulaEngine = engine;
+  }
 
   // ==================== Phase 28: Pivot Registry Integration ====================
 
@@ -1182,22 +1477,22 @@ export class Worksheet {
   recalc(evaluate: (key: number) => void): RecalcResult {
     const result = this.recalcCoordinator.recalc(evaluate);
     if (result.cycles.length > 0) {
-      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
     }
     return result;
   }
 
   /**
    * Automatically recalculate all dirty formula cells using the FormulaEngine.
-   * 
+   *
    * This is a convenience method that wraps recalc() with automatic formula evaluation.
    * It evaluates each dirty cell's formula in topological order and updates cell values.
-   * 
+   *
    * Requires that a FormulaEngine was provided to the constructor (via the engine parameter).
-   * 
+   *
    * @returns RecalcResult with evaluated count and any detected cycles
    * @throws Error if no FormulaEngine is available
-   * 
+   *
    * @example
    * worksheet.setCellValue({row: 0, col: 0}, 10);
    * worksheet.setCellFormula({row: 0, col: 1}, '=A1*2');
@@ -1205,7 +1500,9 @@ export class Worksheet {
    */
   autoRecalculate(): RecalcResult {
     if (!this.formulaEngine) {
-      throw new Error('Cannot auto-recalculate: no FormulaEngine available. Pass an engine to the Worksheet constructor.');
+      throw new Error(
+        "Cannot auto-recalculate: no FormulaEngine available. Pass an engine to the Worksheet constructor.",
+      );
     }
 
     return this.recalc((nodeKey) => {
@@ -1220,16 +1517,16 @@ export class Worksheet {
    * If the cell is dirty, evaluates the dirty subset needed for this address
    * and leaves unrelated off-screen dirty cells untouched.
    */
-  evaluateIfNeeded(addr: Address): Cell['value'] | undefined {
+  evaluateIfNeeded(addr: Address): Cell["value"] | undefined {
     if (!this.formulaEngine) return this.getCellValue(addr);
     const key = packKey(addr.row, addr.col);
     if (!this.recalcCoordinator.isDirty(key)) return this.getCellValue(addr);
 
-    const result = this.recalcCoordinator.recalcSubset([key], nodeKey => {
+    const result = this.recalcCoordinator.recalcSubset([key], (nodeKey) => {
       this.evaluateFormulaNode(nodeKey);
     });
     if (result.cycles.length > 0) {
-      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
     }
     return this.getCellValue(addr);
   }
@@ -1243,12 +1540,12 @@ export class Worksheet {
       return { evaluated: 0, cycles: [] };
     }
 
-    const keys = addresses.map(addr => packKey(addr.row, addr.col));
-    const result = this.recalcCoordinator.recalcSubset(keys, nodeKey => {
+    const keys = addresses.map((addr) => packKey(addr.row, addr.col));
+    const result = this.recalcCoordinator.recalcSubset(keys, (nodeKey) => {
       this.evaluateFormulaNode(nodeKey);
     });
     if (result.cycles.length > 0) {
-      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
     }
     return result;
   }
@@ -1277,7 +1574,7 @@ export class Worksheet {
     const { row, col } = unpackKey(nodeKey);
     const cell = this.cells.get(row, col);
 
-    if (!cell?.formula) return cell?.value as CellValue ?? null;
+    if (!cell?.formula) return (cell?.value as CellValue) ?? null;
 
     try {
       const result = (this.formulaEngine as any).evaluate(cell.formula, {
@@ -1285,7 +1582,12 @@ export class Worksheet {
         currentCell: { row, col },
       });
 
-      if (result && typeof result === 'object' && 'message' in result && result instanceof Error) {
+      if (
+        result &&
+        typeof result === "object" &&
+        "message" in result &&
+        result instanceof Error
+      ) {
         cell.value = result.message;
       } else if (Array.isArray(result)) {
         cell.value = result as any;
@@ -1293,7 +1595,7 @@ export class Worksheet {
         cell.value = result as CellValue;
       }
     } catch (error) {
-      cell.value = '#ERROR!';
+      cell.value = "#ERROR!";
       console.error(`Formula evaluation error at ${row}:${col}:`, error);
     }
 
@@ -1303,7 +1605,12 @@ export class Worksheet {
   /**
    * DAG statistics for diagnostics and tests.
    */
-  get dagStats(): { nodes: number; edges: number; dirty: number; volatiles: number } {
+  get dagStats(): {
+    nodes: number;
+    edges: number;
+    dirty: number;
+    volatiles: number;
+  } {
     return this.recalcCoordinator.stats;
   }
 
@@ -1372,7 +1679,7 @@ export class Worksheet {
   ): IterativeRecalcResult {
     const result = this.recalcCoordinator.recalcIterative(evaluate, policy);
     if (result.cycles.length > 0) {
-      this.events.emit({ type: 'cycle-detected', cycles: result.cycles });
+      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
     }
     return result;
   }
@@ -1397,8 +1704,8 @@ export class Worksheet {
     const region: MergedRegion = {
       startRow: norm.start.row,
       startCol: norm.start.col,
-      endRow:   norm.end.row,
-      endCol:   norm.end.col,
+      endRow: norm.end.row,
+      endCol: norm.end.col,
     };
 
     // Throws MergeConflictError on any overlap — propagates to caller.
@@ -1413,8 +1720,8 @@ export class Worksheet {
       }
     }
 
-    this.events.emit({ type: 'merge-added', region });
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "merge-added", region });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1429,12 +1736,15 @@ export class Worksheet {
   cancelMerge(range: Range): void {
     const norm = this.normalizeRange(range);
     const removed = this.mergeStore.removeOverlapping(
-      norm.start.row, norm.start.col, norm.end.row, norm.end.col
+      norm.start.row,
+      norm.start.col,
+      norm.end.row,
+      norm.end.col,
     );
     for (const region of removed) {
-      this.events.emit({ type: 'merge-removed', region });
+      this.events.emit({ type: "merge-removed", region });
     }
-    if (removed.length > 0) this.events.emit({ type: 'sheet-mutated' });
+    if (removed.length > 0) this.events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1446,15 +1756,15 @@ export class Worksheet {
     if (!region) return null;
     return {
       start: { row: region.startRow, col: region.startCol },
-      end:   { row: region.endRow,   col: region.endCol   },
+      end: { row: region.endRow, col: region.endCol },
     };
   }
 
   /** All merged regions as Range[]. O(n_merges). */
   getMergedRanges(): Range[] {
-    return this.mergeStore.getAll().map(r => ({
+    return this.mergeStore.getAll().map((r) => ({
       start: { row: r.startRow, col: r.startCol },
-      end:   { row: r.endRow,   col: r.endCol   },
+      end: { row: r.endRow, col: r.endCol },
     }));
   }
 
@@ -1491,8 +1801,8 @@ export class Worksheet {
   hideRow(row: number): void {
     if (this.visibilityStore.isRowHidden(row)) return; // already hidden — no-op
     this.visibilityStore.hideRow(row);
-    this.events.emit({ type: 'row-hidden', row });
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "row-hidden", row });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1502,8 +1812,8 @@ export class Worksheet {
   showRow(row: number): void {
     if (!this.visibilityStore.isRowHidden(row)) return; // already visible — no-op
     this.visibilityStore.showRow(row);
-    this.events.emit({ type: 'row-shown', row });
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "row-shown", row });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1512,8 +1822,8 @@ export class Worksheet {
   hideCol(col: number): void {
     if (this.visibilityStore.isColHidden(col)) return; // already hidden — no-op
     this.visibilityStore.hideCol(col);
-    this.events.emit({ type: 'col-hidden', col });
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "col-hidden", col });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1522,8 +1832,8 @@ export class Worksheet {
   showCol(col: number): void {
     if (!this.visibilityStore.isColHidden(col)) return; // already visible — no-op
     this.visibilityStore.showCol(col);
-    this.events.emit({ type: 'col-shown', col });
-    this.events.emit({ type: 'sheet-mutated' });
+    this.events.emit({ type: "col-shown", col });
+    this.events.emit({ type: "sheet-mutated" });
   }
 
   /** Returns true if the row is currently hidden. O(1). */
@@ -1573,13 +1883,15 @@ export class Worksheet {
    */
   /**
    * Iterate over all non-empty cells in sparse order.
-   * 
+   *
    * This is O(n) where n = number of non-empty cells (NOT total grid size).
    * Critical for InsertColumn/DeleteColumn commands to avoid O(n²) scanning.
-   * 
+   *
    * @param callback - Called for each non-empty cell with (row, col, cell)
    */
-  forEachNonEmptyCell(callback: (row: number, col: number, cell: any) => void): void {
+  forEachNonEmptyCell(
+    callback: (row: number, col: number, cell: any) => void,
+  ): void {
     this.cells.forEach((row, col, cell) => {
       callback(row, col, cell);
     });
@@ -1599,7 +1911,7 @@ export class Worksheet {
     if (this.mergeStore.isAnchor(resolved.row, resolved.col)) {
       const region = this.mergeStore.getRegion(resolved.row, resolved.col)!;
       this.mergeStore.removeByAnchor(resolved.row, resolved.col);
-      this.events.emit({ type: 'merge-removed', region });
+      this.events.emit({ type: "merge-removed", region });
     }
 
     // Phase 3: Clear formula dependencies if cell had a formula
@@ -1609,17 +1921,27 @@ export class Worksheet {
 
     // Remove cell from storage (not just clear - actually delete)
     this.cells.delete(resolved.row, resolved.col);
-    
+
     // Phase 3: Notify change to mark dependents dirty (if any cells reference this one)
     this.recalcCoordinator.notifyChanged(resolved.row, resolved.col);
 
-    this.events.emit({ type: 'cell-changed', address: resolved, cell: { value: null } });
+    this.events.emit({
+      type: "cell-changed",
+      address: resolved,
+      cell: { value: null },
+    });
   }
 
   private normalizeRange(r: Range): Range {
     return {
-      start: { row: Math.min(r.start.row, r.end.row), col: Math.min(r.start.col, r.end.col) },
-      end:   { row: Math.max(r.start.row, r.end.row), col: Math.max(r.start.col, r.end.col) },
+      start: {
+        row: Math.min(r.start.row, r.end.row),
+        col: Math.min(r.start.col, r.end.col),
+      },
+      end: {
+        row: Math.max(r.start.row, r.end.row),
+        col: Math.max(r.start.col, r.end.col),
+      },
     };
   }
 
@@ -1643,7 +1965,7 @@ export class Worksheet {
     }
 
     this._emitOrBuffer({
-      type: 'cell-changed',
+      type: "cell-changed",
       address: addr,
       cell: { ...c },
       previousValue: c.value ?? null,
@@ -1659,7 +1981,10 @@ export class Worksheet {
   /**
    * Add a comment to a cell (supports threading via parentId)
    */
-  addComment(addr: Address, comment: Omit<CellComment, 'id' | 'createdAt'>): CellComment {
+  addComment(
+    addr: Address,
+    comment: Omit<CellComment, "id" | "createdAt">,
+  ): CellComment {
     const c = this.cells.getOrCreate(addr.row, addr.col);
     if (!c.comments) c.comments = [];
 
@@ -1670,7 +1995,11 @@ export class Worksheet {
     };
 
     c.comments.push(newComment);
-    this.events.emit({ type: 'comment-added', address: addr, comment: newComment });
+    this.events.emit({
+      type: "comment-added",
+      address: addr,
+      comment: newComment,
+    });
     return newComment;
   }
 
@@ -1684,11 +2013,15 @@ export class Worksheet {
   /**
    * Update an existing comment
    */
-  updateComment(addr: Address, commentId: string, updates: Partial<Omit<CellComment, 'id' | 'createdAt'>>): boolean {
+  updateComment(
+    addr: Address,
+    commentId: string,
+    updates: Partial<Omit<CellComment, "id" | "createdAt">>,
+  ): boolean {
     const c = this.cells.get(addr.row, addr.col);
     if (!c?.comments) return false;
 
-    const idx = c.comments.findIndex(cm => cm.id === commentId);
+    const idx = c.comments.findIndex((cm) => cm.id === commentId);
     if (idx === -1) return false;
 
     c.comments[idx] = {
@@ -1697,14 +2030,23 @@ export class Worksheet {
       editedAt: new Date(),
     };
 
-    this.events.emit({ type: 'comment-updated', address: addr, commentId, comment: c.comments[idx] });
+    this.events.emit({
+      type: "comment-updated",
+      address: addr,
+      commentId,
+      comment: c.comments[idx],
+    });
     return true;
   }
 
   /**
    * Delete a comment (and its threaded replies)
    */
-  deleteComment(addr: Address, commentId: string, deleteReplies = true): boolean {
+  deleteComment(
+    addr: Address,
+    commentId: string,
+    deleteReplies = true,
+  ): boolean {
     const c = this.cells.get(addr.row, addr.col);
     if (!c?.comments) return false;
 
@@ -1717,15 +2059,19 @@ export class Worksheet {
       while (changed) {
         changed = false;
         for (const cm of c.comments) {
-          if (cm.parentId && toDelete.has(cm.parentId) && !toDelete.has(cm.id)) {
+          if (
+            cm.parentId &&
+            toDelete.has(cm.parentId) &&
+            !toDelete.has(cm.id)
+          ) {
             toDelete.add(cm.id);
             changed = true;
           }
         }
       }
-      c.comments = c.comments.filter(cm => !toDelete.has(cm.id));
+      c.comments = c.comments.filter((cm) => !toDelete.has(cm.id));
     } else {
-      c.comments = c.comments.filter(cm => cm.id !== commentId);
+      c.comments = c.comments.filter((cm) => cm.id !== commentId);
     }
 
     if (c.comments.length === before) return false;
@@ -1734,7 +2080,7 @@ export class Worksheet {
     // `delete obj.prop` changes the hidden class; `obj.prop = undefined` does not.
     if (c.comments.length === 0) c.comments = undefined;
 
-    this.events.emit({ type: 'comment-deleted', address: addr, commentId });
+    this.events.emit({ type: "comment-deleted", address: addr, commentId });
     return true;
   }
 
@@ -1765,15 +2111,21 @@ export class Worksheet {
   /**
    * Find next/previous cell with comments (for navigation)
    */
-  getNextCommentCell(fromAddr: Address, direction: 'next' | 'prev' = 'next'): Address | null {
+  getNextCommentCell(
+    fromAddr: Address,
+    direction: "next" | "prev" = "next",
+  ): Address | null {
     const all = this.getAllComments(); // already sorted by (row, col) numerically
     if (all.length === 0) return null;
 
-    if (direction === 'next') {
+    if (direction === "next") {
       for (const item of all) {
         const { row, col } = item.address;
         // Strict numeric comparison — string key comparison was broken for row≥10
-        if (row > fromAddr.row || (row === fromAddr.row && col > fromAddr.col)) {
+        if (
+          row > fromAddr.row ||
+          (row === fromAddr.row && col > fromAddr.col)
+        ) {
           return item.address;
         }
       }
@@ -1781,7 +2133,10 @@ export class Worksheet {
     } else {
       for (let i = all.length - 1; i >= 0; i--) {
         const { row, col } = all[i].address;
-        if (row < fromAddr.row || (row === fromAddr.row && col < fromAddr.col)) {
+        if (
+          row < fromAddr.row ||
+          (row === fromAddr.row && col < fromAddr.col)
+        ) {
           return all[i].address;
         }
       }
@@ -1797,7 +2152,7 @@ export class Worksheet {
   setIcon(addr: Address, icon: CellIcon | undefined): void {
     const c = this.cells.getOrCreate(addr.row, addr.col);
     c.icon = icon;
-    this.events.emit({ type: 'icon-changed', address: addr, icon });
+    this.events.emit({ type: "icon-changed", address: addr, icon });
   }
 
   /**
@@ -1822,10 +2177,17 @@ export class Worksheet {
 
   // ==================== Custom Cell Component APIs ====================
 
-  setCellComponent(addr: Address, component: CustomCellComponent | undefined): void {
+  setCellComponent(
+    addr: Address,
+    component: CustomCellComponent | undefined,
+  ): void {
     const c = this.cells.getOrCreate(addr.row, addr.col);
     c.customComponent = component;
-    this.events.emit({ type: 'cell-component-changed', address: addr, component });
+    this.events.emit({
+      type: "cell-component-changed",
+      address: addr,
+      component,
+    });
   }
 
   getCellComponent(addr: Address): CustomCellComponent | undefined {
@@ -1836,8 +2198,12 @@ export class Worksheet {
     this.setCellComponent(addr, undefined);
   }
 
-  getAllCellComponents(): Array<{ address: Address; component: CustomCellComponent }> {
-    const result: Array<{ address: Address; component: CustomCellComponent }> = [];
+  getAllCellComponents(): Array<{
+    address: Address;
+    component: CustomCellComponent;
+  }> {
+    const result: Array<{ address: Address; component: CustomCellComponent }> =
+      [];
 
     this.cells.forEach((row, col, cell) => {
       if (cell.customComponent) {
@@ -1931,35 +2297,50 @@ export class Worksheet {
    * @param range    Optional bounding box to restrict the search.
    * @returns        Sorted address array (row-major), possibly empty.
    */
-  getSpecialCells(options: SpecialCellsOptions, range?: SearchRange): Address[] {
+  getSpecialCells(
+    options: SpecialCellsOptions,
+    range?: SearchRange,
+  ): Address[] {
     const { type, value: valueFilter, anchor } = options;
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /** True if `addr` falls within range `r` (inclusive). */
-    const inRange = (addr: Address, r: { start: Address; end: Address }): boolean =>
-      addr.row >= r.start.row && addr.row <= r.end.row &&
-      addr.col >= r.start.col && addr.col <= r.end.col;
+    const inRange = (
+      addr: Address,
+      r: { start: Address; end: Address },
+    ): boolean =>
+      addr.row >= r.start.row &&
+      addr.row <= r.end.row &&
+      addr.col >= r.start.col &&
+      addr.col <= r.end.col;
 
     /** True if `v` is an Excel error string like "#VALUE!" */
     const isExcelError = (v: unknown): boolean =>
-      typeof v === 'string' && /^#[A-Z/0-9!?]+$/.test(v) && v.startsWith('#');
+      typeof v === "string" && /^#[A-Z/0-9!?]+$/.test(v) && v.startsWith("#");
 
     /** True if `v` matches the optional SpecialCellValue filter. */
-    const passesFilter = (v: unknown, f: SpecialCellValue | undefined): boolean => {
+    const passesFilter = (
+      v: unknown,
+      f: SpecialCellValue | undefined,
+    ): boolean => {
       if (!f) return true;
       switch (f) {
-        case 'numbers':  return typeof v === 'number';
-        case 'text':     return typeof v === 'string' && !isExcelError(v);
-        case 'logicals': return typeof v === 'boolean';
-        case 'errors':   return isExcelError(v);
+        case "numbers":
+          return typeof v === "number";
+        case "text":
+          return typeof v === "string" && !isExcelError(v);
+        case "logicals":
+          return typeof v === "boolean";
+        case "errors":
+          return isExcelError(v);
       }
     };
 
     // ── dispatch ─────────────────────────────────────────────────────────────
 
     switch (type) {
-      case 'formulas': {
+      case "formulas": {
         const result: Address[] = [];
         this.cells.forEach((row, col, cell) => {
           if (cell.formula == null) return;
@@ -1970,7 +2351,7 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'constants': {
+      case "constants": {
         const result: Address[] = [];
         this.cells.forEach((row, col, cell) => {
           if (cell.formula != null) return;
@@ -1982,7 +2363,7 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'blanks': {
+      case "blanks": {
         // Blank = no cell entry, OR cell exists but value is null/'' and no formula.
         // Requires a bounded range; fall back to used range if none supplied.
         const searchRange = range ?? this.getUsedRange();
@@ -1992,7 +2373,11 @@ export class Worksheet {
         for (let r = start.row; r <= end.row; r++) {
           for (let c = start.col; c <= end.col; c++) {
             const cell = this.getCell({ row: r, col: c });
-            if (!cell || (cell.formula == null && (cell.value === null || cell.value === ''))) {
+            if (
+              !cell ||
+              (cell.formula == null &&
+                (cell.value === null || cell.value === ""))
+            ) {
               result.push({ row: r, col: c });
             }
           }
@@ -2000,7 +2385,7 @@ export class Worksheet {
         return result;
       }
 
-      case 'visible': {
+      case "visible": {
         const result: Address[] = [];
         this.cells.forEach((row, col, cell) => {
           if (this.isRowHidden(row) || this.isColHidden(col)) return;
@@ -2011,12 +2396,12 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'lastCell': {
+      case "lastCell": {
         const ur = this.getUsedRange();
         return ur ? [ur.end] : [];
       }
 
-      case 'currentRegion': {
+      case "currentRegion": {
         if (!anchor) return [];
         const region = this.getContiguousRange(anchor);
         if (!region) return this.getCell(anchor) ? [anchor] : [];
@@ -2027,7 +2412,7 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'currentArray': {
+      case "currentArray": {
         if (!anchor) return [];
         const cell = this.getCell(anchor);
         if (!cell) return [];
@@ -2042,15 +2427,20 @@ export class Worksheet {
         }
         // Anchor is inside a spilled range — delegate to source
         if (cell.spilledFrom) {
-          return this.getSpecialCells({ type: 'currentArray', anchor: cell.spilledFrom });
+          return this.getSpecialCells({
+            type: "currentArray",
+            anchor: cell.spilledFrom,
+          });
         }
         return [anchor];
       }
 
-      case 'precedents':    return anchor ? this.getPrecedents(anchor)  : [];
-      case 'dependents':    return anchor ? this.getDependents(anchor)  : [];
+      case "precedents":
+        return anchor ? this.getPrecedents(anchor) : [];
+      case "dependents":
+        return anchor ? this.getDependents(anchor) : [];
 
-      case 'allPrecedents': {
+      case "allPrecedents": {
         if (!anchor) return [];
         const visited = new Set<string>();
         const queue: Address[] = [anchor];
@@ -2068,7 +2458,7 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'allDependents': {
+      case "allDependents": {
         if (!anchor) return [];
         const visited = new Set<string>();
         const queue: Address[] = [anchor];
@@ -2086,7 +2476,7 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'conditionalFormats': {
+      case "conditionalFormats": {
         const rules = this.getConditionalFormattingRules();
         if (rules.length === 0) return [];
         const seen = new Set<string>();
@@ -2098,7 +2488,10 @@ export class Worksheet {
             for (const rng of rule.ranges) {
               if (inRange({ row, col }, rng)) {
                 const k = `${row}:${col}`;
-                if (!seen.has(k)) { seen.add(k); result.push({ row, col }); }
+                if (!seen.has(k)) {
+                  seen.add(k);
+                  result.push({ row, col });
+                }
                 return; // don't double-count this cell
               }
             }
@@ -2107,12 +2500,15 @@ export class Worksheet {
         return result.sort(compareRowMajor);
       }
 
-      case 'dataValidation': {
+      case "dataValidation": {
         const allValidation = this.getValidationCells();
         if (!range) return allValidation;
         return allValidation.filter(
-          a => a.row >= range.start.row && a.row <= range.end.row &&
-               a.col >= range.start.col && a.col <= range.end.col
+          (a) =>
+            a.row >= range.start.row &&
+            a.row <= range.end.row &&
+            a.col >= range.start.col &&
+            a.col <= range.end.col,
         );
       }
 
@@ -2123,33 +2519,33 @@ export class Worksheet {
 
   /**
    * Find iterator - lazy search with generator pattern
-   * 
+   *
    * **Excel Parity**: ✅ Range.Find() with findNext loop pattern
-   * 
+   *
    * **Complexity**: O(n) where n = cells in range
    * **Memory**: O(1) - yields addresses one at a time
    * **Precision**: ±0 (exact text match)
    * **Error Strategy**: SKIP_ERRORS (silently skip malformed cells)
    * **Volatility**: Non-volatile (deterministic for given worksheet state)
-   * 
+   *
    * **Phase 1 Implementation Status**: 🚧 STUB - Returns empty generator
-   * 
+   *
    * @param options - Search configuration (what, lookIn, lookAt, matchCase, etc.)
    * @param range - Optional range to search (default: entire worksheet)
    * @yields Address of each matching cell
-   * 
+   *
    * @example
    * ```ts
    * // Find all cells containing "Apple"
    * for (const addr of sheet.findIterator({ what: "Apple" })) {
    *   console.log(addr); // { row: 5, col: 2 }
    * }
-   * 
+   *
    * // Case-sensitive search in formulas
-   * for (const addr of sheet.findIterator({ 
-   *   what: "SUM", 
-   *   lookIn: "formulas", 
-   *   matchCase: true 
+   * for (const addr of sheet.findIterator({
+   *   what: "SUM",
+   *   lookIn: "formulas",
+   *   matchCase: true
    * })) {
    *   console.log(sheet.getCell(addr)?.formula);
    * }
@@ -2157,14 +2553,20 @@ export class Worksheet {
    */
   *findIterator(
     options: SearchOptions,
-    range?: SearchRange
+    range?: SearchRange,
   ): Generator<Address, void, undefined> {
     // Empty pattern + no format query → matches nothing (Excel semantics).
-    const hasTextQuery = options.what !== '';
-    const hasFormatQuery = !!(options.searchFormat && Object.keys(options.searchFormat).length > 0);
+    const hasTextQuery = options.what !== "";
+    const hasFormatQuery = !!(
+      options.searchFormat && Object.keys(options.searchFormat).length > 0
+    );
     if (!hasTextQuery && !hasFormatQuery) return;
 
-    const { lookIn = 'values', searchOrder = 'rows', includeHidden = false } = options;
+    const {
+      lookIn = "values",
+      searchOrder = "rows",
+      includeHidden = false,
+    } = options;
     const matcher = hasTextQuery ? buildMatcher(options) : null;
 
     // ── 1. Collect addresses of all populated cells ──────────────────────────
@@ -2191,7 +2593,9 @@ export class Worksheet {
     });
 
     // ── 3. Sort by search order ─────────────────────────────────────────────
-    addresses.sort(searchOrder === 'columns' ? compareColMajor : compareRowMajor);
+    addresses.sort(
+      searchOrder === "columns" ? compareColMajor : compareRowMajor,
+    );
 
     // ── 4. Yield matches ─────────────────────────────────────────────────────
     for (const addr of addresses) {
@@ -2200,19 +2604,24 @@ export class Worksheet {
 
       let text: string | null = null;
 
-      if (lookIn === 'values') {
+      if (lookIn === "values") {
         text = cellValueToString(cell.value);
-      } else if (lookIn === 'formulas') {
+      } else if (lookIn === "formulas") {
         // Search the formula string if present; fall back to display value.
-        text = cell.formula != null ? cell.formula : cellValueToString(cell.value);
-      } else if (lookIn === 'comments') {
+        text =
+          cell.formula != null ? cell.formula : cellValueToString(cell.value);
+      } else if (lookIn === "comments") {
         if (cell.comments && cell.comments.length > 0) {
-          text = cell.comments.map(c => c.text).join(' ');
+          text = cell.comments.map((c) => c.text).join(" ");
         }
       }
 
       // ── Format filter ─────────────────────────────────────────────────
-      if (hasFormatQuery && !styleMatchesFormat(cell.style, options.searchFormat!)) continue;
+      if (
+        hasFormatQuery &&
+        !styleMatchesFormat(cell.style, options.searchFormat!)
+      )
+        continue;
 
       // ── Text filter ───────────────────────────────────────────────────
       if (hasTextQuery) {
@@ -2226,29 +2635,29 @@ export class Worksheet {
 
   /**
    * Find single match (convenience wrapper)
-   * 
+   *
    * **Excel Parity**: ✅ Range.Find(what, after)
-   * 
+   *
    * **Complexity**: O(n) worst case, but returns first match
    * **Memory**: O(1)
    * **Precision**: ±0
    * **Error Strategy**: SKIP_ERRORS
    * **Volatility**: Non-volatile
-   * 
+   *
    * **Phase 1 Implementation Status**: 🚧 STUB - Returns null
-   * 
+   *
    * @param options - Search configuration
    * @param after - Start search after this address (default: top-left)
    * @param range - Optional range to search
    * @returns First matching address or null if no match
-   * 
+   *
    * @example
    * ```ts
    * const addr = sheet.find({ what: "Apple", matchCase: false });
    * if (addr) {
    *   console.log(`Found at ${addr.row}, ${addr.col}`);
    * }
-   * 
+   *
    * // Find next occurrence after A5
    * const nextAddr = sheet.find({ what: "Apple" }, { row: 4, col: 0 });
    * ```
@@ -2256,16 +2665,16 @@ export class Worksheet {
   find(
     options: SearchOptions,
     after?: Address,
-    range?: SearchRange
+    range?: SearchRange,
   ): Address | null {
-    const { searchDirection = 'next' } = options;
+    const { searchDirection = "next" } = options;
 
     // Eagerly collect all matches from the iterator (O(n) scan).
     // PM directive: correctness first, no premature optimisation.
     const allMatches = [...this.findIterator(options, range)];
     if (allMatches.length === 0) return null;
 
-    if (searchDirection === 'next') {
+    if (searchDirection === "next") {
       // ── Forward search ──────────────────────────────────────────────────
       if (!after) return allMatches[0];
 
@@ -2283,7 +2692,8 @@ export class Worksheet {
 
       // Scan in reverse; return first match strictly before `after`.
       for (let i = allMatches.length - 1; i >= 0; i--) {
-        if (isStrictlyBeforeRowMajor(allMatches[i], after)) return allMatches[i];
+        if (isStrictlyBeforeRowMajor(allMatches[i], after))
+          return allMatches[i];
       }
 
       // Wrap-around: no match before `after` → return from the end.
@@ -2293,30 +2703,30 @@ export class Worksheet {
 
   /**
    * Find all matches (eager collection)
-   * 
+   *
    * **Excel Parity**: ✅ Range.FindAll() pattern (loop + collect)
-   * 
+   *
    * **Complexity**: O(n) where n = cells in range
    * **Memory**: O(m) where m = number of matches (eager allocation)
    * **Precision**: ±0
    * **Error Strategy**: SKIP_ERRORS
    * **Volatility**: Non-volatile
-   * 
+   *
    * **Phase 1 Implementation Status**: 🚧 STUB - Returns empty array
-   * 
+   *
    * **Warning**: Use sparingly for large worksheets. Prefer `findIterator()` for
    * memory-efficient streaming. This method allocates an array upfront.
-   * 
+   *
    * @param options - Search configuration
    * @param range - Optional range to search
    * @returns Array of all matching addresses (empty if no matches)
-   * 
+   *
    * @example
    * ```ts
    * // Find all "Apple" occurrences
    * const matches = sheet.findAll({ what: "Apple" });
    * console.log(`Found ${matches.length} matches`);
-   * 
+   *
    * // Search in specific range
    * const rangeMatches = sheet.findAll(
    *   { what: "error", matchCase: false },
@@ -2324,10 +2734,7 @@ export class Worksheet {
    * );
    * ```
    */
-  findAll(
-    options: SearchOptions,
-    range?: SearchRange
-  ): Address[] {
+  findAll(options: SearchOptions, range?: SearchRange): Address[] {
     // findAll is a thin eager wrapper over the lazy iterator.
     // PM mandate: no independent scan loop here — must go through findIterator.
     return [...this.findIterator(options, range)];
@@ -2352,29 +2759,37 @@ export class Worksheet {
    * @complexity O(V + E) where V = cells + merges + visibility items, E = DAG edges.
    */
   extractSnapshot(): WorksheetSnapshot {
-    const cells: WorksheetSnapshot['cells'] = [];
-    this.cells.forEach((row, col, cell) => cells.push({ row, col, cell: this.cloneCell(cell) }));
+    const cells: WorksheetSnapshot["cells"] = [];
+    this.cells.forEach((row, col, cell) =>
+      cells.push({ row, col, cell: this.cloneCell(cell) }),
+    );
 
-    const dagEdges: WorksheetSnapshot['dagEdges'] = [];
+    const dagEdges: WorksheetSnapshot["dagEdges"] = [];
     this.recalcCoordinator.forEachFormula((row, col, deps) => {
       dagEdges.push({ row, col, deps });
     });
 
     return {
-      version:    FORMAT_VERSION,
-      rowCount:   this.rowCount,
-      colCount:   this.colCount,
+      version: FORMAT_VERSION,
+      rowCount: this.rowCount,
+      colCount: this.colCount,
       cells,
-      merges:     this.mergeStore.getAll(),
+      merges: this.mergeStore.getAll(),
       hiddenRows: [...this.visibilityStore.getHiddenRows()],
       hiddenCols: [...this.visibilityStore.getHiddenCols()],
-      rowHeights: [...this.rowHeights].map(([row, height]) => ({ row, height })),
+      rowHeights: [...this.rowHeights].map(([row, height]) => ({
+        row,
+        height,
+      })),
       columnWidths: [...this.colWidths].map(([col, width]) => ({ col, width })),
       rowStyles: [...this.rowStyles].map(([row, style]) => ({ row, style })),
-      columnStyles: [...this.columnStyles].map(([col, style]) => ({ col, style })),
+      columnStyles: [...this.columnStyles].map(([col, style]) => ({
+        col,
+        style,
+      })),
       drawings: this.cloneDrawingLayerData(),
       dagEdges,
-      volatiles:  this.recalcCoordinator.getVolatileAddresses(),
+      volatiles: this.recalcCoordinator.getVolatileAddresses(),
     };
   }
 
@@ -2390,8 +2805,8 @@ export class Worksheet {
    */
   applySnapshot(snapshot: WorksheetSnapshot): void {
     // ── Reset all stores ──────────────────────────────────────────────────
-    this.cells          = new ColumnarCellStore();
-    this.mergeStore     = new MergeStoreV1();
+    this.cells = new ColumnarCellStore();
+    this.mergeStore = new MergeStoreV1();
     this.visibilityStore = new VisibilityStoreV1();
     this.dag.clearAll();
     if (snapshot.rowCount !== undefined) this.rowCount = snapshot.rowCount;
@@ -2413,16 +2828,30 @@ export class Worksheet {
 
     // ── Restore structural styles and dimensions ─────────────────────────
     if (snapshot.rowHeights) {
-      this.rowHeights = new Map(snapshot.rowHeights.map(({ row, height }) => [row, height]));
+      this.rowHeights = new Map(
+        snapshot.rowHeights.map(({ row, height }) => [row, height]),
+      );
     }
     if (snapshot.columnWidths) {
-      this.colWidths = new Map(snapshot.columnWidths.map(({ col, width }) => [col, width]));
+      this.colWidths = new Map(
+        snapshot.columnWidths.map(({ col, width }) => [col, width]),
+      );
     }
     if (snapshot.rowStyles) {
-      this.rowStyles = new Map(snapshot.rowStyles.map(({ row, style }) => [row, this.internStyle(style)!]));
+      this.rowStyles = new Map(
+        snapshot.rowStyles.map(({ row, style }) => [
+          row,
+          this.internStyle(style)!,
+        ]),
+      );
     }
     if (snapshot.columnStyles) {
-      this.columnStyles = new Map(snapshot.columnStyles.map(({ col, style }) => [col, this.internStyle(style)!]));
+      this.columnStyles = new Map(
+        snapshot.columnStyles.map(({ col, style }) => [
+          col,
+          this.internStyle(style)!,
+        ]),
+      );
     }
 
     // ── Restore drawings ─────────────────────────────────────────────────
@@ -2444,7 +2873,12 @@ export class Worksheet {
 
   // ==================== Private Helpers ====================
 
-  private validateInsertArgs(index: number, count: number, size: number, axis: 'row' | 'column'): void {
+  private validateInsertArgs(
+    index: number,
+    count: number,
+    size: number,
+    axis: "row" | "column",
+  ): void {
     if (!Number.isInteger(index) || index < 0 || index > size) {
       throw new RangeError(`Invalid ${axis} insertion index: ${index}`);
     }
@@ -2458,12 +2892,16 @@ export class Worksheet {
     toIndex: number,
     count: number,
     size: number,
-    axis: 'row' | 'column'
+    axis: "row" | "column",
   ): void {
     if (!Number.isInteger(count) || count <= 0) {
       throw new RangeError(`Invalid ${axis} reorder count: ${count}`);
     }
-    if (!Number.isInteger(fromIndex) || fromIndex < 0 || fromIndex + count > size) {
+    if (
+      !Number.isInteger(fromIndex) ||
+      fromIndex < 0 ||
+      fromIndex + count > size
+    ) {
       throw new RangeError(`Invalid ${axis} reorder source: ${fromIndex}`);
     }
     if (!Number.isInteger(toIndex) || toIndex < 0 || toIndex + count > size) {
@@ -2503,7 +2941,13 @@ export class Worksheet {
 
     const nextMerges = this.mergeStore
       .getAll()
-      .map(region => this.remapMergedRegion(region, options.mapRowIndex, options.mapColumnIndex))
+      .map((region) =>
+        this.remapMergedRegion(
+          region,
+          options.mapRowIndex,
+          options.mapColumnIndex,
+        ),
+      )
       .filter((region): region is MergedRegion => region !== null);
 
     const hiddenRows = [...this.visibilityStore.getHiddenRows()]
@@ -2526,12 +2970,18 @@ export class Worksheet {
     this.rowHeights = this.remapIndexMap(this.rowHeights, options.mapRowIndex);
     this.colWidths = this.remapIndexMap(this.colWidths, options.mapColumnIndex);
     this.rowStyles = this.remapIndexMap(this.rowStyles, options.mapRowIndex);
-    this.columnStyles = this.remapIndexMap(this.columnStyles, options.mapColumnIndex);
+    this.columnStyles = this.remapIndexMap(
+      this.columnStyles,
+      options.mapColumnIndex,
+    );
     this.remapDrawingAnchors(mapAddress);
     this.rebuildDependencyGraph(mappedVolatiles);
   }
 
-  private remapIndexMap<T>(source: Map<number, T>, mapper: IndexMapper): Map<number, T> {
+  private remapIndexMap<T>(
+    source: Map<number, T>,
+    mapper: IndexMapper,
+  ): Map<number, T> {
     const next = new Map<number, T>();
     for (const [index, value] of source) {
       const mapped = mapper(index);
@@ -2543,7 +2993,7 @@ export class Worksheet {
   private remapMergedRegion(
     region: MergedRegion,
     rowMapper: IndexMapper,
-    colMapper: IndexMapper
+    colMapper: IndexMapper,
   ): MergedRegion | null {
     const rows = this.remapIndexSpan(region.startRow, region.endRow, rowMapper);
     const cols = this.remapIndexSpan(region.startCol, region.endCol, colMapper);
@@ -2560,7 +3010,7 @@ export class Worksheet {
   private remapIndexSpan(
     start: number,
     end: number,
-    mapper: IndexMapper
+    mapper: IndexMapper,
   ): { min: number; max: number } | null {
     let min = Infinity;
     let max = -Infinity;
@@ -2573,7 +3023,10 @@ export class Worksheet {
     return min === Infinity ? null : { min, max };
   }
 
-  private remapCellMetadata(cell: Cell, mapAddress: (addr: Address) => Address | null): void {
+  private remapCellMetadata(
+    cell: Cell,
+    mapAddress: (addr: Address) => Address | null,
+  ): void {
     if (cell.spillSource) {
       const endAddress = mapAddress(cell.spillSource.endAddress);
       cell.spillSource = endAddress
@@ -2586,9 +3039,11 @@ export class Worksheet {
     }
   }
 
-  private remapDrawingAnchors(mapAddress: (addr: Address) => Address | null): void {
+  private remapDrawingAnchors(
+    mapAddress: (addr: Address) => Address | null,
+  ): void {
     for (const obj of this.drawingLayer.getAllObjects()) {
-      if (obj.type !== 'picture') continue;
+      if (obj.type !== "picture") continue;
       const picture = obj as PictureObject;
       if (!picture.cellAnchor) continue;
 
@@ -2598,16 +3053,25 @@ export class Worksheet {
       });
       if (!mappedStart) continue;
 
-      const nextAnchor = { ...picture.cellAnchor, row: mappedStart.row, col: mappedStart.col };
+      const nextAnchor = {
+        ...picture.cellAnchor,
+        row: mappedStart.row,
+        col: mappedStart.col,
+      };
 
-      if (picture.cellAnchor.endRow !== undefined || picture.cellAnchor.endCol !== undefined) {
+      if (
+        picture.cellAnchor.endRow !== undefined ||
+        picture.cellAnchor.endCol !== undefined
+      ) {
         const mappedEnd = mapAddress({
           row: picture.cellAnchor.endRow ?? picture.cellAnchor.row,
           col: picture.cellAnchor.endCol ?? picture.cellAnchor.col,
         });
         if (mappedEnd) {
-          if (picture.cellAnchor.endRow !== undefined) nextAnchor.endRow = mappedEnd.row;
-          if (picture.cellAnchor.endCol !== undefined) nextAnchor.endCol = mappedEnd.col;
+          if (picture.cellAnchor.endRow !== undefined)
+            nextAnchor.endRow = mappedEnd.row;
+          if (picture.cellAnchor.endCol !== undefined)
+            nextAnchor.endCol = mappedEnd.col;
         }
       }
 
@@ -2621,9 +3085,16 @@ export class Worksheet {
     this.cells.forEach((row, col, cell) => {
       if (!cell.formula) return;
       try {
-        this.recalcCoordinator.registerFormula(row, col, extractReferences(cell.formula, { row, col }));
+        this.recalcCoordinator.registerFormula(
+          row,
+          col,
+          extractReferences(cell.formula, { row, col }),
+        );
       } catch (error) {
-        console.warn(`Failed to rebuild dependencies from formula at ${row}:${col}:`, error);
+        console.warn(
+          `Failed to rebuild dependencies from formula at ${row}:${col}:`,
+          error,
+        );
       }
     });
 
@@ -2641,28 +3112,38 @@ export class Worksheet {
       value: cell.value ?? null,
       formula: cell.formula,
       style: cell.style,
-      comments: cell.comments?.map(comment => ({
+      comments: cell.comments?.map((comment) => ({
         ...comment,
         position: comment.position ? { ...comment.position } : undefined,
-        richText: comment.richText?.map(run => ({
+        richText: comment.richText?.map((run) => ({
           ...run,
           style: run.style ? { ...run.style } : undefined,
         })),
         metadata: comment.metadata ? { ...comment.metadata } : undefined,
       })),
-      icon: cell.icon ? {
-        ...cell.icon,
-        metadata: cell.icon.metadata ? { ...cell.icon.metadata } : undefined,
-      } : undefined,
-      customComponent: cell.customComponent ? {
-        ...cell.customComponent,
-        props: cell.customComponent.props ? { ...cell.customComponent.props } : undefined,
-      } : undefined,
+      icon: cell.icon
+        ? {
+            ...cell.icon,
+            metadata: cell.icon.metadata
+              ? { ...cell.icon.metadata }
+              : undefined,
+          }
+        : undefined,
+      customComponent: cell.customComponent
+        ? {
+            ...cell.customComponent,
+            props: cell.customComponent.props
+              ? { ...cell.customComponent.props }
+              : undefined,
+          }
+        : undefined,
       hyperlink: cell.hyperlink ? { ...cell.hyperlink } : undefined,
-      spillSource: cell.spillSource ? {
-        dimensions: [...cell.spillSource.dimensions] as [number, number],
-        endAddress: { ...cell.spillSource.endAddress },
-      } : undefined,
+      spillSource: cell.spillSource
+        ? {
+            dimensions: [...cell.spillSource.dimensions] as [number, number],
+            endAddress: { ...cell.spillSource.endAddress },
+          }
+        : undefined,
       spilledFrom: cell.spilledFrom ? { ...cell.spilledFrom } : undefined,
     };
   }
@@ -2670,7 +3151,7 @@ export class Worksheet {
   private cloneDrawingLayerData(): SerializedDrawingLayer {
     const serialized = this.drawingLayer.serialize();
     return {
-      objects: serialized.objects.map(obj => this.cloneDrawingObject(obj)),
+      objects: serialized.objects.map((obj) => this.cloneDrawingObject(obj)),
       zOrder: [...serialized.zOrder],
     };
   }
@@ -2683,10 +3164,14 @@ export class Worksheet {
       anchor: obj.anchor ? { ...obj.anchor } : undefined,
     } as T;
 
-    if (copy.type === 'picture') {
+    if (copy.type === "picture") {
       const picture = copy as unknown as PictureObject;
-      picture.cellAnchor = picture.cellAnchor ? { ...picture.cellAnchor } : undefined;
-      picture.cropSettings = picture.cropSettings ? { ...picture.cropSettings } : undefined;
+      picture.cellAnchor = picture.cellAnchor
+        ? { ...picture.cellAnchor }
+        : undefined;
+      picture.cropSettings = picture.cropSettings
+        ? { ...picture.cropSettings }
+        : undefined;
       picture.loadedImage = undefined;
     }
 
@@ -2700,13 +3185,56 @@ export class Worksheet {
     return style;
   }
 
-  private mergeStyles(...styles: Array<CellStyle | undefined>): CellStyle | undefined {
+  /** Memo of merged (column + row + cell) styles, keyed by identity of the interned inputs. */
+  private mergedStyleMemo = new WeakMap<
+    CellStyle,
+    WeakMap<CellStyle, WeakMap<CellStyle, CellStyle>>
+  >();
+  private static readonly NO_STYLE: CellStyle = Object.freeze({}) as CellStyle;
+
+  private mergeStyles(
+    ...styles: Array<CellStyle | undefined>
+  ): CellStyle | undefined {
+    let layers = 0;
+    let only: CellStyle | undefined;
+    for (const style of styles) {
+      if (!style) continue;
+      layers++;
+      only = style;
+    }
+    if (layers <= 1) return only;
+
+    // Inputs are immutable interned references only when a StyleCache is attached.
+    const cache = this.workbook?.getStyleCache
+      ? this.workbook.getStyleCache()
+      : undefined;
+    const a = styles[0] ?? Worksheet.NO_STYLE;
+    const b = styles[1] ?? Worksheet.NO_STYLE;
+    const c = styles[2] ?? Worksheet.NO_STYLE;
+
+    if (cache) {
+      const hit = this.mergedStyleMemo.get(a)?.get(b)?.get(c);
+      if (hit) return hit;
+    }
+
     let merged: CellStyle | undefined;
     for (const style of styles) {
       if (!style) continue;
       merged = merged ? { ...merged, ...style } : style;
     }
-    return merged;
+
+    if (!cache || !merged) return merged;
+
+    // Spreading drops the non-enumerable interned marker, so re-intern the result.
+    // Without this the renderer's assertInternedStyle() throws whenever a cell has
+    // its own style on top of a row/column style, aborting the whole redraw.
+    const canonical: CellStyle = cache.intern(merged);
+    let byB = this.mergedStyleMemo.get(a);
+    if (!byB) this.mergedStyleMemo.set(a, (byB = new WeakMap()));
+    let byC = byB.get(b);
+    if (!byC) byB.set(b, (byC = new WeakMap()));
+    byC.set(c, canonical);
+    return canonical;
   }
 
   private generateCommentId(): string {

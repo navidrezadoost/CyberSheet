@@ -2,13 +2,24 @@ export type Address = { row: number; col: number }; // 1-based indices
 
 export type Range = { start: Address; end: Address };
 
+/**
+ * Rectangular selection descriptor that avoids materializing per-cell addresses.
+ * All indices are 1-based and inclusive.
+ */
+export type AddressRange = {
+  startRow: number;
+  endRow: number;
+  startCol: number;
+  endCol: number;
+};
+
 export type CellValue = string | number | boolean | null;
 
 // Import Excel color types
-import type { ExcelColorSpec } from './ExcelColor';
+import type { ExcelColorSpec } from "./ExcelColor";
 
 // Import entity types (Week 1: Data Types Entity Framework)
-import type { EntityValue } from './types/entity-types';
+import type { EntityValue } from "./types/entity-types";
 
 // ============================================================================
 // BORDER STYLES (Complete Excel parity)
@@ -18,19 +29,19 @@ import type { EntityValue } from './types/entity-types';
  * Excel border line styles - all 13 Excel border variants
  */
 export type BorderLineStyle =
-  | 'thin'           // Default thin line (1px)
-  | 'medium'         // Medium weight (2px)
-  | 'thick'          // Thick weight (3px)
-  | 'hairline'       // Ultra-thin line (0.5px, Excel specialty)
-  | 'dotted'         // Dotted line
-  | 'dashed'         // Dashed line
-  | 'dashDot'        // Dash-dot pattern
-  | 'dashDotDot'     // Dash-dot-dot pattern
-  | 'double'         // Double line
-  | 'mediumDashed'   // Medium dashed
-  | 'mediumDashDot'  // Medium dash-dot
-  | 'mediumDashDotDot' // Medium dash-dot-dot
-  | 'slantDashDot';  // Slanted dash-dot
+  | "thin" // Default thin line (1px)
+  | "medium" // Medium weight (2px)
+  | "thick" // Thick weight (3px)
+  | "hairline" // Ultra-thin line (0.5px, Excel specialty)
+  | "dotted" // Dotted line
+  | "dashed" // Dashed line
+  | "dashDot" // Dash-dot pattern
+  | "dashDotDot" // Dash-dot-dot pattern
+  | "double" // Double line
+  | "mediumDashed" // Medium dashed
+  | "mediumDashDot" // Medium dash-dot
+  | "mediumDashDotDot" // Medium dash-dot-dot
+  | "slantDashDot"; // Slanted dash-dot
 
 /**
  * Border edge definition with color and style
@@ -60,31 +71,31 @@ export interface BorderSpec {
  * Excel fill pattern types - all 18 Excel patterns
  */
 export type FillPatternType =
-  | 'solid'           // Solid fill (default)
-  | 'none'            // No fill
-  | 'gray125'         // 12.5% gray
-  | 'gray0625'        // 6.25% gray
-  | 'darkGray'        // 75% gray
-  | 'mediumGray'      // 50% gray
-  | 'lightGray'       // 25% gray
-  | 'darkHorizontal'  // Horizontal lines (dark)
-  | 'darkVertical'    // Vertical lines (dark)
-  | 'darkDown'        // Diagonal down lines (dark)
-  | 'darkUp'          // Diagonal up lines (dark)
-  | 'darkGrid'        // Grid (dark)
-  | 'darkTrellis'     // Trellis (dark)
-  | 'lightHorizontal' // Horizontal lines (light)
-  | 'lightVertical'   // Vertical lines (light)
-  | 'lightDown'       // Diagonal down lines (light)
-  | 'lightUp'         // Diagonal up lines (light)
-  | 'lightGrid'       // Grid (light)
-  | 'lightTrellis';   // Trellis (light)
+  | "solid" // Solid fill (default)
+  | "none" // No fill
+  | "gray125" // 12.5% gray
+  | "gray0625" // 6.25% gray
+  | "darkGray" // 75% gray
+  | "mediumGray" // 50% gray
+  | "lightGray" // 25% gray
+  | "darkHorizontal" // Horizontal lines (dark)
+  | "darkVertical" // Vertical lines (dark)
+  | "darkDown" // Diagonal down lines (dark)
+  | "darkUp" // Diagonal up lines (dark)
+  | "darkGrid" // Grid (dark)
+  | "darkTrellis" // Trellis (dark)
+  | "lightHorizontal" // Horizontal lines (light)
+  | "lightVertical" // Vertical lines (light)
+  | "lightDown" // Diagonal down lines (light)
+  | "lightUp" // Diagonal up lines (light)
+  | "lightGrid" // Grid (light)
+  | "lightTrellis"; // Trellis (light)
 
 /**
  * Pattern fill with foreground and background colors
  */
 export interface PatternFill {
-  type: 'pattern';
+  type: "pattern";
   pattern: FillPatternType;
   fgColor?: string | ExcelColorSpec;
   bgColor?: string | ExcelColorSpec;
@@ -102,8 +113,8 @@ export interface GradientStop {
  * Gradient fill specification (linear or path)
  */
 export interface GradientFill {
-  type: 'gradient';
-  gradientType: 'linear' | 'path';
+  type: "gradient";
+  gradientType: "linear" | "path";
   /** Angle in degrees for linear gradient (0 = left-to-right) */
   degree?: number;
   /** Gradient stops (minimum 2 required) */
@@ -137,7 +148,12 @@ export interface RichTextRun {
     fontSize?: number;
     bold?: boolean;
     italic?: boolean;
-    underline?: boolean | 'single' | 'double' | 'singleAccounting' | 'doubleAccounting';
+    underline?:
+      | boolean
+      | "single"
+      | "double"
+      | "singleAccounting"
+      | "doubleAccounting";
     strikethrough?: boolean;
     superscript?: boolean;
     subscript?: boolean;
@@ -155,7 +171,7 @@ export interface RichTextValue {
 
 /**
  * Extended cell value supporting rich text and entities
- * 
+ *
  * Week 1 (Feb 2026): Added EntityValue for structured data types
  * - Entities have display value (shown in cell)
  * - Entities have named fields (accessible via dot notation in Week 2+)
@@ -173,33 +189,45 @@ export type CellStyle = {
   fontSize?: number; // px
   bold?: boolean;
   italic?: boolean;
-  underline?: boolean | 'single' | 'double' | 'singleAccounting' | 'doubleAccounting';
+  underline?:
+    | boolean
+    | "single"
+    | "double"
+    | "singleAccounting"
+    | "doubleAccounting";
   color?: string | ExcelColorSpec;
   strikethrough?: boolean;
   superscript?: boolean;
   subscript?: boolean;
   /** Font scheme for theme fonts */
-  fontScheme?: 'major' | 'minor' | 'none';
+  fontScheme?: "major" | "minor" | "none";
   /** Font outline (Mac Excel) */
   outline?: boolean;
   /** Font shadow (Mac Excel) */
   shadow?: boolean;
 
   // === Alignment Properties ===
-  align?: 'left' | 'center' | 'right' | 'fill' | 'justify' | 'centerContinuous' | 'distributed';
-  valign?: 'top' | 'middle' | 'bottom' | 'justify' | 'distributed';
+  align?:
+    | "left"
+    | "center"
+    | "right"
+    | "fill"
+    | "justify"
+    | "centerContinuous"
+    | "distributed";
+  valign?: "top" | "middle" | "bottom" | "justify" | "distributed";
   wrap?: boolean;
-  textOverflow?: 'clip' | 'ellipsis' | 'overflow';
+  textOverflow?: "clip" | "ellipsis" | "overflow";
   rotation?: number; // -90 to 90, or 255 for vertical
   shrinkToFit?: boolean;
   indent?: number; // 0-250 (Excel limit)
   /** Reading order / text direction */
-  readingOrder?: 'context' | 'ltr' | 'rtl';
+  readingOrder?: "context" | "ltr" | "rtl";
   /** Justify last line (for justify/distributed alignment) */
   justifyLastLine?: boolean;
 
   // === Fill Properties ===
-  /** 
+  /**
    * Cell fill/background
    * - string: CSS color (simple solid fill)
    * - ExcelColorSpec: Excel color with theme/indexed support
@@ -238,28 +266,28 @@ export type CellStyle = {
  * Data validation constraint type (Excel: Data → Data Validation → Settings → Allow)
  */
 export type DataValidationType =
-  | 'whole'       // Whole number
-  | 'decimal'     // Decimal number
-  | 'list'        // Drop-down list (formula1 = comma-separated or range ref)
-  | 'date'        // Date
-  | 'time'        // Time
-  | 'textLength'  // Text length
-  | 'custom'      // Custom formula
-  | 'any';        // No restriction (clear validation)
+  | "whole" // Whole number
+  | "decimal" // Decimal number
+  | "list" // Drop-down list (formula1 = comma-separated or range ref)
+  | "date" // Date
+  | "time" // Time
+  | "textLength" // Text length
+  | "custom" // Custom formula
+  | "any"; // No restriction (clear validation)
 
 /**
  * Comparison operator for numeric/date/text-length validation.
  * Not used for 'list', 'custom', or 'any' types.
  */
 export type DataValidationOperator =
-  | 'between'
-  | 'notBetween'
-  | 'equalTo'
-  | 'notEqualTo'
-  | 'greaterThan'
-  | 'lessThan'
-  | 'greaterThanOrEqualTo'
-  | 'lessThanOrEqualTo';
+  | "between"
+  | "notBetween"
+  | "equalTo"
+  | "notEqualTo"
+  | "greaterThan"
+  | "lessThan"
+  | "greaterThanOrEqualTo"
+  | "lessThanOrEqualTo";
 
 /**
  * Data validation rule attached to a cell.
@@ -289,7 +317,7 @@ export type DataValidationRule = {
   /** Show error alert when invalid data is entered. */
   showErrorAlert?: boolean;
   /** Error alert style (determines icon and button set). */
-  errorStyle?: 'stop' | 'warning' | 'information';
+  errorStyle?: "stop" | "warning" | "information";
   /** Title of the error alert dialog. */
   errorTitle?: string;
   /** Body of the error alert dialog. */
@@ -355,7 +383,12 @@ export type FreezeState = {
   cols: number;
 };
 
-export type HyperlinkKind = 'url' | 'internal' | 'file' | 'email' | 'newDocument';
+export type HyperlinkKind =
+  | "url"
+  | "internal"
+  | "file"
+  | "email"
+  | "newDocument";
 
 export type CellHyperlink = {
   /** URL, mailto:, file path, or internal reference such as Sheet1!A1 */
@@ -363,7 +396,7 @@ export type CellHyperlink = {
   /** Screen tip shown on hover */
   tooltip?: string;
   /** Link category used by the Insert Hyperlink dialog */
-  kind?: HyperlinkKind | 'document';
+  kind?: HyperlinkKind | "document";
   /** For internal links: sheet!cell reference */
   subAddress?: string;
   /** For email links */
@@ -404,10 +437,10 @@ export type CellComment = {
  * CyberSheet custom cell component descriptor (Excel ignores; persisted in custom parts later).
  */
 export type CustomCellComponent = {
-  type: 'icon' | 'react-component';
+  type: "icon" | "react-component";
   id: string;
   props?: Record<string, unknown>;
-  position?: 'left' | 'right' | 'overlay';
+  position?: "left" | "right" | "overlay";
   size?: number;
 };
 
@@ -416,11 +449,16 @@ export type CustomCellComponent = {
  */
 export type CellIcon = {
   /** Icon type: image URL, emoji, or built-in icon name */
-  type: 'url' | 'emoji' | 'builtin';
+  type: "url" | "emoji" | "builtin";
   /** Icon source (URL for image, emoji character, or builtin name) */
   source: string;
   /** Icon position within cell */
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  position?:
+    | "top-left"
+    | "top-right"
+    | "bottom-left"
+    | "bottom-right"
+    | "center";
   /** Icon size in pixels */
   size?: number;
   /** Alt text for accessibility */
@@ -430,7 +468,7 @@ export type CellIcon = {
 };
 
 export type Cell = {
-  /** 
+  /**
    * Cell value - supports plain values and rich text
    * - string/number/boolean/null: Plain value
    * - RichTextValue: Per-character formatted text
@@ -480,27 +518,40 @@ export type ColumnFilter = {
    * All comparisons are case-insensitive for string types.
    */
   type:
-    | 'equals'    | 'notEquals'
-    | 'contains'  | 'notContains'
-    | 'startsWith'| 'endsWith'
-    | 'gt' | 'gte' | 'lt' | 'lte' | 'between'
-    | 'empty'     | 'notEmpty'
-    | 'in';
-  value?: string | number | boolean | [number, number] | Array<string | number | boolean>;
+    | "equals"
+    | "notEquals"
+    | "contains"
+    | "notContains"
+    | "startsWith"
+    | "endsWith"
+    | "gt"
+    | "gte"
+    | "lt"
+    | "lte"
+    | "between"
+    | "empty"
+    | "notEmpty"
+    | "in";
+  value?:
+    | string
+    | number
+    | boolean
+    | [number, number]
+    | Array<string | number | boolean>;
 };
 
 /** Sort direction for column sorts. */
-export type SortDirection = 'asc' | 'desc';
+export type SortDirection = "asc" | "desc";
 
 /**
  * A single sort key specifying which column to sort by and in which direction.
  * Multiple keys are applied left-to-right (primary, secondary, …).
  */
 export type SortKey = {
-  col:   number;
-  dir:   SortDirection;
+  col: number;
+  dir: SortDirection;
   /** Coerce values to this type before comparing.  Defaults to natural ordering. */
-  type?: 'text' | 'number' | 'date';
+  type?: "text" | "number" | "date";
 };
 
 /**
@@ -509,8 +560,8 @@ export type SortKey = {
  */
 export type AutoFilterRange = {
   headerRow: number;
-  startCol:  number;
-  endCol:    number;
+  startCol: number;
+  endCol: number;
 };
 
 /**
@@ -526,40 +577,115 @@ export type CellEvent = {
 };
 
 export type SheetEvents =
-  | { type: 'cell-changed'; address: Address; cell: Cell; previousValue?: Cell['value'] } // Phase 30b: previousValue for no-op detection
-  | { type: 'style-changed'; address: Address; style: CellStyle | undefined }
-  | { type: 'spill-source-changed'; address: Address; before: Cell['spillSource']; after: Cell['spillSource'] }
-  | { type: 'spill-from-changed'; address: Address; before: Cell['spilledFrom']; after: Cell['spilledFrom'] }
-  | { type: 'spill-batch-changed'; changes: Array<{ address: Address; before: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] }; after: { spillSource?: Cell['spillSource']; spilledFrom?: Cell['spilledFrom'] } }> }
-  | { type: 'filter-changed'; col: number; filter: ColumnFilter | null; before: ColumnFilter | null }
-  | { type: 'autofilter-range-changed'; before: AutoFilterRange | null; after: AutoFilterRange | null }
-  | { type: 'sort-applied'; startRow: number; startCol: number; endRow: number; endCol: number; keys: SortKey[] }
-  | { type: 'sheet-mutated' }
-  | { type: 'progressive-load-changed'; loadedRows: number; totalRows: number; done: boolean }
-  | { type: 'cell-click'; event: CellEvent }
-  | { type: 'cell-double-click'; event: CellEvent }
-  | { type: 'cell-right-click'; event: CellEvent }
-  | { type: 'cell-hover'; event: CellEvent }
-  | { type: 'cell-hover-end'; address: Address }
-  | { type: 'comment-added'; address: Address; comment: CellComment }
-  | { type: 'comment-updated'; address: Address; commentId: string; comment: CellComment }
-  | { type: 'comment-deleted'; address: Address; commentId: string }
-  | { type: 'icon-changed'; address: Address; icon: CellIcon | undefined }
-  | { type: 'cell-component-changed'; address: Address; component: CustomCellComponent | undefined }
-  | { type: 'merge-added'; region: MergedRegion }
-  | { type: 'merge-removed'; region: MergedRegion }
-  | { type: 'row-hidden'; row: number }
-  | { type: 'row-shown'; row: number }
-  | { type: 'col-hidden'; col: number }
-  | { type: 'col-shown'; col: number }
-  | { type: 'sheet-protection-changed'; before: SheetProtectionOptions | null; after: SheetProtectionOptions | null }
-  | { type: 'freeze-panes-changed'; before: FreezeState | null; after: FreezeState | null }
-  | { type: 'header-footer-changed'; settings: import('./headerFooter').HeaderFooterSettings }
-  | { type: 'cycle-detected'; cycles: import('./dag/DependencyGraph').CycleDiagnostic[] };
+  | {
+      type: "cell-changed";
+      address: Address;
+      cell: Cell;
+      previousValue?: Cell["value"];
+    } // Phase 30b: previousValue for no-op detection
+  | { type: "style-changed"; address: Address; style: CellStyle | undefined }
+  | {
+      type: "spill-source-changed";
+      address: Address;
+      before: Cell["spillSource"];
+      after: Cell["spillSource"];
+    }
+  | {
+      type: "spill-from-changed";
+      address: Address;
+      before: Cell["spilledFrom"];
+      after: Cell["spilledFrom"];
+    }
+  | {
+      type: "spill-batch-changed";
+      changes: Array<{
+        address: Address;
+        before: {
+          spillSource?: Cell["spillSource"];
+          spilledFrom?: Cell["spilledFrom"];
+        };
+        after: {
+          spillSource?: Cell["spillSource"];
+          spilledFrom?: Cell["spilledFrom"];
+        };
+      }>;
+    }
+  | {
+      type: "filter-changed";
+      col: number;
+      filter: ColumnFilter | null;
+      before: ColumnFilter | null;
+    }
+  | {
+      type: "autofilter-range-changed";
+      before: AutoFilterRange | null;
+      after: AutoFilterRange | null;
+    }
+  | {
+      type: "sort-applied";
+      startRow: number;
+      startCol: number;
+      endRow: number;
+      endCol: number;
+      keys: SortKey[];
+    }
+  | { type: "sheet-mutated" }
+  | {
+      type: "progressive-load-changed";
+      loadedRows: number;
+      totalRows: number;
+      done: boolean;
+    }
+  | { type: "cell-click"; event: CellEvent }
+  | { type: "cell-double-click"; event: CellEvent }
+  | { type: "cell-right-click"; event: CellEvent }
+  | { type: "cell-hover"; event: CellEvent }
+  | { type: "cell-hover-end"; address: Address }
+  | { type: "comment-added"; address: Address; comment: CellComment }
+  | {
+      type: "comment-updated";
+      address: Address;
+      commentId: string;
+      comment: CellComment;
+    }
+  | { type: "comment-deleted"; address: Address; commentId: string }
+  | { type: "icon-changed"; address: Address; icon: CellIcon | undefined }
+  | {
+      type: "cell-component-changed";
+      address: Address;
+      component: CustomCellComponent | undefined;
+    }
+  | { type: "merge-added"; region: MergedRegion }
+  | { type: "merge-removed"; region: MergedRegion }
+  | { type: "row-hidden"; row: number }
+  | { type: "row-shown"; row: number }
+  | { type: "col-hidden"; col: number }
+  | { type: "col-shown"; col: number }
+  | {
+      type: "sheet-protection-changed";
+      before: SheetProtectionOptions | null;
+      after: SheetProtectionOptions | null;
+    }
+  | {
+      type: "freeze-panes-changed";
+      before: FreezeState | null;
+      after: FreezeState | null;
+    }
+  | {
+      type: "header-footer-changed";
+      settings: import("./headerFooter").HeaderFooterSettings;
+    }
+  | {
+      type: "cycle-detected";
+      cycles: import("./dag/DependencyGraph").CycleDiagnostic[];
+    };
 
 export interface IFormulaEngine {
   // Evaluate value for a cell. Implementations should handle dependency tracking internally.
-  evaluate(address: Address, getCell: (addr: Address) => Cell | undefined): CellValue;
+  evaluate(
+    address: Address,
+    getCell: (addr: Address) => Cell | undefined,
+  ): CellValue;
   // Notify engine that a cell's formula or value changed.
   onCellChanged?(address: Address, cell: Cell): void;
 }
