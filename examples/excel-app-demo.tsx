@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { loadXlsxFromUrl } from '../packages/io-xlsx/src';
 import { ExcelApp } from '../packages/react/src/components/ExcelApp';
 
-const DEFAULT_URL = '/011-02-1404_3e5401bdea354b0784b4968da3caed23.xlsx';
+const DEFAULT_URL = '/proforma-report.xlsx';
 
 const ExcelAppDemo = () => {
   const [workbook, setWorkbook] = useState<any>(null);
@@ -45,7 +45,7 @@ const ExcelAppDemo = () => {
   return (
     <ExcelApp
       workbook={workbook}
-      fileName="Book1.xlsx"
+      fileName="Proforma Report.xlsx"
       onSave={() => console.log('Save clicked')}
       onWorkbookLoaded={setWorkbook}
     />
