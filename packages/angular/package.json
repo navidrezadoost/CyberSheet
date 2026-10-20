@@ -33,7 +33,7 @@
     "@angular/platform-browser-dynamic": "22.2.3",
     "jest-axe": "^11.0.0",
     "jest-preset-angular": "^17.0.3",
-    "zone.js": "^0.16.2"
+    "zone.js": "^0.16.3"
   },
   "dependencies": {
     "@cyber-sheet/cf-ui-core": "*"
