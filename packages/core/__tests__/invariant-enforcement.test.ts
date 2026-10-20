@@ -31,14 +31,14 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // Populate a cell through proper API
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
       });
       
       // Try to mutate outside engine.run()
       const ws = (engine as any)._ws as Worksheet;
       
       expect(() => {
-        ws.setCellValue({ row: 0, col: 0 }, 200);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 200);
       }).toThrow(/E2 INVARIANT VIOLATION/);
     });
     
@@ -46,13 +46,13 @@ describe('Execution Kernel Invariant Enforcement', () => {
       const engine = new SpreadsheetEngine('E2-Test');
       
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
       });
       
       const ws = (engine as any)._ws as Worksheet;
       
       expect(() => {
-        ws.setCellFormula({ row: 1, col: 0 }, '=A1+50');
+        ws.setCellFormula({ row: (1) + 1, col: (0) + 1 }, '=A1+50');
       }).toThrow(/E2 INVARIANT VIOLATION/);
     });
     
@@ -62,7 +62,7 @@ describe('Execution Kernel Invariant Enforcement', () => {
       const ws = (engine as any)._ws as Worksheet;
       
       expect(() => {
-        ws.setSpillSource({ row: 0, col: 0 }, { dimensions: [3, 1], endAddress: { row: 2, col: 0 } });
+        ws.setSpillSource({ row: 1, col: 1 }, { dimensions: [3, 1], endAddress: { row: 3, col: 1 } });
       }).toThrow(/E2 INVARIANT VIOLATION/);
     });
     
@@ -72,7 +72,7 @@ describe('Execution Kernel Invariant Enforcement', () => {
       const ws = (engine as any)._ws as Worksheet;
       
       expect(() => {
-        ws.setSpilledFrom({ row: 1, col: 0 }, { row: 0, col: 0 });
+        ws.setSpilledFrom({ row: 2, col: 1 }, { row: 1, col: 1 });
       }).toThrow(/E2 INVARIANT VIOLATION/);
     });
     
@@ -81,13 +81,13 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // First populate through proper API
       await engine.run((ws) => {
-        ws.setSpillSource({ row: 0, col: 0 }, { dimensions: [3, 1], endAddress: { row: 2, col: 0 } });
+        ws.setSpillSource({ row: 1, col: 1 }, { dimensions: [3, 1], endAddress: { row: 3, col: 1 } });
       });
       
       const ws = (engine as any)._ws as Worksheet;
       
       expect(() => {
-        ws.clearSpillSource({ row: 0, col: 0 });
+        ws.clearSpillSource({ row: 1, col: 1 });
       }).toThrow(/E2 INVARIANT VIOLATION/);
     });
     
@@ -96,13 +96,13 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // First populate through proper API
       await engine.run((ws) => {
-        ws.setSpilledFrom({ row: 1, col: 0 }, { row: 0, col: 0 });
+        ws.setSpilledFrom({ row: 2, col: 1 }, { row: 1, col: 1 });
       });
       
       const ws = (engine as any)._ws as Worksheet;
       
       expect(() => {
-        ws.clearSpilledFrom({ row: 1, col: 0 });
+        ws.clearSpilledFrom({ row: 2, col: 1 });
       }).toThrow(/E2 INVARIANT VIOLATION/);
     });
     
@@ -111,15 +111,15 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // This should NOT throw — it's inside engine.run()
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
-        ws.setCellFormula({ row: 1, col: 0 }, '=A1+50');
-        ws.setSpillSource({ row: 2, col: 0 }, { dimensions: [3, 1], endAddress: { row: 4, col: 0 } });
-        ws.setSpilledFrom({ row: 3, col: 0 }, { row: 2, col: 0 });
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
+        ws.setCellFormula({ row: (1) + 1, col: (0) + 1 }, '=A1+50');
+        ws.setSpillSource({ row: 3, col: 1 }, { dimensions: [3, 1], endAddress: { row: 5, col: 1 } });
+        ws.setSpilledFrom({ row: 4, col: 1 }, { row: 3, col: 1 });
       });
       
       // Verify state is correct
-      expect(engine.getCellValue({ row: 0, col: 0 })).toBe(100);
-      expect(engine.getCellValue({ row: 1, col: 0 })).toBe(150);
+      expect(engine.getCellValue({ row: 1, col: 1 })).toBe(100);
+      expect(engine.getCellValue({ row: 2, col: 1 })).toBe(150);
     });
   });
   
@@ -134,17 +134,17 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       await expect(
         engine.run(async (ws) => {
-          ws.setCellValue({ row: 0, col: 0 }, 10);
+          ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
           await Promise.resolve(); // ⛔ Creates execution window
-          ws.setCellValue({ row: 0, col: 0 }, 20); // Would execute outside MUTATING
+          ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 20); // Would execute outside MUTATING
         })
       ).rejects.toThrow(ExecutionError);
       
       await expect(
         engine.run(async (ws) => {
-          ws.setCellValue({ row: 0, col: 0 }, 10);
+          ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
           await Promise.resolve();
-          ws.setCellValue({ row: 0, col: 0 }, 20);
+          ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 20);
         })
       ).rejects.toThrow(/must be synchronous/);
     });
@@ -154,12 +154,12 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // This should NOT throw — it's synchronous
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
-        ws.setCellValue({ row: 1, col: 0 }, 200);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
+        ws.setCellValue({ row: (1) + 1, col: (0) + 1 }, 200);
       });
       
-      expect(engine.getCellValue({ row: 0, col: 0 })).toBe(100);
-      expect(engine.getCellValue({ row: 1, col: 0 })).toBe(200);
+      expect(engine.getCellValue({ row: 1, col: 1 })).toBe(100);
+      expect(engine.getCellValue({ row: 2, col: 1 })).toBe(200);
     });
   });
   
@@ -173,11 +173,11 @@ describe('Execution Kernel Invariant Enforcement', () => {
       const engine = new SpreadsheetEngine('E2-Freeze-Test');
       
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
       });
       
       const ws = (engine as any)._ws as Worksheet;
-      const cell = ws.getCell({ row: 0, col: 0 });
+      const cell = ws.getCell({ row: (0) + 1, col: (0) + 1 });
       
       expect(cell).toBeDefined();
       expect(Object.isFrozen(cell)).toBe(true);
@@ -192,12 +192,12 @@ describe('Execution Kernel Invariant Enforcement', () => {
       const engine = new SpreadsheetEngine('E2-Copy-Test');
       
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
       });
       
       const ws = (engine as any)._ws as Worksheet;
-      const cell1 = ws.getCell({ row: 0, col: 0 });
-      const cell2 = ws.getCell({ row: 0, col: 0 });
+      const cell1 = ws.getCell({ row: (0) + 1, col: (0) + 1 });
+      const cell2 = ws.getCell({ row: (0) + 1, col: (0) + 1 });
       
       // Should be separate objects (not same reference)
       expect(cell1).not.toBe(cell2);
@@ -216,7 +216,7 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // Start first run - it will hold MUTATING state
       const promise1 = engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
       });
       
       // Try to start another run() while first is still executing
@@ -224,7 +224,7 @@ describe('Execution Kernel Invariant Enforcement', () => {
       // In practice, the first run() may complete before we can call the second
       // So we test the rejection indirectly by checking state
       const promise2 = engine.run((ws) => {
-        ws.setCellValue({ row: 1, col: 0 }, 200);
+        ws.setCellValue({ row: (1) + 1, col: (0) + 1 }, 200);
       });
       
       // One of these promises should reject with CONCURRENT_RUN
@@ -255,7 +255,7 @@ describe('Execution Kernel Invariant Enforcement', () => {
         try {
           // This should throw — we're in COMPUTING state
           await engine.run((ws) => {
-            ws.setCellValue({ row: 10, col: 10 }, 999);
+            ws.setCellValue({ row: (10) + 1, col: (10) + 1 }, 999);
           });
         } catch (err) {
           reentrantCallError = err as Error;
@@ -264,12 +264,12 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // Trigger an event
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 100);
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
       });
       
       expect(reentrantCallAttempted).toBe(true);
       expect(reentrantCallError).toBeInstanceOf(ExecutionError);
-      expect(reentrantCallError?.message).toMatch(/CONCURRENT_RUN/);
+      expect((reentrantCallError as ExecutionError).code).toBe('CONCURRENT_RUN');
     });
   });
   
@@ -284,22 +284,22 @@ describe('Execution Kernel Invariant Enforcement', () => {
       
       // 1. Normal operation works
       await engine.run((ws) => {
-        ws.setCellValue({ row: 0, col: 0 }, 10);
-        ws.setCellValue({ row: 1, col: 0 }, 20);
-        ws.setCellFormula({ row: 2, col: 0 }, '=A1+A2');
+        ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
+        ws.setCellValue({ row: (1) + 1, col: (0) + 1 }, 20);
+        ws.setCellFormula({ row: (2) + 1, col: (0) + 1 }, '=A1+A2');
       });
       
-      expect(engine.getCellValue({ row: 2, col: 0 })).toBe(30);
+      expect(engine.getCellValue({ row: 3, col: 1 })).toBe(30);
       
       // 2. Direct mutation blocked (E2)
       const ws = (engine as any)._ws as Worksheet;
       expect(() => {
-        ws.setCellValue({ row: 3, col: 0 }, 999);
+        ws.setCellValue({ row: (3) + 1, col: (0) + 1 }, 999);
       }).toThrow(/E2 INVARIANT VIOLATION/);
       
       // 3. Concurrent execution blocked (E1)
       const run1 = engine.run((ws) => {
-        ws.setCellValue({ row: 4, col: 0 }, 100);
+        ws.setCellValue({ row: (4) + 1, col: (0) + 1 }, 100);
       });
       
       await run1;
@@ -310,7 +310,7 @@ describe('Execution Kernel Invariant Enforcement', () => {
       engine.on('cellsChanged', async () => {
         try {
           await engine.run((ws) => {
-            ws.setCellValue({ row: 99, col: 99 }, 999);
+            ws.setCellValue({ row: (99) + 1, col: (99) + 1 }, 999);
           });
         } catch (err) {
           if (err instanceof ExecutionError) {
@@ -320,23 +320,23 @@ describe('Execution Kernel Invariant Enforcement', () => {
       });
       
       await engine.run((ws) => {
-        ws.setCellValue({ row: 6, col: 0 }, 300);
+        ws.setCellValue({ row: (6) + 1, col: (0) + 1 }, 300);
       });
       
       expect(caughtReentryError).toBe(true);
       
       // Verify final state is consistent
-      expect(engine.getCellValue({ row: 0, col: 0 })).toBe(10);
-      expect(engine.getCellValue({ row: 1, col: 0 })).toBe(20);
-      expect(engine.getCellValue({ row: 2, col: 0 })).toBe(30);
-      expect(engine.getCellValue({ row: 4, col: 0 })).toBe(100);
-      expect(engine.getCellValue({ row: 6, col: 0 })).toBe(300);
+      expect(engine.getCellValue({ row: 1, col: 1 })).toBe(10);
+      expect(engine.getCellValue({ row: 2, col: 1 })).toBe(20);
+      expect(engine.getCellValue({ row: 3, col: 1 })).toBe(30);
+      expect(engine.getCellValue({ row: 5, col: 1 })).toBe(100);
+      expect(engine.getCellValue({ row: 7, col: 1 })).toBe(300);
       
       // Cell 5 should not exist (concurrent call was rejected)
-      expect(engine.getCellValue({ row: 5, col: 0 })).toBe(null);
+      expect(engine.getCellValue({ row: 6, col: 1 })).toBe(null);
       
       // Cell 99 should not exist (reentrant call was rejected)
-      expect(engine.getCellValue({ row: 99, col: 99 })).toBe(null);
+      expect(engine.getCellValue({ row: 100, col: 100 })).toBe(null);
     });
   });
 });

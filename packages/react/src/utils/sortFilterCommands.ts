@@ -1,4 +1,4 @@
-import type { CommandManager, Range, Worksheet } from '@cyber-sheet/core';
+import type { CommandManager, Range, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 import { SortCommand } from '@cyber-sheet/core';
 
 export function normalizeRange(range: Range): Range {
@@ -15,7 +15,7 @@ export function normalizeRange(range: Range): Range {
 }
 
 /** Expand the selection to the contiguous data block around the anchor cell. */
-export function resolveSortRange(sheet: Worksheet, selectionRange: Range): Range {
+export function resolveSortRange(sheet: Worksheet | WorkbookSheetView, selectionRange: Range): Range {
   const normalized = normalizeRange(selectionRange);
   return sheet.getContiguousRange(normalized.start) ?? normalized;
 }

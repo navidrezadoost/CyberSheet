@@ -231,7 +231,8 @@ export class ExportPlugin {
           
           ctx.font = `${cell.style?.bold ? 'bold ' : ''}${cell.style?.fontSize || 14}px ${cell.style?.fontFamily || 'Arial'}, sans-serif`;
           
-          const textAlign = cell.style?.align || 'left';
+          const requestedAlign = cell.style?.align || 'left';
+          const textAlign: CanvasTextAlign = requestedAlign === 'right' || requestedAlign === 'center' ? requestedAlign : 'left';
           const textX = textAlign === 'right' 
             ? x + defaultColWidth - 8
             : textAlign === 'center'

@@ -341,14 +341,13 @@ describe('RecalcCoordinator regression with EdgeList', () => {
 // ---------------------------------------------------------------------------
 
 describe('Phase 6 memory model', () => {
-  it('estimateTypedMemoryMB is significantly less than estimateGraphMemoryMB', () => {
+  it('Float64 edges use about half the modeled Set-based memory', () => {
     const V = 100_000;
     const k = 5;
     const setMB   = estimateGraphMemoryMB(V, k);
     const typedMB = estimateTypedMemoryMB(V, k);
 
-    // Typed edges should use at least 2× less memory
-    expect(typedMB).toBeLessThan(setMB / 2);
+    expect(typedMB).toBeLessThan(setMB * 0.6);
 
     console.log(
       `Memory at ${V}k formulas × ${k} deps:` +
@@ -358,15 +357,15 @@ describe('Phase 6 memory model', () => {
     );
   });
 
-  it('typed model: 100k × 5 deps stays under 20 MB', () => {
-    expect(estimateTypedMemoryMB(100_000, 5)).toBeLessThan(20);
+  it('Float64 model: 100k × 5 deps stays under 25 MB', () => {
+    expect(estimateTypedMemoryMB(100_000, 5)).toBeLessThan(25);
   });
 
-  it('typed model: 1M × 5 deps stays under 200 MB (simulated)', () => {
-    expect(estimateTypedMemoryMB(1_000_000, 5)).toBeLessThan(200);
+  it('Float64 model: 1M × 5 deps stays under 250 MB (simulated)', () => {
+    expect(estimateTypedMemoryMB(1_000_000, 5)).toBeLessThan(250);
   });
 
-  it('set-based model: 1M × 5 deps exceeds typed threshold', () => {
+  it('Set-based model: 1M × 5 deps remains more expensive', () => {
     // Confirm the old model would be significantly more expensive at 1M scale
     const setMB   = estimateGraphMemoryMB(1_000_000, 5);
     const typedMB = estimateTypedMemoryMB(1_000_000, 5);

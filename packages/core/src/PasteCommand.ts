@@ -354,14 +354,6 @@ export class PasteCommand implements Command {
         // Write formula to cell (shiftedFormula already has '=')
         this.worksheet.setCellFormula(targetAddr, shiftedFormula);
         
-        // STEP 3: DAG Integration (post-paste registration)
-        // Extract dependencies from shifted formula (without '=' for tokenizer)
-        const formulaBody = shiftedFormula.startsWith('=') 
-          ? shiftedFormula.slice(1) 
-          : shiftedFormula;
-        const deps = this.extractDependencies(formulaBody);
-        this.worksheet.registerDependencies(targetAddr, deps);
-        
       } else {
         // Value-only paste (no formula)
         logEntry.operation = 'write value';
@@ -468,53 +460,6 @@ export class PasteCommand implements Command {
     // We only mark dirty - we do NOT recompute here
     
     console.log('✅ [PasteCommand] Execute completed');
-  }
-  
-  /**
-   * Extract cell reference dependencies from a formula.
-   * 
-   * Uses FormulaShiftingService's tokenizer to identify cell references.
-   * This is a LOCAL operation - O(formula length), not O(graph size).
-   * 
-   * @param formula Formula without leading = (e.g., "A1+B2")
-   * @returns Array of addresses this formula depends on
-   * 
-   * @invariant Pure function - no worksheet access
-   * @invariant O(n) where n = formula length
-   */
-  private extractDependencies(formula: string): Address[] {
-    const deps: Address[] = [];
-    const seen = new Set<string>();
-    
-    // Tokenize formula to find cell references
-    const tokens = FormulaShiftingService.tokenize(formula);
-    
-    for (const token of tokens) {
-      if (token.type === 'CELL_REF') {
-        // Single cell reference
-        const key = `${token.row}:${token.col}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          deps.push({ row: token.row, col: token.col });
-        }
-      } else if (token.type === 'RANGE') {
-        // Range reference - add all cells in range
-        const start = token.start;
-        const end = token.end;
-        
-        for (let row = start.row; row <= end.row; row++) {
-          for (let col = start.col; col <= end.col; col++) {
-            const key = `${row}:${col}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              deps.push({ row, col });
-            }
-          }
-        }
-      }
-    }
-    
-    return deps;
   }
   
   /**

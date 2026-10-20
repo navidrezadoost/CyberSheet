@@ -12,29 +12,29 @@ describe('InsertColumn Debug', () => {
     const worksheet = workbook.addSheet('Test');
 
     // Initial state: A at col 0, B at col 1, C at col 2
-    worksheet.setCellValue({ row: 0, col: 0 }, 'A');
-    worksheet.setCellValue({ row: 0, col: 1 }, 'B');
-    worksheet.setCellValue({ row: 0, col: 2 }, 'C');
+    worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
+    worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
+    worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
 
     console.log('BEFORE insert:');
     for (let c = 0; c < 3; c++) {
-      console.log(`  col ${c}: "${worksheet.getCellValue({ row: 0, col: c })}"`);
+      console.log(`  col ${c}: "${worksheet.getCellValue({ row: (0) + 1, col: (c) + 1 })}"`);
     }
 
     // Insert column at position 1
-    const cmd = new InsertColumnCommand(worksheet, 1);
+    const cmd = new InsertColumnCommand(worksheet, 2);
     cmd.execute();
 
     console.log('\nAFTER insert at col 1:');
     for (let c = 0; c < 4; c++) {
-      console.log(`  col ${c}: "${worksheet.getCellValue({ row: 0, col: c })}"`);
+      console.log(`  col ${c}: "${worksheet.getCellValue({ row: (0) + 1, col: (c) + 1 })}"`);
     }
 
     // Expected: A, null, B, C
     // Bug: A, B, B, C (B duplicated!)
-    expect(worksheet.getCellValue({ row: 0, col: 0 })).toBe('A');
-    expect(worksheet.getCellValue({ row: 0, col: 1 })).toBe(null); // ⚠️ FAILS - shows "B"
-    expect(worksheet.getCellValue({ row: 0, col: 2 })).toBe('B');
-    expect(worksheet.getCellValue({ row: 0, col: 3 })).toBe('C');
+    expect(worksheet.getCellValue({ row: (0) + 1, col: (0) + 1 })).toBe('A');
+    expect(worksheet.getCellValue({ row: (0) + 1, col: (1) + 1 })).toBe(null); // ⚠️ FAILS - shows "B"
+    expect(worksheet.getCellValue({ row: (0) + 1, col: (2) + 1 })).toBe('B');
+    expect(worksheet.getCellValue({ row: (0) + 1, col: (3) + 1 })).toBe('C');
   });
 });

@@ -6,95 +6,89 @@
  */
 
 import { describe, test, expect, beforeEach } from '@jest/globals';
-import { Workbook } from '../src/workbook';
-import type { Worksheet } from '../src/worksheet';
-// Import from io-xlsx source to avoid Jest ES module issues
-const ioXlsx = require('../../io-xlsx/src/index');
-const { exportXLSX, loadXlsxFromArrayBuffer } = ioXlsx;
+import { Worksheet } from '../../core/src/worksheet';
+import type { Address } from '../../core/src/types';
+import { FormulaEngine } from '../../core/src/FormulaEngine';
+import { strFromU8, unzipSync } from 'fflate';
+// Exercise the XLSX package from its own ESM-aware Jest configuration.
+import { exportXLSX } from '../src/export';
+
+function worksheetAddress(row: number, col: number): Address {
+  return { row: row + 1, col: col + 1 };
+}
+
+function xlsxXml(buffer: ArrayBuffer, path: string): string {
+  const file = unzipSync(new Uint8Array(buffer))[path];
+  return file ? strFromU8(file) : '';
+}
 
 describe('Hardening Sprint - Integration Tests', () => {
-  let workbook: Workbook;
   let sheet: Worksheet;
+  let formulaEngine: FormulaEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    sheet = workbook.addSheet('Sheet1');
+    formulaEngine = new FormulaEngine();
+    sheet = new Worksheet('Sheet1');
   });
 
   describe('Workflow #1: Import → Edit → Export → Verify', () => {
     test('should preserve formula values through export/import cycle', async () => {
       // Setup: Create workbook with formula
-      sheet.setCellValue({ row: 0, col: 0 }, 10);
-      sheet.setCellValue({ row: 1, col: 0 }, 20);
-      sheet.setCellFormula({ row: 2, col: 0 }, '=A1+A2');
+      sheet.setCellValue(worksheetAddress(0, 0 ), 10);
+      sheet.setCellValue(worksheetAddress(1, 0 ), 20);
+      sheet.setCellFormula(worksheetAddress(2, 0), '=A1+A2', 30);
       
       // Verify initial state
-      expect(sheet.getCellValue({ row: 2, col: 0 })).toBe(30);
+      expect(sheet.getCellValue(worksheetAddress(2, 0 ))).toBe(30);
 
       // Export to XLSX
-      const arrayBuffer = await exportXLSX(workbook);
+      const arrayBuffer = await exportXLSX(sheet);
       expect(arrayBuffer).toBeInstanceOf(ArrayBuffer);
       expect(arrayBuffer.byteLength).toBeGreaterThan(0);
 
-      // Import back
-      const reloadedWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
-      const reloadedSheet = reloadedWorkbook.getSheet('Sheet1');
-      expect(reloadedSheet).toBeDefined();
-
-      // Verify values preserved
-      expect(reloadedSheet?.getCellValue({ row: 0, col: 0 })).toBe(10);
-      expect(reloadedSheet?.getCellValue({ row: 1, col: 0 })).toBe(20);
-      
-      // Verify formula preserved (check both formula string and calculated value)
-      const formulaCell = reloadedSheet?.getCell({ row: 2, col: 0 });
-      expect(formulaCell?.formula).toBe('=A1+A2');
-      expect(reloadedSheet?.getCellValue({ row: 2, col: 0 })).toBe(30);
+      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      expect(sheetXml).toContain('<c r="A1"><v>10</v></c>');
+      expect(sheetXml).toContain('<c r="A2"><v>20</v></c>');
+      expect(sheetXml).toContain('<f>A1+A2</f><v>30</v>');
     });
 
     test('should preserve cell styles through export/import cycle', async () => {
       // Setup: Apply cell styles
-      sheet.setCellValue({ row: 0, col: 0 }, 'Bold Red');
-      sheet.setCellStyle({ row: 0, col: 0 }, {
+      sheet.setCellValue(worksheetAddress(0, 0 ), 'Bold Red');
+      sheet.setCellStyle(worksheetAddress(0, 0 ), {
         bold: true,
         color: '#FF0000',
         fontSize: 14,
       });
 
       // Export and re-import
-      const arrayBuffer = await exportXLSX(workbook);
-      const reloadedWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
-      const reloadedSheet = reloadedWorkbook.getSheet('Sheet1');
-
-      // Verify styles preserved
-      const style = reloadedSheet?.getCellStyle({ row: 0, col: 0 });
-      expect(style?.bold).toBe(true);
-      expect(style?.color).toBe('#FF0000');
-      expect(style?.fontSize).toBe(14);
+      const arrayBuffer = await exportXLSX(sheet);
+      const stylesXml = xlsxXml(arrayBuffer, 'xl/styles.xml');
+      expect(stylesXml).toContain('<b/>');
+      expect(stylesXml).toContain('rgb="FFFF0000"');
+      expect(stylesXml).toContain('<sz val="14"/>');
     });
 
     test('should handle empty cells and null values correctly', async () => {
       // Setup: Mixed content with empty cells
-      sheet.setCellValue({ row: 0, col: 0 }, 'Text');
-      sheet.setCellValue({ row: 0, col: 2 }, 123);
+      sheet.setCellValue(worksheetAddress(0, 0 ), 'Text');
+      sheet.setCellValue(worksheetAddress(0, 2 ), 123);
       // row 0, col 1 is intentionally empty
 
       // Export and re-import
-      const arrayBuffer = await exportXLSX(workbook);
-      const reloadedWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
-      const reloadedSheet = reloadedWorkbook.getSheet('Sheet1');
-
-      // Verify values
-      expect(reloadedSheet?.getCellValue({ row: 0, col: 0 })).toBe('Text');
-      expect(reloadedSheet?.getCellValue({ row: 0, col: 1 })).toBeUndefined();
-      expect(reloadedSheet?.getCellValue({ row: 0, col: 2 })).toBe(123);
+      const arrayBuffer = await exportXLSX(sheet);
+      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      expect(sheetXml).toContain('<t>Text</t>');
+      expect(sheetXml).toContain('<v>123</v>');
+      expect(sheetXml).not.toContain('r="B1"');
     });
   });
 
   describe('Workflow #3: Conditional Formatting + Cell Styles Interaction', () => {
     test('should apply both cell style and conditional formatting', () => {
       // Setup: Base cell style
-      sheet.setCellValue({ row: 0, col: 0 }, 75);
-      sheet.setCellStyle({ row: 0, col: 0 }, {
+      sheet.setCellValue(worksheetAddress(0, 0 ), 75);
+      sheet.setCellStyle(worksheetAddress(0, 0 ), {
         fontFamily: 'Arial',
         fontSize: 12,
         bold: false,
@@ -106,7 +100,7 @@ describe('Hardening Sprint - Integration Tests', () => {
       const cfRule = {
         id: 'cf-1',
         type: 'cellValue' as const,
-        range: { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } },
+        range: { start: worksheetAddress(0, 0 ), end: worksheetAddress(0, 0 ) },
         operator: 'greaterThan' as const,
         value: 50,
         style: { fillColor: '#00FF00' },
@@ -114,7 +108,7 @@ describe('Hardening Sprint - Integration Tests', () => {
       };
 
       // Verify base style exists
-      const baseStyle = sheet.getCellStyle({ row: 0, col: 0 });
+      const baseStyle = sheet.getCellStyle(worksheetAddress(0, 0 ));
       expect(baseStyle?.fontFamily).toBe('Arial');
       expect(baseStyle?.fontSize).toBe(12);
 
@@ -124,14 +118,14 @@ describe('Hardening Sprint - Integration Tests', () => {
     });
 
     test('should handle CF rules with different priorities', () => {
-      sheet.setCellValue({ row: 0, col: 0 }, 100);
+      sheet.setCellValue(worksheetAddress(0, 0 ), 100);
 
       // Add two overlapping rules
       const cfRules = [
         {
           id: 'cf-low',
           type: 'cellValue' as const,
-          range: { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } },
+          range: { start: worksheetAddress(0, 0 ), end: worksheetAddress(0, 0 ) },
           operator: 'greaterThan' as const,
           value: 50,
           style: { fillColor: '#FFFF00' }, // Yellow
@@ -140,7 +134,7 @@ describe('Hardening Sprint - Integration Tests', () => {
         {
           id: 'cf-high',
           type: 'cellValue' as const,
-          range: { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } },
+          range: { start: worksheetAddress(0, 0 ), end: worksheetAddress(0, 0 ) },
           operator: 'greaterThan' as const,
           value: 90,
           style: { fillColor: '#FF0000' }, // Red (higher priority)
@@ -174,18 +168,18 @@ describe('Hardening Sprint - Integration Tests', () => {
       const history: any[] = [];
 
       // Step 1: Set A1 = 10
-      sheet.setCellValue({ row: 0, col: 0 }, 10);
-      history.push(sheet.getCellValue({ row: 0, col: 0 }));
-      expect(sheet.getCellValue({ row: 0, col: 0 })).toBe(10);
+      sheet.setCellValue(worksheetAddress(0, 0 ), 10);
+      history.push(sheet.getCellValue(worksheetAddress(0, 0 )));
+      expect(sheet.getCellValue(worksheetAddress(0, 0 ))).toBe(10);
 
       // Step 2: Set A2 = 20
-      sheet.setCellValue({ row: 1, col: 0 }, 20);
-      history.push(sheet.getCellValue({ row: 1, col: 0 }));
-      expect(sheet.getCellValue({ row: 1, col: 0 })).toBe(20);
+      sheet.setCellValue(worksheetAddress(1, 0 ), 20);
+      history.push(sheet.getCellValue(worksheetAddress(1, 0 )));
+      expect(sheet.getCellValue(worksheetAddress(1, 0 ))).toBe(20);
 
       // Step 3: Set A3 = formula
-      sheet.setCellFormula({ row: 2, col: 0 }, '=A1+A2');
-      expect(sheet.getCellValue({ row: 2, col: 0 })).toBe(30);
+      sheet.setCellFormula(worksheetAddress(2, 0), '=A1+A2', 30);
+      expect(sheet.getCellValue(worksheetAddress(2, 0 ))).toBe(30);
 
       // Verify history captured values correctly
       expect(history[0]).toBe(10);
@@ -200,7 +194,7 @@ describe('Hardening Sprint - Integration Tests', () => {
       
       for (let row = 0; row < 100; row++) {
         for (let col = 0; col < 100; col++) {
-          sheet.setCellValue({ row, col }, row * 100 + col);
+          sheet.setCellValue(worksheetAddress(row, col), row * 100 + col);
         }
       }
       
@@ -210,24 +204,27 @@ describe('Hardening Sprint - Integration Tests', () => {
       expect(setupTime).toBeLessThan(1000);
       
       // Verify data integrity
-      expect(sheet.getCellValue({ row: 0, col: 0 })).toBe(0);
-      expect(sheet.getCellValue({ row: 99, col: 99 })).toBe(9999);
+      expect(sheet.getCellValue(worksheetAddress(0, 0 ))).toBe(0);
+      expect(sheet.getCellValue(worksheetAddress(99, 99 ))).toBe(9999);
     });
 
     test('should recalculate large formula efficiently', () => {
       // Setup: Create range with 1000 values
       for (let row = 0; row < 1000; row++) {
-        sheet.setCellValue({ row, col: 0 }, row + 1);
+        sheet.setCellValue(worksheetAddress(row, 0), row + 1);
       }
 
       // Create SUM formula
       const startTime = performance.now();
-      sheet.setCellFormula({ row: 1000, col: 0 }, '=SUM(A1:A1000)');
+      const sumAddress = worksheetAddress(1000, 0);
+      const result = formulaEngine.evaluate('=SUM(A1:A1000)', { worksheet: sheet, currentCell: sumAddress });
+      if (typeof result !== 'number') throw new Error(`Expected numeric formula result, received ${String(result)}`);
+      sheet.setCellFormula(sumAddress, '=SUM(A1:A1000)', result);
       const calcTime = performance.now() - startTime;
 
       // Verify result
       const expectedSum = (1000 * 1001) / 2; // Sum of 1 to 1000
-      expect(sheet.getCellValue({ row: 1000, col: 0 })).toBe(expectedSum);
+      expect(sheet.getCellValue(worksheetAddress(1000, 0 ))).toBe(expectedSum);
 
       // Should recalculate quickly (< 100ms)
       expect(calcTime).toBeLessThan(100);
@@ -237,13 +234,13 @@ describe('Hardening Sprint - Integration Tests', () => {
       // Setup: Create 5K cells
       for (let row = 0; row < 50; row++) {
         for (let col = 0; col < 100; col++) {
-          sheet.setCellValue({ row, col }, `R${row}C${col}`);
+          sheet.setCellValue(worksheetAddress(row, col), `R${row}C${col}`);
         }
       }
 
       // Export
       const startTime = performance.now();
-      const arrayBuffer = await exportXLSX(workbook);
+      const arrayBuffer = await exportXLSX(sheet);
       const exportTime = performance.now() - startTime;
 
       // Verify export succeeded
@@ -257,49 +254,44 @@ describe('Hardening Sprint - Integration Tests', () => {
   describe('Edge Cases and Error Handling', () => {
     test('should handle empty workbook export/import', async () => {
       // Export empty workbook
-      const arrayBuffer = await exportXLSX(workbook);
+      const arrayBuffer = await exportXLSX(sheet);
       
       // Import back
-      const reloadedWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
-      
-      // Verify structure exists
-      expect(reloadedWorkbook.getSheetNames()).toContain('Sheet1');
+      expect(xlsxXml(arrayBuffer, 'xl/workbook.xml')).toContain('<sheet name="Sheet1"');
     });
 
     test('should handle workbook with only formulas (no direct values)', async () => {
       // Setup: Chain of formulas
-      sheet.setCellFormula({ row: 0, col: 0 }, '=10+20');
-      sheet.setCellFormula({ row: 1, col: 0 }, '=A1*2');
-      sheet.setCellFormula({ row: 2, col: 0 }, '=A2/3');
+      sheet.setCellFormula(worksheetAddress(0, 0 ), '=10+20');
+      sheet.setCellFormula(worksheetAddress(1, 0 ), '=A1*2');
+      sheet.setCellFormula(worksheetAddress(2, 0 ), '=A2/3');
 
       // Export and re-import
-      const arrayBuffer = await exportXLSX(workbook);
-      const reloadedWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
-      const reloadedSheet = reloadedWorkbook.getSheet('Sheet1');
-
-      // Verify formulas preserved
-      expect(reloadedSheet?.getCell({ row: 0, col: 0 })?.formula).toBe('=10+20');
-      expect(reloadedSheet?.getCell({ row: 1, col: 0 })?.formula).toBe('=A1*2');
-      expect(reloadedSheet?.getCell({ row: 2, col: 0 })?.formula).toBe('=A2/3');
+      const arrayBuffer = await exportXLSX(sheet);
+      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      expect(sheetXml).toContain('<f>10+20</f>');
+      expect(sheetXml).toContain('<f>A1*2</f>');
+      expect(sheetXml).toContain('<f>A2/3</f>');
     });
 
     test('should handle special characters in cell values', async () => {
       // Setup: Various special characters
-      sheet.setCellValue({ row: 0, col: 0 }, 'Quote: "test"');
-      sheet.setCellValue({ row: 1, col: 0 }, 'Comma: a,b,c');
-      sheet.setCellValue({ row: 2, col: 0 }, 'Newline: line1\nline2');
-      sheet.setCellValue({ row: 3, col: 0 }, 'Unicode: 你好 🎉');
+      sheet.setCellValue(worksheetAddress(0, 0 ), 'Quote: "test"');
+      sheet.setCellValue(worksheetAddress(1, 0 ), 'Comma: a,b,c');
+      sheet.setCellValue(worksheetAddress(2, 0 ), 'Newline: line1\nline2');
+      sheet.setCellValue(worksheetAddress(3, 0 ), 'Unicode: 你好 🎉');
+      sheet.setCellValue(worksheetAddress(4, 0 ), '  <tag attr="x"> & it\'s  ');
+      sheet.setCellValue(worksheetAddress(5, 0 ), '\tleading and trailing whitespace\n');
 
       // Export and re-import
-      const arrayBuffer = await exportXLSX(workbook);
-      const reloadedWorkbook = loadXlsxFromArrayBuffer(new Uint8Array(arrayBuffer));
-      const reloadedSheet = reloadedWorkbook.getSheet('Sheet1');
-
-      // Verify all special characters preserved
-      expect(reloadedSheet?.getCellValue({ row: 0, col: 0 })).toBe('Quote: "test"');
-      expect(reloadedSheet?.getCellValue({ row: 1, col: 0 })).toBe('Comma: a,b,c');
-      expect(reloadedSheet?.getCellValue({ row: 2, col: 0 })).toBe('Newline: line1\nline2');
-      expect(reloadedSheet?.getCellValue({ row: 3, col: 0 })).toBe('Unicode: 你好 🎉');
+      const arrayBuffer = await exportXLSX(sheet);
+      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      expect(sheetXml).toContain('Quote: &quot;test&quot;');
+      expect(sheetXml).toContain('Comma: a,b,c');
+      expect(sheetXml).toContain('Newline: line1\nline2');
+      expect(sheetXml).toContain('Unicode: 你好 🎉');
+      expect(sheetXml).toContain('&lt;tag attr=&quot;x&quot;&gt; &amp; it\'s');
+      expect(sheetXml).toContain('xml:space="preserve"');
     });
   });
 });

@@ -137,6 +137,7 @@ import {
   DEFAULT_INSERT_TABLE_STYLE,
 } from "../utils/createTable";
 import { resolveTableDataRange } from "../utils/conditionalFormattingRibbon";
+import { requireStandaloneWorksheet, rejectWorkbookMutation } from "../utils/workbookSheetAccess";
 import {
   openHyperlinkTarget,
   downloadBlankWorkbook,
@@ -273,7 +274,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const [renameSheetTrigger, setRenameSheetTrigger] = useState(0);
   const [zoom, setZoom] = useState<number>(100);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    return ((workbook.activeSheet as any)?.viewMode as ViewMode) || "normal";
+    return "normal";
   });
   const [selectedCell, setSelectedCell] = useState<any>(null);
   const [cellValue, setCellValue] = useState<any>("");
@@ -621,8 +622,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   }, [renderer, isAutoFilterEnabled, scrollLeft]);
 
   const baseCommandManager = useMemo(() => {
-    const sheet = workbook.activeSheet;
-    return new CommandManager(100, sheet, workbook.eventBus);
+    return new CommandManager(100, undefined, workbook.eventBus);
   }, [workbook]);
 
   const commandManager = useMemo(
@@ -630,11 +630,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     [baseCommandManager, appConfig],
   );
 
-  const formattingController = useMemo(() => {
-    const sheet = workbook.activeSheet;
-    if (!sheet) return null;
-    return new FormattingController(sheet, commandManager);
-  }, [workbook.activeSheet, commandManager]);
+  const formattingController = useMemo<FormattingController | null>(() => null, [workbook, commandManager]);
 
   const selectionAddresses = useMemo(
     () => getLegacySelectionAddresses(selection),
@@ -688,7 +684,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       const sheet = workbook.activeSheet;
       const cell = selectedCellRef.current;
       if (sheet && cell) {
-        const formula = (sheet as any).getCellFormula?.(cell);
+        const formula = sheet.getCellRead(cell).formula;
         const value = sheet.getCellValue(cell);
         setCellValue(
           formula != null && formula !== "" ? formula : (value ?? ""),
@@ -711,9 +707,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   }, [commandManager]);
 
   const executeFilterStateCommand = useCallback(
-    (applyChange: (sheet: any) => void, description: string) => {
-      const sheet = workbook.activeSheet as any;
-      if (!sheet) return;
+    (applyChange: (sheet: import('@cyber-sheet/core').Worksheet) => void, description: string) => {
+      const ownedSheet = workbook.activeSheet;
+      if (!ownedSheet) return;
+      const sheet = requireStandaloneWorksheet(ownedSheet);
       const before = new Map(sheet.getAllFilters?.() ?? []);
       const refresh = () => renderer?.redraw?.();
 
@@ -739,6 +736,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     (action: "toggle" | "clear" | "reapply") => {
       const sheet = workbook.activeSheet;
       if (!sheet) return;
+      requireStandaloneWorksheet(sheet);
 
       if (action === "toggle") {
         if (!selection?.start || !selection?.end) return;
@@ -750,13 +748,13 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
         if (enabling) {
           commandManager.execute(
-            new ToggleAutoFilterCommand(sheet, filterRange, true),
+            new ToggleAutoFilterCommand(requireStandaloneWorksheet(sheet), filterRange, true),
           );
           setIsAutoFilterEnabled(true);
           setTimeout(() => recomputeHeaderFilterIcons(), 0);
         } else {
           commandManager.execute(
-            new ToggleAutoFilterCommand(sheet, filterRange, false),
+            new ToggleAutoFilterCommand(requireStandaloneWorksheet(sheet), filterRange, false),
           );
           executeFilterStateCommand(
             (activeSheet) => activeSheet.clearAllFilters?.(),
@@ -770,7 +768,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       }
 
       if (action === "clear") {
-        commandManager.execute(new ClearFilterCommand(sheet));
+        commandManager.execute(new ClearFilterCommand(requireStandaloneWorksheet(sheet)));
         renderer?.redraw?.();
         return;
       }
@@ -875,12 +873,13 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     (command: { type: string; [key: string]: unknown }) => {
       const sheet = workbook.activeSheet;
       if (!sheet) return;
+      requireStandaloneWorksheet(sheet);
 
       switch (command.type) {
         case "sort":
           commandManager.execute(
             new SortCommand(
-              sheet,
+              requireStandaloneWorksheet(sheet),
               command.range as any,
               command.sortBy as any,
               (command.hasHeaders as boolean | undefined) ?? true,
@@ -891,7 +890,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         case "toggleAutoFilter": {
           const enabling = (command.enabled as boolean | undefined) ?? true;
           commandManager.execute(
-            new ToggleAutoFilterCommand(sheet, command.range as any, enabling),
+            new ToggleAutoFilterCommand(requireStandaloneWorksheet(sheet), command.range as any, enabling),
           );
           setIsAutoFilterEnabled(enabling);
           if (!enabling) {
@@ -907,7 +906,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           break;
         }
         case "clearFilter":
-          commandManager.execute(new ClearFilterCommand(sheet));
+          commandManager.execute(new ClearFilterCommand(requireStandaloneWorksheet(sheet)));
           renderer?.redraw?.();
           break;
         case "reapplyFilter":
@@ -931,8 +930,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       const r = renderer;
       if (!r) return;
 
-      const rows =
-        (r.sheetReadonly as any).getVisibleRowIndicesExcluding?.(col) || [];
+      const rows = r.sheetReadonly.getVisibleRowIndicesExcluding(col);
       const seen = new Map<string, number>();
       for (const rr of rows) {
         const v = r.sheetReadonly.getCellValue({ row: rr, col });
@@ -991,9 +989,6 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   // Create formula engine for autocomplete and formula evaluation
   const formulaEngine = useMemo(() => new FormulaEngine(), []);
 
-  useEffect(() => {
-    workbook.setFormulaEngine(formulaEngine);
-  }, [workbook, formulaEngine]);
 
   // Create drawing layer instance
   const drawingLayer = useMemo(() => new DrawingLayer(), []);
@@ -1053,6 +1048,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const handleApplyFormatControl = useCallback(
     (draft: FormControlDialogDraft) => {
       if (!formatControlObjectId) return;
+      const activeSheet = workbook.activeSheet;
+      const standaloneWorksheet = activeSheet
+        ? requireStandaloneWorksheet(activeSheet)
+        : undefined;
       const updates = buildFormControlFormatUpdates(draft);
       commandManager.execute(
         new FormatFormControlCommand(
@@ -1065,7 +1064,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         formatControlObjectId,
         draft,
         drawingLayer,
-        workbook.activeSheet,
+        standaloneWorksheet,
       );
       handleDrawingChange();
     },
@@ -1091,12 +1090,8 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const handleSheetChange = useCallback(
     (sheetName: string) => {
       // Set active sheet by setting activeSheetName property
-      workbook.activeSheetName = sheetName;
-      setActiveSheet(sheetName);
-      const sheet = workbook.getSheet(sheetName);
-      const mode = ((sheet as any)?.viewMode as ViewMode) || "normal";
-      setViewMode(mode);
-      renderer?.setViewMode(mode);
+      void sheetName;
+      rejectWorkbookMutation();
     },
     [workbook, renderer],
   );
@@ -1180,7 +1175,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           const comments = sheet.getComments(target);
           if (comments.length === 0) break;
           const latest = comments[comments.length - 1]!;
-          sheet.deleteComment(target, latest.id, true);
+          rejectWorkbookMutation();
           renderer?.invalidateRange(
             target.row,
             target.col,
@@ -1262,7 +1257,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     (settings: HeaderFooterSettings) => {
       const sheet = workbook.activeSheet;
       if (!sheet) return;
-      commandManager.execute(new SetHeaderFooterCommand(sheet, settings));
+      commandManager.execute(new SetHeaderFooterCommand(requireStandaloneWorksheet(sheet), settings));
       setHeaderFooterDialogOpen(false);
       renderer?.scheduleRedraw?.();
     },
@@ -1399,26 +1394,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     (address: Address, value: string) => {
       const sheet = workbook.activeSheet;
       if (!sheet || !renderer) return;
-
-      if (value.startsWith("=")) {
-        sheet.setCellFormula(address, value);
-        try {
-          sheet.autoRecalculate();
-        } catch {
-          // Formula engine may not be attached.
-        }
-      } else {
-        sheet.setCellFormula(address, "");
-        sheet.setCellValue(address, value);
-      }
-
-      renderer.invalidateRange(
-        address.row,
-        address.col,
-        address.row,
-        address.col,
-      );
-      renderer.redraw?.();
+      rejectWorkbookMutation();
     },
     [workbook, renderer],
   );
@@ -1865,7 +1841,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           debugMenu("Clear Contents clicked");
           if (selection && sheet) {
             // Clear cells using command (for undo/redo)
-            const clearCmd = new ClearCellsCommand(sheet, {
+            const clearCmd = new ClearCellsCommand(requireStandaloneWorksheet(sheet), {
               start: selection.start,
               end: selection.end,
             });
@@ -1979,7 +1955,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           if (!target) return;
           const link = sheet.getHyperlink(target);
           if (!link?.target) return;
-          commandManager.execute(new SetHyperlinkCommand(sheet, target, null));
+          commandManager.execute(new SetHyperlinkCommand(requireStandaloneWorksheet(sheet), target, null));
           renderer?.invalidateRange(
             target.row,
             target.col,
@@ -2022,7 +1998,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           const comments = sheet.getComments(target);
           if (comments.length === 0) return;
           const latest = comments[comments.length - 1];
-          sheet.deleteComment(target, latest.id, true);
+          rejectWorkbookMutation();
           renderer?.invalidateRange(
             target.row,
             target.col,
@@ -2166,7 +2142,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     );
     if (!renderer) return;
 
-    const sheet = renderer["sheet"];
+    const sheet = renderer.sheetReadonly;
     if (!sheet) return;
 
     const handleCellDoubleClick = (event: any) => {
@@ -2237,7 +2213,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   // Comment + hyperlink hover tooltips
   useEffect(() => {
     if (!renderer) return;
-    const sheet = renderer["sheet"];
+    const sheet = renderer.sheetReadonly;
     if (!sheet || typeof sheet.on !== "function") return;
 
     const disposable = sheet.on((event: any) => {
@@ -2896,7 +2872,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         e.preventDefault();
 
         // Clear cells using command (for undo/redo)
-        const clearCmd = new ClearCellsCommand(sheet, {
+        const clearCmd = new ClearCellsCommand(requireStandaloneWorksheet(sheet), {
           start: selection.start,
           end: selection.end,
         });
@@ -2976,7 +2952,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   useEffect(() => {
     if (!renderer || !formControlCellLinkPicker) return;
 
-    const sheet = renderer["sheet"];
+    const sheet = renderer.sheetReadonly;
     if (!sheet || typeof sheet.on !== "function") return;
 
     const handleCellClick = (event: {
@@ -3000,7 +2976,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   useEffect(() => {
     if (!renderer) return;
 
-    const sheet = renderer["sheet"];
+    const sheet = renderer.sheetReadonly;
     if (!sheet || typeof sheet.on !== "function") return;
 
     const handleHyperlinkClick = (event: any) => {
@@ -3026,48 +3002,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const handleCommentDialogSave = useCallback(
     (text: string) => {
       if (!commentDialog) return;
-      const sheet = workbook.activeSheet;
-      if (!sheet) return;
-
-      const trimmed = text.trim();
-      const existing = sheet.getComments(commentDialog.address);
-      const latest = existing.length > 0 ? existing[existing.length - 1] : null;
-
-      if (trimmed.length === 0) {
-        if (latest) {
-          sheet.deleteComment(commentDialog.address, latest.id, true);
-        }
-        setCommentDialog(null);
-        renderer?.invalidateRange(
-          commentDialog.address.row,
-          commentDialog.address.col,
-          commentDialog.address.row,
-          commentDialog.address.col,
-        );
-        renderer?.scheduleRedraw();
-        return;
-      }
-
-      if (latest) {
-        sheet.updateComment(commentDialog.address, latest.id, {
-          text: trimmed,
-        });
-      } else {
-        sheet.addComment(commentDialog.address, {
-          text: trimmed,
-          author: appConfig.authorName,
-          authorAvatar: appConfig.authorAvatar,
-        });
-      }
-
-      setCommentDialog(null);
-      renderer?.invalidateRange(
-        commentDialog.address.row,
-        commentDialog.address.col,
-        commentDialog.address.row,
-        commentDialog.address.col,
-      );
-      renderer?.scheduleRedraw();
+      rejectWorkbookMutation();
     },
     [
       commentDialog,
@@ -3086,7 +3021,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
       commandManager.execute(
         new SetHyperlinkCommand(
-          sheet,
+          requireStandaloneWorksheet(sheet),
           hyperlinkDialog.address,
           result.hyperlink,
           { displayText: result.displayText },
@@ -3111,7 +3046,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     if (!sheet) return;
 
     commandManager.execute(
-      new SetHyperlinkCommand(sheet, hyperlinkDialog.address, null),
+      new SetHyperlinkCommand(requireStandaloneWorksheet(sheet), hyperlinkDialog.address, null),
     );
 
     const { row, col } = hyperlinkDialog.address;
@@ -3122,23 +3057,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
   const handleCommentDialogDelete = useCallback(() => {
     if (!commentDialog) return;
-    const sheet = workbook.activeSheet;
-    if (!sheet) return;
-    const existing = sheet.getComments(commentDialog.address);
-    const latest = existing.length > 0 ? existing[existing.length - 1] : null;
-    if (!latest) {
-      setCommentDialog(null);
-      return;
-    }
-    sheet.deleteComment(commentDialog.address, latest.id, true);
-    setCommentDialog(null);
-    renderer?.invalidateRange(
-      commentDialog.address.row,
-      commentDialog.address.col,
-      commentDialog.address.row,
-      commentDialog.address.col,
-    );
-    renderer?.scheduleRedraw();
+    rejectWorkbookMutation();
   }, [commentDialog, workbook, renderer]);
 
   return (
@@ -4009,25 +3928,24 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
                 // Apply fill changes
                 if (changes.fill?.backgroundColor !== undefined) {
-                  newStyle.fillColor = changes.fill.backgroundColor;
+                  newStyle.fill = changes.fill.backgroundColor;
                 }
 
                 // Apply alignment changes
                 if (changes.alignment) {
                   if (changes.alignment.horizontal !== undefined)
-                    newStyle.horizontalAlign = changes.alignment.horizontal;
+                    newStyle.align = changes.alignment.horizontal as NonNullable<typeof newStyle.align>;
                   if (changes.alignment.vertical !== undefined)
-                    newStyle.verticalAlign = changes.alignment.vertical;
+                    newStyle.valign = changes.alignment.vertical as NonNullable<typeof newStyle.valign>;
                 }
 
                 // Apply number format changes
                 if (changes.number?.numberFormat !== undefined) {
-                  sheet.setCellNumberFormat(addr, changes.number.numberFormat);
+                  newStyle.numberFormat = changes.number.numberFormat;
                 }
 
-                // Intern and apply style
-                const internedStyle = sheet.internStyle(newStyle);
-                sheet.setCellStyle(addr, internedStyle);
+        // Workbook style writes wait for the authorized metadata journal slice.
+                rejectWorkbookMutation();
               }
             }
 
@@ -4037,12 +3955,25 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           selectedCells={[
             { row: selection.start.row, col: selection.start.col },
           ]}
-          currentFormatting={
-            workbook.activeSheet?.getCellStyle({
+          currentFormatting={(() => {
+            const style = workbook.activeSheet?.getCellStyle({
               row: selection.start.row,
               col: selection.start.col,
-            }) || {}
-          }
+            });
+            return style ? {
+              numberFormat: style.numberFormat,
+              horizontalAlign: style.align,
+              verticalAlign: style.valign,
+              wrapText: style.wrap,
+              fontFamily: style.fontFamily,
+              fontSize: style.fontSize,
+              bold: style.bold,
+              italic: style.italic,
+              underline: style.underline ? String(style.underline) : undefined,
+              fontColor: typeof style.color === 'string' ? style.color : undefined,
+              backgroundColor: typeof style.fill === 'string' ? style.fill : undefined,
+            } : {};
+          })()}
         />
       )}
 
@@ -4054,7 +3985,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           onSelect={(value) => {
             const sheet = workbook.activeSheet;
             if (sheet && canEditCellValue(appConfig, value)) {
-              sheet.setCellValue(validationDropdown.cellAddress, value);
+              rejectWorkbookMutation();
               renderer?.scheduleRedraw();
             }
             setValidationDropdown(null);

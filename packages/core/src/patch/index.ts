@@ -8,6 +8,7 @@ export type {
   PatchOp,
   SetCellValueOp,
   ClearCellOp,
+  SetCellContentOp,
   SetCellStyleOp,
   MergeCellsOp,
   CancelMergeOp,

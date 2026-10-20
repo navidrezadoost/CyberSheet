@@ -7,20 +7,27 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "sideEffects": false,
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
+    "test": "jest --config jest.config.cjs --runInBand",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "react": ">=17",
-    "react-dom": ">=17",
     "@cyber-sheet/core": "^0.1.0",
-    "@cyber-sheet/renderer-canvas": "^0.1.0"
+    "@cyber-sheet/renderer-canvas": "^0.1.0",
+    "react": ">=17",
+    "react-dom": ">=17"
   },
   "dependencies": {
     "@cyber-sheet/cf-ui-core": "*",
     "@cyber-sheet/io-xlsx": "*"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3"
   }
 }

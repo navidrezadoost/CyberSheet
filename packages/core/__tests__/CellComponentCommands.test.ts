@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import { SetCellComponentCommand } from '../src/commands/CellComponentCommands';
 import { Workbook } from '../src/workbook';
 

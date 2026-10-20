@@ -17,144 +17,12 @@ function displayDimension(value: number, defaultValue: number): number {
   return Math.max(defaultValue, value);
 }
 
-export async function loadXlsxFromUrl(url: string, fetchFn?: FetchLike): Promise<Workbook> {
-  const f = fetchFn ?? fetch;
-  const res = await f(url);
-  if (!res.ok) throw new Error(`Failed to fetch XLSX: ${res.status}`);
-  const buf = new Uint8Array(await res.arrayBuffer());
-  return loadXlsxFromArrayBuffer(buf);
+export async function loadXlsxFromUrl(_url: string, _fetchFn?: FetchLike): Promise<Workbook> {
+  throw new Error('XLSX import is unavailable until R6 staged restore is authorized');
 }
 
-export function loadXlsxFromArrayBuffer(data: Uint8Array): Workbook {
-  const files = unzipSync(data);
-  const getText = (name: string) => (files[name] ? strFromU8(files[name]) : undefined);
-  const wb = new Workbook();
-
-  // Theme colors (optional)
-  const themeXml = getText('xl/theme/theme1.xml') || '';
-  const themePalette = parseTheme(themeXml);
-
-  // Parse workbook rels to find sheets
-  const wbXml = getText('xl/workbook.xml');
-  if (!wbXml) throw new Error('Invalid XLSX: missing workbook.xml');
-  
-  const sheetEntries = Array.from(wbXml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*sheetId="(\d+)"[^>]*r:id="([^"]+)"/g)).map((m) => {
-    const mm = m as unknown as RegExpMatchArray; return { name: mm[1], id: mm[2], rid: mm[3] };
-  });
-  const relsXml = getText('xl/_rels/workbook.xml.rels') || '';
-  
-  // Fix: Parse Id and Target separately since they can appear in any order
-  const rels = new Map(Array.from(relsXml.matchAll(/<Relationship[^>]*?\/>/g)).map((m) => {
-    const rel = m[0];
-    const idMatch = rel.match(/Id="([^"]+)"/);
-    const targetMatch = rel.match(/Target="([^"]+)"/);
-    if (idMatch && targetMatch) {
-      return [idMatch[1], targetMatch[1]] as const;
-    }
-    return null;
-  }).filter(Boolean) as Array<readonly [string, string]>);
-
-  // Shared strings
-  const sstXml = getText('xl/sharedStrings.xml') || '';
-  const sharedStrings = Array.from(sstXml.matchAll(/<si>\s*<t[^>]*>([\s\S]*?)<\/t>\s*<\/si>/g)).map((m) => {
-    const mm = m as unknown as RegExpMatchArray; return decodeXml(mm[1]);
-  });
-
-  // Styles (limited): number formats, fonts (bold/italic/size/color/name), fills
-  const stylesXml = getText('xl/styles.xml') || '';
-  const styles = parseStyles(stylesXml, themePalette);
-
-  for (const s of sheetEntries) {
-    const target = rels.get(s.rid);
-    if (!target) continue;
-    // Fix: handle both absolute (/xl/worksheets/sheet1.xml) and relative (worksheets/sheet1.xml) paths
-    const path = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
-    const sheetXml = getText(path);
-    if (!sheetXml) continue;
-    
-    // Parse dimension to get declared sheet size, then scan cells as a fallback.
-    const dimMatch = sheetXml.match(/<dimension[^>]*ref="([A-Z]+\d+:)?([A-Z]+\d+)"/);
-    let maxRow = 1;
-    let maxCol = 1;
-    
-    if (dimMatch) {
-      const endRef = dimMatch[2]; // e.g., "Z100"
-      const endAddr = a1ToAddress(endRef);
-      maxRow = endAddr.row;
-      maxCol = endAddr.col;
-    }
-
-    // Parse rows and c elements before creating the sheet so files with missing
-    // or stale dimensions still get their full real size.
-    // Example: <c r="A1" t="s"><v>0</v></c>
-    const rowMatches = Array.from(sheetXml.matchAll(/<row[^>]*r="(\d+)"[\s\S]*?<\/row>/g)) as unknown as RegExpMatchArray[];
-    for (const rowMatch of rowMatches) {
-      const rowR = parseInt((rowMatch as any)[1], 10);
-      maxRow = Math.max(maxRow, rowR);
-      const rowXml = (rowMatch as any)[0] as string;
-      const cellRefs = Array.from(rowXml.matchAll(/<c\s+[^>]*\br="([A-Z]+\d+)"/g)) as unknown as RegExpMatchArray[];
-      for (const refMatch of cellRefs) {
-        const addr = a1ToAddress((refMatch as any)[1] as string);
-        maxRow = Math.max(maxRow, addr.row);
-        maxCol = Math.max(maxCol, addr.col);
-      }
-    }
-
-    const ws = wb.addSheet(
-      s.name,
-      displayDimension(maxRow, DEFAULT_WORKSHEET_ROWS),
-      displayDimension(maxCol, DEFAULT_WORKSHEET_COLS),
-    );
-    
-    for (const rowMatch of rowMatches) {
-      const rowR = parseInt((rowMatch as any)[1], 10);
-      const rowXml = (rowMatch as any)[0] as string;
-      // Match both self-closing <c .../> and regular <c ...>...</c> tags
-      // Simpler approach: match <c ...> and capture everything, then check for self-closing
-      const cellMatches = Array.from(rowXml.matchAll(/<c\s+([^>]+?)(?:\/>|>(.*?)<\/c>)/g)) as unknown as RegExpMatchArray[];
-      
-      for (const cm of cellMatches) {
-        const fullAttrs = (cm as any)[1] as string; // All attributes
-        const inner = (cm as any)[2] as string || ''; // Inner content (empty for self-closing)
-        
-        // Extract r attribute manually
-        const rMatch = fullAttrs.match(/r="([A-Z]+\d+)"/);
-        const addr = rMatch ? rMatch[1] : undefined;
-        
-        if (!addr) continue; // Skip if we can't parse the address
-        
-        const tMatch = fullAttrs.match(/\bt="(\w+)"/);
-        const t = tMatch ? tMatch[1] : '';
-        const vMatch = inner.match(/<v>([\s\S]*?)<\/v>/);
-        const val = vMatch ? vMatch[1] : '';
-        const sMatch = fullAttrs.match(/\bs="(\d+)"/);
-        const sIdx = sMatch ? parseInt(sMatch[1], 10) : undefined;
-        const mappedStyle = sIdx != null ? styles.xfStyles[sIdx] : undefined;
-        const { col } = a1ToAddress(addr);
-        
-        // Only set value if cell has content (not self-closing)
-        if (vMatch || inner.length > 0) {
-          if (t === 's') {
-            const idx = parseInt(val, 10);
-            ws.setCellValue({ row: rowR, col }, sharedStrings[idx] ?? '');
-          } else if (t === 'b') {
-            ws.setCellValue({ row: rowR, col }, val === '1');
-          } else if (t === 'str' || t === 'inlineStr') {
-            ws.setCellValue({ row: rowR, col }, decodeXml(val));
-          } else {
-            // number or date (we'll treat as number for now; formatting later)
-            const num = Number(val);
-            ws.setCellValue({ row: rowR, col }, Number.isFinite(num) ? num : val);
-          }
-        }
-        if (mappedStyle) {
-          ws.setCellStyle({ row: rowR, col }, mappedStyle);
-        }
-      }
-    }
-  }
-  
-  return wb;
+export function loadXlsxFromArrayBuffer(_data: Uint8Array): Workbook {
+  throw new Error('XLSX import is unavailable until R6 staged restore is authorized');
 }
 
 function a1ToAddress(a1: string): { row: number; col: number } {
@@ -166,7 +34,16 @@ function a1ToAddress(a1: string): { row: number; col: number } {
   return { row, col };
 }
 
-function decodeXml(s: string): string { return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); }
+function decodeXml(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
 
 function parseStyles(xml: string, theme?: ThemePalette): { xfStyles: (CellStyle & { numberFormat?: string })[] } {
   if (!xml) return { xfStyles: [] };

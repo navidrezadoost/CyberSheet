@@ -52,6 +52,7 @@ const PATCH_TOP_KEYS: readonly string[] = ['seq', 'ops'];
 const OP_KEY_ORDER: Record<string, readonly string[]> = {
   setCellValue: ['op', 'row', 'col', 'before', 'after'],
   clearCell:    ['op', 'row', 'col', 'before'],
+  setCellContent: ['op', 'row', 'col', 'before', 'after'],
   setCellStyle: ['op', 'row', 'col', 'before', 'after'],
   mergeCells:   ['op', 'startRow', 'startCol', 'endRow', 'endCol'],
   cancelMerge:  ['op', 'startRow', 'startCol', 'endRow', 'endCol'],

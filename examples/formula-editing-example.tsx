@@ -13,10 +13,12 @@ import { Workbook, Worksheet, Address } from '@cyber-sheet/core';
 import { CyberSheet } from '../packages/react/src/CyberSheet';
 import { FormulaBar } from '../packages/react/src/FormulaBar';
 import { useFormulaController } from '../packages/react/src/useFormulaController';
+import { rejectR1ExampleInitialization } from './r1-initialization-gate';
 
 export function FormulaEditingExample() {
   // Create workbook and worksheet
   const [workbook] = useState(() => {
+    rejectR1ExampleInitialization('Formula editing demo', 'R2 initial cell content and formula edits');
     const wb = new Workbook();
     const sheet = wb.addSheet('Sheet1', 20, 10);
     

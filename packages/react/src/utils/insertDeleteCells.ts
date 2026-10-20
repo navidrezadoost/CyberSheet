@@ -6,7 +6,9 @@ import {
   type Address,
   type CommandManager,
   type Worksheet,
+  type WorkbookSheetView,
 } from '@cyber-sheet/core';
+import { requireStandaloneWorksheet } from './workbookSheetAccess';
 
 export interface CellRange {
   start: Address;
@@ -14,25 +16,25 @@ export interface CellRange {
 }
 
 export function executeInsertCells(
-  worksheet: Worksheet,
+  sheet: Worksheet | WorkbookSheetView,
   commandManager: CommandManager,
   range: CellRange,
   mode: InsertCellsMode
 ): void {
-  commandManager.execute(new InsertCellsCommand(worksheet, range, mode));
+  commandManager.execute(new InsertCellsCommand(requireStandaloneWorksheet(sheet), range, mode));
 }
 
 export function executeDeleteCells(
-  worksheet: Worksheet,
+  sheet: Worksheet | WorkbookSheetView,
   commandManager: CommandManager,
   range: CellRange,
   mode: DeleteCellsMode
 ): void {
-  commandManager.execute(new DeleteCellsCommand(worksheet, range, mode));
+  commandManager.execute(new DeleteCellsCommand(requireStandaloneWorksheet(sheet), range, mode));
 }
 
 export function getInsertDeleteInvalidateBounds(
-  worksheet: Worksheet,
+  worksheet: Pick<Worksheet, 'rowCount' | 'colCount'> | Pick<WorkbookSheetView, 'rowCount' | 'colCount'>,
   range: CellRange,
   mode: InsertCellsMode | DeleteCellsMode
 ): { r1: number; c1: number; r2: number; c2: number } {

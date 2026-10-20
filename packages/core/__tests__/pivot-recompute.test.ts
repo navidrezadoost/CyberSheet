@@ -74,7 +74,7 @@ describe('Phase 31a: Lazy Rebuild', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register pivot (starts clean)
     const pivotId = registry.register({
@@ -84,7 +84,6 @@ describe('Phase 31a: Lazy Rebuild', () => {
       worksheetId: 'Sheet1',
       
     });
-
     // Mark dirty
     registry.markDirty(pivotId);
     expect(registry.isDirty(pivotId)).toBe(true);
@@ -112,7 +111,7 @@ describe('Phase 31a: Lazy Rebuild', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register pivot (starts clean)
     const pivotId = registry.register({
@@ -122,7 +121,6 @@ describe('Phase 31a: Lazy Rebuild', () => {
       worksheetId: 'Sheet1',
       
     });
-
     // Store a snapshot manually
     store.set(pivotId, makeSnapshot(pivotId, Date.now(), 0));
 
@@ -152,7 +150,7 @@ describe('Phase 31a: Zero Overhead When Clean', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register clean pivot with snapshot
     const pivotId = registry.register({
@@ -162,7 +160,6 @@ describe('Phase 31a: Zero Overhead When Clean', () => {
       worksheetId: 'Sheet1',
       
     });
-
     store.set(pivotId, makeSnapshot(pivotId, Date.now(), 0));
 
     // Query 10 times
@@ -190,7 +187,7 @@ describe('Phase 31a: Single Rebuild Guarantee', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register dirty pivot
     const pivotId = registry.register({
@@ -200,6 +197,7 @@ describe('Phase 31a: Single Rebuild Guarantee', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // Query 10 times
     for (let i = 0; i < 10; i++) {
@@ -227,7 +225,7 @@ describe('Phase 31a: Builder Failure Fallback', () => {
       throw new Error('Builder failed');
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
     const queryEngine = new GetPivotData(registry, store, engine);
 
     // Register dirty pivot
@@ -238,6 +236,7 @@ describe('Phase 31a: Builder Failure Fallback', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // ensureFresh should catch error and keep dirty=true
     engine.ensureFresh(pivotId);
@@ -266,7 +265,7 @@ describe('Phase 31a: Builder Failure Fallback', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register dirty pivot
     const pivotId = registry.register({
@@ -276,6 +275,7 @@ describe('Phase 31a: Builder Failure Fallback', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // First rebuild fails
     engine.ensureFresh(pivotId);
@@ -311,7 +311,7 @@ describe('Phase 31a: Re-entrancy Protection', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register dirty pivot
     const pivotId = registry.register({
@@ -321,6 +321,7 @@ describe('Phase 31a: Re-entrancy Protection', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // This should NOT cause infinite loop
     engine.ensureFresh(pivotId);
@@ -340,7 +341,7 @@ describe('Phase 31a: Re-entrancy Protection', () => {
       throw new Error('Builder error');
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register dirty pivot
     const pivotId = registry.register({
@@ -350,13 +351,14 @@ describe('Phase 31a: Re-entrancy Protection', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // ensureFresh catches error
     engine.ensureFresh(pivotId);
 
     // Verify: rebuilding flag is cleared (not stuck)
     const meta = registry.get(pivotId);
-    expect(meta?.rebuilding).toBeUndefined();
+    expect(meta?.rebuilding).toBe(false);
   });
 });
 
@@ -374,7 +376,7 @@ describe('Phase 31a: Deterministic Recompute', () => {
       return makeSnapshot(id, 12345, 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register two pivots with identical configs
     const pivotId1 = registry.register({
@@ -424,7 +426,7 @@ describe('Phase 31a: GetPivotData Integration', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
     const queryEngine = new GetPivotData(registry, store, engine);
 
     // Register dirty pivot
@@ -435,6 +437,7 @@ describe('Phase 31a: GetPivotData Integration', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // Query should trigger rebuild
     const result = queryEngine.query(pivotId, 'Revenue', [
@@ -462,7 +465,7 @@ describe('Phase 31a: GetPivotData Integration', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
     const queryEngine = new GetPivotData(registry, store, engine);
 
     // Register clean pivot with snapshot
@@ -497,7 +500,7 @@ describe('Phase 31a: GetPivotData Integration', () => {
       throw new Error('Build error');
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
     const queryEngine = new GetPivotData(registry, store, engine);
 
     // Register dirty pivot
@@ -508,6 +511,7 @@ describe('Phase 31a: GetPivotData Integration', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // Query should attempt rebuild, fail, and return #CALC!
     const result = queryEngine.query(pivotId, 'Revenue', []);
@@ -525,7 +529,7 @@ describe('Phase 31a: GetPivotData Integration', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
     const queryEngine = new GetPivotData(registry, store, engine);
 
     // Register dirty pivot
@@ -536,6 +540,7 @@ describe('Phase 31a: GetPivotData Integration', () => {
       worksheetId: 'Sheet1',
       
     });
+    registry.markDirty(pivotId);
 
     // 10 queries
     for (let i = 0; i < 10; i++) {
@@ -565,7 +570,7 @@ describe('Phase 31a: Edge Cases', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // ensureFresh on non-existent ID
     engine.ensureFresh('fake-id' as PivotId);
@@ -582,7 +587,7 @@ describe('Phase 31a: Edge Cases', () => {
       return makeSnapshot(id, Date.now(), 0);
     };
 
-    const engine = new PivotRecomputeEngineImpl(registry, store, builder);
+    const engine = new PivotRecomputeEngineImpl(registry, store, builder, () => null);
 
     // Register clean pivot
     const pivotId = registry.register({

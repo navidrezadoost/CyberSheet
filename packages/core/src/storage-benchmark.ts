@@ -14,6 +14,9 @@
  */
 
 import { Worksheet } from './worksheet';
+import { getNodeProcess } from './utils/runtime-environment';
+
+const nodeProcess = getNodeProcess();
 
 // ---------------------------------------------------------------------------
 // 0.  GC helpers
@@ -26,11 +29,11 @@ function forceGC(): void {
 }
 
 function heapMB(): number {
-  return process.memoryUsage().heapUsed / 1024 / 1024;
+  return nodeProcess.memoryUsage().heapUsed / 1024 / 1024;
 }
 
 function rss(): number {
-  return process.memoryUsage().rss / 1024 / 1024;
+  return nodeProcess.memoryUsage().rss / 1024 / 1024;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +218,7 @@ function printScalingProjection(results: BenchResult[]): void {
 
 async function main(): Promise<void> {
   console.log('\n  cyber-sheet-excel — Storage Layer Audit');
-  console.log(`  Node ${process.version}   ${new Date().toISOString()}\n`);
+  console.log(`  Node ${nodeProcess.version}   ${new Date().toISOString()}\n`);
 
   printKeyAnalysis();
 
@@ -223,7 +226,7 @@ async function main(): Promise<void> {
   const batches = [10_000, 50_000, 100_000, 200_000];
   const strResults: BenchResult[] = [];
   for (const n of batches) {
-    process.stdout.write(`  inserting ${n.toLocaleString()} cells...`);
+    nodeProcess.stdout.write(`  inserting ${n.toLocaleString()} cells...`);
     const r = runBatch(n, 'string');
     strResults.push(r);
     console.log(` done (${r.insertMs}ms, +${r.heapMBDelta.toFixed(1)}MB)`);
@@ -233,7 +236,7 @@ async function main(): Promise<void> {
   console.log('Running numeric-value batches (best case: V8 SMI inlining)...');
   const numResults: BenchResult[] = [];
   for (const n of batches) {
-    process.stdout.write(`  inserting ${n.toLocaleString()} cells...`);
+    nodeProcess.stdout.write(`  inserting ${n.toLocaleString()} cells...`);
     const r = runBatch(n, 'number');
     numResults.push(r);
     console.log(` done (${r.insertMs}ms, +${r.heapMBDelta.toFixed(1)}MB)`);
@@ -244,4 +247,4 @@ async function main(): Promise<void> {
   printScalingProjection(strResults);
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main().catch(err => { console.error(err); nodeProcess.exit(1); });

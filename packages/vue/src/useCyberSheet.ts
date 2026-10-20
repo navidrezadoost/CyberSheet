@@ -5,7 +5,7 @@
  */
 
 import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue';
-import type { Worksheet, FormulaEngine, CollaborationEngine } from '@cyber-sheet/core';
+import type { WorkbookSheetView, FormulaEngine, CollaborationEngine } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 
 export interface UseCyberSheetOptions {
@@ -19,7 +19,7 @@ export interface UseCyberSheetOptions {
 
 export interface UseCyberSheetReturn {
   containerRef: Ref<HTMLDivElement | null>;
-  worksheet: Ref<Worksheet | null>;
+  worksheet: Ref<WorkbookSheetView | null>;
   renderer: Ref<CanvasRenderer | null>;
   formulaEngine: Ref<FormulaEngine | null>;
   collaboration: Ref<CollaborationEngine | null>;
@@ -30,7 +30,7 @@ export interface UseCyberSheetReturn {
 
 export function useCyberSheet(options: UseCyberSheetOptions = {}): UseCyberSheetReturn {
   const containerRef = ref<HTMLDivElement | null>(null);
-  const worksheet = ref<Worksheet | null>(null);
+  const worksheet = ref<WorkbookSheetView | null>(null);
   const renderer = ref<CanvasRenderer | null>(null);
   const formulaEngine = ref<FormulaEngine | null>(null);
   const collaboration = ref<CollaborationEngine | null>(null);
@@ -41,20 +41,18 @@ export function useCyberSheet(options: UseCyberSheetOptions = {}): UseCyberSheet
     if (!containerRef.value) return;
 
     // Dynamic imports to support tree-shaking
-    const { Workbook, FormulaEngine, CollaborationEngine } = await import('@cyber-sheet/core');
+    const { Workbook, FormulaEngine } = await import('@cyber-sheet/core');
     const { CanvasRenderer } = await import('@cyber-sheet/renderer-canvas');
 
-    const workbook = new Workbook();
-    const ws = workbook.addSheet('Sheet1');
-
-    // Load initial data
-    if (options.data) {
-      options.data.forEach((row, rowIndex) => {
-        row.forEach((value, colIndex) => {
-          ws.setCellValue({ row: rowIndex, col: colIndex }, value);
-        });
-      });
+    if (options.data?.some((row) => row.length > 0)) {
+      throw new Error('Initial workbook cell data is unavailable until the R2 journal slice is authorized');
     }
+    if (options.enableCollaboration) {
+      throw new Error('Workbook collaboration writes are unavailable until their journal slice is authorized');
+    }
+    const workbook = Workbook.create({ sheets: [{ name: 'Sheet1' }] });
+    const ws = workbook.getSheet('Sheet1');
+    if (!ws) throw new Error('Workbook bootstrap failed to create Sheet1');
 
     const r = new CanvasRenderer(containerRef.value!, ws, {
       debug: false
@@ -69,12 +67,6 @@ export function useCyberSheet(options: UseCyberSheetOptions = {}): UseCyberSheet
       formulaEngine.value = fe;
     }
 
-    // Enable collaboration
-    if (options.enableCollaboration && options.collaborationUrl) {
-      const collab = new CollaborationEngine(ws);
-      collab.connect(options.collaborationUrl);
-      collaboration.value = collab;
-    }
 
     // Handle cell changes
     if (options.onCellChange) {
@@ -97,7 +89,7 @@ export function useCyberSheet(options: UseCyberSheetOptions = {}): UseCyberSheet
   // API methods
   const setCell = (row: number, col: number, value: any) => {
     if (!worksheet.value) return;
-    worksheet.value.setCellValue({ row, col }, value);
+    throw new Error('Workbook cell writes are unavailable until the R2 journal slice is authorized');
   };
 
   const getCell = (row: number, col: number) => {

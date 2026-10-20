@@ -1,0 +1,30 @@
+# CS-001C Worksheet Mutation Inventory
+
+Inventory basis: public methods on `packages/core/src/worksheet.ts` as of CS-002. A mutation is **journaled** only when `PatchRecorder` observes a reversible patch operation before the new state becomes observable. Cell event reconstruction is not sufficient to cover a mutation whose state is absent from the event.
+
+| Public method(s) | Execution boundary | Complete reversible journal today | Dependency effect | Notification | Status / follow-up |
+|---|---|---|---|---|---|
+| `setCellValue`, `setCellFormula`, `clearCellContent`, `clearCellFormula` | Enforced for engine owned instances | Cell content represented by `setCellContent`; rollback snapshots content | Yes, including stale edge removal / formula registration | Cell mutation event | Covered for content; CS-002 regressions |
+| `applyCalculatedValue`, `applyFormulaResults`, `recalc`, `autoRecalculate`, `evaluateIfNeeded`, `evaluateBatch`, `completeScheduledRecalculation` | Computing-only guard for `applyCalculatedValue`; others internal/public without uniform boundary | Calculated values intentionally excluded from user history; results not transaction-journaled | Yes / consume dirty state | Cell event for single engine calculation; batch results suppress events | Engine-owned methods should be made internal or boundary-guarded under CS-001C |
+| `runTransaction`, `restoreCellContent`, `setFormulaEngine` | Transaction entry is guarded; restore/configuration paths are not uniformly guarded | Transaction callback journaling exists; restore participates in content patches; engine configuration is not workbook state history | `restoreCellContent` re-registers formula dependencies | Transaction notifications or none for configuration | Define restore/configuration as internal-only or journaled public APIs |
+| `registerDependencies`, `clearDependencies`, `notifyChanged`, `registerVolatile`, `clearVolatile`, `flushVolatiles` | Not uniformly guarded | No independent inverse record | Direct graph mutation | No standard mutation event | Internal graph service APIs; restrict to formula lifecycle/engine |
+| `setCellStyle`, `setRowStyle`, `clearRowStyle`, `setColumnStyle`, `clearColumnStyle` | Cell style methods enforced; row/column style boundary requires review | Cell style rollback is present; row/column style journal coverage not established | None | Style event coverage varies | Complete style category inventory/tests |
+| `setSpillSource`, `setSpilledFrom`, `clearSpillSource`, `clearSpilledFrom`, `applySpillBatch` | Partial boundary checks | Spill state is not represented completely in `WorksheetPatch` | Spill writes may affect formulas | Internal or cell notifications vary | P0: add reversible spill operation and boundary enforcement |
+| `setConditionalFormattingRules`, `addConditionalFormattingRule`, `clearConditionalFormatting` | Not consistently enforced | Not established | None | No uniform notification | Journal full rule state and test rollback |
+| `setHeaderFooter` | Not consistently enforced | Not established | None | No uniform notification | Journal settings snapshot |
+| `setDataValidation`, `removeDataValidation` | Not consistently enforced | Not established | None | No uniform notification | Journal validation state |
+| `protectSheet`, `unprotectSheet`, `setFreezePanes`, `clearFreezePanes` | Not consistently enforced | Not established | None | No uniform notification | Journal sheet metadata |
+| `setColumnFilter`, `clearColumnFilter`, `clearAllFilters`, `setAutoFilterRange`, `clearAutoFilterRange`, `sortRange` | Boundary coverage varies | Filter/range/sort state not established as reversible patches | `sortRange` moves cell state and can affect dependencies | Notifications vary | Journal filter config and structural cell moves |
+| `setColumnWidth`, `setRowHeight`, `setRowHeights` | Boundary coverage varies | Dimension history not established | None | No uniform notification | Journal dimensions before write |
+| `insertRows`, `insertColumns`, `reorderRows`, `reorderColumns` | Boundary coverage varies | Structural inverse coverage not established | Must remap formula references and graph nodes | Notifications vary | P0: define structural patch and graph remapping |
+| `mergeCells`, `cancelMerge` | Boundary coverage varies | Merge inverse state not established | Anchor resolution affects references | Merge events vary | Journal complete merge range and prior state |
+| `hideRow`, `showRow`, `hideCol`, `showCol` | Not consistently enforced | Not established | None | No uniform notification | Journal visibility metadata |
+| `insertImage`, `deleteImage` | Not consistently enforced | Not established | None | No uniform notification | Journal drawing layer state |
+| `deleteCell`, `setHyperlink`, `removeHyperlink`, `addComment`, `updateComment`, `deleteComment`, `setIcon`, `setCellComponent`, `clearCellComponent` | Boundary coverage varies | Not established across all metadata fields | Formula lifecycle for `deleteCell` must be maintained | Cell events cover some methods only | Add typed metadata patch ops and tests |
+| `applySnapshot`, `beginProgressiveLoad`, `markRowsLoaded`, `finishProgressiveLoad` | Load/restore path; transaction policy undefined | Snapshot is a full-state replacement, not an ordinary patch | Snapshot re-registration exists in parts; verify all graph edges | Load notifications vary | Define atomic restore boundary and report coverage |
+
+## Coverage rule
+
+For each mutation family, CS-001C must verify: guard before the first write; journal captures old state before external observation; rollback restores the entire affected state; commit either publishes the complete change or leaves the workbook unchanged; graph changes are included where relevant; observers receive one documented notification after commit. Unsupported engine-owned mutation APIs must throw until that family is covered.
+
+This document is an inventory/checklist, not a claim that CS-001C is complete. The row/column structural, spill, metadata, and whole-workbook commit-atomicity gaps remain open.

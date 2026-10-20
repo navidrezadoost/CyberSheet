@@ -4,6 +4,7 @@ import type {
   ExtendedCellValue,
   Range,
   Worksheet,
+  WorkbookSheetView,
 } from '@cyber-sheet/core';
 import { BatchCommand, SetValueCommand } from '@cyber-sheet/core';
 import {
@@ -11,6 +12,7 @@ import {
   pivotGridToValues,
   type PivotDefinition,
 } from '../../../core/src/sdk/pivot';
+import { requireStandaloneWorksheet } from './workbookSheetAccess';
 
 function colToLetter(col: number): string {
   let letters = '';
@@ -47,7 +49,7 @@ export function normalizeRange(range: Range): Range {
 }
 
 export function resolvePivotSourceRange(
-  worksheet: Worksheet,
+  sheet: Worksheet | WorkbookSheetView,
   selection: Range | null,
 ): Range | null {
   if (selection) {
@@ -60,12 +62,12 @@ export function resolvePivotSourceRange(
     }
   }
 
-  const used = worksheet.getUsedRange();
+  const used = sheet.getUsedRange();
   if (!used) return null;
   return normalizeRange(used);
 }
 
-function extractGrid(worksheet: Worksheet, sourceRange: Range): ExtendedCellValue[][] {
+function extractGrid(worksheet: Worksheet | WorkbookSheetView, sourceRange: Range): ExtendedCellValue[][] {
   const grid: ExtendedCellValue[][] = [];
   for (let row = sourceRange.start.row; row <= sourceRange.end.row; row++) {
     const rowValues: ExtendedCellValue[] = [];
@@ -137,11 +139,12 @@ export type InsertPivotTableResult =
   | { ok: false; error: string };
 
 export function insertPivotTable(
-  worksheet: Worksheet,
+  sheet: Worksheet | WorkbookSheetView,
   commandManager: CommandManager,
   sourceRange: Range,
   target: Address,
 ): InsertPivotTableResult {
+  const worksheet = requireStandaloneWorksheet(sheet);
   const normalizedSource = normalizeRange(sourceRange);
   const rawGrid = extractGrid(worksheet, normalizedSource);
   const definition = inferPivotDefinition(normalizedSource, rawGrid);

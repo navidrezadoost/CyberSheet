@@ -10,6 +10,7 @@ import type {
   AddressRange,
   Range,
   Worksheet,
+  CommandManager,
 } from "@cyber-sheet/core";
 import {
   ArrowUndoRegular,
@@ -71,7 +72,6 @@ import {
 import { isHomeGroupEnabled } from "../../config/appConfig";
 import type {
   SelectionState,
-  CommandManager,
   StyleState,
   ColorValue,
 } from "./types";
@@ -79,6 +79,8 @@ import type { Fill } from "./fillTypes";
 import { NO_FILL, solidFill } from "./fillTypes";
 import type { BorderPayload } from "./borderTypes";
 import type { NumberFormatValue } from "./numberFormatTypes";
+import type { SheetAccess } from "../../utils/workbookSheetAccess";
+import { requireStandaloneWorksheet } from "../../utils/workbookSheetAccess";
 import "./ribbon.css";
 
 export interface HomeTabProps {
@@ -88,7 +90,7 @@ export interface HomeTabProps {
   // Current selection state
   selection: SelectionState;
 
-  worksheet?: Worksheet | null;
+  worksheet?: SheetAccess | null;
   clipboardService?: ClipboardService;
   onAfterCommand?: () => void;
   historyVersion?: number;
@@ -187,6 +189,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const formattingController = useMemo(() => {
     if (formattingControllerProp) return formattingControllerProp;
     if (!worksheet) return null;
+    if ('workbookId' in worksheet) return null;
     return new FormattingController(worksheet, commandManager as any);
   }, [formattingControllerProp, worksheet, commandManager]);
 
@@ -271,7 +274,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         cyberSheetConfig.fonts.defaultSize,
       bold: selectionBold ?? selection?.bold,
       italic: activeStyle.italic ?? selection?.italic,
-      underline: activeStyle.underline ?? selection?.underline,
+      underline: Boolean(activeStyle.underline ?? selection?.underline),
       fontColor:
         (activeStyle.color as string | undefined) ?? selection?.fontColor,
       fillColor: fillColor ?? selection?.fillColor,
@@ -526,7 +529,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         return;
       }
       if (type === "contents" || type === "all") {
-        commandManager.execute(new ClearCellsCommand(worksheet, range));
+        commandManager.execute(new ClearCellsCommand(requireStandaloneWorksheet(worksheet), range));
         if (type === "all") {
           formattingController?.clearFormatInRanges(selectedRanges);
         }
@@ -563,12 +566,13 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       }
 
       if (!worksheet || !range) return;
+      const standaloneWorksheet = requireStandaloneWorksheet(worksheet);
 
       switch (operation) {
         case "rowHeight": {
           const px = Number(value) * (4 / 3);
           if (!Number.isFinite(px) || px <= 0) return;
-          setRowHeightsInRange(commandManager, worksheet, range, px);
+          setRowHeightsInRange(commandManager, standaloneWorksheet, range, px);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
@@ -576,43 +580,43 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         case "columnWidth": {
           const px = Math.max(12, Number(value) * 8);
           if (!Number.isFinite(px) || px <= 0) return;
-          setColumnWidthsInRange(commandManager, worksheet, range, px);
+          setColumnWidthsInRange(commandManager, standaloneWorksheet, range, px);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
         }
         case "autoFitColumnWidth":
-          autoFitColumnWidths(commandManager, worksheet, range);
+          autoFitColumnWidths(commandManager, standaloneWorksheet, range);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
         case "autoFitRowHeight":
-          autoFitRowHeights(commandManager, worksheet, range);
+          autoFitRowHeights(commandManager, standaloneWorksheet, range);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
         case "hideRows":
-          hideRowsInRange(commandManager, worksheet, range);
+          hideRowsInRange(commandManager, standaloneWorksheet, range);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
         case "unhideRows":
-          unhideRowsNearRange(commandManager, worksheet, range);
+          unhideRowsNearRange(commandManager, standaloneWorksheet, range);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
         case "hideColumns":
-          hideColumnsInRange(commandManager, worksheet, range);
+          hideColumnsInRange(commandManager, standaloneWorksheet, range);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
         case "unhideColumns":
-          unhideColumnsNearRange(commandManager, worksheet, range);
+          unhideColumnsNearRange(commandManager, standaloneWorksheet, range);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
         case "lockCell":
-          setCellsLocked(commandManager, worksheet, selectedAddresses, true);
+          setCellsLocked(commandManager, standaloneWorksheet, selectedAddresses, true);
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
@@ -635,7 +639,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const handleInsertCells = useCallback(
     (mode: InsertCellsMode) => {
       if (!worksheet || !range) return;
-      executeInsertCells(worksheet, commandManager, range, mode);
+      executeInsertCells(requireStandaloneWorksheet(worksheet), commandManager, range, mode);
       onAfterCommand?.();
     },
     [worksheet, range, commandManager, onAfterCommand],
@@ -644,7 +648,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const handleDeleteCells = useCallback(
     (mode: DeleteCellsMode) => {
       if (!worksheet || !range) return;
-      executeDeleteCells(worksheet, commandManager, range, mode);
+      executeDeleteCells(requireStandaloneWorksheet(worksheet), commandManager, range, mode);
       onAfterCommand?.();
     },
     [worksheet, range, commandManager, onAfterCommand],
@@ -657,7 +661,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         setShowCustomSortDialog(true);
         return;
       }
-      executeSortSelection(commandManager, worksheet, range, direction);
+      executeSortSelection(commandManager, requireStandaloneWorksheet(worksheet), range, direction);
       setStyleVersion((version) => version + 1);
       onAfterCommand?.();
     },
@@ -672,7 +676,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       if (!worksheet || !range) return;
       executeMultiSortSelection(
         commandManager,
-        worksheet,
+        requireStandaloneWorksheet(worksheet),
         range,
         levels,
         hasHeaders,
@@ -696,19 +700,19 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       {isHomeGroupEnabled(appConfig, "clipboard") && (
         <>
           {/* ==================== Clipboard Group ==================== */}
-          <ClipboardGroup
-            worksheet={worksheet as any}
+          {worksheet && clipboardService && <ClipboardGroup
+            worksheet={worksheet}
             clipboardService={
-              (clipboardService ?? new ClipboardService()) as any
+              clipboardService
             }
-            formattingController={formattingController as any}
+            formattingController={formattingController}
             commandManager={commandManager}
             selectedCells={selectedAddresses}
             currentRange={range ?? undefined}
             onAfterClipboard={onAfterCommand}
             formatPainterActive={formatPainterActive}
             onFormatPainterActivate={handleFormatPainterActivate}
-          />
+          />}
 
           {/* ==================== Undo/Redo Group ==================== */}
           <RibbonGroup title="Undo" className="compact">
@@ -838,10 +842,10 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         </RibbonGroup>
       )}
 
-      {isHomeGroupEnabled(appConfig, "styles") && (
+      {isHomeGroupEnabled(appConfig, "styles") && formattingController && worksheet && !('workbookId' in worksheet) && (
         <StylesGroup
-          formattingController={formattingController as any}
-          worksheet={worksheet ?? undefined}
+          formattingController={formattingController}
+          worksheet={worksheet}
           commandManager={commandManager}
           selectedRanges={selectedRanges}
           currentRange={range ?? undefined}
@@ -849,9 +853,9 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         />
       )}
 
-      {isHomeGroupEnabled(appConfig, "cells") && (
+      {isHomeGroupEnabled(appConfig, "cells") && formattingController && (
         <CellsGroup
-          formattingController={formattingController as any}
+          formattingController={formattingController}
           selectedCells={selectedAddresses}
           currentRange={range ?? undefined}
           onInsertCells={handleInsertCells}
@@ -861,9 +865,9 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         />
       )}
 
-      {isHomeGroupEnabled(appConfig, "editing") && (
+      {isHomeGroupEnabled(appConfig, "editing") && formattingController && (
         <EditingGroup
-          formattingController={formattingController as any}
+          formattingController={formattingController}
           selectedCells={selectedAddresses}
           currentRange={range ?? undefined}
           onAutoSum={onAutoSum}

@@ -549,7 +549,9 @@ export class RecomputeScheduler {
       // ── Time slice ──────────────────────────────────────────────────────
       while (!this._heap.isEmpty) {
         const elapsed = this._now() - sliceStart;
-        if (elapsed >= this.timeSliceMs) break;         // slice budget exhausted
+        // Always make progress, even when a caller configures a zero-length
+        // time slice. Otherwise flush yields before removing any task forever.
+        if (completed + skipped > 0 && elapsed >= this.timeSliceMs) break;
 
         const task = this._heap.pop()!;
 

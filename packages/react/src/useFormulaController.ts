@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { FormulaController, Address, Worksheet, CellValue } from '@cyber-sheet/core';
+import { FormulaController, Address, Worksheet, ExtendedCellValue } from '@cyber-sheet/core';
 
 export interface UseFormulaControllerOptions {
   worksheet: Worksheet | undefined;
@@ -18,7 +18,7 @@ export interface UseFormulaControllerResult {
   /** Current formula for selected cell */
   currentFormula: string | undefined;
   /** Current value for selected cell */
-  currentValue: CellValue;
+  currentValue: ExtendedCellValue;
   /** Set formula for current cell */
   setFormula: (formula: string) => { success: boolean; error?: string };
   /** Clear formula from current cell */
@@ -39,7 +39,7 @@ export function useFormulaController(options: UseFormulaControllerOptions): UseF
   
   // ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP LEVEL
   const [currentFormula, setCurrentFormula] = useState<string | undefined>(undefined);
-  const [currentValue, setCurrentValue] = useState<CellValue>(null);
+  const [currentValue, setCurrentValue] = useState<ExtendedCellValue>(null);
   const [hasFormula, setHasFormula] = useState<boolean>(false);
   const [controller, setController] = useState<FormulaController | null>(null);
   

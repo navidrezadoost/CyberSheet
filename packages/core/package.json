@@ -3,31 +3,31 @@
   "version": "0.1.0",
   "private": false,
   "type": "module",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
+  "main": "dist/esm/index.js",
+  "module": "dist/esm/index.js",
   "types": "dist/index.d.ts",
   "sideEffects": false,
   "files": ["dist"],
   "exports": {
     ".": {
-      "import": "./dist/index.js",
+      "import": "./dist/esm/index.js",
       "types": "./dist/index.d.ts"
     },
     "./sdk": {
-      "import": "./dist/sdk/index.js",
+      "import": "./dist/esm/sdk/index.js",
       "types": "./dist/sdk/index.d.ts"
     },
     "./patch": {
-      "import": "./dist/patch/index.js",
+      "import": "./dist/esm/patch/index.js",
       "types": "./dist/patch/index.d.ts"
     },
     "./snapshot": {
-      "import": "./dist/persistence/SnapshotCodec.js",
+      "import": "./dist/esm/persistence/SnapshotCodec.js",
       "types": "./dist/persistence/SnapshotCodec.d.ts"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsup src/index.ts src/sdk/index.ts src/patch/index.ts src/persistence/SnapshotCodec.ts --format esm --out-dir dist --clean --no-splitting --legacy-output --no-dts && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json --emitDeclarationOnly",
     "clean": "rm -rf dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "jest --config ../../jest.config.js",

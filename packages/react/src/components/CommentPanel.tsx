@@ -5,6 +5,7 @@ import {
   getAuthorInitials,
   type CommentThreadSummary,
 } from '../utils/commentPanelUtils';
+import { rejectWorkbookMutation } from '../utils/workbookSheetAccess';
 
 export interface CommentPanelProps {
   isOpen: boolean;
@@ -112,11 +113,7 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({
     const sheet = workbook.getSheet(thread.sheetName);
     if (!sheet) return;
 
-    sheet.addComment(thread.address, {
-      text,
-      author: defaultAuthor,
-      parentId: thread.root.id,
-    });
+    rejectWorkbookMutation();
 
     setReplyDrafts((drafts) => ({ ...drafts, [thread.id]: '' }));
     setExpandedThreadId(null);
@@ -126,7 +123,7 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({
   const handleResolveThread = useCallback((thread: CommentThreadSummary, resolved: boolean) => {
     const sheet = workbook.getSheet(thread.sheetName);
     if (!sheet) return;
-    sheet.updateComment(thread.address, thread.root.id, { resolved });
+    rejectWorkbookMutation();
     refresh();
   }, [workbook, refresh]);
 
@@ -134,7 +131,7 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({
     for (const thread of threads) {
       if (!thread.resolved) {
         const sheet = workbook.getSheet(thread.sheetName);
-        sheet?.updateComment(thread.address, thread.root.id, { resolved: true });
+        if (sheet) rejectWorkbookMutation();
       }
     }
     refresh();

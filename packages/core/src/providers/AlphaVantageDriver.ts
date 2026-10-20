@@ -1,10 +1,10 @@
-import { IDataTypeProvider } from './IDataTypeProvider';
-import { ProviderRegistry } from './ProviderRegistry';
-import { HttpProviderAdapter } from './HttpProviderAdapter';
-import { ThrottlePolicy } from './ThrottlePolicy';
-import { QuotaManager } from './QuotaManager';
-import { HttpObservability } from './HttpObservability';
-import { FormulaContext, FormulaValue } from '../types/formula-types';
+import type { IDataTypeProvider } from "./IDataTypeProvider";
+import { ProviderRegistry } from "./ProviderRegistry";
+import { HttpProviderAdapter } from "./HttpProviderAdapter";
+import { ThrottlePolicy } from "./ThrottlePolicy";
+import { QuotaManager } from "./QuotaManager";
+import { HttpObservability } from "./HttpObservability";
+import { FormulaContext, FormulaValue } from "../types/formula-types";
 
 /**
  * AlphaVantageDriver - Minimal HTTP driver for Alpha Vantage stock data
@@ -33,8 +33,8 @@ import { FormulaContext, FormulaValue } from '../types/formula-types';
  * @see ThrottlePolicy for rate limiting
  */
 export class AlphaVantageDriver implements IDataTypeProvider {
-  readonly id = 'alpha-vantage-driver';
-  readonly type = 'stock';
+  readonly id = "alpha-vantage-driver";
+  readonly type = "stock";
 
   private readonly quota: QuotaManager;
   private readonly adapter: HttpProviderAdapter;
@@ -55,24 +55,26 @@ export class AlphaVantageDriver implements IDataTypeProvider {
     adapter?: HttpProviderAdapter,
     throttle?: ThrottlePolicy,
     quota?: QuotaManager,
-    observability?: HttpObservability
+    observability?: HttpObservability,
   ) {
     if (!apiKey) {
-      throw new Error('AlphaVantageDriver: apiKey required');
+      throw new Error("AlphaVantageDriver: apiKey required");
     }
 
     // Phase 1: Disable retries for linear quota accounting
     // retries: 0 ensures 1 symbol = 1 attempt = 1 quota
     // Retry strategy deferred to Phase 2 after telemetry
-    this.adapter = adapter || new HttpProviderAdapter(
-      fetch,
-      (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-      { 
-        retries: 0,        // PHASE 1: No retries
-        timeoutMs: 5000    // 5s timeout
-      },
-      Math.random
-    );
+    this.adapter =
+      adapter ||
+      new HttpProviderAdapter(
+        fetch,
+        (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        {
+          retries: 0, // PHASE 1: No retries
+          timeoutMs: 5000, // 5s timeout
+        },
+        Math.random,
+      );
     this.throttle = throttle || this.createDefaultThrottle();
     this.quota = quota || new QuotaManager(500); // Default: 500/day
     this.observability = observability;
@@ -87,13 +89,13 @@ export class AlphaVantageDriver implements IDataTypeProvider {
     return {
       acquire: async () => {
         // No-op default (caller should provide WindowThrottle)
-      }
+      },
     };
   }
 
   /**
    * Get value for a stock field (synchronous cache access)
-   * 
+   *
    * @param field - Field name (e.g., 'Price', 'Change')
    * @param entity - Entity object (contains symbol)
    * @param context - Formula context
@@ -102,11 +104,11 @@ export class AlphaVantageDriver implements IDataTypeProvider {
   getValue(field: string, entity: any, context: FormulaContext): FormulaValue {
     const symbol = entity.id || entity.symbol;
     if (!symbol) {
-      return new Error('#REF!');
+      return new Error("#REF!");
     }
-    
+
     // Delegate to registry for cache lookup
-    return this.registry.getValue('stock', symbol, field, entity, context);
+    return this.registry.getValue("stock", symbol, field, entity, context);
   }
 
   /**
@@ -131,28 +133,27 @@ export class AlphaVantageDriver implements IDataTypeProvider {
     for (const symbol of ids) {
       try {
         // CRITICAL SEQUENCING (QUOTA CONTRACT - INVARIANT 3)
-        
+
         // Step 1: Wait for rate limit slot
         await this.throttle.acquire();
-        
+
         // Step 2: Check quota availability
         this.quota.assertAvailable();
-        
+
         // Step 3: Consume quota atomically
         this.quota.consume();
-        
+
         // Step 4: Dispatch HTTP request
         const quote = await this.fetchQuote(symbol);
-        
+
         // Step 5: Cache successful result
         this.cacheQuote(symbol, quote);
-        
       } catch (error) {
         // Cache error for deduplication (DETERMINISM CONTRACT)
         this.cacheError(symbol, error);
-        
+
         // Track failure for metrics
-        if (this.observability && 'recordFailure' in this.observability) {
+        if (this.observability && "recordFailure" in this.observability) {
           (this.observability as any).recordFailure(error);
         }
       }
@@ -172,7 +173,7 @@ export class AlphaVantageDriver implements IDataTypeProvider {
    */
   private async fetchQuote(symbol: string): Promise<AlphaVantageQuote> {
     const startTime = Date.now();
-    
+
     // Observability: request started
     this.observability?.requestStarted?.(symbol, startTime);
 
@@ -181,17 +182,17 @@ export class AlphaVantageDriver implements IDataTypeProvider {
       const url = this.buildUrl(symbol);
       const response = await this.adapter.request<AlphaVantageResponse>({
         url,
-        method: 'GET'
+        method: "GET",
       });
 
       // Check for HTTP-level errors
       if (response.error) {
-        throw new Error(response.error.message || 'HTTP request failed');
+        throw new Error(response.error.message || "HTTP request failed");
       }
 
       // Extract data from response
       if (!response.data) {
-        throw new Error('No response data');
+        throw new Error("No response data");
       }
 
       // Parse response
@@ -202,12 +203,11 @@ export class AlphaVantageDriver implements IDataTypeProvider {
       this.observability?.requestFinished?.(symbol, duration, false);
 
       return quote;
-      
     } catch (error) {
       // Observability: request failed
       const duration = Date.now() - startTime;
       this.observability?.requestFinished?.(symbol, duration, false);
-      
+
       throw error;
     }
   }
@@ -217,9 +217,9 @@ export class AlphaVantageDriver implements IDataTypeProvider {
    */
   private buildUrl(symbol: string): string {
     const params = new URLSearchParams({
-      function: 'GLOBAL_QUOTE',
+      function: "GLOBAL_QUOTE",
       symbol: symbol,
-      apikey: this.apiKey
+      apikey: this.apiKey,
     });
     return `https://www.alphavantage.co/query?${params.toString()}`;
   }
@@ -229,30 +229,37 @@ export class AlphaVantageDriver implements IDataTypeProvider {
    *
    * @throws Error if response invalid or contains error message
    */
-  private parseResponse(symbol: string, response: AlphaVantageResponse): AlphaVantageQuote {
+  private parseResponse(
+    symbol: string,
+    response: AlphaVantageResponse,
+  ): AlphaVantageQuote {
     // Alpha Vantage error response
-    if ('Error Message' in response) {
-      throw new Error(`Alpha Vantage: ${response['Error Message']}`);
+    if ("Error Message" in response) {
+      throw new Error(`Alpha Vantage: ${response["Error Message"]}`);
     }
 
     // Alpha Vantage rate limit response
-    if ('Note' in response && response.Note && response.Note.includes('API call frequency')) {
-      throw new Error('#RATE_LIMIT!');
+    if (
+      "Note" in response &&
+      response.Note &&
+      response.Note.includes("API call frequency")
+    ) {
+      throw new Error("#RATE_LIMIT!");
     }
 
     // Extract quote data
-    const globalQuote = response['Global Quote'];
+    const globalQuote = response["Global Quote"];
     if (!globalQuote || Object.keys(globalQuote).length === 0) {
       throw new Error(`No data for symbol: ${symbol}`);
     }
 
     return {
-      symbol: globalQuote['01. symbol'],
-      price: parseFloat(globalQuote['05. price']),
-      change: parseFloat(globalQuote['09. change']),
-      changePercent: globalQuote['10. change percent'],
-      volume: parseInt(globalQuote['06. volume'], 10),
-      latestTradingDay: globalQuote['07. latest trading day']
+      symbol: globalQuote["01. symbol"],
+      price: parseFloat(globalQuote["05. price"]),
+      change: parseFloat(globalQuote["09. change"]),
+      changePercent: globalQuote["10. change percent"],
+      volume: parseInt(globalQuote["06. volume"], 10),
+      latestTradingDay: globalQuote["07. latest trading day"],
     };
   }
 
@@ -261,40 +268,68 @@ export class AlphaVantageDriver implements IDataTypeProvider {
    */
   private cacheQuote(symbol: string, quote: AlphaVantageQuote): void {
     // Cache individual fields for STOCK() function access
-    this.registry.setCachedValue({ type: 'stock', id: symbol, field: 'Price' }, quote.price);
-    this.registry.setCachedValue({ type: 'stock', id: symbol, field: 'Change' }, quote.change);
-    this.registry.setCachedValue({ type: 'stock', id: symbol, field: 'ChangePercent' }, quote.changePercent);
-    this.registry.setCachedValue({ type: 'stock', id: symbol, field: 'Volume' }, quote.volume);
-    this.registry.setCachedValue({ type: 'stock', id: symbol, field: 'LastTradeDate' }, quote.latestTradingDay);
+    this.registry.setCachedValue(
+      { type: "stock", id: symbol, field: "Price" },
+      quote.price,
+    );
+    this.registry.setCachedValue(
+      { type: "stock", id: symbol, field: "Change" },
+      quote.change,
+    );
+    this.registry.setCachedValue(
+      { type: "stock", id: symbol, field: "ChangePercent" },
+      quote.changePercent,
+    );
+    this.registry.setCachedValue(
+      { type: "stock", id: symbol, field: "Volume" },
+      quote.volume,
+    );
+    this.registry.setCachedValue(
+      { type: "stock", id: symbol, field: "LastTradeDate" },
+      quote.latestTradingDay,
+    );
   }
 
   /**
    * Cache error in registry for deduplication
    */
   private cacheError(symbol: string, error: unknown): void {
-    const errorValue = error instanceof Error ? error : new Error(String(error));
-    
+    const errorValue =
+      error instanceof Error ? error : new Error(String(error));
+
     // Cache error for all common fields
-    const fields = ['Price', 'Change', 'ChangePercent', 'Volume', 'LastTradeDate'];
-    fields.forEach(field => {
-      this.registry.setCachedValue({ type: 'stock', id: symbol, field }, errorValue);
+    const fields = [
+      "Price",
+      "Change",
+      "ChangePercent",
+      "Volume",
+      "LastTradeDate",
+    ];
+    fields.forEach((field) => {
+      this.registry.setCachedValue(
+        { type: "stock", id: symbol, field },
+        errorValue,
+      );
     });
 
     // Observability: quota hit (if quota error)
-    if (errorValue.message === '#QUOTA!') {
+    if (errorValue.message === "#QUOTA!") {
       this.observability?.quotaHit?.(this.quota.getUsed(), this.quota.limit);
     }
   }
 
   /**
    * Get metrics report for observation phase
-   * 
+   *
    * Requires that the observability instance is a MetricsCollector.
    * Returns null if no metrics collector is configured.
    */
   getMetricsReport(): any | null {
-    if (this.observability && 'getReport' in this.observability) {
-      return (this.observability as any).getReport(this.quota.getUsed(), this.quota.limit);
+    if (this.observability && "getReport" in this.observability) {
+      return (this.observability as any).getReport(
+        this.quota.getUsed(),
+        this.quota.limit,
+      );
     }
     return null;
   }
@@ -304,16 +339,16 @@ export class AlphaVantageDriver implements IDataTypeProvider {
  * Alpha Vantage API response types
  */
 interface AlphaVantageResponse {
-  'Global Quote'?: {
-    '01. symbol': string;
-    '05. price': string;
-    '09. change': string;
-    '10. change percent': string;
-    '06. volume': string;
-    '07. latest trading day': string;
+  "Global Quote"?: {
+    "01. symbol": string;
+    "05. price": string;
+    "09. change": string;
+    "10. change percent": string;
+    "06. volume": string;
+    "07. latest trading day": string;
   };
-  'Error Message'?: string;
-  'Note'?: string;
+  "Error Message"?: string;
+  Note?: string;
 }
 
 /**

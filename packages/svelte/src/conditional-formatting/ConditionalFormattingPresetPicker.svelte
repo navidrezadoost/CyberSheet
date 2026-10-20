@@ -25,6 +25,10 @@
   let searchQuery: string = '';
   let filteredPresets: CFPreset[] = [];
   let popularPresets: CFPreset[] = [];
+  $: filteredPresetRows = Array.from(
+    { length: Math.ceil(filteredPresets.length / 2) },
+    (_, rowIndex) => filteredPresets.slice(rowIndex * 2, rowIndex * 2 + 2),
+  );
 
   // Accessibility state
   let announcementText: string = '';
@@ -82,7 +86,7 @@
       case 'Enter':
       case ' ':
         event.preventDefault();
-        handleCategoryChange(categories[currentIndex].value);
+        handleCategoryChange(categories[currentIndex].id);
         return;
       default:
         return;
@@ -201,7 +205,7 @@
   };
 
   // Event handlers
-  const handleCategoryChange = (category: PresetCategory) => {
+  const handleCategoryChange = (category: PresetCategory | 'all') => {
     controller.selectCategory(category);
   };
 
@@ -258,7 +262,7 @@
       filteredPresets = state.filteredPresets;
 
       // Announce category change
-      const category = categories.find(c => c.value === state.selectedCategory);
+      const category = categories.find(c => c.id === state.selectedCategory);
       if (category) {
         announce(`${category.label} category selected. ${filteredPresets.length} presets available.`);
       }
@@ -338,50 +342,46 @@
     role={enableA11y ? 'toolbar' : undefined}
     aria-label={enableA11y ? 'Category filters' : undefined}
   >
-    {#each categories as cat, i}
-      <button
-        on:click={() => handleCategoryChange(cat.value)}
-        on:keydown={(e) => enableA11y && handleCategoryKeyDown(e, i)}
-        class:cf-preset-picker__category-btn--active={selectedCategory === cat.value}
-        class="cf-preset-picker__category-btn"
-        role={enableA11y ? 'radio' : undefined}
-        aria-checked={enableA11y ? (selectedCategory === cat.value) : undefined}
-        tabindex={enableA11y ? (selectedCategory === cat.value ? 0 : -1) : undefined}
-      >
-        {cat.label}
-        <span 
-          class="cf-preset-picker__category-badge"
-          aria-label={enableA11y ? `${cat.count} presets` : undefined}
+    <div role={enableA11y ? 'radiogroup' : undefined} aria-label={enableA11y ? 'Preset categories' : undefined}>
+      {#each categories as cat, i}
+        <button
+          on:click={() => handleCategoryChange(cat.id)}
+          on:keydown={(e) => enableA11y && handleCategoryKeyDown(e, i)}
+          class:cf-preset-picker__category-btn--active={selectedCategory === cat.id}
+          class="cf-preset-picker__category-btn"
+          role={enableA11y ? 'radio' : undefined}
+          aria-checked={enableA11y ? (selectedCategory === cat.id) : undefined}
+          tabindex={enableA11y ? (selectedCategory === cat.id ? 0 : -1) : undefined}
         >
-          {cat.count}
-        </span>
-      </button>
-    {/each}
+          {cat.label}
+          <span class="cf-preset-picker__category-badge" aria-label={enableA11y ? `${cat.count} presets` : undefined}>
+            {cat.count}
+          </span>
+        </button>
+      {/each}
+    </div>
   </div>
 
   <!-- Popular Presets -->
   {#if showPopular && selectedCategory === 'all' && !searchQuery && popularPresets.length > 0}
-    <div 
-      class="cf-preset-picker__popular"
-      role={enableA11y ? 'list' : undefined}
-      aria-label={enableA11y ? 'Popular presets' : undefined}
-    >
+    <div class="cf-preset-picker__popular">
       <h4 class="cf-preset-picker__popular-title">Popular Presets</h4>
-      <div class="cf-preset-picker__popular-grid">
+      <div class="cf-preset-picker__popular-grid" role={enableA11y ? 'list' : undefined} aria-label={enableA11y ? 'Popular presets' : undefined}>
         {#each popularPresets as preset, i}
-          <button
-            on:click={() => handlePresetClick(preset)}
-            on:keydown={(e) => enableA11y && handlePopularKeyDown(e, preset, i)}
-            class:cf-preset-picker__popular-card--selected={selectedPresetId === preset.id}
-            class="cf-preset-picker__popular-card"
-            role={enableA11y ? 'listitem' : undefined}
-            aria-label={enableA11y ? preset.name : undefined}
-            aria-selected={enableA11y ? (selectedPresetId === preset.id) : undefined}
-            tabindex={enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : undefined}
-          >
-            <div class="cf-preset-picker__popular-icon" aria-hidden="true">{getPresetIcon(preset)}</div>
-            <div class="cf-preset-picker__popular-name">{preset.name}</div>
-          </button>
+          <div role="listitem" aria-label={enableA11y ? preset.name : undefined}>
+            <button
+              on:click={() => handlePresetClick(preset)}
+              on:keydown={(e) => enableA11y && handlePopularKeyDown(e, preset, i)}
+              class:cf-preset-picker__popular-card--selected={selectedPresetId === preset.id}
+              class="cf-preset-picker__popular-card"
+              aria-label={enableA11y ? preset.name : undefined}
+              aria-pressed={enableA11y ? (selectedPresetId === preset.id) : undefined}
+              tabindex={enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : undefined}
+            >
+              <div class="cf-preset-picker__popular-icon" aria-hidden="true">{getPresetIcon(preset)}</div>
+              <div class="cf-preset-picker__popular-name">{preset.name}</div>
+            </button>
+          </div>
         {/each}
       </div>
     </div>
@@ -396,32 +396,36 @@
     aria-rowcount={enableA11y ? Math.ceil(filteredPresets.length / 2) : undefined}
     aria-colcount={enableA11y ? 2 : undefined}
   >
-    {#each filteredPresets as preset, i}
-      <button
-        on:click={() => handlePresetClick(preset)}
-        on:keydown={(e) => enableA11y && handlePresetKeyDown(e, preset, i)}
-        class:cf-preset-picker__card--selected={selectedPresetId === preset.id}
-        class="cf-preset-picker__card"
-        role={enableA11y ? 'gridcell' : undefined}
-        aria-label={enableA11y ? `${preset.name}. ${preset.description}` : undefined}
-        aria-selected={enableA11y ? (selectedPresetId === preset.id) : undefined}
-        aria-rowindex={enableA11y ? Math.floor(i / 2) + 1 : undefined}
-        aria-colindex={enableA11y ? (i % 2) + 1 : undefined}
-        tabindex={enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : undefined}
-      >
-        <div class="cf-preset-picker__card-icon" aria-hidden="true">{getPresetIcon(preset)}</div>
-        <div class="cf-preset-picker__card-content">
-          <div class="cf-preset-picker__card-name">{preset.name}</div>
-          <div class="cf-preset-picker__card-description">{preset.description}</div>
-          {#if preset.tags && preset.tags.length > 0}
-            <div class="cf-preset-picker__card-tags">
-              {#each preset.tags as tag}
-                <span class="cf-preset-picker__card-tag">{tag}</span>
-              {/each}
+    {#each filteredPresetRows as row, rowIndex}
+      <div class="cf-preset-picker__grid-row" role={enableA11y ? 'row' : undefined}>
+        {#each row as preset, columnIndex}
+          <button
+            on:click={() => handlePresetClick(preset)}
+            on:keydown={(e) => enableA11y && handlePresetKeyDown(e, preset, rowIndex * 2 + columnIndex)}
+            class:cf-preset-picker__card--selected={selectedPresetId === preset.id}
+            class="cf-preset-picker__card"
+            role={enableA11y ? 'gridcell' : undefined}
+            aria-label={enableA11y ? `${preset.name}. ${preset.description}` : undefined}
+            aria-selected={enableA11y ? (selectedPresetId === preset.id) : undefined}
+            aria-rowindex={enableA11y ? rowIndex + 1 : undefined}
+            aria-colindex={enableA11y ? columnIndex + 1 : undefined}
+            tabindex={enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : undefined}
+          >
+            <div class="cf-preset-picker__card-icon" aria-hidden="true">{getPresetIcon(preset)}</div>
+            <div class="cf-preset-picker__card-content">
+              <div class="cf-preset-picker__card-name">{preset.name}</div>
+              <div class="cf-preset-picker__card-description">{preset.description}</div>
+              {#if preset.tags && preset.tags.length > 0}
+                <div class="cf-preset-picker__card-tags">
+                  {#each preset.tags as tag}
+                    <span class="cf-preset-picker__card-tag">{tag}</span>
+                  {/each}
+                </div>
+              {/if}
             </div>
-          {/if}
-        </div>
-      </button>
+          </button>
+        {/each}
+      </div>
     {/each}
   </div>
 
@@ -519,6 +523,7 @@
   .cf-preset-picker__category-btn {
     padding: 6px 12px;
     border: 1px solid #ddd;
+    border-style: solid;
     border-radius: 16px;
     background: white;
     font-size: 12px;
@@ -576,9 +581,15 @@
     gap: 8px;
   }
 
+  .cf-preset-picker__popular-grid > div,
+  .cf-preset-picker__grid-row {
+    display: contents;
+  }
+
   .cf-preset-picker__popular-card {
     padding: 12px;
     border: 1px solid #ddd;
+    border-style: solid;
     border-radius: 4px;
     background: white;
     cursor: pointer;
@@ -624,6 +635,7 @@
   .cf-preset-picker__card {
     padding: 12px;
     border: 1px solid #ddd;
+    border-style: solid;
     border-radius: 4px;
     background: white;
     cursor: pointer;
@@ -702,7 +714,8 @@
     padding: 8px 16px;
     background: #007acc;
     color: white;
-    border: none;
+    border: 1px solid transparent;
+    border-style: solid;
     border-radius: 4px;
     font-size: 13px;
     cursor: pointer;

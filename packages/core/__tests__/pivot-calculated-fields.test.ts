@@ -529,9 +529,9 @@ describe('Phase 33b - Caching', () => {
     // Spy on formula engine evaluate
     const originalEvaluate = formulaEngine.evaluate.bind(formulaEngine);
     let evaluateCount = 0;
-    formulaEngine.evaluate = function(...args: any[]) {
+    formulaEngine.evaluate = function(formula, context) {
       evaluateCount++;
-      return originalEvaluate(...args);
+      return originalEvaluate(formula, context);
     };
 
     const pivot = engine.generate(config);

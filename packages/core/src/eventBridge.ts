@@ -1,7 +1,6 @@
 import type { Command } from './CommandManager';
 import { EventBus } from './EventBus';
 import type { SheetEvents } from './types';
-import type { Workbook } from './workbook';
 import type { Worksheet } from './worksheet';
 
 export function getCommandEventType(command: Command): string {
@@ -113,7 +112,7 @@ const WORKSHEET_BRIDGE_HANDLERS: Record<string, WorksheetBridgeHandler> = {
 export class WorkbookEventBridgeManager {
   private wiring = new Map<string, () => void>();
 
-  constructor(private workbook: Workbook, private eventBus: EventBus) {
+  constructor(private resolveWorksheets: () => Worksheet[], private eventBus: EventBus) {
     for (const event of WORKSHEET_BRIDGE_EVENTS) {
       const handler = WORKSHEET_BRIDGE_HANDLERS[event];
       if (!handler) continue;
@@ -147,13 +146,10 @@ export class WorkbookEventBridgeManager {
   }
 
   private getWorksheets(): Worksheet[] {
-    return this.workbook
-      .getSheetNames()
-      .map((name) => this.workbook.getSheet(name))
-      .filter((sheet): sheet is Worksheet => sheet != null);
+    return this.resolveWorksheets();
   }
 }
 
-export function setupWorkbookLazyBridges(workbook: Workbook): WorkbookEventBridgeManager {
-  return new WorkbookEventBridgeManager(workbook, workbook.eventBus);
+export function setupWorkbookLazyBridges(getWorksheets: () => Worksheet[], eventBus: EventBus): WorkbookEventBridgeManager {
+  return new WorkbookEventBridgeManager(getWorksheets, eventBus);
 }

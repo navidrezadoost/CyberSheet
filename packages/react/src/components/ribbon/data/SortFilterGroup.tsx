@@ -1,6 +1,6 @@
 import { SortFilterGroupIcon5, SortFilterGroupIcon4, SortFilterGroupIcon3, SortFilterGroupIcon2, SortFilterGroupIcon1 } from '@cyber-sheet/icons/react';
 import React, { useState, useCallback } from 'react';
-import type { Workbook, Address, Range } from '@cyber-sheet/core';
+import type { Workbook, Address, Range, WorkbookSheetView } from '@cyber-sheet/core';
 import {
   normalizeRange,
   resolveSortRange,

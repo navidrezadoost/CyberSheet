@@ -1,4 +1,3 @@
-import { describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../src/EventBus';
 import { Workbook } from '../src/workbook';
 import { CommandManager, SetValueCommand } from '../src/CommandManager';
@@ -6,13 +5,13 @@ import { CommandManager, SetValueCommand } from '../src/CommandManager';
 describe('EventBus lazy bridges', () => {
   it('activates and deactivates registered bridges with listener count', () => {
     const bus = new EventBus();
-    const activate = vi.fn();
-    const deactivate = vi.fn();
+    const activate = jest.fn();
+    const deactivate = jest.fn();
 
     bus.registerBridge('lazy', activate, deactivate);
     expect(activate).not.toHaveBeenCalled();
 
-    const unsub = bus.on('lazy', vi.fn());
+    const unsub = bus.on('lazy', jest.fn());
     expect(activate).toHaveBeenCalledTimes(1);
     expect(bus.isBridgeActive('lazy')).toBe(true);
 
@@ -25,7 +24,7 @@ describe('EventBus lazy bridges', () => {
 describe('EventBus', () => {
   it('supports on, once, and off', () => {
     const bus = new EventBus();
-    const handler = vi.fn();
+    const handler = jest.fn();
 
     const unsub = bus.on('test', handler);
     bus.emit('test', { value: 1 });
@@ -35,7 +34,7 @@ describe('EventBus', () => {
     bus.emit('test', { value: 2 });
     expect(handler).toHaveBeenCalledTimes(1);
 
-    const onceHandler = vi.fn();
+    const onceHandler = jest.fn();
     bus.once('once', onceHandler);
     bus.emit('once', 'a');
     bus.emit('once', 'b');
@@ -48,7 +47,7 @@ describe('Workbook event bridge', () => {
   it('emits cell-value-change when a cell is updated', () => {
     const workbook = new Workbook();
     const sheet = workbook.addSheet('Sheet1');
-    const handler = vi.fn();
+    const handler = jest.fn();
     workbook.eventBus.on('cell-value-change', handler);
 
     sheet.setCellValue({ row: 1, col: 1 }, 42);
@@ -65,7 +64,7 @@ describe('Workbook event bridge', () => {
   it('does not bridge cell-value-change until subscribed', () => {
     const workbook = new Workbook();
     const sheet = workbook.addSheet('Sheet1');
-    const handler = vi.fn();
+    const handler = jest.fn();
 
     sheet.setCellValue({ row: 1, col: 1 }, 42);
     expect(handler).not.toHaveBeenCalled();
@@ -84,8 +83,8 @@ describe('CommandManager event bridge', () => {
   it('emits command-execute and command-undo', () => {
     const workbook = new Workbook();
     const sheet = workbook.addSheet('Sheet1');
-    const executeHandler = vi.fn();
-    const undoHandler = vi.fn();
+    const executeHandler = jest.fn();
+    const undoHandler = jest.fn();
     workbook.eventBus.on('command-execute', executeHandler);
     workbook.eventBus.on('command-undo', undoHandler);
 

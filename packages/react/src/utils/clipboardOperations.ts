@@ -7,7 +7,9 @@ import {
   type CommandManager,
   type Range,
   type Worksheet,
+  type WorkbookSheetView,
 } from '@cyber-sheet/core';
+import { requireStandaloneWorksheet } from './workbookSheetAccess';
 
 export interface ClipboardRenderer {
   invalidateRange: (r1: number, c1: number, r2: number, c2: number) => void;
@@ -55,7 +57,7 @@ export async function readSystemClipboardText(): Promise<string | null> {
 }
 
 export function payloadToPlainText(
-  worksheet: Worksheet,
+  worksheet: Worksheet | WorkbookSheetView,
   range: Range
 ): string {
   const rows: string[] = [];
@@ -73,7 +75,7 @@ export function payloadToPlainText(
 export type { ClipboardCopyMode };
 
 export function performCopy(
-  worksheet: Worksheet,
+  worksheet: Worksheet | WorkbookSheetView,
   clipboardService: ClipboardService,
   range: Range,
   options?: { writeSystemClipboard?: boolean; mode?: ClipboardCopyMode }
@@ -86,11 +88,12 @@ export function performCopy(
 }
 
 export function performCut(
-  worksheet: Worksheet,
+  worksheet: Worksheet | WorkbookSheetView,
   clipboardService: ClipboardService,
   range: Range,
   options?: { writeSystemClipboard?: boolean; mode?: ClipboardCopyMode }
 ): Range {
+  worksheet = requireStandaloneWorksheet(worksheet);
   const mode = options?.mode ?? 'all';
   clipboardService.cut(worksheet, range, mode);
   if (options?.writeSystemClipboard !== false) {
@@ -145,12 +148,13 @@ export function performPaste(
  * from the system clipboard (external copy) and paste with undo support.
  */
 export async function performPasteAsync(
-  worksheet: Worksheet,
+  sheet: Worksheet | WorkbookSheetView,
   commandManager: CommandManager,
   clipboardService: ClipboardService,
   targetAnchor: Address,
   options?: PasteOptions
 ): Promise<boolean> {
+  const worksheet = requireStandaloneWorksheet(sheet);
   const internalPayload = clipboardService.getPayload();
   if (internalPayload) {
     applyPastePayload(worksheet, commandManager, internalPayload, targetAnchor, options);

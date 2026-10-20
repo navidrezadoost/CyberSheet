@@ -20,10 +20,12 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Workbook } from '@cyber-sheet/core';
 import type { ConditionalFormattingRule } from '@cyber-sheet/core';
+import { rejectR1ExampleInitialization } from './r1-initialization-gate';
 import { ExcelApp } from '@cyber-sheet/react/src/components/ExcelApp';
 
 // Create demo workbook with conditional formatting
 function createDemoWorkbook(): Workbook {
+  rejectR1ExampleInitialization('Conditional formatting demo', 'R2 initial cell content and R5 formatting metadata');
   const workbook = new Workbook();
   
   // ===== Sheet 1: Sales Performance with Icon Sets =====

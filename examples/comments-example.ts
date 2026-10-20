@@ -9,53 +9,8 @@
  * 5. Icon overlays
  */
 
-import { Workbook, Worksheet } from '@cyber-sheet/core';
+import { Worksheet } from '@cyber-sheet/core';
 import { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
-import { LightweightXLSXParser } from '@cyber-sheet/io-xlsx';
-
-// ==================== Excel Comment Import ====================
-
-async function importExcelWithComments(file: File): Promise<Workbook> {
-  const buffer = await file.arrayBuffer();
-  const parser = new LightweightXLSXParser();
-  
-  // Parse metadata
-  await parser.parseMetadata(buffer);
-  
-  // Load first sheet with comments
-  const cells = await parser.parseSheet(0, {
-    includeComments: true, // Enable comment import
-    includeStyles: true,
-  });
-  
-  const workbook = new Workbook();
-  const sheet = workbook.addSheet('ImportedSheet');
-  
-  // Import cells with comments
-  for (const [ref, parsedCell] of cells) {
-    const addr = parseRef(ref); // Convert A1 to {row, col}
-    
-    sheet.setCellValue(addr, parsedCell.value);
-    
-    if (parsedCell.style) {
-      sheet.setCellStyle(addr, parsedCell.style);
-    }
-    
-    if (parsedCell.comments) {
-      // Excel comments are already converted to CellComment format
-      for (const comment of parsedCell.comments) {
-        sheet.addComment(addr, {
-          text: comment.text,
-          author: comment.author,
-          parentId: comment.parentId,
-          position: comment.position,
-        });
-      }
-    }
-  }
-  
-  return workbook;
-}
 
 // ==================== Custom Comment UI ====================
 
@@ -342,16 +297,6 @@ class CustomCommentSystem {
 
 // ==================== Helper Functions ====================
 
-function parseRef(ref: string): { row: number; col: number } {
-  const match = ref.match(/^([A-Z]+)(\d+)$/);
-  if (!match) return { row: 1, col: 1 };
-  
-  const col = match[1].split('').reduce((acc, char) => acc * 26 + (char.charCodeAt(0) - 64), 0);
-  const row = parseInt(match[2]);
-  
-  return { row, col };
-}
-
 function colToLetter(col: number): string {
   let result = '';
   while (col > 0) {
@@ -402,37 +347,10 @@ export async function initializeCommentingApp(
   canvasContainer: HTMLElement,
   commentPanelId: string,
   currentUser: CustomUser
-) {
-  // 1. Import Excel with comments
-  const workbook = await importExcelWithComments(excelFile);
-  const sheet = workbook.sheets[0];
-  
-  // 2. Setup renderer
-  const renderer = new CanvasRenderer(canvasContainer, sheet);
-  
-  // 3. Setup custom comment system
-  const customSystem = new CustomCommentSystem(sheet);
-  customSystem.registerUser(currentUser);
-  
-  // 4. Setup comment panel
-  const commentPanel = new CommentPanel(commentPanelId, sheet, currentUser.name);
-  
-  // 5. Wire up events
-  setupCommentSystem(renderer, sheet, commentPanel);
-  
-  // 6. Add some icons to cells with comments
-  const commented = sheet.getAllComments();
-  commented.forEach(({ address }) => {
-    sheet.setIcon(address, {
-      type: 'emoji',
-      source: '💬',
-      position: 'top-right',
-      size: 14,
-    });
-  });
-  
-  // 7. Enable keyboard navigation
-  navigateToComments(renderer, sheet);
-  
-  return { workbook, sheet, renderer, commentPanel, customSystem };
+): Promise<never> {
+  void excelFile;
+  void canvasContainer;
+  void commentPanelId;
+  void currentUser;
+  throw new Error('Comment-enabled workbook import and staged restore are unavailable until the R6 slice is authorized; no workbook was initialized.');
 }

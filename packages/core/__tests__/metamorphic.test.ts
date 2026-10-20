@@ -13,7 +13,19 @@
  */
 
 import { SpreadsheetEngine } from '../src/SpreadsheetEngine';
+import type { Worksheet } from '../src/worksheet';
 import { Address } from '../src/types';
+
+// These two symmetry cases remain explicitly skipped until row/column delete
+// operations are part of the Worksheet contract. Keep their intent visible
+// without compiling calls to APIs that do not exist.
+function deleteRowPendingWorksheetApi(_worksheet: Worksheet, _rowIndex: number): never {
+  throw new Error('Worksheet row deletion is not implemented');
+}
+
+function deleteColumnPendingWorksheetApi(_worksheet: Worksheet, _columnIndex: number): never {
+  throw new Error('Worksheet column deletion is not implemented');
+}
 
 describe('Metamorphic Properties — Arithmetic Identity', () => {
   
@@ -21,13 +33,13 @@ describe('Metamorphic Properties — Arithmetic Identity', () => {
     const engine = new SpreadsheetEngine('M1');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 100);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1+50');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A2-50');
+      ws.setCellValue({ row: 1, col: 1 }, 100);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+50');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A2-50');
     });
     
-    const a1 = engine.getCellValue({ row: 0, col: 0 });
-    const a3 = engine.getCellValue({ row: 2, col: 0 });
+    const a1 = engine.getCellValue({ row: 1, col: 1 });
+    const a3 = engine.getCellValue({ row: 3, col: 1 });
     
     expect(a3).toBe(a1); // A3 = (A1 + 50) - 50 should equal A1
   });
@@ -36,13 +48,13 @@ describe('Metamorphic Properties — Arithmetic Identity', () => {
     const engine = new SpreadsheetEngine('M2');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 42);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1*7');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A2/7');
+      ws.setCellValue({ row: 1, col: 1 }, 42);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*7');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A2/7');
     });
     
-    const a1 = engine.getCellValue({ row: 0, col: 0 });
-    const a3 = engine.getCellValue({ row: 2, col: 0 });
+    const a1 = engine.getCellValue({ row: 1, col: 1 });
+    const a3 = engine.getCellValue({ row: 3, col: 1 });
     
     expect(a3).toBe(a1);
   });
@@ -51,12 +63,12 @@ describe('Metamorphic Properties — Arithmetic Identity', () => {
     const engine = new SpreadsheetEngine('M3');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 123);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1+0');
+      ws.setCellValue({ row: 1, col: 1 }, 123);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+0');
     });
     
-    const a1 = engine.getCellValue({ row: 0, col: 0 });
-    const a2 = engine.getCellValue({ row: 1, col: 0 });
+    const a1 = engine.getCellValue({ row: 1, col: 1 });
+    const a2 = engine.getCellValue({ row: 2, col: 1 });
     
     expect(a2).toBe(a1);
   });
@@ -65,12 +77,12 @@ describe('Metamorphic Properties — Arithmetic Identity', () => {
     const engine = new SpreadsheetEngine('M4');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 456);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1*1');
+      ws.setCellValue({ row: 1, col: 1 }, 456);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*1');
     });
     
-    const a1 = engine.getCellValue({ row: 0, col: 0 });
-    const a2 = engine.getCellValue({ row: 1, col: 0 });
+    const a1 = engine.getCellValue({ row: 1, col: 1 });
+    const a2 = engine.getCellValue({ row: 2, col: 1 });
     
     expect(a2).toBe(a1);
   });
@@ -82,14 +94,14 @@ describe('Metamorphic Properties — Commutativity', () => {
     const engine = new SpreadsheetEngine('M5');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 10);
-      ws.setCellValue({ row: 0, col: 1 }, 20);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1+B1'); // 10 + 20
-      ws.setCellFormula({ row: 1, col: 1 }, '=B1+A1'); // 20 + 10
+      ws.setCellValue({ row: 1, col: 1 }, 10);
+      ws.setCellValue({ row: 1, col: 2 }, 20);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+B1'); // 10 + 20
+      ws.setCellFormula({ row: 2, col: 2 }, '=B1+A1'); // 20 + 10
     });
     
-    const leftToRight = engine.getCellValue({ row: 1, col: 0 });
-    const rightToLeft = engine.getCellValue({ row: 1, col: 1 });
+    const leftToRight = engine.getCellValue({ row: 2, col: 1 });
+    const rightToLeft = engine.getCellValue({ row: 2, col: 2 });
     
     expect(leftToRight).toBe(rightToLeft);
   });
@@ -98,14 +110,14 @@ describe('Metamorphic Properties — Commutativity', () => {
     const engine = new SpreadsheetEngine('M6');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 7);
-      ws.setCellValue({ row: 0, col: 1 }, 8);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1*B1');
-      ws.setCellFormula({ row: 1, col: 1 }, '=B1*A1');
+      ws.setCellValue({ row: 1, col: 1 }, 7);
+      ws.setCellValue({ row: 1, col: 2 }, 8);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*B1');
+      ws.setCellFormula({ row: 2, col: 2 }, '=B1*A1');
     });
     
-    const leftToRight = engine.getCellValue({ row: 1, col: 0 });
-    const rightToLeft = engine.getCellValue({ row: 1, col: 1 });
+    const leftToRight = engine.getCellValue({ row: 2, col: 1 });
+    const rightToLeft = engine.getCellValue({ row: 2, col: 2 });
     
     expect(leftToRight).toBe(rightToLeft);
   });
@@ -117,21 +129,21 @@ describe('Metamorphic Properties — Associativity', () => {
     const engine = new SpreadsheetEngine('M7');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 5);
-      ws.setCellValue({ row: 0, col: 1 }, 10);
-      ws.setCellValue({ row: 0, col: 2 }, 15);
+      ws.setCellValue({ row: 1, col: 1 }, 5);
+      ws.setCellValue({ row: 1, col: 2 }, 10);
+      ws.setCellValue({ row: 1, col: 3 }, 15);
       
       // Left associative: (A1+B1)+C1
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1+B1');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A2+C1');
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+B1');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A2+C1');
       
       // Right associative: A1+(B1+C1)
-      ws.setCellFormula({ row: 1, col: 1 }, '=B1+C1');
-      ws.setCellFormula({ row: 2, col: 1 }, '=A1+B2');
+      ws.setCellFormula({ row: 2, col: 2 }, '=B1+C1');
+      ws.setCellFormula({ row: 3, col: 2 }, '=A1+B2');
     });
     
-    const leftAssoc = engine.getCellValue({ row: 2, col: 0 });
-    const rightAssoc = engine.getCellValue({ row: 2, col: 1 });
+    const leftAssoc = engine.getCellValue({ row: 3, col: 1 });
+    const rightAssoc = engine.getCellValue({ row: 3, col: 2 });
     
     expect(leftAssoc).toBe(rightAssoc);
   });
@@ -140,19 +152,19 @@ describe('Metamorphic Properties — Associativity', () => {
     const engine = new SpreadsheetEngine('M8');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 2);
-      ws.setCellValue({ row: 0, col: 1 }, 3);
-      ws.setCellValue({ row: 0, col: 2 }, 4);
+      ws.setCellValue({ row: 1, col: 1 }, 2);
+      ws.setCellValue({ row: 1, col: 2 }, 3);
+      ws.setCellValue({ row: 1, col: 3 }, 4);
       
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1*B1');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A2*C1');
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*B1');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A2*C1');
       
-      ws.setCellFormula({ row: 1, col: 1 }, '=B1*C1');
-      ws.setCellFormula({ row: 2, col: 1 }, '=A1*B2');
+      ws.setCellFormula({ row: 2, col: 2 }, '=B1*C1');
+      ws.setCellFormula({ row: 3, col: 2 }, '=A1*B2');
     });
     
-    const leftAssoc = engine.getCellValue({ row: 2, col: 0 });
-    const rightAssoc = engine.getCellValue({ row: 2, col: 1 });
+    const leftAssoc = engine.getCellValue({ row: 3, col: 1 });
+    const rightAssoc = engine.getCellValue({ row: 3, col: 2 });
     
     expect(leftAssoc).toBe(rightAssoc);
   });
@@ -164,22 +176,22 @@ describe('Metamorphic Properties — Distributivity', () => {
     const engine = new SpreadsheetEngine('M9');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 3);
-      ws.setCellValue({ row: 0, col: 1 }, 4);
-      ws.setCellValue({ row: 0, col: 2 }, 5);
+      ws.setCellValue({ row: 1, col: 1 }, 3);
+      ws.setCellValue({ row: 1, col: 2 }, 4);
+      ws.setCellValue({ row: 1, col: 3 }, 5);
       
       // Left side: A1*(B1+C1)
-      ws.setCellFormula({ row: 1, col: 0 }, '=B1+C1');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A1*A2');
+      ws.setCellFormula({ row: 2, col: 1 }, '=B1+C1');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A1*A2');
       
       // Right side: A1*B1 + A1*C1
-      ws.setCellFormula({ row: 1, col: 1 }, '=A1*B1');
-      ws.setCellFormula({ row: 1, col: 2 }, '=A1*C1');
-      ws.setCellFormula({ row: 2, col: 1 }, '=B2+C2');
+      ws.setCellFormula({ row: 2, col: 2 }, '=A1*B1');
+      ws.setCellFormula({ row: 2, col: 3 }, '=A1*C1');
+      ws.setCellFormula({ row: 3, col: 2 }, '=B2+C2');
     });
     
-    const leftSide = engine.getCellValue({ row: 2, col: 0 });
-    const rightSide = engine.getCellValue({ row: 2, col: 1 });
+    const leftSide = engine.getCellValue({ row: 3, col: 1 });
+    const rightSide = engine.getCellValue({ row: 3, col: 2 });
     
     expect(leftSide).toBe(rightSide);
   });
@@ -191,16 +203,16 @@ describe('Metamorphic Properties — Formula Equivalence', () => {
     const engine = new SpreadsheetEngine('M10');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 10);
-      ws.setCellValue({ row: 1, col: 0 }, 20);
-      ws.setCellValue({ row: 2, col: 0 }, 30);
+      ws.setCellValue({ row: 1, col: 1 }, 10);
+      ws.setCellValue({ row: 2, col: 1 }, 20);
+      ws.setCellValue({ row: 3, col: 1 }, 30);
       
-      ws.setCellFormula({ row: 3, col: 0 }, '=SUM(A1:A3)');
-      ws.setCellFormula({ row: 3, col: 1 }, '=A1+A2+A3');
+      ws.setCellFormula({ row: 4, col: 1 }, '=SUM(A1:A3)');
+      ws.setCellFormula({ row: 4, col: 2 }, '=A1+A2+A3');
     });
     
-    const sumFormula = engine.getCellValue({ row: 3, col: 0 });
-    const addFormula = engine.getCellValue({ row: 3, col: 1 });
+    const sumFormula = engine.getCellValue({ row: 4, col: 1 });
+    const addFormula = engine.getCellValue({ row: 4, col: 2 });
     
     expect(sumFormula).toBe(addFormula);
   });
@@ -209,15 +221,15 @@ describe('Metamorphic Properties — Formula Equivalence', () => {
     const engine = new SpreadsheetEngine('M11');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 100);
-      ws.setCellValue({ row: 1, col: 0 }, 200);
+      ws.setCellValue({ row: 1, col: 1 }, 100);
+      ws.setCellValue({ row: 2, col: 1 }, 200);
       
-      ws.setCellFormula({ row: 2, col: 0 }, '=AVERAGE(A1:A2)');
-      ws.setCellFormula({ row: 2, col: 1 }, '=(A1+A2)/2');
+      ws.setCellFormula({ row: 3, col: 1 }, '=AVERAGE(A1:A2)');
+      ws.setCellFormula({ row: 3, col: 2 }, '=(A1+A2)/2');
     });
     
-    const avgFormula = engine.getCellValue({ row: 2, col: 0 });
-    const manualAvg = engine.getCellValue({ row: 2, col: 1 });
+    const avgFormula = engine.getCellValue({ row: 3, col: 1 });
+    const manualAvg = engine.getCellValue({ row: 3, col: 2 });
     
     expect(avgFormula).toBe(manualAvg);
   });
@@ -226,17 +238,17 @@ describe('Metamorphic Properties — Formula Equivalence', () => {
     const engine = new SpreadsheetEngine('M12');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 15);
-      ws.setCellValue({ row: 0, col: 1 }, 25);
+      ws.setCellValue({ row: 1, col: 1 }, 15);
+      ws.setCellValue({ row: 1, col: 2 }, 25);
       
-      ws.setCellFormula({ row: 1, col: 0 }, '=MAX(A1,B1)');
-      ws.setCellFormula({ row: 1, col: 1 }, '=MIN(A1,B1)');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A2+B2');
-      ws.setCellFormula({ row: 2, col: 1 }, '=A1+B1');
+      ws.setCellFormula({ row: 2, col: 1 }, '=MAX(A1,B1)');
+      ws.setCellFormula({ row: 2, col: 2 }, '=MIN(A1,B1)');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A2+B2');
+      ws.setCellFormula({ row: 3, col: 2 }, '=A1+B1');
     });
     
-    const maxPlusMin = engine.getCellValue({ row: 2, col: 0 });
-    const directSum = engine.getCellValue({ row: 2, col: 1 });
+    const maxPlusMin = engine.getCellValue({ row: 3, col: 1 });
+    const directSum = engine.getCellValue({ row: 3, col: 2 });
     
     expect(maxPlusMin).toBe(directSum);
   });
@@ -249,17 +261,17 @@ describe('Metamorphic Properties — Structural Symmetry', () => {
     
     // Set up initial state
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 10);
-      ws.setCellValue({ row: 1, col: 0 }, 20);
-      ws.setCellValue({ row: 2, col: 0 }, 30);
+      ws.setCellValue({ row: 1, col: 1 }, 10);
+      ws.setCellValue({ row: 2, col: 1 }, 20);
+      ws.setCellValue({ row: 3, col: 1 }, 30);
     });
     
     // Snapshot initial state
     const stateBefore = snapshotState(engine);
     
     // Insert row 1, then delete row 1
-    await engine.run((ws) => ws.insertRow(1));
-    await engine.run((ws) => ws.deleteRow(1));
+    await engine.run((ws) => ws.insertRows(1, 1));
+    await engine.run((ws) => deleteRowPendingWorksheetApi(ws, 1));
     
     // Snapshot final state
     const stateAfter = snapshotState(engine);
@@ -271,15 +283,15 @@ describe('Metamorphic Properties — Structural Symmetry', () => {
     const engine = new SpreadsheetEngine('M14');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 1);
-      ws.setCellValue({ row: 0, col: 1 }, 2);
-      ws.setCellValue({ row: 0, col: 2 }, 3);
+      ws.setCellValue({ row: 1, col: 1 }, 1);
+      ws.setCellValue({ row: 1, col: 2 }, 2);
+      ws.setCellValue({ row: 1, col: 3 }, 3);
     });
     
     const stateBefore = snapshotState(engine);
     
-    await engine.run((ws) => ws.insertColumn(1));
-    await engine.run((ws) => ws.deleteColumn(1));
+    await engine.run((ws) => ws.insertColumns(1, 1));
+    await engine.run((ws) => deleteColumnPendingWorksheetApi(ws, 1));
     
     const stateAfter = snapshotState(engine);
     
@@ -293,22 +305,22 @@ describe('Metamorphic Properties — Dependency Propagation', () => {
     const engine = new SpreadsheetEngine('M15');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 10);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1*2');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A1*3');
-      ws.setCellFormula({ row: 3, col: 0 }, '=A1*4');
+      ws.setCellValue({ row: 1, col: 1 }, 10);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*2');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A1*3');
+      ws.setCellFormula({ row: 4, col: 1 }, '=A1*4');
     });
     
-    const a2Before = engine.getCellValue({ row: 1, col: 0 });
-    const a3Before = engine.getCellValue({ row: 2, col: 0 });
-    const a4Before = engine.getCellValue({ row: 3, col: 0 });
+    const a2Before = engine.getCellValue({ row: 2, col: 1 });
+    const a3Before = engine.getCellValue({ row: 3, col: 1 });
+    const a4Before = engine.getCellValue({ row: 4, col: 1 });
     
     // Change A1
-    await engine.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 20));
+    await engine.run((ws) => ws.setCellValue({ row: 1, col: 1 }, 20));
     
-    const a2After = engine.getCellValue({ row: 1, col: 0 });
-    const a3After = engine.getCellValue({ row: 2, col: 0 });
-    const a4After = engine.getCellValue({ row: 3, col: 0 });
+    const a2After = engine.getCellValue({ row: 2, col: 1 });
+    const a3After = engine.getCellValue({ row: 3, col: 1 });
+    const a4After = engine.getCellValue({ row: 4, col: 1 });
     
     // All should have doubled
     expect(a2After).toBe((a2Before as number) * 2);
@@ -320,16 +332,16 @@ describe('Metamorphic Properties — Dependency Propagation', () => {
     const engine = new SpreadsheetEngine('M16');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 5);
-      ws.setCellFormula({ row: 0, col: 1 }, '=A1+10');
-      ws.setCellFormula({ row: 0, col: 2 }, '=B1+10');
+      ws.setCellValue({ row: 1, col: 1 }, 5);
+      ws.setCellFormula({ row: 1, col: 2 }, '=A1+10');
+      ws.setCellFormula({ row: 1, col: 3 }, '=B1+10');
     });
     
-    const cBefore = engine.getCellValue({ row: 0, col: 2 });
+    const cBefore = engine.getCellValue({ row: 1, col: 3 });
     
-    await engine.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 15)); // A1: 5→15 (+10)
+    await engine.run((ws) => ws.setCellValue({ row: 1, col: 1 }, 15)); // A1: 5→15 (+10)
     
-    const cAfter = engine.getCellValue({ row: 0, col: 2 });
+    const cAfter = engine.getCellValue({ row: 1, col: 3 });
     
     expect(cAfter).toBe((cBefore as number) + 10);
   });
@@ -340,10 +352,10 @@ describe('Metamorphic Properties — Idempotence', () => {
   test('M17: Setting same value twice is idempotent', async () => {
     const engine = new SpreadsheetEngine('M17');
     
-    await engine.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 100));
+    await engine.run((ws) => ws.setCellValue({ row: 1, col: 1 }, 100));
     const stateAfterFirst = snapshotState(engine);
     
-    await engine.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 100));
+    await engine.run((ws) => ws.setCellValue({ row: 1, col: 1 }, 100));
     const stateAfterSecond = snapshotState(engine);
     
     expect(stateAfterSecond).toEqual(stateAfterFirst);
@@ -354,10 +366,10 @@ describe('Metamorphic Properties — Idempotence', () => {
     
     const stateBefore = snapshotState(engine);
     
-    await engine.run((ws) => ws.clearCell({ row: 5, col: 5 }));
+    await engine.run((ws) => ws.clearCellContent({ row: 6, col: 6 }));
     const stateAfter1 = snapshotState(engine);
     
-    await engine.run((ws) => ws.clearCell({ row: 5, col: 5 }));
+    await engine.run((ws) => ws.clearCellContent({ row: 6, col: 6 }));
     const stateAfter2 = snapshotState(engine);
     
     expect(stateAfter1).toEqual(stateBefore);
@@ -371,17 +383,17 @@ describe('Metamorphic Properties — Substitution', () => {
     const engine = new SpreadsheetEngine('M19');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 42);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1*2');
+      ws.setCellValue({ row: 1, col: 1 }, 42);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*2');
     });
     
-    const withReference = engine.getCellValue({ row: 1, col: 0 });
+    const withReference = engine.getCellValue({ row: 2, col: 1 });
     
     await engine.run((ws) => {
-      ws.setCellFormula({ row: 1, col: 1 }, '=42*2'); // Direct substitution
+      ws.setCellFormula({ row: 2, col: 2 }, '=42*2'); // Direct substitution
     });
     
-    const withValue = engine.getCellValue({ row: 1, col: 1 });
+    const withValue = engine.getCellValue({ row: 2, col: 2 });
     
     expect(withValue).toBe(withReference);
   });
@@ -390,19 +402,19 @@ describe('Metamorphic Properties — Substitution', () => {
     const engine = new SpreadsheetEngine('M20');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 10);
-      ws.setCellValue({ row: 0, col: 1 }, 20);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1+B1');
-      ws.setCellFormula({ row: 2, col: 0 }, '=A2*2');
+      ws.setCellValue({ row: 1, col: 1 }, 10);
+      ws.setCellValue({ row: 1, col: 2 }, 20);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+B1');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A2*2');
     });
     
-    const composed = engine.getCellValue({ row: 2, col: 0 });
+    const composed = engine.getCellValue({ row: 3, col: 1 });
     
     await engine.run((ws) => {
-      ws.setCellFormula({ row: 2, col: 1 }, '=(A1+B1)*2'); // Inlined
+      ws.setCellFormula({ row: 3, col: 2 }, '=(A1+B1)*2'); // Inlined
     });
     
-    const inlined = engine.getCellValue({ row: 2, col: 1 });
+    const inlined = engine.getCellValue({ row: 3, col: 2 });
     
     expect(inlined).toBe(composed);
   });
@@ -414,13 +426,13 @@ describe('Metamorphic Properties — Negation Symmetry', () => {
     const engine = new SpreadsheetEngine('M21');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 50);
-      ws.setCellFormula({ row: 1, col: 0 }, '=-A1');
-      ws.setCellFormula({ row: 2, col: 0 }, '=-A2');
+      ws.setCellValue({ row: 1, col: 1 }, 50);
+      ws.setCellFormula({ row: 2, col: 1 }, '=-A1');
+      ws.setCellFormula({ row: 3, col: 1 }, '=-A2');
     });
     
-    const original = engine.getCellValue({ row: 0, col: 0 });
-    const doubleNeg = engine.getCellValue({ row: 2, col: 0 });
+    const original = engine.getCellValue({ row: 1, col: 1 });
+    const doubleNeg = engine.getCellValue({ row: 3, col: 1 });
     
     expect(doubleNeg).toBe(original);
   });
@@ -429,14 +441,14 @@ describe('Metamorphic Properties — Negation Symmetry', () => {
     const engine = new SpreadsheetEngine('M22');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 100);
-      ws.setCellValue({ row: 0, col: 1 }, 30);
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1-B1');
-      ws.setCellFormula({ row: 1, col: 1 }, '=-(B1-A1)');
+      ws.setCellValue({ row: 1, col: 1 }, 100);
+      ws.setCellValue({ row: 1, col: 2 }, 30);
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1-B1');
+      ws.setCellFormula({ row: 2, col: 2 }, '=-(B1-A1)');
     });
     
-    const aMinusB = engine.getCellValue({ row: 1, col: 0 });
-    const negBMinusA = engine.getCellValue({ row: 1, col: 1 });
+    const aMinusB = engine.getCellValue({ row: 2, col: 1 });
+    const negBMinusA = engine.getCellValue({ row: 2, col: 2 });
     
     expect(aMinusB).toBe(negBMinusA);
   });
@@ -448,18 +460,18 @@ describe('Metamorphic Properties — Comparison Consistency', () => {
     const engine = new SpreadsheetEngine('M23');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 42);
-      ws.setCellValue({ row: 0, col: 1 }, 42);
-      ws.setCellValue({ row: 0, col: 2 }, 42);
+      ws.setCellValue({ row: 1, col: 1 }, 42);
+      ws.setCellValue({ row: 1, col: 2 }, 42);
+      ws.setCellValue({ row: 1, col: 3 }, 42);
       
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1=B1');
-      ws.setCellFormula({ row: 1, col: 1 }, '=B1=C1');
-      ws.setCellFormula({ row: 1, col: 2 }, '=A1=C1');
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1=B1');
+      ws.setCellFormula({ row: 2, col: 2 }, '=B1=C1');
+      ws.setCellFormula({ row: 2, col: 3 }, '=A1=C1');
     });
     
-    const aEqualsB = engine.getCellValue({ row: 1, col: 0 });
-    const bEqualsC = engine.getCellValue({ row: 1, col: 1 });
-    const aEqualsC = engine.getCellValue({ row: 1, col: 2 });
+    const aEqualsB = engine.getCellValue({ row: 2, col: 1 });
+    const bEqualsC = engine.getCellValue({ row: 2, col: 2 });
+    const aEqualsC = engine.getCellValue({ row: 2, col: 3 });
     
     expect(aEqualsB).toBe(true);
     expect(bEqualsC).toBe(true);
@@ -470,15 +482,15 @@ describe('Metamorphic Properties — Comparison Consistency', () => {
     const engine = new SpreadsheetEngine('M24');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 50);
-      ws.setCellValue({ row: 0, col: 1 }, 30);
+      ws.setCellValue({ row: 1, col: 1 }, 50);
+      ws.setCellValue({ row: 1, col: 2 }, 30);
       
-      ws.setCellFormula({ row: 1, col: 0 }, '=A1>B1');
-      ws.setCellFormula({ row: 1, col: 1 }, '=NOT(A1<=B1)');
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1>B1');
+      ws.setCellFormula({ row: 2, col: 2 }, '=NOT(A1<=B1)');
     });
     
-    const greaterThan = engine.getCellValue({ row: 1, col: 0 });
-    const notLessOrEqual = engine.getCellValue({ row: 1, col: 1 });
+    const greaterThan = engine.getCellValue({ row: 2, col: 1 });
+    const notLessOrEqual = engine.getCellValue({ row: 2, col: 2 });
     
     expect(greaterThan).toBe(notLessOrEqual);
   });
@@ -490,15 +502,15 @@ describe('Metamorphic Properties — Clearing Symmetry', () => {
     const engine = new SpreadsheetEngine('M25');
     
     await engine.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 1);
-      ws.setCellValue({ row: 1, col: 0 }, 2);
-      ws.setCellValue({ row: 2, col: 0 }, 3);
+      ws.setCellValue({ row: 1, col: 1 }, 1);
+      ws.setCellValue({ row: 2, col: 1 }, 2);
+      ws.setCellValue({ row: 3, col: 1 }, 3);
     });
     
     await engine.run((ws) => {
-      ws.clearCell({ row: 0, col: 0 });
-      ws.clearCell({ row: 1, col: 0 });
-      ws.clearCell({ row: 2, col: 0 });
+      ws.clearCellContent({ row: 1, col: 1 });
+      ws.clearCellContent({ row: 2, col: 1 });
+      ws.clearCellContent({ row: 3, col: 1 });
     });
     
     const state = snapshotState(engine);
@@ -511,8 +523,8 @@ describe('Metamorphic Properties — Clearing Symmetry', () => {
     
     const emptyState = snapshotState(engine);
     
-    await engine.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 999));
-    await engine.run((ws) => ws.clearCell({ row: 0, col: 0 }));
+    await engine.run((ws) => ws.setCellValue({ row: 1, col: 1 }, 999));
+    await engine.run((ws) => ws.clearCellContent({ row: 1, col: 1 }));
     
     const finalState = snapshotState(engine);
     
@@ -525,8 +537,8 @@ function snapshotState(engine: SpreadsheetEngine) {
   const cells: Array<{ row: number; col: number; value: any }> = [];
   
   // Scan a reasonable range for non-null cells
-  for (let row = 0; row < 100; row++) {
-    for (let col = 0; col < 26; col++) {
+  for (let row = 1; row <= 100; row++) {
+    for (let col = 1; col <= 26; col++) {
       const value = engine.getCellValue({ row, col });
       if (value !== null) {
         cells.push({ row, col, value });

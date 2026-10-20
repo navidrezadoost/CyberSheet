@@ -765,8 +765,12 @@ export const ExcelReactViewer = ({ url = DEFAULT_URL }: ExcelReactViewerProps) =
         onSheetChange={setActiveSheetName}
         onAddSheet={() => {
           const newName = `Sheet${sheetNames.length + 1}`;
-          workbook?.addSheet(newName);
-          setActiveSheetName(newName);
+          try {
+            workbook?.addSheet(newName);
+            setActiveSheetName(newName);
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : 'Sheet creation is unavailable until R5');
+          }
         }}
         onRenameSheet={(oldName, newName) => {
           // TODO: Implement rename in core

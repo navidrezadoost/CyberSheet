@@ -6,7 +6,9 @@
  */
 
 import { Worksheet } from '@cyber-sheet/core';
-import type { CellRange } from '@cyber-sheet/core';
+import type { CellRange, WorkbookId, WorksheetId } from '@cyber-sheet/core';
+import { adoptWorksheetByWorkbook } from '../../core/src/worksheet';
+import { OwnerBackedWorkbookSheetView } from '../../core/src/WorkbookSheetView';
 import { ChartDataAdapter } from '../src/ChartDataAdapter';
 
 describe('ChartDataAdapter', () => {
@@ -69,6 +71,52 @@ describe('ChartDataAdapter', () => {
 
       expect(chartData.datasets[0].data).toEqual([0, 1, 0]);
     });
+  });
+
+  test('returns detached primitive chart data when reading an adopted worksheet view', () => {
+    worksheet.setCellValue({ row: 1, col: 1 }, 'Category');
+    worksheet.setCellValue({ row: 1, col: 2 }, 'Sales');
+    worksheet.setCellValue({ row: 2, col: 1 }, 'Q1');
+    worksheet.setCellValue({ row: 2, col: 2 }, 100);
+    const ownerId = 'chart-data-adapter-owner' as WorkbookId;
+    const sheetId = worksheet.getWorksheetId() as WorksheetId;
+    adoptWorksheetByWorkbook(worksheet, ownerId);
+    const view = new OwnerBackedWorkbookSheetView(ownerId, sheetId, () => worksheet);
+
+    const data = ChartDataAdapter.rangeToChartData(
+      view,
+      { startRow: 1, startCol: 1, endRow: 2, endCol: 2 },
+      { hasHeaderRow: true, hasHeaderCol: true, seriesDirection: 'columns' },
+    );
+
+    expect(data).toEqual({ labels: ['Q1'], datasets: [{ label: 'Sales', data: [100] }] });
+    data.labels[0] = 'changed output';
+    data.datasets[0].data[0] = 999;
+
+    expect(view.getCellValue({ row: 1, col: 1 })).toBe('Category');
+    expect(view.getCellValue({ row: 2, col: 1 })).toBe('Q1');
+    expect(view.getCellValue({ row: 2, col: 2 })).toBe(100);
+  });
+
+  test('preserves standalone formula reads and requires an owner view for adopted formula reads', () => {
+    worksheet.setCellValue({ row: 1, col: 1 }, 1);
+    worksheet.setCellFormula({ row: 1, col: 2 }, '=1+6', 7);
+    const range: CellRange = { startRow: 1, startCol: 1, endRow: 1, endCol: 2 };
+    const options = { hasHeaderRow: false, hasHeaderCol: false, seriesDirection: 'rows' as const };
+
+    expect(ChartDataAdapter.rangeToChartData(worksheet, range, options).datasets[0].data).toEqual([1, 7]);
+
+    const ownerId = 'chart-formula-owner' as WorkbookId;
+    const sheetId = worksheet.getWorksheetId() as WorksheetId;
+    Object.defineProperty(worksheet, 'isWorkbookOwned', { value: () => false, configurable: true });
+    adoptWorksheetByWorkbook(worksheet, ownerId);
+    expect(() => ChartDataAdapter.rangeToChartData(worksheet, range, options)).toThrow(/require a WorkbookSheetView/);
+    expect(() => ChartDataAdapter.detectHeaderRow(worksheet, range)).toThrow(/require a WorkbookSheetView/);
+    expect(() => ChartDataAdapter.detectHeaderCol(worksheet, range)).toThrow(/require a WorkbookSheetView/);
+    expect(() => ChartDataAdapter.validateRange(worksheet, range)).toThrow(/require a WorkbookSheetView/);
+
+    const view = new OwnerBackedWorkbookSheetView(ownerId, sheetId, () => worksheet);
+    expect(ChartDataAdapter.rangeToChartData(view, range, options).datasets[0].data).toEqual([1, 0]);
   });
 
   // ============================================================================

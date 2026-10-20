@@ -679,7 +679,7 @@ export class FormulaEngine {
     }
 
     // 3) Resolve via BatchResolver
-    const ctx = new (require('./providers').ProviderResolutionContext)();
+    const ctx = new ProviderResolutionContext();
     ctx.addPendingMany(refs);
 
     try {
@@ -1260,6 +1260,10 @@ export class FormulaEngine {
     const cell = context.worksheet.getCell(addr);
     
     if (!cell) return null;
+
+    // Circular results are committed by the dependency graph when iteration
+    // is disabled. Preserve that error through downstream formula references.
+    if (cell.value === '#CIRC!') return new Error('#CIRC!');
     
     if (cell.formula) {
       // Recursively evaluate formula
@@ -1287,6 +1291,10 @@ export class FormulaEngine {
         const cell = context.worksheet.getCell(addr);
         
         if (cell) {
+          if (cell.value === '#CIRC!') {
+            values.push(new Error('#CIRC!'));
+            continue;
+          }
           if (cell.formula) {
             values.push(this.evaluate(cell.formula, { ...context, currentCell: addr }));
           } else {

@@ -12,6 +12,7 @@
 
 import { Workbook } from '@cyber-sheet/core';
 import { ExcelRenderer, MultiLayerCanvas, ExcelBorderRenderer } from '../packages/renderer-canvas/src';
+import { rejectR1ExampleInitialization } from './r1-initialization-gate';
 
 
 // ============================================================================
@@ -19,6 +20,7 @@ import { ExcelRenderer, MultiLayerCanvas, ExcelBorderRenderer } from '../package
 // ============================================================================
 
 function example1_basicMultiLayer() {
+  rejectR1ExampleInitialization('Canvas fidelity demo', 'R2 cell content and R5 style writes');
   console.log('=== Example 1: Basic Multi-Layer Renderer ===');
 
   const workbook = new Workbook();
@@ -265,6 +267,7 @@ function example4_antialiasingControl() {
 // ============================================================================
 
 function example5_performanceBenchmark() {
+  rejectR1ExampleInitialization('Canvas benchmark demo', 'R2 cell content and R5 style writes');
   console.log('=== Example 5: Performance Benchmark ===');
 
   const workbook = new Workbook();

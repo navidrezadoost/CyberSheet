@@ -11,7 +11,7 @@
  *   E5. Deterministic execution (same input → same output)
  */
 
-import { SpreadsheetEngine, ExecutionError } from '../src/SpreadsheetEngine';
+import { SpreadsheetEngine } from '../src/SpreadsheetEngine';
 import type { Address } from '../src/types';
 
 // ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ describe('Invariant E2 — Mutation Isolation', () => {
 
     await engine.run((ws) => {
       ws.setCellValue({ row: 1, col: 1 }, 42);
-      ws.setCellValue({ row: 2, col: 1 }, '=A1*2');
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*2');
     });
 
     expect(engine.getCellValue({ row: 1, col: 1 })).toBe(42);
@@ -131,8 +131,7 @@ describe('Invariant E3 — Scheduler Encapsulation', () => {
 
     await engine.run((ws) => {
       ws.setCellValue({ row: 1, col: 1 }, 100);
-      const cell = ws.getCell({ row: 2, col: 1 });
-      if (cell) cell.formula = '=A1+1';
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+1');
     });
 
     // Formula should have been evaluated by internal scheduler
@@ -160,8 +159,7 @@ describe('Invariant E4 — Event Ordering', () => {
 
     await engine.run((ws) => {
       ws.setCellValue({ row: 1, col: 1 }, 10);
-      const cell = ws.getCell({ row: 2, col: 1 });
-      if (cell) cell.formula = '=A1*2';
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*2');
     });
 
     // Event should have fired
@@ -184,13 +182,9 @@ describe('Invariant E4 — Event Ordering', () => {
       ws.setCellValue({ row: 1, col: 1 }, 5);
 
       // 3 formulas
-      const c2 = ws.getCell({ row: 2, col: 1 });
-      const c3 = ws.getCell({ row: 3, col: 1 });
-      const c4 = ws.getCell({ row: 4, col: 1 });
-
-      if (c2) c2.formula = '=A1+1';
-      if (c3) c3.formula = '=A2+1';
-      if (c4) c4.formula = '=A3+1';
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+1');
+      ws.setCellFormula({ row: 3, col: 1 }, '=A2+1');
+      ws.setCellFormula({ row: 4, col: 1 }, '=A3+1');
     });
 
     expect(evaluatedCount).toBe(3);
@@ -233,11 +227,8 @@ describe('Invariant E5 — Deterministic Execution', () => {
         ws.setCellValue({ row: 1, col: 1 }, 10);
         ws.setCellValue({ row: 2, col: 1 }, 20);
 
-        const c3 = ws.getCell({ row: 3, col: 1 });
-        const c4 = ws.getCell({ row: 4, col: 1 });
-
-        if (c3) c3.formula = '=A1+A2';
-        if (c4) c4.formula = '=A3*2';
+        ws.setCellFormula({ row: 3, col: 1 }, '=A1+A2');
+        ws.setCellFormula({ row: 4, col: 1 }, '=A3*2');
       });
     };
 
@@ -278,29 +269,20 @@ describe('Invariant E6 — Re-entrancy Safety', () => {
   test('event handlers cannot call run() (re-entrancy blocked)', async () => {
     const engine = new SpreadsheetEngine();
 
-    let reentrantCallAttempted = false;
-    let reentrantCallThrew = false;
+    let reentrantAttempt: Promise<void> | undefined;
 
     engine.on('cellsChanged', () => {
-      reentrantCallAttempted = true;
-      try {
-        // Attempt re-entrant run() — should throw
-        engine.run((ws) => {
-          ws.setCellValue({ row: 2, col: 1 }, 'illegal');
-        });
-      } catch (err) {
-        if (err instanceof ExecutionError && err.code === 'CONCURRENT_RUN') {
-          reentrantCallThrew = true;
-        }
-      }
+      // run() is async: an in-flight attempt rejects its Promise.
+      reentrantAttempt = engine.run((ws) => {
+        ws.setCellValue({ row: 2, col: 1 }, 'illegal');
+      });
     });
 
     await engine.run((ws) => {
       ws.setCellValue({ row: 1, col: 1 }, 'trigger');
     });
 
-    expect(reentrantCallAttempted).toBe(true);
-    expect(reentrantCallThrew).toBe(true);
+    await expect(reentrantAttempt).rejects.toMatchObject({ code: 'CONCURRENT_RUN' });
 
     // State should be IDLE after successful completion
     expect(engine.executionState).toBe('IDLE');
@@ -312,62 +294,37 @@ describe('Invariant E6 — Re-entrancy Safety', () => {
     expect(engine.getCellValue({ row: 2, col: 1 })).toBeNull();
   });
 
-  test('nested run() from async event handler is blocked', async () => {
+  test('async event handlers can observe the in-flight run rejection', async () => {
     const engine = new SpreadsheetEngine();
-
-    let asyncReentryBlocked = false;
+    let rejectionObserved: Promise<void> | undefined;
 
     engine.on('formulasEvaluated', async () => {
-      await new Promise(resolve => setTimeout(resolve, 0)); // yield
-
-      try {
-        await engine.run((ws) => {
-          ws.setCellValue({ row: 3, col: 1 }, 'nested');
-        });
-      } catch (err) {
-        if (err instanceof ExecutionError && err.code === 'CONCURRENT_RUN') {
-          asyncReentryBlocked = true;
-        }
-      }
+      const attempt = engine.run((ws) => {
+        ws.setCellValue({ row: 3, col: 1 }, 'nested');
+      });
+      rejectionObserved = expect(attempt).rejects.toMatchObject({ code: 'CONCURRENT_RUN' });
+      await rejectionObserved;
     });
 
     await engine.run((ws) => {
       ws.setCellValue({ row: 1, col: 1 }, 10);
-      const cell = ws.getCell({ row: 2, col: 1 });
-      if (cell) cell.formula = '=A1*2';
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*2');
     });
 
-    // Wait for async event handler to complete
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    expect(asyncReentryBlocked).toBe(true);
+    await rejectionObserved;
     expect(engine.getCellValue({ row: 3, col: 1 })).toBeNull();
   });
 
   test('sequential run() calls after event emission succeed', async () => {
     const engine = new SpreadsheetEngine();
 
-    let secondRunCompleted = false;
-
-    engine.on('cellsChanged', () => {
-      // Don't call run() here — wait for event emission to complete
-      setTimeout(async () => {
-        // THIS is legal: sequential run() after first completes
-        await engine.run((ws) => {
-          ws.setCellValue({ row: 2, col: 1 }, 'sequential');
-        });
-        secondRunCompleted = true;
-      }, 5);
-    });
-
     await engine.run((ws) => {
       ws.setCellValue({ row: 1, col: 1 }, 'first');
     });
+    await engine.run((ws) => {
+      ws.setCellValue({ row: 2, col: 1 }, 'sequential');
+    });
 
-    // Wait for setTimeout callback
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    expect(secondRunCompleted).toBe(true);
     expect(engine.getCellValue({ row: 1, col: 1 })).toBe('first');
     expect(engine.getCellValue({ row: 2, col: 1 })).toBe('sequential');
   });
@@ -395,17 +352,14 @@ describe('Integration — Full Execution Pipeline', () => {
       ws.setCellValue({ row: 1, col: 1 }, 5000); // salary
       ws.setCellValue({ row: 1, col: 2 }, 1000); // freelance
 
-      const income = ws.getCell({ row: 2, col: 1 });
-      if (income) income.formula = '=A1+B1';
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1+B1');
 
       ws.setCellValue({ row: 3, col: 1 }, 2000); // rent
       ws.setCellValue({ row: 3, col: 2 }, 800);  // food
 
-      const expenses = ws.getCell({ row: 4, col: 1 });
-      if (expenses) expenses.formula = '=A3+B3';
+      ws.setCellFormula({ row: 4, col: 1 }, '=A3+B3');
 
-      const net = ws.getCell({ row: 5, col: 1 });
-      if (net) net.formula = '=A2-A4';
+      ws.setCellFormula({ row: 5, col: 1 }, '=A2-A4');
     });
 
     // All formulas computed correctly
@@ -423,8 +377,7 @@ describe('Integration — Full Execution Pipeline', () => {
     // First run
     await engine.run((ws) => {
       ws.setCellValue({ row: 1, col: 1 }, 10);
-      const c2 = ws.getCell({ row: 2, col: 1 });
-      if (c2) c2.formula = '=A1*2';
+      ws.setCellFormula({ row: 2, col: 1 }, '=A1*2');
     });
 
     expect(engine.getCellValue({ row: 2, col: 1 })).toBe(20);

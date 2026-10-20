@@ -90,9 +90,39 @@ export interface ChartOptions {
   onAnimationComplete?: () => void;
 }
 
+type Canvas2DContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+function isCanvas2DContext(
+  context: RenderingContext | OffscreenCanvasRenderingContext2D | null
+): context is Canvas2DContext {
+  return context !== null &&
+    'fillRect' in context &&
+    typeof context.fillRect === 'function';
+}
+
+export function getCanvas2DContext(canvas: HTMLCanvasElement | OffscreenCanvas): Canvas2DContext {
+  if (typeof HTMLCanvasElement !== 'undefined' && canvas instanceof HTMLCanvasElement) {
+    const context = canvas.getContext('2d');
+    if (context) return context;
+    throw new Error('Unable to acquire a 2D canvas context');
+  }
+
+  if (typeof OffscreenCanvas !== 'undefined' && canvas instanceof OffscreenCanvas) {
+    const context = canvas.getContext('2d');
+    if (context) return context;
+    throw new Error('Unable to acquire a 2D canvas context');
+  }
+
+  // Keep structurally compatible canvas implementations usable when the
+  // platform canvas constructors are absent or the implementation is a mock.
+  const context = canvas.getContext('2d');
+  if (isCanvas2DContext(context)) return context;
+  throw new Error('Unable to acquire a 2D canvas context');
+}
+
 export class ChartEngine {
   private canvas: HTMLCanvasElement | OffscreenCanvas;
-  private ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  private ctx: Canvas2DContext;
   private defaultColors = [
     '#4285F4', '#DB4437', '#F4B400', '#0F9D58', '#AB47BC',
     '#00ACC1', '#FF7043', '#9E9D24', '#5C6BC0', '#F06292'
@@ -100,7 +130,7 @@ export class ChartEngine {
 
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d')!;
+    this.ctx = getCanvas2DContext(canvas);
   }
 
   /**

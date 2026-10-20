@@ -1,18 +1,1 @@
-<svg width="100" height="12" className="cs-line-preview">
-        <line
-          x1="0"
-          y1="3"
-          x2="100"
-          y2="3"
-          stroke={color}
-          strokeWidth="1"
-        />
-        <line
-          x1="0"
-          y1="9"
-          x2="100"
-          y2="9"
-          stroke={color}
-          strokeWidth="1"
-        />
-      </svg>
+<svg viewBox="0 0 100 12"><path d="M0 3h100M0 9h100" stroke="currentColor"/></svg>

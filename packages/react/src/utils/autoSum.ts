@@ -1,6 +1,7 @@
-import type { Address, Cell, CommandManager, Range, Worksheet } from '@cyber-sheet/core';
+import type { Address, Cell, CommandManager, Range, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 import { AutoSumCommand } from '@cyber-sheet/core';
 import { formatRangeA1 } from './parseA1Reference';
+import { requireStandaloneWorksheet } from './workbookSheetAccess';
 
 export type AutoSumFunction = 'SUM' | 'AVERAGE' | 'COUNT' | 'MAX' | 'MIN';
 
@@ -256,11 +257,12 @@ export function applyAutoSumPlans(sheet: Worksheet, plans: AutoSumPlan[]): Addre
 
 export function executeAutoSum(
   commandManager: CommandManager | null | undefined,
-  sheet: Worksheet,
+  sheetAccess: Worksheet | WorkbookSheetView,
   selectionRange: Range,
   activeCell: Address,
   fn: AutoSumFunction,
 ): Address[] {
+  const sheet = requireStandaloneWorksheet(sheetAccess);
   const plans = detectAutoSumPlans(sheet, selectionRange, activeCell, fn);
   if (plans.length === 0) return [];
 

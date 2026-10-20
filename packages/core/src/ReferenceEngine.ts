@@ -20,6 +20,7 @@
 
 import { FormulaEngine } from './FormulaEngine';
 import type { Address, CellValue, ExtendedCellValue } from './types';
+import { extractFormulaDependencies } from './utils/formula-reference-extractor';
 
 // ---------------------------------------------------------------------------
 // Reference Cell (minimal structure)
@@ -93,6 +94,72 @@ export class ReferenceEngine {
   // -------------------------------------------------------------------------
 
   private recomputeAll(): void {
+    // Iteration is disabled by the approved spreadsheet policy. Identify the
+    // formula SCCs first so self references (including range self references)
+    // cannot accidentally converge through the oracle's fixed-point loop.
+    const formulaCells = [...this.cells.entries()].filter(([, cell]) => Boolean(cell.formula));
+    const formulaByKey = new Map(formulaCells);
+    const dependencies = new Map<string, Set<string>>();
+    const dependents = new Map<string, Set<string>>();
+    for (const [key, cell] of formulaCells) {
+      const addr = this.keyAddr(key);
+      const extracted = extractFormulaDependencies(cell.formula!, { row: addr.row - 1, col: addr.col - 1 });
+      const refs = new Set<string>();
+      for (const ref of extracted.cells) refs.add(this.addrKey({ row: ref.row + 1, col: ref.col + 1 }));
+      for (const range of extracted.ranges) {
+        for (const [candidateKey] of formulaCells) {
+          const candidate = this.keyAddr(candidateKey);
+          if (candidate.row - 1 >= range.startRow && candidate.row - 1 <= range.endRow
+            && candidate.col - 1 >= range.startCol && candidate.col - 1 <= range.endCol) refs.add(candidateKey);
+        }
+      }
+      refs.delete(key);
+      // Restore self edges explicitly; self-inclusive ranges are circular too.
+      const selfRef = extracted.cells.some((ref) => ref.row + 1 === addr.row && ref.col + 1 === addr.col)
+        || extracted.ranges.some((range) => addr.row - 1 >= range.startRow && addr.row - 1 <= range.endRow
+          && addr.col - 1 >= range.startCol && addr.col - 1 <= range.endCol);
+      if (selfRef) refs.add(key);
+      dependencies.set(key, new Set([...refs].filter((ref) => formulaByKey.has(ref))));
+      for (const ref of refs) {
+        if (!formulaByKey.has(ref)) continue;
+        let next = dependents.get(ref);
+        if (!next) dependents.set(ref, next = new Set());
+        next.add(key);
+      }
+    }
+
+    let index = 0;
+    const indices = new Map<string, number>();
+    const low = new Map<string, number>();
+    const stack: string[] = [];
+    const onStack = new Set<string>();
+    const circular = new Set<string>();
+    const connect = (key: string): void => {
+      indices.set(key, index); low.set(key, index++); stack.push(key); onStack.add(key);
+      for (const dep of dependencies.get(key) ?? []) {
+        if (!indices.has(dep)) { connect(dep); low.set(key, Math.min(low.get(key)!, low.get(dep)!)); }
+        else if (onStack.has(dep)) low.set(key, Math.min(low.get(key)!, indices.get(dep)!));
+      }
+      if (low.get(key) !== indices.get(key)) return;
+      const component: string[] = [];
+      let member: string;
+      do { member = stack.pop()!; onStack.delete(member); component.push(member); } while (member !== key);
+      if (component.length > 1 || dependencies.get(key)?.has(key)) for (const item of component) circular.add(item);
+    };
+    for (const [key] of formulaCells) if (!indices.has(key)) connect(key);
+
+    const blocked = new Set(circular);
+    const queue = [...circular];
+    for (let i = 0; i < queue.length; i++) {
+      for (const dependent of dependents.get(queue[i]) ?? []) {
+        if (!blocked.has(dependent)) { blocked.add(dependent); queue.push(dependent); }
+      }
+    }
+    for (const key of blocked) {
+      const cell = this.cells.get(key);
+      if (cell) cell.value = '#CIRC!';
+    }
+
     // Simple fixed-point iteration (up to 100 passes for deep chains)
     const MAX_ITERATIONS = 100;
 
@@ -101,7 +168,7 @@ export class ReferenceEngine {
 
       // Iterate all cells with formulas
       for (const [key, cell] of this.cells.entries()) {
-        if (!cell.formula) continue;
+        if (!cell.formula || blocked.has(key)) continue;
 
         const addr = this.keyAddr(key);
         const oldValue = cell.value;

@@ -8,10 +8,12 @@ import React from 'react';
 import { Workbook } from '@cyber-sheet/core';
 import { ExcelApp } from '@cyber-sheet/react';
 import '@cyber-sheet/react/dist/excel-app.css';
+import { rejectR1ExampleInitialization } from '../../r1-initialization-gate';
 
 export const ExcelAppExample: React.FC = () => {
   // Create a workbook
   const workbook = React.useMemo(() => {
+    rejectR1ExampleInitialization('React Excel app example', 'R2 initial content/formulas and R5 styles');
     const wb = new Workbook();
     const sheet = wb.getActiveSheet();
     

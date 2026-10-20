@@ -8,7 +8,7 @@ export interface CustomSortDialogProps {
   onSort: (levels: Array<{ columnIndex: number; ascending: boolean }>, hasHeaders: boolean) => void;
 }
 
-export function CustomSortDialog({ sortRange, onClose, onSort }: CustomSortDialogProps): JSX.Element {
+export function CustomSortDialog({ sortRange, onClose, onSort }: CustomSortDialogProps): React.JSX.Element {
   const columnCount = sortRange.end.col - sortRange.start.col + 1;
   const [sortLevels, setSortLevels] = useState<Array<{ columnIndex: number; ascending: boolean }>>([
     { columnIndex: 0, ascending: true },

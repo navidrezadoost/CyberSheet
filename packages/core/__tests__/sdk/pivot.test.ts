@@ -338,7 +338,7 @@ describe('§6 buildPivot — empty dataset errors', () => {
       source: { start: { row: 1, col: 1 }, end: { row: 1, col: 1 } },
       rows: ['A'], values: [{ field: 'B', aggregator: 'sum' }],
     };
-    expect(() => buildPivot([], def)).toThrowError(PivotSourceError);
+    expect(() => buildPivot([], def)).toThrow(PivotSourceError);
   });
 
   it('throws PivotSourceError on empty header row', () => {
@@ -346,7 +346,7 @@ describe('§6 buildPivot — empty dataset errors', () => {
       source: { start: { row: 1, col: 1 }, end: { row: 2, col: 1 } },
       rows: ['A'], values: [{ field: 'B', aggregator: 'sum' }],
     };
-    expect(() => buildPivot([[]], def)).toThrowError(PivotSourceError);
+    expect(() => buildPivot([[]], def)).toThrow(PivotSourceError);
   });
 
   it('throws EmptyPivotSourceError on header-only grid (1 row)', () => {
@@ -355,7 +355,7 @@ describe('§6 buildPivot — empty dataset errors', () => {
       rows: ['Region'],
       values: [{ field: 'Revenue', aggregator: 'sum' }],
     };
-    expect(() => buildPivot([['Region', 'Revenue']], def)).toThrowError(EmptyPivotSourceError);
+    expect(() => buildPivot([['Region', 'Revenue']], def)).toThrow(EmptyPivotSourceError);
   });
 
   it('throws PivotSourceError when rows array is empty', () => {
@@ -364,7 +364,7 @@ describe('§6 buildPivot — empty dataset errors', () => {
       rows: [],
       values: [{ field: 'B', aggregator: 'sum' }],
     };
-    expect(() => buildPivot([['A', 'B'], [1, 2]], def)).toThrowError(PivotSourceError);
+    expect(() => buildPivot([['A', 'B'], [1, 2]], def)).toThrow(PivotSourceError);
   });
 
   it('throws PivotSourceError when values array is empty', () => {
@@ -373,7 +373,7 @@ describe('§6 buildPivot — empty dataset errors', () => {
       rows: ['A'],
       values: [],
     };
-    expect(() => buildPivot([['A', 'B'], ['x', 1]], def)).toThrowError(PivotSourceError);
+    expect(() => buildPivot([['A', 'B'], ['x', 1]], def)).toThrow(PivotSourceError);
   });
 });
 
@@ -388,7 +388,7 @@ describe('§7 buildPivot — field resolution errors', () => {
       rows: ['NonExistent'],
       values: [{ field: 'Revenue', aggregator: 'sum' }],
     };
-    expect(() => buildPivot(SALES_GRID, def)).toThrowError(PivotFieldError);
+    expect(() => buildPivot(SALES_GRID, def)).toThrow(PivotFieldError);
   });
 
   it('PivotFieldError carries correct field and available list', () => {
@@ -415,7 +415,7 @@ describe('§7 buildPivot — field resolution errors', () => {
       rows: ['Region'],
       values: [{ field: 'GrossProfit', aggregator: 'sum' }],
     };
-    expect(() => buildPivot(SALES_GRID, def)).toThrowError(PivotFieldError);
+    expect(() => buildPivot(SALES_GRID, def)).toThrow(PivotFieldError);
   });
 
   it('throws PivotFieldError for second bad value field (not just the first)', () => {
@@ -427,7 +427,7 @@ describe('§7 buildPivot — field resolution errors', () => {
         { field: 'BadField', aggregator: 'count' },
       ],
     };
-    expect(() => buildPivot(SALES_GRID, def)).toThrowError(PivotFieldError);
+    expect(() => buildPivot(SALES_GRID, def)).toThrow(PivotFieldError);
   });
 
   it('matches fields when source headers have trailing spaces', () => {
@@ -860,7 +860,7 @@ describe('§16 Protection — direct edit of locked pivot cell', () => {
     s.createPivot(def, { row: 10, col: 1 });
 
     // Trying to overwrite pivot header cell (row 10, col 1) should throw
-    expect(() => s.setCell(10, 1, 'Hack')).toThrowError(ProtectedCellError);
+    expect(() => s.setCell(10, 1, 'Hack')).toThrow(ProtectedCellError);
     s.dispose();
   });
 });
@@ -936,7 +936,7 @@ describe('§18 SDK createPivot — PivotSourceError on bad source range', () => 
       rows: ['Region'],
       values: [{ field: 'Revenue', aggregator: 'sum' }],
     };
-    expect(() => s.createPivot(def, { row: 1, col: 1 })).toThrowError(PivotSourceError);
+    expect(() => s.createPivot(def, { row: 1, col: 1 })).toThrow(PivotSourceError);
     s.dispose();
   });
 
@@ -947,7 +947,7 @@ describe('§18 SDK createPivot — PivotSourceError on bad source range', () => 
       rows: ['Region'],
       values: [{ field: 'Revenue', aggregator: 'sum' }],
     };
-    expect(() => s.createPivot(def, { row: 1, col: 1 })).toThrowError(PivotSourceError);
+    expect(() => s.createPivot(def, { row: 1, col: 1 })).toThrow(PivotSourceError);
     s.dispose();
   });
 });
@@ -964,7 +964,7 @@ describe('§19 SDK createPivot — PivotFieldError for unknown field', () => {
       rows: ['Country'],  // 'Country' not in headers
       values: [{ field: 'Revenue', aggregator: 'sum' }],
     };
-    expect(() => s.createPivot(def, { row: 5, col: 1 })).toThrowError(PivotFieldError);
+    expect(() => s.createPivot(def, { row: 5, col: 1 })).toThrow(PivotFieldError);
     s.dispose();
   });
 });
@@ -980,7 +980,7 @@ describe('§20 SDK createPivot — EmptyPivotSourceError', () => {
       rows: ['Region'],
       values: [{ field: 'Revenue', aggregator: 'sum' }],
     };
-    expect(() => s.createPivot(def, { row: 5, col: 1 })).toThrowError(EmptyPivotSourceError);
+    expect(() => s.createPivot(def, { row: 5, col: 1 })).toThrow(EmptyPivotSourceError);
     s.dispose();
   });
 });

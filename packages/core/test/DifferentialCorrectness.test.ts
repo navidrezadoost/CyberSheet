@@ -31,73 +31,73 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
   describe('Basic Operations', () => {
     it('should match naive engine: insert single column', () => {
       // Setup: Add initial data
-      worksheet.setCellValue({ row: 0, col: 0 }, 'A');
-      worksheet.setCellValue({ row: 0, col: 1 }, 'B');
-      worksheet.setCellValue({ row: 0, col: 2 }, 'C');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
+      worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
 
-      naive.setCellValue({ row: 0, col: 0 }, 'A');
-      naive.setCellValue({ row: 0, col: 1 }, 'B');
-      naive.setCellValue({ row: 0, col: 2 }, 'C');
+      naive.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
+      naive.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
+      naive.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
 
       console.log('BEFORE insert:');
       for (let c = 0; c < 3; c++) {
-        console.log(`  col ${c}: opt="${worksheet.getCellValue({ row: 0, col: c })}", naive="${naive.getCellValue({ row: 0, col: c })}"`);
+        console.log(`  col ${c}: opt="${worksheet.getCellValue({ row: (0) + 1, col: (c) + 1 })}", naive="${naive.getCellValue({ row: (0) + 1, col: (c) + 1 })}"`);
       }
 
       // Operation: Insert column at position 1
-      const cmd = new InsertColumnCommand(worksheet, 1);
+      const cmd = new InsertColumnCommand(worksheet, 2);
       cmd.execute();
 
-      naive.insertColumn(1);
+      naive.insertColumn(2);
 
       // Debug: Print states
       console.log('After insert at col 1:');
       console.log(`  Merges: ${JSON.stringify(worksheet.getMergedRanges())}`);
       for (let c = 0; c < 4; c++) {
-        const optVal = worksheet.getCellValue({ row: 0, col: c });
-        const naiveVal = naive.getCellValue({ row: 0, col: c });
+        const optVal = worksheet.getCellValue({ row: (0) + 1, col: (c) + 1 });
+        const naiveVal = naive.getCellValue({ row: (0) + 1, col: (c) + 1 });
         console.log(`  col ${c}: opt="${optVal}", naive="${naiveVal}"`);
       }
 
       // Verify: States match
-      expect(worksheet.getCellValue({ row: 0, col: 0 })).toBe(naive.getCellValue({ row: 0, col: 0 }));
-      expect(worksheet.getCellValue({ row: 0, col: 1 })).toBe(naive.getCellValue({ row: 0, col: 1 }));
-      expect(worksheet.getCellValue({ row: 0, col: 2 })).toBe(naive.getCellValue({ row: 0, col: 2 }));
-      expect(worksheet.getCellValue({ row: 0, col: 3 })).toBe(naive.getCellValue({ row: 0, col: 3 }));
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (0) + 1 })).toBe(naive.getCellValue({ row: (0) + 1, col: (0) + 1 }));
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (1) + 1 })).toBe(naive.getCellValue({ row: (0) + 1, col: (1) + 1 }));
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (2) + 1 })).toBe(naive.getCellValue({ row: (0) + 1, col: (2) + 1 }));
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (3) + 1 })).toBe(naive.getCellValue({ row: (0) + 1, col: (3) + 1 }));
     });
 
     it('should match naive engine: delete single column', () => {
       // Setup
-      worksheet.setCellValue({ row: 0, col: 0 }, 'A');
-      worksheet.setCellValue({ row: 0, col: 1 }, 'B');
-      worksheet.setCellValue({ row: 0, col: 2 }, 'C');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
+      worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
 
-      naive.setCellValue({ row: 0, col: 0 }, 'A');
-      naive.setCellValue({ row: 0, col: 1 }, 'B');
-      naive.setCellValue({ row: 0, col: 2 }, 'C');
+      naive.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
+      naive.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
+      naive.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
 
       // Operation: Delete column 1
-      const cmd = new DeleteColumnCommand(worksheet, 1);
+      const cmd = new DeleteColumnCommand(worksheet, 2);
       cmd.execute();
 
-      naive.deleteColumn(1);
+      naive.deleteColumn(2);
 
       // Verify
-      expect(worksheet.getCellValue({ row: 0, col: 0 })).toBe(naive.getCellValue({ row: 0, col: 0 }));
-      expect(worksheet.getCellValue({ row: 0, col: 1 })).toBe(naive.getCellValue({ row: 0, col: 1 }));
-      expect(worksheet.getCellValue({ row: 0, col: 2 })).toBe(null); // Both should be null
-      expect(naive.getCellValue({ row: 0, col: 2 })).toBe(null);
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (0) + 1 })).toBe(naive.getCellValue({ row: (0) + 1, col: (0) + 1 }));
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (1) + 1 })).toBe(naive.getCellValue({ row: (0) + 1, col: (1) + 1 }));
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (2) + 1 })).toBe(null); // Both should be null
+      expect(naive.getCellValue({ row: (0) + 1, col: (2) + 1 })).toBe(null);
     });
 
     it('should match naive engine: merge lifecycle', () => {
       // Setup merge
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
-      naive.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
+      naive.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
 
       // Insert column before merge
-      const cmd = new InsertColumnCommand(worksheet, 0);
+      const cmd = new InsertColumnCommand(worksheet, 2);
       cmd.execute();
-      naive.insertColumn(0);
+      naive.insertColumn(2);
 
       // Verify merge shifted
       const optMerges = worksheet.getMergedRanges();
@@ -121,13 +121,13 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
       };
 
       // Initial state
-      worksheet.setCellValue({ row: 0, col: 0 }, 100);
-      worksheet.setCellValue({ row: 1, col: 1 }, 200);
-      worksheet.setCellValue({ row: 2, col: 2 }, 300);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
+      worksheet.setCellValue({ row: (1) + 1, col: (1) + 1 }, 200);
+      worksheet.setCellValue({ row: (2) + 1, col: (2) + 1 }, 300);
 
-      naive.setCellValue({ row: 0, col: 0 }, 100);
-      naive.setCellValue({ row: 1, col: 1 }, 200);
-      naive.setCellValue({ row: 2, col: 2 }, 300);
+      naive.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
+      naive.setCellValue({ row: (1) + 1, col: (1) + 1 }, 200);
+      naive.setCellValue({ row: (2) + 1, col: (2) + 1 }, 300);
 
       const commands: Array<InsertColumnCommand | DeleteColumnCommand> = [];
 
@@ -138,20 +138,20 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
         if (op < 0.5) {
           // Insert
           const col = Math.floor(seededRandom() * 5);
-          const cmd = new InsertColumnCommand(worksheet, col);
+          const cmd = new InsertColumnCommand(worksheet, col + 1);
           cmd.execute();
           commands.push(cmd);
 
-          naive.insertColumn(col);
+          naive.insertColumn(col + 1);
         } else {
           // Delete
           const col = Math.floor(seededRandom() * 5);
           try {
-            const cmd = new DeleteColumnCommand(worksheet, col);
+            const cmd = new DeleteColumnCommand(worksheet, col + 1);
             cmd.execute();
             commands.push(cmd);
 
-            naive.deleteColumn(col);
+            naive.deleteColumn(col + 1);
           } catch {
             // Ignore invalid deletes in both engines
           }
@@ -167,8 +167,8 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
           // Sample cell values
           for (let r = 0; r < 3; r++) {
             for (let c = 0; c < 5; c++) {
-              const optVal = worksheet.getCellValue({ row: r, col: c });
-              const naiveVal = naive.getCellValue({ row: r, col: c });
+              const optVal = worksheet.getCellValue({ row: (r) + 1, col: (c) + 1 });
+              const naiveVal = naive.getCellValue({ row: (r) + 1, col: (c) + 1 });
               expect(optVal).toBe(naiveVal);
             }
           }
@@ -183,8 +183,8 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
       // Verify all visible cells match
       for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 10; c++) {
-          const optVal = worksheet.getCellValue({ row: r, col: c });
-          const naiveVal = naive.getCellValue({ row: r, col: c });
+          const optVal = worksheet.getCellValue({ row: (r) + 1, col: (c) + 1 });
+          const naiveVal = naive.getCellValue({ row: (r) + 1, col: (c) + 1 });
           expect(optVal).toBe(naiveVal);
         }
       }
@@ -201,8 +201,8 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
 
       // Initial state
       for (let i = 0; i < 10; i++) {
-        worksheet.setCellValue({ row: i, col: i }, `V${i}`);
-        naive.setCellValue({ row: i, col: i }, `V${i}`);
+        worksheet.setCellValue({ row: (i) + 1, col: (i) + 1 }, `V${i}`);
+        naive.setCellValue({ row: (i) + 1, col: (i) + 1 }, `V${i}`);
       }
 
       let successfulOps = 0;
@@ -214,9 +214,9 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
         if (op < 0.5) {
           // Insert
           try {
-            const cmd = new InsertColumnCommand(worksheet, col);
+            const cmd = new InsertColumnCommand(worksheet, col + 1);
             cmd.execute();
-            naive.insertColumn(col);
+            naive.insertColumn(col + 1);
             successfulOps++;
           } catch (e) {
             // Both should fail or both succeed
@@ -224,9 +224,9 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
         } else {
           // Delete
           try {
-            const cmd = new DeleteColumnCommand(worksheet, col);
+            const cmd = new DeleteColumnCommand(worksheet, col + 1);
             cmd.execute();
-            naive.deleteColumn(col);
+            naive.deleteColumn(col + 1);
             successfulOps++;
           } catch (e) {
             // Both should fail or both succeed
@@ -237,8 +237,8 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
         if (i % 100 === 0) {
           for (let r = 0; r < 10; r++) {
             for (let c = 0; c < 10; c++) {
-              const optVal = worksheet.getCellValue({ row: r, col: c });
-              const naiveVal = naive.getCellValue({ row: r, col: c });
+              const optVal = worksheet.getCellValue({ row: (r) + 1, col: (c) + 1 });
+              const naiveVal = naive.getCellValue({ row: (r) + 1, col: (c) + 1 });
               if (optVal !== naiveVal) {
                 throw new Error(`Mismatch at op ${i}, cell (${r},${c}): opt="${optVal}", naive="${naiveVal}"`);
               }
@@ -259,8 +259,8 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
 
       // Initial state
       for (let i = 0; i < 20; i++) {
-        worksheet.setCellValue({ row: i, col: i }, `X${i}`);
-        naive.setCellValue({ row: i, col: i }, `X${i}`);
+        worksheet.setCellValue({ row: (i) + 1, col: (i) + 1 }, `X${i}`);
+        naive.setCellValue({ row: (i) + 1, col: (i) + 1 }, `X${i}`);
       }
 
       let successfulOps = 0;
@@ -271,18 +271,18 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
 
         if (op < 0.5) {
           try {
-            const cmd = new InsertColumnCommand(worksheet, col);
+            const cmd = new InsertColumnCommand(worksheet, col + 1);
             cmd.execute();
-            naive.insertColumn(col);
+            naive.insertColumn(col + 1);
             successfulOps++;
           } catch (e) {
             // Synchronized failure
           }
         } else {
           try {
-            const cmd = new DeleteColumnCommand(worksheet, col);
+            const cmd = new DeleteColumnCommand(worksheet, col + 1);
             cmd.execute();
-            naive.deleteColumn(col);
+            naive.deleteColumn(col + 1);
             successfulOps++;
           } catch (e) {
             // Synchronized failure
@@ -293,8 +293,8 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
         if (i % 500 === 0) {
           for (let r = 0; r < 15; r++) {
             for (let c = 0; c < 15; c++) {
-              const optVal = worksheet.getCellValue({ row: r, col: c });
-              const naiveVal = naive.getCellValue({ row: r, col: c });
+              const optVal = worksheet.getCellValue({ row: (r) + 1, col: (c) + 1 });
+              const naiveVal = naive.getCellValue({ row: (r) + 1, col: (c) + 1 });
               if (optVal !== naiveVal) {
                 throw new Error(`10k mismatch at op ${i}, cell (${r},${c}): opt="${optVal}", naive="${naiveVal}"`);
               }
@@ -312,13 +312,13 @@ describe('Differential Correctness (Optimized vs Naive)', () => {
 
     it('should match naive engine: degenerate merge handling', () => {
       // Setup 2x1 merge
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
-      naive.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
+      naive.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
 
       // Delete column - should make merge 1x1 (degenerate)
-      const cmd = new DeleteColumnCommand(worksheet, 1);
+      const cmd = new DeleteColumnCommand(worksheet, 2);
       cmd.execute();
-      naive.deleteColumn(1);
+      naive.deleteColumn(2);
 
       // Both should have removed the degenerate merge
       expect(worksheet.getMergedRanges()).toHaveLength(0);

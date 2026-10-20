@@ -13,7 +13,7 @@ interface ShapeGalleryProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectShape: (shapeType: string) => void;
-  triggerRef: React.RefObject<HTMLElement>;
+  triggerRef: React.RefObject<HTMLElement | null>;
 }
 
 export const ShapeGallery: React.FC<ShapeGalleryProps> = ({

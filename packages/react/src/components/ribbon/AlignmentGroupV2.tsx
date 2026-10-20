@@ -40,8 +40,8 @@ export const AlignmentGroupV2: React.FC<AlignmentGroupV2Props> = ({
   const [showRotationMenu, setShowRotationMenu] = useState(false);
   const [pulseWrap, setPulseWrap] = useState(false);
   
-  const mergeMenuRef = useRef(null);
-  const rotationMenuRef = useRef(null);
+  const mergeMenuRef = useRef<HTMLDivElement>(null);
+  const rotationMenuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns when clicking outside
   useEffect(() => {

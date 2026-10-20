@@ -79,11 +79,16 @@ export class AccessibilityManager {
     this.focusOverlay = this.createFocusOverlay();
     this.inputElement = this.createHiddenInput();
 
-    // Initialize event handlers
-    this.setupEventListeners();
-    
-    // Set initial focus
-    this.updateFocus(this.focusState.cell);
+    try {
+      // Initialize event handlers
+      this.setupEventListeners();
+
+      // Set initial focus
+      this.updateFocus(this.focusState.cell);
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
   }
 
   /**

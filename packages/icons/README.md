@@ -15,19 +15,20 @@ packages/icons/
 
 ## Generation
 
-Icon components were generated using [svger-cli](https://github.com/faezemohades/svger-cli):
+The source directory contains SVG fragments. Eight recovered React icons previously contained JSX expressions that referenced variables unavailable to their exported icon components. Those sources are now static SVGs and are regenerated through the checked-in deterministic wrapper generator:
 
 ```bash
-# Generate React icons
+npm run generate:react-icons
+```
+
+The generator rejects non-static JSX in these inputs and writes only the eight affected React components. Other framework outputs remain managed by the upstream `svger-cli` workflow below. Do not run that external generator on these eight sources; it does not preserve or interpret React expressions.
+
+For the other framework adapters, the original upstream commands remain:
+
+```bash
 svger-cli build packages/icons/svg packages/icons/react
-
-# Generate Vue icons
 svger-cli config --set framework=vue && svger-cli build packages/icons/svg packages/icons/vue
-
-# Generate Svelte icons
 svger-cli config --set framework=svelte && svger-cli build packages/icons/svg packages/icons/svelte
-
-# Generate Angular icons
 svger-cli config --set framework=angular && svger-cli build packages/icons/svg packages/icons/angular
 ```
 

@@ -1,7 +1,1 @@
-<svg width="20" height="16" xmlns="http://www.w3.org/2000/svg">
-            <rect width="20" height="16" fill={fill.background} />
-            {/* Simplified pattern preview */}
-            <text x="10" y="12" fontSize="10" textAnchor="middle" fill={fill.foreground}>
-              ⊞
-            </text>
-          </svg>
+<svg viewBox="0 0 24 24"><path d="M4 4h16v12H4z" fill="#fff" stroke="currentColor"/><path d="M4 16h16v4H4z" fill="#4472c4"/><path d="m9 10 3-4 3 4-3 3z" fill="#f2c811"/></svg>

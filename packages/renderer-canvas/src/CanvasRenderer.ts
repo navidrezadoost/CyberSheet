@@ -1,5 +1,6 @@
 import {
   Worksheet,
+  type WorkbookSheetView,
   Address,
   CellStyle,
   CellEvent,
@@ -22,6 +23,7 @@ import {
   sectionHasContent,
   type HeaderFooterSection,
   type CellValue,
+  type ExtendedCellValue,
 } from "@cyber-sheet/core";
 import { TextMeasureCache } from "./TextMeasureCache";
 import {
@@ -32,7 +34,7 @@ import {
   resolveThemePreset,
 } from "./Theme";
 import { FormatCache } from "./FormatCache";
-import { RenderPlugin } from "./plugins";
+import { RenderPlugin, createRenderPluginContext } from "./plugins";
 import {
   type ViewMode,
   getDefaultPageMetrics,
@@ -150,8 +152,8 @@ export type RenderLayer = {
       width: number;
       height: number;
       dpr: number;
-      options: Required<CanvasRendererOptions>;
-      sheet: Worksheet;
+      options: Readonly<Required<CanvasRendererOptions>>;
+      sheet: Worksheet | WorkbookSheetView;
       getScroll: () => { x: number; y: number };
       rectForRange: (
         r1: number,
@@ -163,9 +165,197 @@ export type RenderLayer = {
   ) => void;
 };
 
+const worksheetIsWorkbookOwned = Worksheet.prototype.isWorkbookOwned;
+const worksheetGetCell = Worksheet.prototype.getCell;
+const worksheetGetCellByKey = Worksheet.prototype.getCellByKey;
+const worksheetForEachNonEmptyCell = Worksheet.prototype.forEachNonEmptyCell;
+const worksheetGetFormulaAddresses = Worksheet.prototype.getFormulaAddresses;
+const worksheetGetAllFilters = Worksheet.prototype.getAllFilters;
+
+function formulaCacheCanAffectQuery(
+  worksheet: Worksheet,
+  columns: Set<number>,
+  range?: { start: Address; end: Address },
+): boolean {
+  return worksheetGetFormulaAddresses.call(worksheet).some((address) =>
+    columns.has(address.col) && (!range || (
+      address.row >= range.start.row && address.row <= range.end.row &&
+      address.col >= range.start.col && address.col <= range.end.col
+    )),
+  );
+}
+
+function assertFormulaQueryAvailable(
+  worksheet: Worksheet,
+  property: PropertyKey,
+  args: unknown[],
+): void {
+  const name = typeof property === 'string' ? property : '';
+  const filters = worksheetGetAllFilters.call(worksheet);
+  const filterColumns = new Set(filters.keys());
+  const formulas = worksheetGetFormulaAddresses.call(worksheet);
+  const formulasInRange = (range?: { start: Address; end: Address }) => formulas.some((address) =>
+    !range || (
+      address.row >= range.start.row && address.row <= range.end.row &&
+      address.col >= range.start.col && address.col <= range.end.col
+    ),
+  );
+
+  if (name === 'getDistinctValues') {
+    const column = args[0] as number;
+    const visibleOnly = args[1] === true;
+    const columns = new Set([column]);
+    if (visibleOnly) {
+      for (const filterColumn of filterColumns) {
+        if (filterColumn !== column) columns.add(filterColumn);
+      }
+    }
+    if (formulaCacheCanAffectQuery(worksheet, columns)) {
+      throw new Error('Workbook-owned distinct-value query is unavailable when formula cached values could affect its result');
+    }
+  } else if (name === 'find' || name === 'findAll' || name === 'findIterator') {
+    const options = args[0] as { what?: string; lookIn?: string } | undefined;
+    const rangeIndex = name === 'find' ? 2 : 1;
+    const range = args[rangeIndex] as { start: Address; end: Address } | undefined;
+    if ((options?.what ?? '') !== '' && (options?.lookIn ?? 'values') === 'values' && formulasInRange(range)) {
+      throw new Error('Workbook-owned value search is unavailable when formula cached values could affect matches');
+    }
+  } else if (name === 'getSpecialCells') {
+    const options = args[0] as { type?: string; value?: unknown } | undefined;
+    const range = args[1] as { start: Address; end: Address } | undefined;
+    if (
+      (options?.type === 'errors' || (options?.type === 'formulas' && options.value !== undefined)) &&
+      formulasInRange(range)
+    ) {
+      throw new Error('Workbook-owned special-cell value query is unavailable when formula cached values could affect matches');
+    }
+  } else if (name === 'getVisibleRowIndices' || name === 'getVisibleRowIndicesExcluding') {
+    const range = name === 'getVisibleRowIndices'
+      ? args[0] as { start: Address; end: Address } | undefined
+      : undefined;
+    const excludeColumn = name === 'getVisibleRowIndicesExcluding' ? args[0] as number : undefined;
+    const relevantFilterColumns = new Set(
+      [...filterColumns].filter((column) => column !== excludeColumn),
+    );
+    if (formulaCacheCanAffectQuery(worksheet, relevantFilterColumns, range)) {
+      throw new Error('Workbook-owned filtered-row query is unavailable when a filter depends on formula cached values');
+    }
+  }
+}
+
+function maskFormulaCell(cell: Readonly<import('@cyber-sheet/core').Cell> | undefined, owned: boolean) {
+  return owned && cell?.formula
+    ? Object.freeze({ ...cell, value: null })
+    : cell;
+}
+
+/**
+ * Preserve the standalone Worksheet API while making a retained renderer handle
+ * switch to the owner view's formula-read rule when that Worksheet is adopted.
+ */
+function createWorksheetObservationHandle(worksheet: Worksheet): Worksheet {
+  return new Proxy(worksheet, {
+    get(target, property) {
+      if (property === 'isWorkbookOwned') {
+        return () => worksheetIsWorkbookOwned.call(target);
+      }
+      if (property === 'getCell') {
+        return (address: Address) => maskFormulaCell(
+          worksheetGetCell.call(target, address),
+          worksheetIsWorkbookOwned.call(target),
+        );
+      }
+      if (property === 'getCellByKey') {
+        return (key: number) => maskFormulaCell(
+          worksheetGetCellByKey.call(target, key),
+          worksheetIsWorkbookOwned.call(target),
+        );
+      }
+      if (property === 'getCellValue') {
+        return (address: Address) => {
+          const owned = worksheetIsWorkbookOwned.call(target);
+          const cell = worksheetGetCell.call(target, address);
+          return owned && cell?.formula ? null : cell?.value ?? null;
+        };
+      }
+      if (property === 'forEachNonEmptyCell') {
+        return (callback: (row: number, col: number, cell: unknown) => void) =>
+          worksheetForEachNonEmptyCell.call(target, (row, col, cell) => {
+            callback(row, col, maskFormulaCell(cell, worksheetIsWorkbookOwned.call(target)));
+          });
+      }
+      const value = Reflect.get(target, property, target);
+      if (
+        typeof value === 'function' &&
+        typeof property === 'string' &&
+        [
+          'getDistinctValues', 'find', 'findAll', 'findIterator', 'getSpecialCells',
+          'getVisibleRowIndices', 'getVisibleRowIndicesExcluding',
+        ].includes(property)
+      ) {
+        return (...args: unknown[]) => {
+          if (worksheetIsWorkbookOwned.call(target)) {
+            assertFormulaQueryAvailable(target, property, args);
+          }
+          return Reflect.apply(value, target, args);
+        };
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+function detachedFrozenOptionData<T>(value: T, copies = new WeakMap<object, object>()): T {
+  if (value === null || typeof value !== 'object') return value;
+  const existing = copies.get(value);
+  if (existing) return existing as T;
+  if (Array.isArray(value)) {
+    const copy: unknown[] = new Array(value.length);
+    copies.set(value, copy);
+    const keys = Reflect.ownKeys(value);
+    for (const key of keys) {
+      if (key === 'length') continue;
+      const index = Number(key);
+      if (typeof key !== 'string' || !Number.isInteger(index) || index < 0 || String(index) !== key || index >= value.length) {
+        throw new TypeError('CanvasRenderer option arrays must be dense and have no custom properties');
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+      if (!descriptor.enumerable || !('value' in descriptor)) {
+        throw new TypeError('CanvasRenderer option arrays must contain enumerable data entries');
+      }
+      copy[index] = detachedFrozenOptionData(descriptor.value, copies);
+    }
+    for (let index = 0; index < copy.length; index++) {
+      if (!Object.prototype.hasOwnProperty.call(copy, index)) {
+        throw new TypeError('CanvasRenderer option arrays must be dense');
+      }
+    }
+    return Object.freeze(copy) as T;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('CanvasRenderer option snapshots require plain configuration objects');
+  }
+  const copy: Record<PropertyKey, unknown> = Object.create(prototype);
+  copies.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (!descriptor.enumerable || !('value' in descriptor)) {
+      throw new TypeError('CanvasRenderer option snapshots require enumerable data properties');
+    }
+    Object.defineProperty(copy, key, {
+      value: detachedFrozenOptionData(descriptor.value, copies),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+  }
+  return Object.freeze(copy) as T;
+}
+
 export class CanvasRenderer {
   private container: HTMLElement;
-  private sheet: Worksheet;
+  #sheet: Worksheet | WorkbookSheetView;
   private options: Required<CanvasRendererOptions>;
   private theme: Theme = ExcelLightTheme;
   private canvas: HTMLCanvasElement;
@@ -213,6 +403,7 @@ export class CanvasRenderer {
   private pendingMouseX = 0;
   private pendingMouseY = 0;
   private hoverProcessPending = false;
+  private hoverRafId: number | null = null;
   private lastHoveredRow = -1;
   private lastHoveredCol = -1;
   private isVisible = true; // Track tab visibility to pause processing when hidden
@@ -222,9 +413,11 @@ export class CanvasRenderer {
   private gridLinesCanvas: HTMLCanvasElement | null = null; // Static gridlines rendered once
   private gridLinesNeedRedraw = true; // Flag to redraw gridlines on scroll/resize
   private viewMode: ViewMode = "normal";
-  private readonly workerPendingCells = new Set<string>();
+  private readonly workerPendingCells = new Map<string, number>();
   private formulaWorker?: FormulaWorkerBridge;
   private formulaWorkerHydrated = false;
+  private formulaWorkerGeneration = 0;
+  private disposed = false;
   private layoutCacheDirty = true;
   private visibleRowsCache: number[] = [];
   private visibleColsCache: number[] = [];
@@ -236,6 +429,8 @@ export class CanvasRenderer {
     { image: HTMLImageElement; status: "loading" | "loaded" | "error" }
   >();
   private drawingLayerChangeListener?: () => void;
+  #subscribedDrawingLayer?: CanvasDrawingLayer;
+  #worksheetSubscription?: { dispose(): void };
 
   // Distinct value cache per column for filter menus
 
@@ -255,8 +450,8 @@ export class CanvasRenderer {
       map = this._valueCache.get(col);
       if (!map) {
         map = new Map();
-        for (let r = 1; r <= this.sheet.rowCount; r++) {
-          const v = this.sheet.getCellValue({ row: r, col });
+        for (let r = 1; r <= this.#sheet.rowCount; r++) {
+          const v = this.#sheet.getCellValue({ row: r, col });
           const key = v == null ? "" : String(v);
           map.set(key, (map.get(key) || 0) + 1);
         }
@@ -264,19 +459,18 @@ export class CanvasRenderer {
       }
     } else if (domain === "visible") {
       map = new Map();
-      const rows = this.sheet.getVisibleRowIndices();
+      const rows = this.#sheet.getVisibleRowIndices();
       for (const r of rows) {
-        const v = this.sheet.getCellValue({ row: r, col });
+        const v = this.#sheet.getCellValue({ row: r, col });
         const key = v == null ? "" : String(v);
         map.set(key, (map.get(key) || 0) + 1);
       }
     } else if (domain === "filtered") {
       // Rows that pass other filters except this column's own filter
       map = new Map();
-      const rows =
-        (this.sheet as any).getVisibleRowIndicesExcluding?.(col) || [];
+      const rows = this.#sheet.getVisibleRowIndicesExcluding(col);
       for (const r of rows) {
-        const v = this.sheet.getCellValue({ row: r, col });
+        const v = this.#sheet.getCellValue({ row: r, col });
         const key = v == null ? "" : String(v);
         map.set(key, (map.get(key) || 0) + 1);
       }
@@ -294,24 +488,38 @@ export class CanvasRenderer {
   // Distinct value cache per column for filter menus
   private _valueCache: Map<number, Map<string, number>> = new Map();
 
+  private standaloneMutationTarget(): Worksheet {
+    if (!(this.#sheet instanceof Worksheet)) {
+      throw new Error("Workbook-owned renderer mutations are unavailable until their journal slice is authorized");
+    }
+    return this.#sheet;
+  }
+
   constructor(
     container: HTMLElement,
-    sheet: Worksheet,
+    sheet: Worksheet | WorkbookSheetView,
     options: CanvasRendererOptions = {},
   ) {
     this.container = container;
-    this.sheet = sheet;
+    this.#sheet = sheet instanceof Worksheet ? createWorksheetObservationHandle(sheet) : sheet;
+    if (!(sheet instanceof Worksheet) && options.autoSizeColumns) {
+      throw new Error("Auto-sizing a workbook-owned sheet is unavailable until its journal slice is authorized");
+    }
     this.options = {
       headerHeight: options.headerHeight ?? 24,
       headerWidth: options.headerWidth ?? 48,
       theme: options.theme ?? {},
       debug: options.debug ?? false,
       onRender: options.onRender,
+      onRequestColumnFilterMenu: options.onRequestColumnFilterMenu,
       locale: options.locale ?? undefined,
       formulaWorker: options.formulaWorker,
       formulaWorkerFactory: options.formulaWorkerFactory,
       formulaWorkerThreshold: options.formulaWorkerThreshold ?? 10,
-      images: options.images ?? [],
+      images:
+        typeof options.images === "function"
+          ? options.images
+          : detachedFrozenOptionData(options.images ?? []),
       drawingLayer: options.drawingLayer,
     } as Required<CanvasRendererOptions>;
     this.formulaWorker = options.formulaWorker;
@@ -338,18 +546,19 @@ export class CanvasRenderer {
     }
     this.setupEventListeners();
     if (options.drawingLayer) {
+      this.#subscribedDrawingLayer = options.drawingLayer;
       this.drawingLayerChangeListener = () => this.scheduleRedraw();
-      options.drawingLayer.on("changed", this.drawingLayerChangeListener);
+      this.#subscribedDrawingLayer.on("changed", this.drawingLayerChangeListener);
     }
     this.cachedCFRules = sheet.getConditionalFormattingRules?.() ?? [];
     // Invalidate distinct value cache on relevant sheet events
-    this.sheet.on((ev: SheetEvents) => {
-      const t = (ev as any).type;
+    this.#worksheetSubscription = this.#sheet.on((ev: SheetEvents) => {
+      const t = ev.type;
       if (t === "cell-changed")
-        this.clearValueCacheForColumn((ev as any).address.col);
+        this.clearValueCacheForColumn(ev.address.col);
       else if (t === "sheet-mutated" || t === "filter-changed") {
         this.invalidateLayoutCache();
-        this.cachedCFRules = this.sheet.getConditionalFormattingRules?.() ?? [];
+        this.cachedCFRules = this.#sheet.getConditionalFormattingRules?.() ?? [];
         this.clearValueCacheForColumn();
         this.gridLinesNeedRedraw = true;
         // Layout may have changed (row height / column width): a partial dirty
@@ -369,7 +578,7 @@ export class CanvasRenderer {
       }
       // Invalidate cell region for style/comment/icon changes so visual updates (color, borders, indicators) appear
       if (t === "style-changed") {
-        const a = (ev as any).address;
+        const a = ev.address;
         this.invalidateRange(a.row, a.col, a.row, a.col);
       } else if (
         t === "comment-added" ||
@@ -377,23 +586,34 @@ export class CanvasRenderer {
         t === "comment-deleted" ||
         t === "icon-changed"
       ) {
-        const a = (ev as any).address;
+        const a = ev.address;
         this.invalidateRange(a.row, a.col, a.row, a.col);
       } else if (t === "cell-component-changed") {
-        const a = (ev as any).address;
+        const a = ev.address;
         this.invalidateRange(a.row, a.col, a.row, a.col);
         this.scheduleRedraw();
       } else if (t === "header-footer-changed") {
         this.scheduleRedraw();
       }
       if (t === "cell-changed") {
-        this.syncFormulaWorkerCell((ev as any).address, (ev as any).cell);
+        this.syncFormulaWorkerCell(ev.address, ev.cell);
       }
     });
     this.redraw();
   }
 
   dispose() {
+    this.disposed = true;
+    this.formulaWorkerGeneration++;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    if (this.hoverRafId !== null) {
+      cancelAnimationFrame(this.hoverRafId);
+      this.hoverRafId = null;
+    }
+    this.hoverProcessPending = false;
     // Clean up resize timer
     if (this.resizeTimer !== null) {
       clearTimeout(this.resizeTimer);
@@ -401,6 +621,8 @@ export class CanvasRenderer {
     }
     this.resizeObserver?.disconnect();
     this.removeEventListeners();
+    this.#worksheetSubscription?.dispose();
+    this.#worksheetSubscription = undefined;
     if (
       this.formulaWorker &&
       this.formulaWorker !== this.options.formulaWorker
@@ -408,9 +630,10 @@ export class CanvasRenderer {
       this.formulaWorker.terminate?.();
       this.formulaWorker = undefined;
     }
-    if (this.options.drawingLayer && this.drawingLayerChangeListener) {
-      this.options.drawingLayer.off("changed", this.drawingLayerChangeListener);
+    if (this.#subscribedDrawingLayer && this.drawingLayerChangeListener) {
+      this.#subscribedDrawingLayer.off("changed", this.drawingLayerChangeListener);
       this.drawingLayerChangeListener = undefined;
+      this.#subscribedDrawingLayer = undefined;
     }
     this.canvas.remove();
   }
@@ -443,6 +666,7 @@ export class CanvasRenderer {
 
   /** Coalesce any number of invalidations into a single frame. */
   scheduleRedraw() {
+    if (this.disposed) return;
     if (this.rafId !== null) return; // Already scheduled
     this.rafId = requestAnimationFrame(() => {
       this.rafId = null;
@@ -532,10 +756,23 @@ export class CanvasRenderer {
 
   // Expose read-only handles for host wrappers (React) that need to align/snapping or edge checks
   get optionsReadonly(): Readonly<Required<CanvasRendererOptions>> {
-    return this.options;
+    const options = this.options;
+    const snapshot = {
+      ...options,
+      theme: detachedFrozenOptionData(options.theme),
+      autoSizeColumns:
+        typeof options.autoSizeColumns === 'object' && options.autoSizeColumns !== null
+          ? detachedFrozenOptionData(options.autoSizeColumns)
+          : options.autoSizeColumns,
+      images:
+        Array.isArray(options.images)
+          ? detachedFrozenOptionData(options.images)
+          : options.images,
+    };
+    return Object.freeze(snapshot);
   }
-  get sheetReadonly(): Worksheet {
-    return this.sheet;
+  get sheetReadonly(): Worksheet | WorkbookSheetView {
+    return this.#sheet;
   }
   // The size of the drawable content viewport (excluding headers), in CSS pixels.
   getViewportSize(): { width: number; height: number } {
@@ -564,32 +801,21 @@ export class CanvasRenderer {
   private ensureLayoutCache(): void {
     if (!this.layoutCacheDirty) return;
 
-    const anySheet: any = this.sheet as any;
-    const rows: number[] =
-      typeof anySheet.getVisibleRowIndices === "function"
-        ? anySheet.getVisibleRowIndices()
-        : Array.from({ length: this.sheet.rowCount }, (_, i) => i + 1);
-    const cols: number[] =
-      typeof anySheet.getVisibleColumnIndices === "function"
-        ? anySheet.getVisibleColumnIndices()
-        : Array.from({ length: this.sheet.colCount }, (_, i) => i + 1).filter(
-            (col) =>
-              typeof anySheet.isColHidden !== "function" ||
-              !anySheet.isColHidden(col),
-          );
+    const rows = this.#sheet.getVisibleRowIndices();
+    const cols = this.#sheet.getVisibleColumnIndices();
 
     const rowTops = new Array(rows.length + 1);
     rowTops[0] = 0;
     for (let i = 0; i < rows.length; i++) {
       rowTops[i + 1] =
-        rowTops[i] + this.sheet.getRowHeight(rows[i]) * this.zoom;
+        rowTops[i] + this.#sheet.getRowHeight(rows[i]) * this.zoom;
     }
 
     const colLefts = new Array(cols.length + 1);
     colLefts[0] = 0;
     for (let i = 0; i < cols.length; i++) {
       colLefts[i + 1] =
-        colLefts[i] + this.sheet.getColumnWidth(cols[i]) * this.zoom;
+        colLefts[i] + this.#sheet.getColumnWidth(cols[i]) * this.zoom;
     }
 
     this.visibleRowsCache = rows;
@@ -755,16 +981,16 @@ export class CanvasRenderer {
     };
     const rows: number[] =
       mode === "visible"
-        ? this.sheet.getVisibleRowIndices()
-        : Array.from({ length: this.sheet.rowCount }, (_, i) => i + 1);
+        ? this.#sheet.getVisibleRowIndices()
+        : Array.from({ length: this.#sheet.rowCount }, (_, i) => i + 1);
     const limitedRows =
       rows.length > maxRowsToScan ? rows.slice(0, maxRowsToScan) : rows;
-    for (let c = 1; c <= this.sheet.colCount; c++) {
+    for (let c = 1; c <= this.#sheet.colCount; c++) {
       let maxW = includeHeader ? measure(this.colLabel(c)) : 0;
       for (const r of limitedRows) {
-        const v = this.sheet.getCellValue({ row: r, col: c });
+        const v = this.#sheet.getCellValue({ row: r, col: c });
         if (v == null) continue;
-        const style = this.sheet.getCellStyle({ row: r, col: c });
+        const style = this.#sheet.getCellStyle({ row: r, col: c });
         // use formatted textual value if applicable
         let text: string;
         if (typeof v === "number") {
@@ -781,7 +1007,7 @@ export class CanvasRenderer {
         maxWidth,
         Math.max(minWidth, Math.ceil(maxW + padding)),
       );
-      this.sheet.setColumnWidth(c, finalW);
+      this.standaloneMutationTarget().setColumnWidth(c, finalW);
     }
     this.redraw();
   }
@@ -800,9 +1026,9 @@ export class CanvasRenderer {
   computeHeatmapRange() {
     let min = Infinity,
       max = -Infinity;
-    for (let r = 1; r <= this.sheet.rowCount; r++) {
-      for (let c = 1; c <= this.sheet.colCount; c++) {
-        const v = this.sheet.getCellValue({ row: r, col: c });
+    for (let r = 1; r <= this.#sheet.rowCount; r++) {
+      for (let c = 1; c <= this.#sheet.colCount; c++) {
+        const v = this.#sheet.getCellValue({ row: r, col: c });
         if (typeof v === "number") {
           min = Math.min(min, v);
           max = Math.max(max, v);
@@ -1065,7 +1291,7 @@ export class CanvasRenderer {
     let colIndex = firstColIndex ?? 0;
     while (x < width && colIndex < visCols.length) {
       const col = visCols[colIndex];
-      const cw = this.sheet.getColumnWidth(col) * this.zoom;
+      const cw = this.#sheet.getColumnWidth(col) * this.zoom;
       const px = Math.round(x + cw) + 0.5;
       ctx.beginPath();
       ctx.moveTo(px, headerHeight);
@@ -1081,7 +1307,7 @@ export class CanvasRenderer {
     let rowIndex = this.visibleRange().firstRowIndex ?? 0;
     while (y < height && rowIndex < visRows.length) {
       const row = visRows[rowIndex];
-      const rh = this.sheet.getRowHeight(row) * this.zoom;
+      const rh = this.#sheet.getRowHeight(row) * this.zoom;
       const py = Math.round(y + rh) + 0.5;
       ctx.beginPath();
       ctx.moveTo(headerWidth, py);
@@ -1125,13 +1351,10 @@ export class CanvasRenderer {
     }
   }
   invalidateRect(x: number, y: number, w: number, h: number) {
+    if (this.disposed) return;
     const r = { x, y, w, h };
     this.dirty = this.dirty ? unionRect(this.dirty, r) : r;
-    if (this.rafId == null)
-      this.rafId = requestAnimationFrame(() => {
-        this.rafId = null;
-        this.redraw();
-      });
+    this.scheduleRedraw();
   }
   exportToDataURL(
     range?: { r1: number; c1: number; r2: number; c2: number },
@@ -1259,12 +1482,12 @@ export class CanvasRenderer {
       let colIndex = firstColIndex ?? 0;
       while (x < width && colIndex < this.visibleColsCache.length) {
         const col = this.visibleColsCache[colIndex];
-        const cw = this.sheet.getColumnWidth(col) * this.zoom;
+        const cw = this.#sheet.getColumnWidth(col) * this.zoom;
         addresses.push({ row, col });
         x += cw;
         colIndex++;
       }
-      y += this.sheet.getRowHeight(row) * this.zoom;
+      y += this.#sheet.getRowHeight(row) * this.zoom;
       rowIndex++;
     }
 
@@ -1272,62 +1495,89 @@ export class CanvasRenderer {
   }
 
   private evaluateVisibleFormulaCells(): void {
+    if (
+      this.disposed ||
+      !(this.#sheet instanceof Worksheet) ||
+      this.#sheet.isWorkbookOwned()
+    ) return;
+    const worksheet = this.#sheet;
     const visibleAddresses = this.getVisibleCellAddresses();
-    const isDirty = (this.sheet as any).isDirty;
+    const isDirty = worksheet.isDirty;
     const dirtyAddresses =
       typeof isDirty === "function"
-        ? visibleAddresses.filter((addr) => isDirty.call(this.sheet, addr))
+        ? visibleAddresses.filter((addr) => isDirty.call(this.#sheet, addr))
         : visibleAddresses;
     const formulaAddresses = dirtyAddresses.filter(
-      (addr) => !!this.sheet.getCell(addr)?.formula,
+      (addr) => !!this.#sheet.getCell(addr)?.formula,
     );
     if (formulaAddresses.length === 0) return;
 
     const worker = this.getFormulaWorker(true);
     const threshold = this.options.formulaWorkerThreshold;
     if (!worker || formulaAddresses.length < threshold) {
-      const evaluateBatch = (this.sheet as any).evaluateBatch;
-      if (typeof evaluateBatch === "function")
-        evaluateBatch.call(this.sheet, formulaAddresses);
+      worksheet.evaluateBatch(formulaAddresses);
       return;
     }
 
     const pending = formulaAddresses.filter((addr) => {
       const key = `${addr.row}:${addr.col}`;
-      if (this.workerPendingCells.has(key)) return false;
-      this.workerPendingCells.add(key);
+      if (this.workerPendingCells.get(key) === this.formulaWorkerGeneration) return false;
+      this.workerPendingCells.set(key, this.formulaWorkerGeneration);
       return true;
     });
     if (pending.length === 0) return;
 
+    const workerGeneration = this.formulaWorkerGeneration;
+    // The bridge may mutate its input array. Keep renderer-owned addresses
+    // private for result application and pending-cell cleanup.
+    const workerAddresses = pending.map((address) => ({ ...address }));
     worker
-      .evaluateBatch(pending)
+      .evaluateBatch(workerAddresses)
       .then((result) => {
-        const applyFormulaResults = (this.sheet as any).applyFormulaResults;
-        if (typeof applyFormulaResults === "function") {
-          applyFormulaResults.call(this.sheet, pending, result.values);
-        }
+        // A renderer may outlive the worksheet's standalone phase. Worker
+        // results started before adoption must not apply to the now-owned sheet.
+        if (!this.isCurrentFormulaWorker(worker, workerGeneration) || worksheet.isWorkbookOwned()) return;
+        worksheet.applyFormulaResults(pending, result.values);
       })
       .catch((error) => {
-        console.warn(
-          "Formula worker batch failed; falling back to main-thread evaluation.",
-          error,
-        );
-        const evaluateBatch = (this.sheet as any).evaluateBatch;
-        if (typeof evaluateBatch === "function")
-          evaluateBatch.call(this.sheet, pending);
+        console.warn("Formula worker batch failed.", error);
+        // Do not run the synchronous fallback after adoption, disposal, or
+        // worker replacement: it is a worksheet mutation path.
+        if (!this.isCurrentFormulaWorker(worker, workerGeneration) || worksheet.isWorkbookOwned()) return;
+        worksheet.evaluateBatch(pending);
       })
       .finally(() => {
-        for (const addr of pending)
-          this.workerPendingCells.delete(`${addr.row}:${addr.col}`);
-        this.scheduleRedraw();
+        for (const addr of pending) {
+          const key = `${addr.row}:${addr.col}`;
+          if (this.workerPendingCells.get(key) === workerGeneration) {
+            this.workerPendingCells.delete(key);
+          }
+        }
+        if (!this.disposed) this.scheduleRedraw();
       });
+  }
+
+  private isCurrentFormulaWorker(worker: FormulaWorkerBridge, generation: number): boolean {
+    return !this.disposed && this.formulaWorker === worker && this.formulaWorkerGeneration === generation;
+  }
+
+  private replaceFormulaWorker(worker: FormulaWorkerBridge): void {
+    if (this.formulaWorker === worker) return;
+    const previousWorker = this.formulaWorker;
+    this.formulaWorker = worker;
+    this.formulaWorkerHydrated = false;
+    this.formulaWorkerGeneration++;
+    if (previousWorker && previousWorker !== this.options.formulaWorker) {
+      previousWorker.terminate?.();
+    }
+    this.hydrateFormulaWorker(worker);
   }
 
   private syncFormulaWorkerCell(
     addr: Address,
     cell: { value?: unknown; formula?: string },
   ): void {
+    if (this.disposed || !(this.#sheet instanceof Worksheet) || this.#sheet.isWorkbookOwned()) return;
     const worker = this.getFormulaWorker(!!cell.formula);
     if (!worker) return;
     if (cell.formula) {
@@ -1357,14 +1607,11 @@ export class CanvasRenderer {
   }
 
   private hydrateFormulaWorker(worker: FormulaWorkerBridge): void {
+    if (this.disposed || !(this.#sheet instanceof Worksheet) || this.#sheet.isWorkbookOwned()) return;
     if (this.formulaWorkerHydrated) return;
     this.formulaWorkerHydrated = true;
 
-    const forEachNonEmptyCell = (this.sheet as any).forEachNonEmptyCell;
-    if (typeof forEachNonEmptyCell !== "function") return;
-
-    forEachNonEmptyCell.call(
-      this.sheet,
+    this.#sheet.forEachNonEmptyCell(
       (
         row: number,
         col: number,
@@ -1397,8 +1644,7 @@ export class CanvasRenderer {
     if (typeof factory !== "function") return undefined;
     try {
       const worker = factory();
-      this.formulaWorker = worker;
-      this.hydrateFormulaWorker(worker);
+      this.replaceFormulaWorker(worker);
     } catch (error) {
       console.warn(
         "Failed to create formula worker; using main-thread formula evaluation.",
@@ -1500,7 +1746,9 @@ export class CanvasRenderer {
   private getConfiguredImages(): CanvasImageSpec[] {
     const configured = this.options.images;
     const images = typeof configured === "function" ? configured() : configured;
-    const fromOptions = Array.isArray(images) ? images : [];
+    const fromOptions = Array.isArray(images)
+      ? detachedFrozenOptionData(images)
+      : [];
     const drawingLayer = this.options.drawingLayer;
     const fromDrawingLayer = drawingLayer
       ? drawingLayer
@@ -1789,15 +2037,15 @@ export class CanvasRenderer {
       if (clip) {
         while (
           colIndex < visCols.length &&
-          x + this.sheet.getColumnWidth(visCols[colIndex]) * this.zoom < clip.x
+          x + this.#sheet.getColumnWidth(visCols[colIndex]) * this.zoom < clip.x
         ) {
-          x += this.sheet.getColumnWidth(visCols[colIndex]) * this.zoom;
+          x += this.#sheet.getColumnWidth(visCols[colIndex]) * this.zoom;
           colIndex++;
         }
       }
       while (x < width && colIndex < visCols.length) {
         const col = visCols[colIndex];
-        const cw = this.sheet.getColumnWidth(col) * this.zoom;
+        const cw = this.#sheet.getColumnWidth(col) * this.zoom;
         if (clip && x > clip.x + clip.w) break;
         ctx.fillText(
           this.colLabel(col),
@@ -1820,15 +2068,15 @@ export class CanvasRenderer {
       if (clip) {
         while (
           rowIndex < visRows.length &&
-          y + this.sheet.getRowHeight(visRows[rowIndex]) * this.zoom < clip.y
+          y + this.#sheet.getRowHeight(visRows[rowIndex]) * this.zoom < clip.y
         ) {
-          y += this.sheet.getRowHeight(visRows[rowIndex]) * this.zoom;
+          y += this.#sheet.getRowHeight(visRows[rowIndex]) * this.zoom;
           rowIndex++;
         }
       }
       while (y < height && rowIndex < visRows.length) {
         const row = visRows[rowIndex];
-        const rh = this.sheet.getRowHeight(row) * this.zoom;
+        const rh = this.#sheet.getRowHeight(row) * this.zoom;
         if (clip && y > clip.y + clip.h) break;
         const label = String(row);
         ctx.fillText(
@@ -1852,10 +2100,10 @@ export class CanvasRenderer {
       if (clip) {
         while (
           rowIndex < visRows.length &&
-          y + this.sheet.getRowHeight(visRows[rowIndex]) * this.getZoom() <
+          y + this.#sheet.getRowHeight(visRows[rowIndex]) * this.getZoom() <
             clip.y
         ) {
-          y += this.sheet.getRowHeight(visRows[rowIndex]) * this.getZoom();
+          y += this.#sheet.getRowHeight(visRows[rowIndex]) * this.getZoom();
           rowIndex++;
         }
       }
@@ -1866,21 +2114,21 @@ export class CanvasRenderer {
         if (clip) {
           while (
             colIndex < visCols.length &&
-            x + this.sheet.getColumnWidth(visCols[colIndex]) * this.zoom <
+            x + this.#sheet.getColumnWidth(visCols[colIndex]) * this.zoom <
               clip.x
           ) {
-            x += this.sheet.getColumnWidth(visCols[colIndex]) * this.zoom;
+            x += this.#sheet.getColumnWidth(visCols[colIndex]) * this.zoom;
             colIndex++;
           }
         }
-        const rh = this.sheet.getRowHeight(row) * this.zoom;
+        const rh = this.#sheet.getRowHeight(row) * this.zoom;
         while (x < width && colIndex < visCols.length) {
           if (clip && y > clip.y + clip.h) break;
           const col = visCols[colIndex];
-          const cw = this.sheet.getColumnWidth(col) * this.zoom;
+          const cw = this.#sheet.getColumnWidth(col) * this.zoom;
           if (clip && x > clip.x + clip.w) break;
           const addr = { row, col };
-          const merged = (this.sheet as any).getMergedRangeForCell?.(addr);
+          const merged = this.#sheet.getMergedRangeForCell(addr);
           let spanW = cw,
             spanH = rh,
             isAnchor = true;
@@ -1903,13 +2151,11 @@ export class CanvasRenderer {
             colIndex++;
             continue;
           }
-          const v = this.sheet.getCellValue(addr);
-          let style: CellStyle | undefined = this.sheet.getCellStyle(addr);
-          const hyperlink = this.sheet.getHyperlink?.(addr);
+          const v = this.#sheet.getCellValue(addr);
+          let style: CellStyle | undefined = this.#sheet.getCellStyle(addr);
+          const hyperlink = this.#sheet.getHyperlink?.(addr);
           const rowLoaded =
-            typeof (this.sheet as any).isRowLoaded === "function"
-              ? (this.sheet as any).isRowLoaded(row)
-              : true;
+            this.#sheet.isRowLoaded(row);
 
           const { result: cfResult, style: cfStyle } =
             this.applyConditionalFormatting(v, addr, style);
@@ -1934,9 +2180,7 @@ export class CanvasRenderer {
           for (const plugin of this.plugins) {
             if (plugin.getCellBackground) {
               const bg = plugin.getCellBackground({
-                addr,
-                value: v,
-                style,
+                ...createRenderPluginContext(addr, v as ExtendedCellValue, style),
                 min: this.heatmapRange?.min,
                 max: this.heatmapRange?.max,
               });
@@ -1962,9 +2206,7 @@ export class CanvasRenderer {
             for (const plugin of this.plugins) {
               if (plugin.transformColor) {
                 fillColor = plugin.transformColor(fillColor, {
-                  addr,
-                  value: v,
-                  style,
+                  ...createRenderPluginContext(addr, v as ExtendedCellValue, style),
                 });
               }
             }
@@ -2031,9 +2273,7 @@ export class CanvasRenderer {
                 for (const plugin of this.plugins) {
                   if (plugin.transformColor) {
                     resolved = plugin.transformColor(resolved, {
-                      addr,
-                      value: v,
-                      style,
+                      ...createRenderPluginContext(addr, v as ExtendedCellValue, style),
                     });
                   }
                 }
@@ -2143,7 +2383,7 @@ export class CanvasRenderer {
             // Apply custom font transform
             for (const plugin of this.plugins) {
               if (plugin.transformFont) {
-                font = plugin.transformFont(font, { addr, value: v, style });
+                font = plugin.transformFont(font, createRenderPluginContext(addr, v as ExtendedCellValue, style));
               }
             }
 
@@ -2168,9 +2408,7 @@ export class CanvasRenderer {
             for (const plugin of this.plugins) {
               if (plugin.transformColor) {
                 textColor = plugin.transformColor(textColor, {
-                  addr,
-                  value: v,
-                  style,
+                  ...createRenderPluginContext(addr, v as ExtendedCellValue, style),
                 });
               }
             }
@@ -2474,14 +2712,14 @@ export class CanvasRenderer {
                 plugin.afterCellRender(
                   ctx,
                   { x, y, w: drawW, h: drawH },
-                  { addr, value: v, style },
+                  createRenderPluginContext(addr, v as ExtendedCellValue, style),
                 );
               }
             }
           }
 
           // Comment indicator (small red triangle top-right) if comments exist
-          const cellObj = (this.sheet as any).getCell?.(addr);
+          const cellObj = this.#sheet.getCell(addr);
           if (isAnchor && cfResult?.icon) {
             this.renderConditionalIcon(
               ctx,
@@ -2584,7 +2822,7 @@ export class CanvasRenderer {
           x += cw;
           colIndex++;
         }
-        y += this.sheet.getRowHeight(row) * this.zoom;
+        y += this.#sheet.getRowHeight(row) * this.zoom;
         rowIndex++;
       }
 
@@ -2673,7 +2911,7 @@ export class CanvasRenderer {
       try {
         this.options.onRender({
           ms: this._lastRenderMs,
-          regions: this.lastDirtyRects.slice(),
+          regions: this.lastDirtyRects.map((region) => ({ ...region })),
         });
       } catch {}
     }
@@ -2707,13 +2945,13 @@ export class CanvasRenderer {
     const rows = this.getVisibleRows();
     const rowBreaks = computeRowPageBreaks(
       rows,
-      (row) => this.sheet.getRowHeight(row) * this.zoom,
+      (row) => this.#sheet.getRowHeight(row) * this.zoom,
       metrics.contentHeightPx,
     );
     const cols = this.getVisibleCols();
     const colBreakIndexes = computeColPageBreaks(
       cols.length,
-      (index) => this.sheet.getColumnWidth(cols[index - 1]) * this.zoom,
+      (index) => this.#sheet.getColumnWidth(cols[index - 1]) * this.zoom,
       metrics.contentWidthPx,
     );
     const colBreaks = colBreakIndexes
@@ -2799,7 +3037,7 @@ export class CanvasRenderer {
 
     for (const row of rowBreaks) {
       const y =
-        this.sheetYForRow(row) + this.sheet.getRowHeight(row) * this.zoom;
+        this.sheetYForRow(row) + this.#sheet.getRowHeight(row) * this.zoom;
       if (y < headerHeight || y > height) continue;
       ctx.beginPath();
       ctx.moveTo(headerWidth, y + 0.5);
@@ -2809,7 +3047,7 @@ export class CanvasRenderer {
 
     for (const col of colBreaks) {
       const x =
-        this.sheetXForCol(col) + this.sheet.getColumnWidth(col) * this.zoom;
+        this.sheetXForCol(col) + this.#sheet.getColumnWidth(col) * this.zoom;
       if (x < headerWidth || x > width) continue;
       ctx.beginPath();
       ctx.moveTo(x + 0.5, headerHeight);
@@ -2884,7 +3122,7 @@ export class CanvasRenderer {
             metrics.marginBottomPx + metrics.footerPx,
           );
 
-          const headerFooter = this.sheet.getHeaderFooter?.() ?? {
+          const headerFooter = this.#sheet.getHeaderFooter?.() ?? {
             header: { left: "", center: "", right: "" },
             footer: { left: "", center: "", right: "" },
           };
@@ -2893,7 +3131,7 @@ export class CanvasRenderer {
           const expandCtx = {
             page: pageNumber,
             pages: totalPages,
-            sheetName: this.sheet.name,
+            sheetName: this.#sheet.name,
             fileName: "Workbook",
           };
 
@@ -3126,8 +3364,8 @@ export class CanvasRenderer {
       width,
       height,
       dpr: this.dpr,
-      options: this.options,
-      sheet: this.sheet,
+      options: this.optionsReadonly,
+      sheet: this.#sheet,
       getScroll: () => this.getScroll(),
       rectForRange: (r1: number, c1: number, r2: number, c2: number) =>
         this.rectForRange(r1, c1, r2, c2),
@@ -3160,7 +3398,7 @@ export class CanvasRenderer {
   private getFullSheetRange(): { start: Address; end: Address } {
     return {
       start: { row: 1, col: 1 },
-      end: { row: this.sheet.rowCount, col: this.sheet.colCount },
+      end: { row: this.#sheet.rowCount, col: this.#sheet.colCount },
     };
   }
 
@@ -3184,7 +3422,7 @@ export class CanvasRenderer {
         type: "col",
         index: hit.col,
         startPos: e.clientX,
-        startSize: this.sheet.getColumnWidth(hit.col),
+        startSize: this.#sheet.getColumnWidth(hit.col),
         applyToAll,
       };
       return;
@@ -3197,7 +3435,7 @@ export class CanvasRenderer {
         type: "row",
         index: hit.row,
         startPos: e.clientY,
-        startSize: this.sheet.getRowHeight(hit.row),
+        startSize: this.#sheet.getRowHeight(hit.row),
         applyToAll,
       };
       return;
@@ -3207,14 +3445,14 @@ export class CanvasRenderer {
     if (hit.type === "header-col") {
       const col = hit.col;
       this.setSelections([
-        { start: { row: 1, col }, end: { row: this.sheet.rowCount, col } },
+        { start: { row: 1, col }, end: { row: this.#sheet.rowCount, col } },
       ]);
       return;
     }
     if (hit.type === "header-row") {
       const row = hit.row;
       this.setSelections([
-        { start: { row, col: 1 }, end: { row, col: this.sheet.colCount } },
+        { start: { row, col: 1 }, end: { row, col: this.#sheet.colCount } },
       ]);
       return;
     }
@@ -3251,7 +3489,7 @@ export class CanvasRenderer {
           type: "cell-double-click" as const,
           event: { address: addr, bounds, originalEvent: e },
         };
-        this.sheet["events"].emit(eventObj);
+        if (this.#sheet instanceof Worksheet) this.#sheet.emitStandaloneEvent(eventObj);
       }
       this.clickStartCell = null;
       this.isDragging = false;
@@ -3269,7 +3507,7 @@ export class CanvasRenderer {
 
     const bounds = this.getCellBounds(addr);
     if (bounds) {
-      this.sheet["events"].emit({
+      if (this.#sheet instanceof Worksheet) this.#sheet.emitStandaloneEvent({
         type: "cell-click",
         event: { address: addr, bounds, originalEvent: e },
       });
@@ -3277,6 +3515,7 @@ export class CanvasRenderer {
   };
 
   private handleMouseMove = (e: MouseEvent) => {
+    if (this.disposed) return;
     // Store mouse position without processing - will be handled in rAF
     this.pendingMouseX = e.clientX;
     this.pendingMouseY = e.clientY;
@@ -3284,7 +3523,10 @@ export class CanvasRenderer {
     // Schedule processing on next animation frame if not already scheduled
     if (!this.hoverProcessPending) {
       this.hoverProcessPending = true;
-      requestAnimationFrame(() => this.processHover());
+      this.hoverRafId = requestAnimationFrame(() => {
+        this.hoverRafId = null;
+        this.processHover();
+      });
     }
   };
 
@@ -3297,6 +3539,7 @@ export class CanvasRenderer {
   // 5. No event references: originalEvent set to null (prevents memory leaks)
   private processHover = () => {
     this.hoverProcessPending = false;
+    if (this.disposed) return;
 
     // Skip processing if tab is hidden (micro-optimization)
     if (!this.isVisible) {
@@ -3314,13 +3557,13 @@ export class CanvasRenderer {
         const delta = (mouseX - this.resizeState.startPos) / this.zoom;
         const newWidth = Math.max(10, this.resizeState.startSize + delta) | 0; // Integer hint
         if (this.resizeState.applyToAll) {
-          for (let c = 1; c <= this.sheet.colCount; c++) {
-            this.sheet.setColumnWidth(c, newWidth);
+          for (let c = 1; c <= this.#sheet.colCount; c++) {
+            this.standaloneMutationTarget().setColumnWidth(c, newWidth);
           }
           // All column boundaries changed, force full redraw.
           this.dirtyCells.clear();
         } else {
-          this.sheet.setColumnWidth(this.resizeState.index, newWidth);
+          this.standaloneMutationTarget().setColumnWidth(this.resizeState.index, newWidth);
           // Mark all visible cells in this column dirty
           const visRows = this.getVisibleRows();
           for (const row of visRows) {
@@ -3333,15 +3576,15 @@ export class CanvasRenderer {
         const delta = (mouseY - this.resizeState.startPos) / this.zoom;
         const newHeight = Math.max(10, this.resizeState.startSize + delta) | 0; // Integer hint
         if (this.resizeState.applyToAll) {
-          for (let r = 1; r <= this.sheet.rowCount; r++) {
-            this.sheet.setRowHeight(r, newHeight);
+          for (let r = 1; r <= this.#sheet.rowCount; r++) {
+            this.standaloneMutationTarget().setRowHeight(r, newHeight);
           }
           // All row boundaries changed, force full redraw.
           this.dirtyCells.clear();
         } else {
-          this.sheet.setRowHeight(this.resizeState.index, newHeight);
+          this.standaloneMutationTarget().setRowHeight(this.resizeState.index, newHeight);
           // Mark all visible cells in this row dirty
-          for (let c = 1; c <= this.sheet.colCount; c++) {
+          for (let c = 1; c <= this.#sheet.colCount; c++) {
             this.markCellDirty(this.resizeState.index, c);
           }
         }
@@ -3390,7 +3633,7 @@ export class CanvasRenderer {
         this.canvas.style.cursor = "pointer";
       } else if (
         hit.type === "cell" &&
-        this.sheet.getHyperlink?.(hit.addr)?.target
+        this.#sheet.getHyperlink?.(hit.addr)?.target
       ) {
         this.canvas.style.cursor = "pointer";
       } else {
@@ -3419,7 +3662,7 @@ export class CanvasRenderer {
 
     // Fire hover-end for previous cell
     if (this.lastHoveredRow !== -1 && this.hoveredCell) {
-      this.sheet["events"].emit({
+      if (this.#sheet instanceof Worksheet) this.#sheet.emitStandaloneEvent({
         type: "cell-hover-end",
         address: this.hoveredCell,
       });
@@ -3429,7 +3672,7 @@ export class CanvasRenderer {
     if (addr) {
       const bounds = this.getCellBounds(addr);
       if (bounds) {
-        this.sheet["events"].emit({
+        if (this.#sheet instanceof Worksheet) this.#sheet.emitStandaloneEvent({
           type: "cell-hover",
           event: { address: addr, bounds, originalEvent: null }, // No event ref to avoid memory retention
         });
@@ -3457,14 +3700,14 @@ export class CanvasRenderer {
     const minCol = Math.min(range.start.col, range.end.col);
     const maxCol = Math.max(range.start.col, range.end.col);
 
-    const coversRowsOneBased = minRow <= 1 && maxRow >= this.sheet.rowCount;
-    const coversColsOneBased = minCol <= 1 && maxCol >= this.sheet.colCount;
+    const coversRowsOneBased = minRow <= 1 && maxRow >= this.#sheet.rowCount;
+    const coversColsOneBased = minCol <= 1 && maxCol >= this.#sheet.colCount;
 
     // Some legacy callers still use 0-based addresses when setting selection.
     const coversRowsZeroBased =
-      minRow <= 0 && maxRow >= this.sheet.rowCount - 1;
+      minRow <= 0 && maxRow >= this.#sheet.rowCount - 1;
     const coversColsZeroBased =
-      minCol <= 0 && maxCol >= this.sheet.colCount - 1;
+      minCol <= 0 && maxCol >= this.#sheet.colCount - 1;
 
     return (
       (coversRowsOneBased && coversColsOneBased) ||
@@ -3511,12 +3754,12 @@ export class CanvasRenderer {
 
     for (const row of scanRows) {
       const addr = { row, col };
-      const cell = this.sheet.getCell(addr);
+      const cell = this.#sheet.getCell(addr);
       if (!cell) continue;
 
       const value = cell.value;
       if (value != null) {
-        const style = this.sheet.getCellStyle(addr);
+        const style = this.#sheet.getCellStyle(addr);
         const formatted = this.formatCache.formatValue(
           value,
           style?.numberFormat,
@@ -3527,7 +3770,7 @@ export class CanvasRenderer {
       }
     }
 
-    this.sheet.setColumnWidth(col, Math.min(maxWidth, 400)); // cap at 400px
+      this.standaloneMutationTarget().setColumnWidth(col, Math.min(maxWidth, 400)); // cap at 400px
     this.ctx.restore();
     this.scheduleRedraw();
   }
@@ -3545,13 +3788,13 @@ export class CanvasRenderer {
     // Scan visible columns for max content height in this row
     for (const col of this.getVisibleCols().slice(0, 100)) {
       const addr = { row, col };
-      const cell = this.sheet.getCell(addr);
+      const cell = this.#sheet.getCell(addr);
       if (!cell) continue;
 
       const value = cell.value;
       if (value == null) continue;
 
-      const style = this.sheet.getCellStyle(addr);
+      const style = this.#sheet.getCellStyle(addr);
       const formatted = this.formatCache.formatValue(
         value,
         style?.numberFormat,
@@ -3563,7 +3806,7 @@ export class CanvasRenderer {
       const lineHeight = cellFontSize * 1.2; // Line height includes spacing between lines
 
       // Get column width to calculate how many lines the content needs
-      const colWidth = this.sheet.getColumnWidth(col);
+      const colWidth = this.#sheet.getColumnWidth(col);
       const horizontalPadding = 8; // 4px each side
       const maxTextWidth = colWidth - horizontalPadding;
 
@@ -3613,7 +3856,7 @@ export class CanvasRenderer {
       maxHeight = Math.max(maxHeight, cellHeight);
     }
 
-    this.sheet.setRowHeight(row, Math.min(Math.ceil(maxHeight), 300)); // cap at 300px
+    this.standaloneMutationTarget().setRowHeight(row, Math.min(Math.ceil(maxHeight), 300)); // cap at 300px
     this.ctx.restore();
     this.scheduleRedraw();
   }
@@ -3637,14 +3880,14 @@ export class CanvasRenderer {
       const apply = (selected: string[]) => {
         // If all values selected, clear filter (no-op visually) so icon/state resets
         if (selected.length === values.length) {
-          this.sheet.clearColumnFilter(col);
+          this.standaloneMutationTarget().clearColumnFilter(col);
         } else {
-          this.sheet.setColumnFilter(col, { type: "in", value: selected });
+          this.standaloneMutationTarget().setColumnFilter(col, { type: "in", value: selected });
         }
         this.redraw();
       };
       const clear = () => {
-        this.sheet.clearColumnFilter(col);
+        this.standaloneMutationTarget().clearColumnFilter(col);
         this.redraw();
       };
       this.options.onRequestColumnFilterMenu({
@@ -3662,7 +3905,7 @@ export class CanvasRenderer {
     const bounds = this.getCellBounds(addr);
     if (!bounds) return;
 
-    this.sheet["events"].emit({
+    if (this.#sheet instanceof Worksheet) this.#sheet.emitStandaloneEvent({
       type: "cell-right-click",
       event: { address: addr, bounds, originalEvent: e },
     });

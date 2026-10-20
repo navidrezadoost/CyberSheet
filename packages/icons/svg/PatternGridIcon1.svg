@@ -1,16 +1,1 @@
-<svg width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern
-            id={`pattern-${pattern.type}`}
-            x="0"
-            y="0"
-            width="8"
-            height="8"
-            patternUnits="userSpaceOnUse"
-          >
-            <rect width="8" height="8" fill={backgroundColor} />
-            <path d={pattern.svgPattern} stroke={foregroundColor} fill="none" strokeWidth="1" />
-          </pattern>
-        </defs>
-        <rect width="24" height="24" fill={`url(#pattern-${pattern.type})`} />
-      </svg>
+<svg viewBox="0 0 24 24"><defs><pattern id="pattern-grid" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#fff"/><path d="M0 8 8 0" stroke="#999"/></pattern></defs><rect width="24" height="24" fill="url(#pattern-grid)"/></svg>

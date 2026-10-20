@@ -1,5 +1,6 @@
-import type { CommandManager, FormattingController, Range, Worksheet } from '@cyber-sheet/core';
+import type { CommandManager, FormattingController, Range, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 import { BatchCommand, ToggleAutoFilterCommand } from '@cyber-sheet/core';
+import { requireStandaloneWorksheet } from './workbookSheetAccess';
 
 export interface TableStylePreset {
   name: string;
@@ -18,11 +19,12 @@ export const DEFAULT_INSERT_TABLE_STYLE: TableStylePreset = {
 export function applyTableFormat(
   formattingController: FormattingController,
   commandManager: CommandManager,
-  worksheet: Worksheet,
+  sheet: Worksheet | WorkbookSheetView,
   range: Range,
   hasHeaders: boolean,
   style: TableStylePreset = DEFAULT_INSERT_TABLE_STYLE,
 ): void {
+  const worksheet = requireStandaloneWorksheet(sheet);
   const commands = [
     formattingController.createTableStyleCommand(range, {
       headerRowColor: style.headerRowColor,

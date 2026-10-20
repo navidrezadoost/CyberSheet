@@ -10,7 +10,7 @@ type StartMessage = {
 };
 
 const post = (message: unknown, transfer?: Transferable[]) => {
-  globalThis.postMessage(message, transfer ?? []);
+  globalThis.postMessage(message, { transfer: transfer ?? [] });
 };
 
 globalThis.addEventListener('message', async (ev: MessageEvent<StartMessage>) => {

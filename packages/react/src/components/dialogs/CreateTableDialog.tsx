@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Range, Worksheet } from '@cyber-sheet/core';
+import type { Range, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 import {
   formatRangeA1,
   inferHasHeaders,
@@ -8,7 +8,7 @@ import {
 
 export interface CreateTableDialogProps {
   isOpen: boolean;
-  worksheet: Worksheet;
+  worksheet: Worksheet | WorkbookSheetView;
   selection: Range | null;
   styleName: string;
   onClose: () => void;

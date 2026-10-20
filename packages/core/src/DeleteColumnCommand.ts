@@ -127,6 +127,16 @@ export class DeleteColumnCommand implements TransformCommand {
       }
     });
 
+    // Merge-only edits still need a valid one-based PasteCommand anchor.
+    // Structural commands may have no cells from which to derive bounds.
+    const affectedMergesForBounds = this.worksheet.getMergedRanges().filter(merge => merge.end.col >= k);
+    if (minRow === Infinity && affectedMergesForBounds.length > 0) {
+      minRow = Math.min(...affectedMergesForBounds.map(merge => merge.start.row));
+      maxRow = Math.max(...affectedMergesForBounds.map(merge => merge.end.row));
+      minColShift = Math.min(...affectedMergesForBounds.map(merge => merge.start.col));
+      maxColShift = Math.max(...affectedMergesForBounds.map(merge => merge.end.col));
+    }
+
     // Save deleted cells for undo
     this.deletedSnapshot = {
       sourceRange: {

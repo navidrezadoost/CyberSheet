@@ -7,7 +7,68 @@
  * Used by Worksheet.setCellFormula to automatically register dependencies in the DAG.
  */
 
-import type { Address } from '../types';
+import type { Address, AddressRange } from '../types';
+
+export type FormulaDependencies = { cells: Address[]; ranges: AddressRange[] };
+
+/** Extract compact A1 dependencies for worksheet graph registration. */
+export function extractFormulaDependencies(
+  formula: string,
+  currentCell: Address,
+  referenceStyle: 'A1' | 'R1C1' = 'A1',
+): FormulaDependencies {
+  if (referenceStyle === 'R1C1') {
+    return { cells: extractReferences(formula, currentCell, referenceStyle), ranges: [] };
+  }
+
+  const expr = removeStringLiterals(
+    (formula.startsWith('=') ? formula.slice(1) : formula).replace(SHEET_QUALIFIED_REFERENCE, ' '),
+  );
+  const ranges: AddressRange[] = [];
+  const rangeTokens: string[] = [];
+
+  for (const match of expr.matchAll(A1_RANGE_REF)) {
+    const start = parseA1Address(match[1]);
+    const end = parseA1Address(match[2]);
+    if (start && end) {
+      ranges.push({
+        startRow: Math.min(start.row, end.row),
+        endRow: Math.max(start.row, end.row),
+        startCol: Math.min(start.col, end.col),
+        endCol: Math.max(start.col, end.col),
+      });
+      rangeTokens.push(match[0]);
+    }
+  }
+
+  for (const match of expr.matchAll(A1_COL_REF)) {
+    const startCol = parseA1Column(match[1]);
+    const endCol = parseA1Column(match[2]);
+    if (startCol !== null && endCol !== null) {
+      ranges.push({ startRow: 0, endRow: 1_048_575, startCol: Math.min(startCol, endCol), endCol: Math.max(startCol, endCol) });
+      rangeTokens.push(match[0]);
+    }
+  }
+
+  for (const match of expr.matchAll(A1_ROW_REF)) {
+    const startRow = Number(match[1].replace('$', '')) - 1;
+    const endRow = Number(match[2].replace('$', '')) - 1;
+    if (Number.isInteger(startRow) && Number.isInteger(endRow) && startRow >= 0 && endRow < 1_048_576) {
+      ranges.push({ startRow: Math.min(startRow, endRow), endRow: Math.max(startRow, endRow), startCol: 0, endCol: 16_383 });
+      rangeTokens.push(match[0]);
+    }
+  }
+
+  let singles = expr;
+  for (const token of rangeTokens) singles = singles.replace(token, ' ');
+  singles = singles.replace(A1_COL_REF, ' ').replace(A1_ROW_REF, ' ');
+  const cells = new Map<string, Address>();
+  for (const match of singles.matchAll(A1_CELL_REF)) {
+    const address = parseA1Address(match[1]);
+    if (address) cells.set(`${address.row}:${address.col}`, address);
+  }
+  return { cells: [...cells.values()], ranges };
+}
 
 /**
  * Cell reference pattern (A1 notation):
@@ -36,7 +97,9 @@ const R1C1_CELL_REF = /R(\[?-?\d+\]?)?C(\[?-?\d+\]?)?/gi;
  * - Sheet1!A1
  * - 'Sheet Name'!B2:C3
  */
-const SHEET_QUALIFIED = /(?:'[^']*'|[\w]+)!/g;
+// A sheet-qualified reference belongs to another graph. Removing only its
+// qualifier would incorrectly register its coordinates on the current sheet.
+const SHEET_QUALIFIED_REFERENCE = /(?:'(?:[^']|'')+'|[\w.]+)!(?:\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?|\$?[A-Z]+:\$?[A-Z]+|\$?\d+:\$?\d+)/gi;
 
 /**
  * Structured reference (Excel Tables):
@@ -83,7 +146,7 @@ export function extractReferences(
   const expr = formula.startsWith('=') ? formula.slice(1) : formula;
   
   // Remove string literals (they might contain reference-like text)
-  const cleaned = removeStringLiterals(expr);
+  const cleaned = removeStringLiterals(expr.replace(SHEET_QUALIFIED_REFERENCE, ' '));
   
   if (referenceStyle === 'A1') {
     extractA1References(cleaned, addresses);
@@ -105,8 +168,8 @@ export function extractReferences(
  * Extract A1-style references (A1, B2:C3, etc.)
  */
 function extractA1References(expr: string, addresses: Set<string>): void {
-  // Remove sheet qualifiers first (we only track dependencies within the same sheet for now)
-  const unqualified = expr.replace(SHEET_QUALIFIED, '');
+  // Cross-sheet references are not representable by this local Address list.
+  const unqualified = expr.replace(SHEET_QUALIFIED_REFERENCE, ' ');
   
   // Extract range references (A1:B2)
   const rangeMatches = unqualified.matchAll(A1_RANGE_REF);
@@ -238,7 +301,7 @@ function parseA1Column(colStr: string): number | null {
     col = col * 26 + charCode + 1;
   }
   
-  return col - 1; // Convert to 0-indexed
+  return col - 1;
 }
 
 /**
@@ -251,24 +314,16 @@ function expandRange(start: Address, end: Address, addresses: Set<string>): void
   const minCol = Math.min(start.col, end.col);
   const maxCol = Math.max(start.col, end.col);
   
-  // Cap at reasonable size to avoid memory explosion
-  const MAX_RANGE_SIZE = 10000;
+  // This helper is an explicit materializer for callers who need addresses;
+  // keep it bounded. Worksheet dependency registration uses compact ranges.
+  const MAX_RANGE_SIZE = 10_000;
   const rangeSize = (maxRow - minRow + 1) * (maxCol - minCol + 1);
-  
   if (rangeSize > MAX_RANGE_SIZE) {
-    // For very large ranges (e.g., entire columns), sample strategically
-    // Track corners + center + edges
-    for (const row of [minRow, Math.floor((minRow + maxRow) / 2), maxRow]) {
-      for (const col of [minCol, Math.floor((minCol + maxCol) / 2), maxCol]) {
-        addresses.add(`${row}:${col}`);
-      }
-    }
-  } else {
-    // Normal range: expand fully
-    for (let row = minRow; row <= maxRow; row++) {
-      for (let col = minCol; col <= maxCol; col++) {
-        addresses.add(`${row}:${col}`);
-      }
+    return;
+  }
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      addresses.add(`${row}:${col}`);
     }
   }
 }

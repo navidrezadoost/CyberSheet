@@ -5,14 +5,27 @@
  * Part of Week 12 Day 2: Data Integration
  */
 
+import { Worksheet as WorksheetClass } from "@cyber-sheet/core";
 import type {
   Worksheet,
+  WorkbookSheetView,
   CellValue,
   ExtendedCellValue,
   CellRange,
   SeriesDirection,
 } from "@cyber-sheet/core";
 import type { ChartData } from "./ChartEngine";
+
+const worksheetIsWorkbookOwned = WorksheetClass.prototype.isWorkbookOwned;
+
+/** Worksheet-backed reads must use the owner view once a sheet is adopted. */
+export type ChartWorksheetSource = Worksheet | WorkbookSheetView;
+
+export function assertChartWorksheetSource(source: ChartWorksheetSource, usage = "chart reads"): void {
+  if (source instanceof WorksheetClass && worksheetIsWorkbookOwned.call(source)) {
+    throw new Error(`Workbook-owned ${usage} require a WorkbookSheetView`);
+  }
+}
 
 /**
  * Options for data adaptation
@@ -39,10 +52,11 @@ export class ChartDataAdapter {
    * Convert a sheet range to ChartData
    */
   static rangeToChartData(
-    worksheet: Worksheet,
+    worksheet: ChartWorksheetSource,
     range: CellRange,
     options: DataAdapterOptions,
   ): ChartData {
+    assertChartWorksheetSource(worksheet);
     const {
       hasHeaderRow,
       hasHeaderCol,
@@ -79,7 +93,7 @@ export class ChartDataAdapter {
    * Extract data from worksheet range
    */
   private static extractRangeData(
-    worksheet: Worksheet,
+    worksheet: ChartWorksheetSource,
     range: CellRange,
   ): ExtendedCellValue[][] {
     const { startRow, startCol, endRow, endCol } = range;
@@ -280,7 +294,8 @@ export class ChartDataAdapter {
   /**
    * Auto-detect if first row contains headers
    */
-  static detectHeaderRow(worksheet: Worksheet, range: CellRange): boolean {
+  static detectHeaderRow(worksheet: ChartWorksheetSource, range: CellRange): boolean {
+    assertChartWorksheetSource(worksheet);
     const { startRow, startCol, endCol } = range;
 
     let textCount = 0;
@@ -302,7 +317,8 @@ export class ChartDataAdapter {
   /**
    * Auto-detect if first column contains headers
    */
-  static detectHeaderCol(worksheet: Worksheet, range: CellRange): boolean {
+  static detectHeaderCol(worksheet: ChartWorksheetSource, range: CellRange): boolean {
+    assertChartWorksheetSource(worksheet);
     const { startRow, endRow, startCol } = range;
 
     let textCount = 0;
@@ -324,7 +340,8 @@ export class ChartDataAdapter {
   /**
    * Validate range has data suitable for charting
    */
-  static validateRange(worksheet: Worksheet, range: CellRange): string[] {
+  static validateRange(worksheet: ChartWorksheetSource, range: CellRange): string[] {
+    assertChartWorksheetSource(worksheet);
     const errors: string[] = [];
     const { startRow, startCol, endRow, endCol } = range;
 

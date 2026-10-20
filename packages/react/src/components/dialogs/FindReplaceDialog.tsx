@@ -19,14 +19,14 @@
 import * as React from 'react';
 import { SmilodonNativeSelect } from '../SmilodonNativeSelect';
 import { FindService } from '@cyber-sheet/core';
-import type { Address, FindServiceOptions, Worksheet } from '@cyber-sheet/core';
+import type { Address, FindServiceOptions, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 
 type FindReplaceTab = 'find' | 'replace';
 
 export interface FindReplaceDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  worksheet: Worksheet;
+  worksheet: Worksheet | WorkbookSheetView;
   initialTab?: FindReplaceTab;
   onMatchSelected?: (address: Address) => void;
 }

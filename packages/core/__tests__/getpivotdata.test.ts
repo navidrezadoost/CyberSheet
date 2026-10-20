@@ -11,6 +11,7 @@
 
 import { describe, test, expect, beforeEach } from '@jest/globals';
 import { GetPivotData } from '../src/GetPivotData';
+import { PivotRecomputeEngineImpl } from '../src/PivotRecomputeEngine';
 import { PivotRegistryImpl, type PivotId } from '../src/PivotRegistry';
 import { PivotSnapshotStore, type PivotSnapshot } from '../src/PivotSnapshotStore';
 import type { PivotConfig } from '../src/PivotEngine';
@@ -24,7 +25,7 @@ describe('GetPivotData - Basic Query', () => {
   beforeEach(() => {
     registry = new PivotRegistryImpl();
     snapshotStore = new PivotSnapshotStore();
-    engine = new GetPivotData(registry, snapshotStore);
+    engine = new GetPivotData(registry, snapshotStore, new PivotRecomputeEngineImpl(registry, snapshotStore, () => { throw new Error('Test builder unavailable'); }, () => null));
 
     // Register pivot
     const config: PivotConfig = {
@@ -106,7 +107,7 @@ describe('GetPivotData - Error Cases', () => {
   beforeEach(() => {
     registry = new PivotRegistryImpl();
     snapshotStore = new PivotSnapshotStore();
-    engine = new GetPivotData(registry, snapshotStore);
+    engine = new GetPivotData(registry, snapshotStore, new PivotRecomputeEngineImpl(registry, snapshotStore, () => { throw new Error('Test builder unavailable'); }, () => null));
   });
 
   test('missing pivot returns #REF!', () => {
@@ -292,7 +293,7 @@ describe('GetPivotData - Type Strictness', () => {
   beforeEach(() => {
     registry = new PivotRegistryImpl();
     snapshotStore = new PivotSnapshotStore();
-    engine = new GetPivotData(registry, snapshotStore);
+    engine = new GetPivotData(registry, snapshotStore, new PivotRecomputeEngineImpl(registry, snapshotStore, () => { throw new Error('Test builder unavailable'); }, () => null));
   });
 
   test('string vs number - no match', () => {
@@ -412,7 +413,7 @@ describe('GetPivotData - Null Handling', () => {
   beforeEach(() => {
     registry = new PivotRegistryImpl();
     snapshotStore = new PivotSnapshotStore();
-    engine = new GetPivotData(registry, snapshotStore);
+    engine = new GetPivotData(registry, snapshotStore, new PivotRecomputeEngineImpl(registry, snapshotStore, () => { throw new Error('Test builder unavailable'); }, () => null));
   });
 
   test('null === null - match', () => {
@@ -534,7 +535,7 @@ describe('GetPivotData - Multiple Filters', () => {
   beforeEach(() => {
     registry = new PivotRegistryImpl();
     snapshotStore = new PivotSnapshotStore();
-    engine = new GetPivotData(registry, snapshotStore);
+    engine = new GetPivotData(registry, snapshotStore, new PivotRecomputeEngineImpl(registry, snapshotStore, () => { throw new Error('Test builder unavailable'); }, () => null));
   });
 
   test('AND logic - all filters must match', () => {
@@ -601,7 +602,7 @@ describe('GetPivotData - Performance Sanity', () => {
   test('large dataset - O(n) filtering', () => {
     const registry = new PivotRegistryImpl();
     const snapshotStore = new PivotSnapshotStore();
-    const engine = new GetPivotData(registry, snapshotStore);
+    const engine = new GetPivotData(registry, snapshotStore, new PivotRecomputeEngineImpl(registry, snapshotStore, () => { throw new Error('Test builder unavailable'); }, () => null));
 
     const pivotId = registry.register({
       name: 'Large',
@@ -615,6 +616,7 @@ describe('GetPivotData - Performance Sanity', () => {
     for (let i = 0; i < 10000; i++) {
       rows.push({
         Region: `Region${i % 100}`,
+        Row: i,
         Revenue: i * 100,
       });
     }
@@ -623,7 +625,7 @@ describe('GetPivotData - Performance Sanity', () => {
       pivotId,
       computedAt: Date.now(),
       rows,
-      fields: ['Region', 'Revenue'],
+      fields: ['Region', 'Row', 'Revenue'],
       valueFields: ['Revenue'],
     };
 
@@ -631,7 +633,8 @@ describe('GetPivotData - Performance Sanity', () => {
 
     const start = Date.now();
     const result = engine.query(pivotId, 'Revenue', [
-      { field: 'Region', value: 'Region50' }
+      { field: 'Region', value: 'Region50' },
+      { field: 'Row', value: 50 },
     ]);
     const duration = Date.now() - start;
 

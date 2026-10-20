@@ -8,6 +8,7 @@ import {
   ColumnFilter,
   MergedRegion,
   Range,
+  AddressRange,
   SheetEvents,
   IFormulaEngine,
   type CellValue,
@@ -27,7 +28,7 @@ import {
   SpecialCellsOptions,
   SpecialCellValue,
 } from "./types/search-types";
-import { extractReferences } from "./utils/formula-reference-extractor";
+import { extractFormulaDependencies } from "./utils/formula-reference-extractor";
 import {
   buildMatcher,
   cellValueToString,
@@ -58,6 +59,9 @@ import {
   type RecalcResult,
   type IterativeRecalcResult,
   type RecalcIterationPolicy,
+  assertWorksheetAddress,
+  MAX_WORKSHEET_ROW,
+  MAX_WORKSHEET_COLUMN,
   packKey,
   unpackKey,
 } from "./dag/DependencyGraph";
@@ -76,99 +80,291 @@ export type { WorksheetSnapshot } from "./persistence/SnapshotCodec";
 export const DEFAULT_WORKSHEET_ROWS = 5000;
 export const DEFAULT_WORKSHEET_COLS = 16384;
 
+// Worksheet identities must not depend on wall-clock resolution or mutable names.
+let nextWorksheetIdentity = 1;
+const WORKBOOK_ADOPTION_KEY = Object.freeze(Object.create(null)) as object;
+
+function cloneDrawingData<T>(
+  value: T,
+  seen = new WeakMap<object, unknown>(),
+  active = new WeakSet<object>(),
+): T {
+  if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+    throw new TypeError('Drawing state must contain serializable data before Workbook adoption');
+  }
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new TypeError('Drawing state must contain finite numbers before Workbook adoption');
+  }
+  if (value === null || typeof value !== 'object') return value;
+
+  if (active.has(value)) {
+    throw new TypeError('Drawing state must not contain cycles before Workbook adoption');
+  }
+  const prior = seen.get(value);
+  if (prior !== undefined) return prior as T;
+
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.some((key) => typeof key === 'symbol')) {
+    throw new TypeError('Drawing state must not contain symbol-keyed properties before Workbook adoption');
+  }
+
+  if (value instanceof Date) {
+    if (ownKeys.length > 0 || !Number.isFinite(value.getTime())) {
+      throw new TypeError('Drawing dates must be valid and have no custom properties before Workbook adoption');
+    }
+    return new Date(value.getTime()) as T;
+  }
+
+  if (Array.isArray(value)) {
+    const copy: unknown[] = new Array(value.length);
+    seen.set(value, copy);
+    active.add(value);
+    try {
+      for (const key of ownKeys) {
+        if (key === 'length') continue;
+        const index = Number(key);
+        if (!Number.isInteger(index) || index < 0 || String(index) !== key || index >= value.length) {
+          throw new TypeError('Drawing arrays must not contain custom properties before Workbook adoption');
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+        if (!descriptor.enumerable || !('value' in descriptor)) {
+          throw new TypeError('Drawing arrays must not contain accessors or hidden entries before Workbook adoption');
+        }
+        copy[index] = cloneDrawingData(descriptor.value, seen, active);
+      }
+    } finally {
+      active.delete(value);
+    }
+    return copy as T;
+  }
+  if (value instanceof Map) {
+    throw new TypeError('Drawing state Maps are not part of the serialized drawing contract');
+  }
+  if (value instanceof Set) {
+    throw new TypeError('Drawing state Sets are not part of the serialized drawing contract');
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Drawing state must contain cloneable plain data before Workbook adoption');
+  }
+
+  const copy: Record<string, unknown> = Object.create(prototype);
+  seen.set(value, copy);
+  active.add(value);
+  try {
+    for (const key of ownKeys) {
+      if (typeof key !== 'string') {
+        throw new TypeError('Drawing state must not contain symbol-keyed properties before Workbook adoption');
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+      if (!descriptor.enumerable) {
+        throw new TypeError('Drawing objects must not contain non-enumerable properties before Workbook adoption');
+      }
+      if (!('value' in descriptor)) {
+        throw new TypeError('Drawing objects must not contain accessors before Workbook adoption');
+      }
+      copy[key] = cloneDrawingData(descriptor.value, seen, active);
+    }
+  } finally {
+    active.delete(value);
+  }
+  return copy as T;
+}
+
+/** @internal Guarded methods; excluded from the public package barrel. */
+export const WORKSHEET_OWNED_MUTATOR_METHODS = Object.freeze([
+  'rowCount', 'colCount', 'canonicalStyle',
+  'beginProgressiveLoad', 'markRowsLoaded', 'finishProgressiveLoad', 'applyCalculatedValue',
+  'beginFormulaResultEventBatch', 'endFormulaResultEventBatch', 'setCellValue', 'clearCellContent',
+  'clearCellFormula', 'setCellFormula', 'setSpillSource', 'setSpilledFrom', 'clearSpillSource',
+  'clearSpilledFrom', 'applySpillBatch', 'setCellStyle', 'restoreCellContent', 'setRowStyle',
+  'clearRowStyle', 'setColumnStyle', 'clearColumnStyle', 'setConditionalFormattingRules',
+  'addConditionalFormattingRule', 'clearConditionalFormatting', 'setHeaderFooter', 'setDataValidation',
+  'removeDataValidation', 'protectSheet', 'unprotectSheet', 'setFreezePanes', 'clearFreezePanes',
+  'setColumnFilter', 'clearColumnFilter', 'clearAllFilters', 'setAutoFilterRange', 'clearAutoFilterRange',
+  'sortRange', 'setRowHeights', 'setColumnWidth', 'setRowHeight', 'insertRows', 'insertColumns', 'runTransaction',
+  'reorderRows', 'reorderColumns', 'getDrawingLayer', 'insertImage', 'deleteImage', 'setFormulaEngine',
+  'registerDependencies', 'clearDependencies', 'notifyChanged', 'applyCircularReferenceResults',
+  'completeScheduledRecalculation', 'recalc', 'autoRecalculate', 'evaluateIfNeeded', 'evaluateBatch',
+  'applyFormulaResults', 'registerVolatile', 'clearVolatile', 'flushVolatiles', 'recalcIterative',
+  'mergeCells', 'cancelMerge', 'hideRow', 'showRow', 'hideCol', 'showCol', 'deleteCell', 'setHyperlink',
+  'removeHyperlink', 'addComment', 'updateComment', 'deleteComment', 'setIcon', 'setCellComponent',
+  'clearCellComponent', 'applySnapshot',
+]);
+const OWNED_MUTATORS = new Set(WORKSHEET_OWNED_MUTATOR_METHODS);
+
 type IndexMapper = (index: number) => number | null;
+type WorksheetOwnerAccess = {
+  internStyle(style: CellStyle): CellStyle;
+  queryPivotDataAt(
+    address: Address,
+    sheetName: string,
+    valueField: string,
+    filters: Array<{ field: string; value: import('./types').CellValue }>,
+  ): import('./GetPivotData').GetPivotDataResult;
+};
+
+function detachOwnedEventValue<T>(value: T): T {
+  if (typeof value === 'function') return undefined as T;
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return new Date(value.getTime()) as T;
+  if (Array.isArray(value)) return Object.freeze(value.map(detachOwnedEventValue)) as T;
+  if (value instanceof Map) return Object.freeze(Array.from(value, ([key, entry]) => [detachOwnedEventValue(key), detachOwnedEventValue(entry)])) as T;
+  if (value instanceof Set) return Object.freeze(Array.from(value, detachOwnedEventValue)) as T;
+  const copy: Record<PropertyKey, unknown> = {};
+  for (const key of Reflect.ownKeys(value)) copy[key] = detachOwnedEventValue((value as Record<PropertyKey, unknown>)[key]);
+  return Object.freeze(copy) as T;
+}
 
 export class Worksheet {
-  readonly name: string;
+  #name: string;
+  get name(): string { return this.#name; }
   /** Cell store — ICellStore boundary; swap implementation without touching any other Worksheet code. */
-  private cells: ICellStore = new ColumnarCellStore();
-  private colWidths = new Map<number, number>(); // px
-  private rowHeights = new Map<number, number>(); // px
-  private columnStyles = new Map<number, CellStyle>();
-  private rowStyles = new Map<number, CellStyle>();
-  private drawingLayer = new DrawingLayer();
+  #cells: ICellStore = new ColumnarCellStore();
+  #colWidths = new Map<number, number>(); // px
+  #rowHeights = new Map<number, number>(); // px
+  #columnStyles = new Map<number, CellStyle>();
+  #rowStyles = new Map<number, CellStyle>();
+  #drawingLayer = new DrawingLayer();
   /** Data validation rules, keyed by "row:col". */
-  private validationStore = new Map<string, DataValidationRule>();
+  #validationStore = new Map<string, DataValidationRule>();
   /** Sheet-level protection settings, or null when not protected. */
-  private sheetProtection: SheetProtectionOptions | null = null;
+  #sheetProtection: SheetProtectionOptions | null = null;
   /** Freeze-pane state, or null when no panes are frozen. */
-  private freezeState: FreezeState | null = null;
+  #freezeState: FreezeState | null = null;
   /** Auto-filter range marker (header row + column span), or null if not set. */
-  private autoFilterRange: AutoFilterRange | null = null;
-  private filters = new Map<number, ColumnFilter>();
-  private events = new Emitter<SheetEvents>();
-  private formulaEngine?: IFormulaEngine;
+  #autoFilterRange: AutoFilterRange | null = null;
+  #filters = new Map<number, ColumnFilter>();
+  #events = new Emitter<SheetEvents>();
+  #formulaEngine?: IFormulaEngine;
   /**
    * Merge store — IMergeStore boundary; swap implementation without touching any other Worksheet code.
    * To rollback: replace MergeStoreV1 with MergeStoreLegacy (same interface, O(n) ops).
    */
-  private mergeStore: IMergeStore = new MergeStoreV1();
+  #mergeStore: IMergeStore = new MergeStoreV1();
   /**
    * Visibility store — IVisibilityStore boundary.
    * Stores hidden rows and columns as Set<number> — all queries O(1).
    * To rollback: replace VisibilityStoreV1 with VisibilityStoreLegacy (same interface, O(n) ops).
    * Hidden state is NEVER written into CellRecord — this is an invariant.
    */
-  private visibilityStore: IVisibilityStore = new VisibilityStoreV1();
+  #visibilityStore: IVisibilityStore = new VisibilityStoreV1();
   /**
    * Dependency graph — Phase 4.
    * Tracks formula dependencies as a directed graph: precedent → dependent.
    * Provides BFS dirty propagation + Kahn topo evaluation order + Tarjan SCC cycle detection.
    * Decoupled from ICellStore — the DAG holds only NodeKey (packed row/col keys).
    */
-  private readonly dag = new DependencyGraph();
+  #dag = new DependencyGraph();
   /**
    * RecalcCoordinator — Phase 4.
    * Owns the recalculation pipeline: register deps → notify changed → recalc(evalFn).
    * Exposes registerDependencies() and recalc() as the public DAG API on Worksheet.
    */
-  private readonly recalcCoordinator = new RecalcCoordinator(this.dag);
-  private conditionalRules: ConditionalFormattingRule[] = [];
-  private workbook?: any; // Reference to parent Workbook (for StyleCache access)
+  #recalcCoordinator = new RecalcCoordinator(this.#dag);
+  #conditionalRules: ConditionalFormattingRule[] = [];
+  #workbook?: WorksheetOwnerAccess;
+  #ownedByWorkbook?: string;
   /** Phase 28: Internal worksheet ID for pivot registry */
-  private worksheetId: string;
+  #worksheetId: string;
   /** Reference to SpreadsheetEngine for E2 invariant enforcement */
-  private _engine?: { isMutating(): boolean };
+  #_engine?: { isMutating(): boolean; isComputing?(): boolean };
   /** Per-sheet header and footer text (left / center / right sections). */
-  private headerFooter: HeaderFooterSettings = cloneHeaderFooterSettings(
+  #headerFooter: HeaderFooterSettings = cloneHeaderFooterSettings(
     DEFAULT_HEADER_FOOTER,
   );
-  private progressiveLoadTotalRows = 0;
-  private progressiveLoadDone = true;
-  private readonly progressiveLoadedRows = new Set<number>();
-  rowCount: number;
-  colCount: number;
+  #progressiveLoadTotalRows = 0;
+  #progressiveLoadDone = true;
+  #progressiveLoadedRows = new Set<number>();
+  #rowCount: number;
+  #colCount: number;
+  get rowCount(): number { return this.#rowCount; }
+  set rowCount(value: number) { this.assertOwnedMutationEntry('rowCount'); this.#rowCount = value; }
+  get colCount(): number { return this.#colCount; }
+  set colCount(value: number) { this.assertOwnedMutationEntry('colCount'); this.#colCount = value; }
 
   // Transaction-level event buffering (Phase 11 enforcement)
-  private _inTransaction = false;
-  private _pendingEvents: SheetEvents[] = [];
+  #_inTransaction = false;
+  #_pendingEvents: SheetEvents[] = [];
+  #_deferredFormulaResultEvents: SheetEvents[] = [];
+  #_formulaRecalculationDepth = 0;
+  #_mutationListeners = new Set<(event: SheetEvents) => void>();
 
   constructor(
     name: string,
     rows = DEFAULT_WORKSHEET_ROWS,
     cols = DEFAULT_WORKSHEET_COLS,
     engine?: IFormulaEngine,
-    workbook?: any,
-    spreadsheetEngine?: { isMutating(): boolean },
+    workbook?: WorksheetOwnerAccess,
+    spreadsheetEngine?: { isMutating(): boolean; isComputing?(): boolean },
   ) {
-    this.name = name;
-    this.rowCount = rows;
-    this.colCount = cols;
-    this.formulaEngine = engine;
-    this.workbook = workbook;
-    this._engine = spreadsheetEngine;
-    this.worksheetId = `ws-${name}-${Date.now()}`; // Phase 28: Unique ID
+    this.#name = name;
+    this.#rowCount = rows;
+    this.#colCount = cols;
+    this.#formulaEngine = engine;
+    this.#workbook = workbook;
+    this.#_engine = spreadsheetEngine;
+    this.#worksheetId = `ws-${nextWorksheetIdentity++}`;
+  }
+
+  /** @internal Workbook adopts a standalone worksheet exactly once. */
+  adoptByWorkbook(workbookId: string, key: object): void {
+    if (key !== WORKBOOK_ADOPTION_KEY) throw new Error('Worksheet adoption is owner-private');
+    if (this.#ownedByWorkbook && this.#ownedByWorkbook !== workbookId) {
+      throw new Error('Worksheet already belongs to another workbook');
+    }
+    if (this.#ownedByWorkbook) return;
+    // A standalone caller may have retained the current DrawingLayer or one of
+    // its mutable objects. Move the workbook onto a detached layer at adoption
+    // so those pre-adoption aliases can no longer mutate owner drawing state.
+    const drawingState = this.#cloneDrawingLayerData();
+    const adoptedDrawingLayer = new DrawingLayer();
+    adoptedDrawingLayer.deserialize(drawingState);
+    this.#drawingLayer = adoptedDrawingLayer;
+    this.#ownedByWorkbook = workbookId;
+    Object.preventExtensions(this);
+  }
+
+  isWorkbookOwned(): boolean { return this.#ownedByWorkbook !== undefined; }
+
+  /** Narrow formula query path; does not expose the containing Workbook or its services. */
+  queryPivotDataAt(
+    address: Address,
+    valueField: string,
+    filters: Array<{ field: string; value: import('./types').CellValue }> = [],
+  ): import('./GetPivotData').GetPivotDataResult {
+    if (!this.#workbook || typeof this.#workbook.queryPivotDataAt !== 'function') return '#REF!';
+    return this.#workbook.queryPivotDataAt(address, this.#name, valueField, filters);
+  }
+
+  /** @internal Called by the locked prototype entry wrappers. */
+  assertOwnedMutationEntry(operation: string): void {
+    if (this.#ownedByWorkbook) throw new Error(`Workbook-owned Worksheet.${operation} is unavailable until its journal slice is authorized`);
   }
 
   on(listener: (e: SheetEvents) => void) {
-    return this.events.on(listener);
+    return this.#events.on((event) => listener(this.#ownedByWorkbook ? detachOwnedEventValue(event) : event));
   }
 
-  beginProgressiveLoad(totalRows = this.rowCount): void {
-    this.progressiveLoadTotalRows = totalRows;
-    this.progressiveLoadDone = false;
-    this.progressiveLoadedRows.clear();
-    this.events.emit({
+  /** @internal Pointer events are not published from workbook-owned sheets in R1. */
+  emitStandaloneEvent(event: SheetEvents): void {
+    if (this.#ownedByWorkbook) return;
+    this.#events.emit(event);
+  }
+
+  /** @internal Subscribe to each mutation before public event coalescing. */
+  onMutation(listener: (event: SheetEvents) => void): { dispose(): void } {
+    const detachedListener = (event: SheetEvents) => listener(this.#ownedByWorkbook ? detachOwnedEventValue(event) : event);
+    this.#_mutationListeners.add(detachedListener);
+    return { dispose: () => this.#_mutationListeners.delete(detachedListener) };
+  }
+
+  beginProgressiveLoad(totalRows = this.#rowCount): void {
+    this.#progressiveLoadTotalRows = totalRows;
+    this.#progressiveLoadDone = false;
+    this.#progressiveLoadedRows.clear();
+    this.#events.emit({
       type: "progressive-load-changed",
       loadedRows: 0,
       totalRows,
@@ -179,40 +375,40 @@ export class Worksheet {
   markRowsLoaded(startRow: number, endRow: number): void {
     if (endRow < startRow) return;
     for (let row = Math.max(1, startRow); row <= endRow; row++) {
-      this.progressiveLoadedRows.add(row);
+      this.#progressiveLoadedRows.add(row);
     }
-    this.events.emit({
+    this.#events.emit({
       type: "progressive-load-changed",
-      loadedRows: this.progressiveLoadedRows.size,
-      totalRows: this.progressiveLoadTotalRows || this.rowCount,
-      done: this.progressiveLoadDone,
+      loadedRows: this.#progressiveLoadedRows.size,
+      totalRows: this.#progressiveLoadTotalRows || this.#rowCount,
+      done: this.#progressiveLoadDone,
     });
   }
 
   finishProgressiveLoad(): void {
-    this.progressiveLoadDone = true;
-    this.events.emit({
+    this.#progressiveLoadDone = true;
+    this.#events.emit({
       type: "progressive-load-changed",
-      loadedRows: this.progressiveLoadedRows.size,
-      totalRows: this.progressiveLoadTotalRows || this.rowCount,
+      loadedRows: this.#progressiveLoadedRows.size,
+      totalRows: this.#progressiveLoadTotalRows || this.#rowCount,
       done: true,
     });
   }
 
   isProgressiveLoading(): boolean {
-    return !this.progressiveLoadDone;
+    return !this.#progressiveLoadDone;
   }
 
   isRowLoaded(row: number): boolean {
-    return this.progressiveLoadDone || this.progressiveLoadedRows.has(row);
+    return this.#progressiveLoadDone || this.#progressiveLoadedRows.has(row);
   }
 
   /**
    * Assert that we're in a valid mutation state.
    * Throws if called outside engine.run() (E2 invariant enforcement).
    */
-  private assertMutating(operation: string): void {
-    if (this._engine && !this._engine.isMutating()) {
+  #assertMutating(operation: string): void {
+    if (this.#_engine && !this.#_engine.isMutating()) {
       throw new Error(
         `[E2 INVARIANT VIOLATION] ${operation} called outside engine.run(). ` +
           "All mutations must occur within the engine.run() callback.",
@@ -224,7 +420,7 @@ export class Worksheet {
    * Check if a transaction is currently active.
    */
   isTransactionActive(): boolean {
-    return this._inTransaction;
+    return this.#_inTransaction;
   }
 
   /**
@@ -233,20 +429,20 @@ export class Worksheet {
    * Re-entrant: nested calls reuse the outer transaction.
    */
   runTransaction<T>(fn: () => T): T {
-    if (this._inTransaction) {
+    if (this.#_inTransaction) {
       // Re-entrant call — reuse existing transaction
       return fn();
     }
 
-    this._inTransaction = true;
+    this.#_inTransaction = true;
     try {
       const result = fn();
-      this._inTransaction = false;
-      this._flushEvents();
+      this.#_inTransaction = false;
+      this.#_flushEvents();
       return result;
     } catch (e) {
-      this._inTransaction = false;
-      this._pendingEvents = [];
+      this.#_inTransaction = false;
+      this.#_pendingEvents = [];
       throw e;
     }
   }
@@ -254,11 +450,12 @@ export class Worksheet {
   /**
    * Emit or buffer an event depending on transaction state.
    */
-  private _emitOrBuffer(event: SheetEvents): void {
-    if (this._inTransaction) {
-      this._pendingEvents.push(event);
+  #_emitOrBuffer(event: SheetEvents): void {
+    for (const listener of this.#_mutationListeners) listener(event);
+    if (this.#_inTransaction) {
+      this.#_pendingEvents.push(event);
     } else {
-      this.events.emit(event);
+      this.#events.emit(event);
     }
   }
 
@@ -266,30 +463,28 @@ export class Worksheet {
    * Flush pending events after transaction commit.
    * Coalesces events into one final aggregate event.
    */
-  private _flushEvents(): void {
-    if (this._pendingEvents.length === 0) return;
+  #_flushEvents(): void {
+    if (this.#_pendingEvents.length === 0) return;
 
-    const pending = this._pendingEvents;
-    this._pendingEvents = [];
+    const pending = this.#_pendingEvents;
+    this.#_pendingEvents = [];
 
     // Pure style batches (e.g. formatting 10k cells) must reach listeners for
     // EVERY cell, otherwise the renderer would only invalidate the last one.
     // Dedupe per address (last write wins) so each cell is emitted at most once.
-    if (
-      pending.length > 1 &&
-      pending.every((e) => e.type === "style-changed")
-    ) {
+    if (pending.length > 1 && pending.every((e) => e.type === "style-changed")) {
       const latest = new Map<number, SheetEvents>();
       for (const e of pending) {
         const a = (e as { address: Address }).address;
         latest.set(a.row * 65536 + a.col, e);
       }
-      for (const e of latest.values()) this.events.emit(e);
+      for (const e of latest.values()) this.#events.emit(e);
       return;
     }
 
-    // For now, emit the last event (aggregate coalescing can be added later)
-    this.events.emit(pending[pending.length - 1]);
+    // Preserve established public event batching semantics. Internal mutation
+    // journals subscribe before this coalescing step and still see every write.
+    this.#events.emit(pending[pending.length - 1]);
   }
 
   /**
@@ -303,14 +498,18 @@ export class Worksheet {
    * All mutations must go through setCellValue(), setCellFormula(), etc.
    */
   getCell(addr: Address): Readonly<Cell> | undefined {
+    assertWorksheetAddress(addr.row, addr.col);
     // Redirect non-anchor merged cells to their anchor.
-    const anchor = this.mergeStore.getAnchor(addr.row, addr.col);
+    const anchor = this.#mergeStore.getAnchor(addr.row, addr.col);
     const { row, col } = anchor ?? addr;
-    const cell = this.cells.get(row, col);
+    const cell = this.#cells.get(row, col);
 
-    // Return frozen copy to prevent direct mutation
-    // This closes the "read → mutate via returned object" escape hatch
-    return cell ? Object.freeze({ ...cell }) : undefined;
+    // Standalone callers retain the legacy shallow value behavior. An adopted
+    // worksheet may still be held by code that received it before adoption, so
+    // its nested cell state must be detached as well as its top-level record.
+    return cell
+      ? (this.#ownedByWorkbook ? detachOwnedEventValue(cell) : Object.freeze({ ...cell }))
+      : undefined;
   }
 
   /**
@@ -339,8 +538,8 @@ export class Worksheet {
    * Otherwise returns the address unchanged.
    * O(1) via MergeStoreV1.getAnchor().
    */
-  private resolveAnchor(addr: Address): Address {
-    return this.mergeStore.getAnchor(addr.row, addr.col) ?? addr;
+  #resolveAnchor(addr: Address): Address {
+    return this.#mergeStore.getAnchor(addr.row, addr.col) ?? addr;
   }
 
   /**
@@ -351,9 +550,10 @@ export class Worksheet {
    * boundary, not here. This keeps internal implementation flexible while
    * maintaining invariant enforcement at the architectural boundary.
    */
-  private ensureCell(addr: Address): Cell {
-    const resolved = this.resolveAnchor(addr);
-    return this.cells.getOrCreate(resolved.row, resolved.col);
+  #ensureCell(addr: Address): Cell {
+    assertWorksheetAddress(addr.row, addr.col);
+    const resolved = this.#resolveAnchor(addr);
+    return this.#cells.getOrCreate(resolved.row, resolved.col);
   }
 
   getCellValue(addr: Address): Cell["value"] {
@@ -361,25 +561,68 @@ export class Worksheet {
   }
 
   setCellValue(addr: Address, value: Cell["value"]): void {
-    if (!this._inTransaction) {
+    this.#assertMutating("setCellValue");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.setCellValue(addr, value));
     }
 
-    const c = this.ensureCell(addr);
+    const c = this.#ensureCell(addr);
     const previousValue = c.value; // Phase 30b: Capture before mutation
+    const previousFormula = c.formula;
     // Phase 30b: No-op guard — same value, no mutation, no event
-    if (previousValue === value) {
+    if (previousValue === value && previousFormula === undefined) {
       return;
     }
     c.value = value;
-    if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
-    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this._emitOrBuffer({
+    if (previousFormula !== undefined) {
+      delete c.formula;
+      this.clearDependencies(addr);
+    }
+    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
+    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
+    this.#_emitOrBuffer({
       type: "cell-changed",
       address: addr,
       cell: { ...c },
       previousValue,
+      previousFormula,
     });
+  }
+
+  /** @internal Apply a formula result while the owning engine is computing. */
+  applyCalculatedValue(addr: Address, value: Cell["value"]): void {
+    if (this.#_engine && !this.#_engine.isComputing?.()) {
+      throw new Error("Calculated values may only be applied by the execution engine.");
+    }
+
+    const c = this.#ensureCell(addr);
+    const previousValue = c.value;
+    if (previousValue === value) return;
+    c.value = value;
+    const event: SheetEvents = {
+      type: "cell-changed",
+      origin: "formula-result",
+      address: addr,
+      cell: { ...c },
+      previousValue,
+      previousFormula: c.formula,
+    };
+    if (this.#_formulaRecalculationDepth > 0) this.#_deferredFormulaResultEvents.push(event);
+    else this.#events.emit(event);
+  }
+
+  /** @internal Buffer derived-result events across an engine scheduler pass. */
+  beginFormulaResultEventBatch(): void {
+    this.#_formulaRecalculationDepth++;
+  }
+
+  /** @internal Publish buffered results only after the engine returns to IDLE. */
+  endFormulaResultEventBatch(commit: boolean): void {
+    this.#_formulaRecalculationDepth = Math.max(0, this.#_formulaRecalculationDepth - 1);
+    if (this.#_formulaRecalculationDepth !== 0) return;
+    const events = this.#_deferredFormulaResultEvents;
+    this.#_deferredFormulaResultEvents = [];
+    if (commit) for (const event of events) this.#events.emit(event);
   }
 
   /**
@@ -387,16 +630,17 @@ export class Worksheet {
    * Keeps style/metadata intact.
    */
   clearCellContent(addr: Address): void {
-    if (!this._inTransaction) {
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.clearCellContent(addr));
     }
 
-    const resolved = this.resolveAnchor(addr);
-    const c = this.cells.get(resolved.row, resolved.col);
+    const resolved = this.#resolveAnchor(addr);
+    const c = this.#cells.get(resolved.row, resolved.col);
     if (!c) return;
 
     const hadFormula = typeof c.formula === "string" && c.formula.length > 0;
     const previousValue = c.value;
+    const previousFormula = c.formula;
 
     if (previousValue === null && !hadFormula) {
       return;
@@ -404,14 +648,16 @@ export class Worksheet {
 
     c.value = null;
     if ("formula" in c) delete c.formula;
+    if (hadFormula) this.clearDependencies(resolved);
 
-    if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
-    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this._emitOrBuffer({
+    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
+    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
+    this.#_emitOrBuffer({
       type: "cell-changed",
       address: addr,
       cell: { ...c },
       previousValue,
+      previousFormula,
     });
   }
 
@@ -419,23 +665,26 @@ export class Worksheet {
    * Clear only formula text while keeping the current cell value.
    */
   clearCellFormula(addr: Address): void {
-    if (!this._inTransaction) {
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.clearCellFormula(addr));
     }
 
-    const resolved = this.resolveAnchor(addr);
-    const c = this.cells.get(resolved.row, resolved.col);
+    const resolved = this.#resolveAnchor(addr);
+    const c = this.#cells.get(resolved.row, resolved.col);
     if (!c || c.formula === undefined) return;
 
+    const previousFormula = c.formula;
     delete c.formula;
+    this.clearDependencies(resolved);
 
-    if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
-    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this._emitOrBuffer({
+    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
+    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
+    this.#_emitOrBuffer({
       type: "cell-changed",
       address: addr,
       cell: { ...c },
       previousValue: c.value,
+      previousFormula,
     });
   }
 
@@ -455,21 +704,37 @@ export class Worksheet {
     formula: string,
     displayValue?: Cell["value"],
   ): void {
-    this.assertMutating("setCellFormula");
-    if (!this._inTransaction) {
+    this.#assertMutating("setCellFormula");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() =>
         this.setCellFormula(addr, formula, displayValue),
       );
     }
 
-    const c = this.ensureCell(addr);
+    const c = this.#ensureCell(addr);
+    const previousFormula = c.formula;
+    const previousValue = c.value;
     c.formula = formula;
     if (displayValue !== undefined) c.value = displayValue;
 
     // Phase 3: Automatically extract and register formula dependencies
     try {
-      const dependencies = extractReferences(formula, addr);
-      this.registerDependencies(addr, dependencies);
+      // A1 references are extracted as zero-based coordinates, while every
+      // Worksheet Address and DependencyGraph key follows the public
+      // one-based contract. Keep the extractor's R1C1 origin zero-based and
+      // normalize every extracted dependency exactly once below.
+      const parserAddress = { row: addr.row - 1, col: addr.col - 1 };
+      const extracted = extractFormulaDependencies(formula, parserAddress);
+      // Formula-reference extraction uses zero-based coordinates; graph
+      // nodes use the public one-based worksheet coordinate contract.
+      const dependencies = extracted.cells.map(({ row, col }) => ({ row: row + 1, col: col + 1 }));
+      const ranges = extracted.ranges.map((range) => ({
+        startRow: range.startRow + 1,
+        endRow: range.endRow + 1,
+        startCol: range.startCol + 1,
+        endCol: range.endCol + 1,
+      }));
+      this.registerDependencies(addr, dependencies, ranges);
     } catch (error) {
       // Dependency extraction failed - log but continue
       console.warn(
@@ -478,9 +743,15 @@ export class Worksheet {
       );
     }
 
-    if (this.formulaEngine) this.formulaEngine.onCellChanged?.(addr, c);
-    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this._emitOrBuffer({ type: "cell-changed", address: addr, cell: { ...c } });
+    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
+    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
+    this.#_emitOrBuffer({
+      type: "cell-changed",
+      address: addr,
+      cell: { ...c },
+      previousValue,
+      previousFormula,
+    });
   }
 
   /**
@@ -488,15 +759,15 @@ export class Worksheet {
    * Does NOT fire events (spill is internal bookkeeping).
    */
   setSpillSource(addr: Address, source: Cell["spillSource"]): void {
-    this.assertMutating("setSpillSource");
-    if (!this._inTransaction) {
+    this.#assertMutating("setSpillSource");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.setSpillSource(addr, source));
     }
 
-    const c = this.ensureCell(addr);
+    const c = this.#ensureCell(addr);
     const before = c.spillSource;
     c.spillSource = source;
-    this._emitOrBuffer({
+    this.#_emitOrBuffer({
       type: "spill-source-changed",
       address: addr,
       before,
@@ -509,15 +780,15 @@ export class Worksheet {
    * Does NOT fire events.
    */
   setSpilledFrom(addr: Address, from: Cell["spilledFrom"]): void {
-    this.assertMutating("setSpilledFrom");
-    if (!this._inTransaction) {
+    this.#assertMutating("setSpilledFrom");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.setSpilledFrom(addr, from));
     }
 
-    const c = this.ensureCell(addr);
+    const c = this.#ensureCell(addr);
     const before = c.spilledFrom;
     c.spilledFrom = from;
-    this._emitOrBuffer({
+    this.#_emitOrBuffer({
       type: "spill-from-changed",
       address: addr,
       before,
@@ -530,16 +801,16 @@ export class Worksheet {
    * Sets spillSource to undefined (preserves mono-shape — never delete).
    */
   clearSpillSource(addr: Address): void {
-    this.assertMutating("clearSpillSource");
-    if (!this._inTransaction) {
+    this.#assertMutating("clearSpillSource");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.clearSpillSource(addr));
     }
 
-    const c = this.cells.get(addr.row, addr.col);
+    const c = this.#cells.get(addr.row, addr.col);
     if (c) {
       const before = c.spillSource;
       c.spillSource = undefined;
-      this._emitOrBuffer({
+      this.#_emitOrBuffer({
         type: "spill-source-changed",
         address: addr,
         before,
@@ -553,16 +824,16 @@ export class Worksheet {
    * Sets spilledFrom to undefined (preserves mono-shape — never delete).
    */
   clearSpilledFrom(addr: Address): void {
-    this.assertMutating("clearSpilledFrom");
-    if (!this._inTransaction) {
+    this.#assertMutating("clearSpilledFrom");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.clearSpilledFrom(addr));
     }
 
-    const c = this.cells.get(addr.row, addr.col);
+    const c = this.#cells.get(addr.row, addr.col);
     if (c) {
       const before = c.spilledFrom;
       c.spilledFrom = undefined;
-      this._emitOrBuffer({
+      this.#_emitOrBuffer({
         type: "spill-from-changed",
         address: addr,
         before,
@@ -582,7 +853,7 @@ export class Worksheet {
       spilledFrom?: Cell["spilledFrom"];
     }>,
   ): void {
-    if (!this._inTransaction) {
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.applySpillBatch(changes));
     }
 
@@ -600,7 +871,7 @@ export class Worksheet {
 
     // Capture before state for all cells
     for (const change of changes) {
-      let cell = this.cells.get(change.addr.row, change.addr.col);
+      let cell = this.#cells.get(change.addr.row, change.addr.col);
       const before = {
         spillSource: cell?.spillSource,
         spilledFrom: cell?.spilledFrom,
@@ -612,7 +883,7 @@ export class Worksheet {
 
       if (isSet || cell) {
         if (!cell && isSet) {
-          cell = this.ensureCell(change.addr);
+          cell = this.#ensureCell(change.addr);
         }
         if (cell) {
           if ("spillSource" in change) {
@@ -633,16 +904,17 @@ export class Worksheet {
     }
 
     // Emit one batch event
-    this._emitOrBuffer({ type: "spill-batch-changed", changes: eventChanges });
+    this.#_emitOrBuffer({ type: "spill-batch-changed", changes: eventChanges });
   }
 
   getDirectCellStyle(addr: Address): CellStyle | undefined {
     // Hot path (formatting, rendering): read the stored style reference directly.
     // getCell() clones + freezes the whole record, which is wasted work here —
     // the style itself is already an immutable interned reference.
-    const anchor = this.mergeStore.getAnchor(addr.row, addr.col);
+    const anchor = this.#mergeStore.getAnchor(addr.row, addr.col);
     const { row, col } = anchor ?? addr;
-    return this.cells.get(row, col)?.style;
+    const style = this.#cells.get(row, col)?.style;
+    return this.#ownedByWorkbook ? detachOwnedEventValue(style) : style;
   }
 
   getCellStyle(addr: Address): CellStyle | undefined {
@@ -650,29 +922,45 @@ export class Worksheet {
   }
 
   getEffectiveCellStyle(addr: Address): CellStyle | undefined {
-    const columnStyle = this.columnStyles.get(addr.col);
-    const rowStyle = this.rowStyles.get(addr.row);
+    const columnStyle = this.#columnStyles.get(addr.col);
+    const rowStyle = this.#rowStyles.get(addr.row);
     const cellStyle = this.getDirectCellStyle(addr);
-    return this.mergeStyles(columnStyle, rowStyle, cellStyle);
+    return this.#mergeStyles(columnStyle, rowStyle, cellStyle);
   }
 
   setCellStyle(addr: Address, style: CellStyle | undefined): void {
-    if (!this._inTransaction) {
+    this.#assertMutating("setCellStyle");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.setCellStyle(addr, style));
     }
 
-    const c = this.ensureCell(addr);
+    const c = this.#ensureCell(addr);
+    const previousStyle = c.style;
 
     // Callers that already hold a canonical style (e.g. batch formatting) skip re-hashing.
     const internedStyle =
-      style && isInternedStyle(style) ? style : this.internStyle(style);
+      style && isInternedStyle(style) ? style : this.#internStyle(style);
 
     c.style = internedStyle; // Reference to canonical style (not a copy)
-    this._emitOrBuffer({
+    this.#_emitOrBuffer({
       type: "style-changed",
       address: addr,
       style: internedStyle,
+      previousStyle,
     });
+  }
+
+  /** @internal Restore value and formula state from a reversible content patch. */
+  restoreCellContent(
+    addr: Address,
+    state: { value: Cell["value"]; formula?: string },
+  ): void {
+    if (state.formula !== undefined) {
+      this.setCellFormula(addr, state.formula, state.value);
+      return;
+    }
+    this.clearCellFormula(addr);
+    this.setCellValue(addr, state.value);
   }
 
   /**
@@ -680,22 +968,24 @@ export class Worksheet {
    * Lets batch operations intern each distinct style once.
    */
   canonicalStyle(style: CellStyle | undefined): CellStyle | undefined {
-    return style && isInternedStyle(style) ? style : this.internStyle(style);
+    return style && isInternedStyle(style) ? style : this.#internStyle(style);
   }
 
   getRowStyle(row: number): CellStyle | undefined {
-    return this.rowStyles.get(row);
+    const style = this.#rowStyles.get(row);
+    return this.#ownedByWorkbook ? detachOwnedEventValue(style) : style;
   }
 
   setRowStyle(row: number, style: CellStyle | undefined): void {
-    if (!this._inTransaction) {
+    this.#assertMutating("setRowStyle");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.setRowStyle(row, style));
     }
 
-    const internedStyle = this.internStyle(style);
-    if (internedStyle) this.rowStyles.set(row, internedStyle);
-    else this.rowStyles.delete(row);
-    this._emitOrBuffer({ type: "sheet-mutated" });
+    const internedStyle = this.#internStyle(style);
+    if (internedStyle) this.#rowStyles.set(row, internedStyle);
+    else this.#rowStyles.delete(row);
+    this.#_emitOrBuffer({ type: "sheet-mutated" });
   }
 
   clearRowStyle(row: number): void {
@@ -703,18 +993,20 @@ export class Worksheet {
   }
 
   getColumnStyle(col: number): CellStyle | undefined {
-    return this.columnStyles.get(col);
+    const style = this.#columnStyles.get(col);
+    return this.#ownedByWorkbook ? detachOwnedEventValue(style) : style;
   }
 
   setColumnStyle(col: number, style: CellStyle | undefined): void {
-    if (!this._inTransaction) {
+    this.#assertMutating("setColumnStyle");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.setColumnStyle(col, style));
     }
 
-    const internedStyle = this.internStyle(style);
-    if (internedStyle) this.columnStyles.set(col, internedStyle);
-    else this.columnStyles.delete(col);
-    this._emitOrBuffer({ type: "sheet-mutated" });
+    const internedStyle = this.#internStyle(style);
+    if (internedStyle) this.#columnStyles.set(col, internedStyle);
+    else this.#columnStyles.delete(col);
+    this.#_emitOrBuffer({ type: "sheet-mutated" });
   }
 
   clearColumnStyle(col: number): void {
@@ -737,8 +1029,8 @@ export class Worksheet {
     options?: { replace?: boolean; source?: "preset" | "manual" },
   ): void {
     if (Array.isArray(rangeOrRules)) {
-      this.conditionalRules = rangeOrRules.slice();
-      this.events.emit({ type: "sheet-mutated" });
+      this.#conditionalRules = rangeOrRules.slice();
+      this.#events.emit({ type: "sheet-mutated" });
       return;
     }
 
@@ -747,42 +1039,43 @@ export class Worksheet {
     const opts = Array.isArray(rulesOrOptions) ? options : rulesOrOptions;
     const replace = opts?.replace ?? true;
 
-    const normalizedRange = this.normalizeRange(range);
+    const normalizedRange = this.#normalizeRange(range);
     const updatedRules = rules.map((rule) => ({
       ...rule,
       ranges: [normalizedRange],
     }));
 
     if (replace) {
-      this.conditionalRules = updatedRules;
+      this.#conditionalRules = updatedRules;
     } else {
-      this.conditionalRules = [...this.conditionalRules, ...updatedRules];
+      this.#conditionalRules = [...this.#conditionalRules, ...updatedRules];
     }
 
-    this.events.emit({ type: "sheet-mutated" });
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   addConditionalFormattingRule(rule: ConditionalFormattingRule): void {
-    this.conditionalRules.push(rule);
-    this.events.emit({ type: "sheet-mutated" });
+    this.#conditionalRules.push(rule);
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   clearConditionalFormatting(): void {
-    this.conditionalRules = [];
-    this.events.emit({ type: "sheet-mutated" });
+    this.#conditionalRules = [];
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   getConditionalFormattingRules(): ConditionalFormattingRule[] {
-    return this.conditionalRules.slice();
+    const rules = this.#conditionalRules.slice();
+    return this.#ownedByWorkbook ? detachOwnedEventValue(rules) : rules;
   }
 
   getHeaderFooter(): HeaderFooterSettings {
-    return cloneHeaderFooterSettings(this.headerFooter);
+    return cloneHeaderFooterSettings(this.#headerFooter);
   }
 
   setHeaderFooter(settings: HeaderFooterSettings): void {
-    this.headerFooter = cloneHeaderFooterSettings(settings);
-    this.events.emit({
+    this.#headerFooter = cloneHeaderFooterSettings(settings);
+    this.#events.emit({
       type: "header-footer-changed",
       settings: this.getHeaderFooter(),
     });
@@ -791,22 +1084,23 @@ export class Worksheet {
   // ── Data Validation ──────────────────────────────────────────────────────
 
   setDataValidation(addr: Address, rule: DataValidationRule): void {
-    this.validationStore.set(`${addr.row}:${addr.col}`, rule);
-    this.events.emit({ type: "sheet-mutated" });
+    this.#validationStore.set(`${addr.row}:${addr.col}`, rule);
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   getDataValidation(addr: Address): DataValidationRule | undefined {
-    return this.validationStore.get(`${addr.row}:${addr.col}`);
+    const rule = this.#validationStore.get(`${addr.row}:${addr.col}`);
+    return this.#ownedByWorkbook ? detachOwnedEventValue(rule) : rule;
   }
 
   removeDataValidation(addr: Address): void {
-    this.validationStore.delete(`${addr.row}:${addr.col}`);
-    this.events.emit({ type: "sheet-mutated" });
+    this.#validationStore.delete(`${addr.row}:${addr.col}`);
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   getValidationCells(): Address[] {
     const result: Address[] = [];
-    for (const key of this.validationStore.keys()) {
+    for (const key of this.#validationStore.keys()) {
       const [row, col] = key.split(":").map(Number);
       result.push({ row, col });
     }
@@ -823,9 +1117,9 @@ export class Worksheet {
    * The kernel stores the protection state for query by SDK-level guards.
    */
   protectSheet(options: SheetProtectionOptions = {}): void {
-    const before = this.sheetProtection;
-    this.sheetProtection = options;
-    this.events.emit({
+    const before = this.#sheetProtection;
+    this.#sheetProtection = options;
+    this.#events.emit({
       type: "sheet-protection-changed",
       before,
       after: options,
@@ -834,19 +1128,21 @@ export class Worksheet {
 
   /** Remove sheet protection. */
   unprotectSheet(): void {
-    const before = this.sheetProtection;
-    this.sheetProtection = null;
-    this.events.emit({ type: "sheet-protection-changed", before, after: null });
+    const before = this.#sheetProtection;
+    this.#sheetProtection = null;
+    this.#events.emit({ type: "sheet-protection-changed", before, after: null });
   }
 
   /** Return `true` if the sheet is currently protected. */
   isSheetProtected(): boolean {
-    return this.sheetProtection !== null;
+    return this.#sheetProtection !== null;
   }
 
   /** Return the current protection settings, or `null` if not protected. */
   getSheetProtection(): SheetProtectionOptions | null {
-    return this.sheetProtection === null ? null : { ...this.sheetProtection };
+    if (this.#sheetProtection === null) return null;
+    const protection = { ...this.#sheetProtection };
+    return this.#ownedByWorkbook ? detachOwnedEventValue(protection) : protection;
   }
 
   // ── Freeze Panes ─────────────────────────────────────────────────────────
@@ -867,39 +1163,39 @@ export class Worksheet {
         `setFreezePanes: rows and cols must be non-negative integers (got ${rows}, ${cols})`,
       );
     }
-    const before = this.freezeState;
-    this.freezeState = rows === 0 && cols === 0 ? null : { rows, cols };
-    this.events.emit({
+    const before = this.#freezeState;
+    this.#freezeState = rows === 0 && cols === 0 ? null : { rows, cols };
+    this.#events.emit({
       type: "freeze-panes-changed",
       before,
-      after: this.freezeState,
+      after: this.#freezeState,
     });
   }
 
   /** Remove all frozen panes. */
   clearFreezePanes(): void {
-    const before = this.freezeState;
-    this.freezeState = null;
-    this.events.emit({ type: "freeze-panes-changed", before, after: null });
+    const before = this.#freezeState;
+    this.#freezeState = null;
+    this.#events.emit({ type: "freeze-panes-changed", before, after: null });
   }
 
   /** Return the current freeze-pane state, or `null` if no panes are frozen. */
   getFreezePanes(): FreezeState | null {
-    return this.freezeState === null ? null : { ...this.freezeState };
+    return this.#freezeState === null ? null : { ...this.#freezeState };
   }
 
   /**
    * Get the used range (smallest rectangle that includes all non-empty cells).
    */
   getUsedRange(): Range | null {
-    if (this.cells.size === 0) return null;
+    if (this.#cells.size === 0) return null;
 
     let minRow = Infinity;
     let maxRow = -Infinity;
     let minCol = Infinity;
     let maxCol = -Infinity;
 
-    this.cells.forEach((row, col) => {
+    this.#cells.forEach((row, col) => {
       minRow = Math.min(minRow, row);
       maxRow = Math.max(maxRow, row);
       minCol = Math.min(minCol, col);
@@ -950,19 +1246,19 @@ export class Worksheet {
     let expanded = true;
     while (expanded) {
       expanded = false;
-      if (minRow > 0 && isRowNonEmpty(minRow - 1, minCol, maxCol)) {
+      if (minRow > 1 && isRowNonEmpty(minRow - 1, minCol, maxCol)) {
         minRow -= 1;
         expanded = true;
       }
-      if (maxRow < this.rowCount && isRowNonEmpty(maxRow + 1, minCol, maxCol)) {
+      if (maxRow < this.#rowCount && isRowNonEmpty(maxRow + 1, minCol, maxCol)) {
         maxRow += 1;
         expanded = true;
       }
-      if (minCol > 0 && isColNonEmpty(minCol - 1, minRow, maxRow)) {
+      if (minCol > 1 && isColNonEmpty(minCol - 1, minRow, maxRow)) {
         minCol -= 1;
         expanded = true;
       }
-      if (maxCol < this.colCount && isColNonEmpty(maxCol + 1, minRow, maxRow)) {
+      if (maxCol < this.#colCount && isColNonEmpty(maxCol + 1, minRow, maxRow)) {
         maxCol += 1;
         expanded = true;
       }
@@ -975,22 +1271,22 @@ export class Worksheet {
   }
 
   setColumnFilter(col: number, filter: ColumnFilter): void {
-    const before = this.filters.get(col) ?? null;
-    this.filters.set(col, filter);
-    this.events.emit({ type: "filter-changed", col, filter, before });
+    const before = this.#filters.get(col) ?? null;
+    this.#filters.set(col, filter);
+    this.#events.emit({ type: "filter-changed", col, filter, before });
   }
 
   clearColumnFilter(col: number): void {
-    const before = this.filters.get(col) ?? null;
-    this.filters.delete(col);
-    this.events.emit({ type: "filter-changed", col, filter: null, before });
+    const before = this.#filters.get(col) ?? null;
+    this.#filters.delete(col);
+    this.#events.emit({ type: "filter-changed", col, filter: null, before });
   }
 
   /** Clear all column filters at once. Emits one `filter-changed` event per cleared column. */
   clearAllFilters(): void {
-    for (const [col, filter] of this.filters) {
-      this.filters.delete(col);
-      this.events.emit({
+    for (const [col, filter] of this.#filters) {
+      this.#filters.delete(col);
+      this.#events.emit({
         type: "filter-changed",
         col,
         filter: null,
@@ -1001,24 +1297,27 @@ export class Worksheet {
 
   /** Return a snapshot of all active filters keyed by column number. */
   getAllFilters(): Map<number, ColumnFilter> {
-    return new Map(this.filters);
+    return this.#ownedByWorkbook
+      ? new Map(Array.from(this.#filters, ([column, filter]) => [column, detachOwnedEventValue(filter)]))
+      : new Map(this.#filters);
   }
 
   /**
    * Get current filter for a column, if any.
    */
   getColumnFilter(col: number): ColumnFilter | undefined {
-    return this.filters.get(col);
+    const filter = this.#filters.get(col);
+    return this.#ownedByWorkbook ? detachOwnedEventValue(filter) : filter;
   }
 
   getVisibleRowIndices(range?: Range): number[] {
     const rows = range
       ? { start: range.start.row, end: range.end.row }
-      : { start: 1, end: this.rowCount };
+      : { start: 1, end: this.#rowCount };
     const result: number[] = [];
     for (let r = rows.start; r <= rows.end; r++) {
       if (this.isRowHidden(r)) continue;
-      if (!this.rowMatchesFilters(r)) continue;
+      if (!this.#rowMatchesFilters(r)) continue;
       result.push(r);
     }
     return result;
@@ -1027,7 +1326,7 @@ export class Worksheet {
   getVisibleColumnIndices(range?: Range): number[] {
     const cols = range
       ? { start: range.start.col, end: range.end.col }
-      : { start: 1, end: this.colCount };
+      : { start: 1, end: this.#colCount };
     const result: number[] = [];
     for (let c = cols.start; c <= cols.end; c++) {
       if (this.isColHidden(c)) continue;
@@ -1042,9 +1341,9 @@ export class Worksheet {
    */
   getVisibleRowIndicesExcluding(columnToExclude: number): number[] {
     const result: number[] = [];
-    for (let r = 1; r <= this.rowCount; r++) {
+    for (let r = 1; r <= this.#rowCount; r++) {
       if (this.isRowHidden(r)) continue;
-      if (!this.rowMatchesFilters(r, columnToExclude)) continue;
+      if (!this.#rowMatchesFilters(r, columnToExclude)) continue;
       result.push(r);
     }
     return result;
@@ -1063,7 +1362,7 @@ export class Worksheet {
   ): { value: string; count: number }[] {
     const rows = visibleOnly
       ? this.getVisibleRowIndicesExcluding(col)
-      : Array.from({ length: this.rowCount }, (_, i) => i + 1);
+      : Array.from({ length: this.#rowCount }, (_, i) => i + 1);
     const counts = new Map<string, number>();
     for (const row of rows) {
       const v = this.getCell({ row, col })?.value ?? null;
@@ -1086,26 +1385,26 @@ export class Worksheet {
     startCol: number,
     endCol: number,
   ): void {
-    const before = this.autoFilterRange;
-    this.autoFilterRange = { headerRow, startCol, endCol };
-    this.events.emit({
+    const before = this.#autoFilterRange;
+    this.#autoFilterRange = { headerRow, startCol, endCol };
+    this.#events.emit({
       type: "autofilter-range-changed",
       before,
-      after: this.autoFilterRange,
+      after: this.#autoFilterRange,
     });
   }
 
   /** Remove the auto-filter range marker. */
   clearAutoFilterRange(): void {
-    const before = this.autoFilterRange;
+    const before = this.#autoFilterRange;
     if (before === null) return;
-    this.autoFilterRange = null;
-    this.events.emit({ type: "autofilter-range-changed", before, after: null });
+    this.#autoFilterRange = null;
+    this.#events.emit({ type: "autofilter-range-changed", before, after: null });
   }
 
   /** Return the current auto-filter range, or `null` if not set. */
   getAutoFilterRange(): AutoFilterRange | null {
-    return this.autoFilterRange === null ? null : { ...this.autoFilterRange };
+    return this.#autoFilterRange === null ? null : { ...this.#autoFilterRange };
   }
 
   // ── Range Sort ────────────────────────────────────────────────────────────
@@ -1137,7 +1436,7 @@ export class Worksheet {
     for (let r = start.row; r <= end.row; r++) {
       const values: Array<Cell["value"] | null> = [];
       for (let c = start.col; c <= end.col; c++) {
-        values.push(this.cells.get(r, c)?.value ?? null);
+        values.push(this.#cells.get(r, c)?.value ?? null);
       }
       rows.push({ rowIndex: r, values });
     }
@@ -1157,7 +1456,7 @@ export class Worksheet {
         if (aBlank && bBlank) continue;
         if (aBlank) return 1;
         if (bBlank) return -1;
-        const cmp = this._compareValues(av, bv, key.type ?? "text");
+        const cmp = this.#_compareValues(av, bv, key.type ?? "text");
         if (cmp !== 0) return key.dir === "asc" ? cmp : -cmp;
       }
       return 0;
@@ -1171,10 +1470,10 @@ export class Worksheet {
         const destCol = start.col + ci;
         const v = sortedRows[ri]![ci] ?? null;
         if (v === null) {
-          this.cells.delete(destRow, destCol);
+          this.#cells.delete(destRow, destCol);
         } else {
-          const existing = this.cells.get(destRow, destCol);
-          this.cells.set(destRow, destCol, {
+          const existing = this.#cells.get(destRow, destCol);
+          this.#cells.set(destRow, destCol, {
             ...(existing ?? { value: null }),
             value: v,
           });
@@ -1182,7 +1481,7 @@ export class Worksheet {
       }
     }
 
-    this.events.emit({
+    this.#events.emit({
       type: "sort-applied",
       startRow: start.row,
       startCol: start.col,
@@ -1193,7 +1492,7 @@ export class Worksheet {
   }
 
   /** Compare two cell values for sorting. Nulls sort last in all directions. */
-  private _compareValues(
+  #_compareValues(
     a: Cell["value"] | null,
     b: Cell["value"] | null,
     type: "text" | "number" | "date",
@@ -1212,16 +1511,16 @@ export class Worksheet {
     return sa < sb ? -1 : sa > sb ? 1 : 0;
   }
 
-  private rowMatchesFilters(row: number, excludeCol?: number): boolean {
-    for (const [col, filter] of this.filters) {
+  #rowMatchesFilters(row: number, excludeCol?: number): boolean {
+    for (const [col, filter] of this.#filters) {
       if (excludeCol != null && col === excludeCol) continue;
       const v = this.getCell({ row, col })?.value ?? null;
-      if (!this.matchesFilter(v, filter)) return false;
+      if (!this.#matchesFilter(v, filter)) return false;
     }
     return true;
   }
 
-  private matchesFilter(v: Cell["value"], f: ColumnFilter): boolean {
+  #matchesFilter(v: Cell["value"], f: ColumnFilter): boolean {
     if (f.type === "empty") return v === null || v === "";
     if (f.type === "notEmpty") return !(v === null || v === "");
     if (v === null) return false;
@@ -1252,57 +1551,57 @@ export class Worksheet {
   setRowHeights(heights: Iterable<[number, number]>): void {
     let changed = false;
     for (const [row, px] of heights) {
-      if (this.rowHeights.get(row) === px) continue;
-      this.rowHeights.set(row, px);
+      if (this.#rowHeights.get(row) === px) continue;
+      this.#rowHeights.set(row, px);
       changed = true;
     }
-    if (changed) this.events.emit({ type: "sheet-mutated" });
+    if (changed) this.#events.emit({ type: "sheet-mutated" });
   }
 
   getColumnWidth(col: number): number {
-    return this.colWidths.get(col) ?? 80;
+    return this.#colWidths.get(col) ?? 80;
   }
   setColumnWidth(col: number, px: number): void {
-    this.colWidths.set(col, px);
-    this.events.emit({ type: "sheet-mutated" });
+    this.#colWidths.set(col, px);
+    this.#events.emit({ type: "sheet-mutated" });
   }
   getRowHeight(row: number): number {
-    return this.rowHeights.get(row) ?? 20;
+    return this.#rowHeights.get(row) ?? 20;
   }
   setRowHeight(row: number, px: number): void {
-    this.rowHeights.set(row, px);
-    this.events.emit({ type: "sheet-mutated" });
+    this.#rowHeights.set(row, px);
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   insertRows(rowIndex: number, count = 1): void {
-    this.validateInsertArgs(rowIndex, count, this.rowCount, "row");
-    if (!this._inTransaction) {
+    this.#validateInsertArgs(rowIndex, count, this.#rowCount, "row");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.insertRows(rowIndex, count));
     }
 
     const rowMapper: IndexMapper = (row) =>
-      row >= rowIndex ? row + count : row;
+      row > rowIndex ? row + count : row;
     const colMapper: IndexMapper = (col) => col;
-    this.remapWorksheetState({
+    this.#remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
       transformFormula: (formula) =>
         FormulaShiftingService.adjustForRowInsertion(formula, rowIndex, count),
     });
-    this.rowCount += count;
-    this._emitOrBuffer({ type: "sheet-mutated" });
+    this.#rowCount += count;
+    this.#_emitOrBuffer({ type: "sheet-mutated" });
   }
 
   insertColumns(colIndex: number, count = 1): void {
-    this.validateInsertArgs(colIndex, count, this.colCount, "column");
-    if (!this._inTransaction) {
+    this.#validateInsertArgs(colIndex, count, this.#colCount, "column");
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.insertColumns(colIndex, count));
     }
 
     const rowMapper: IndexMapper = (row) => row;
     const colMapper: IndexMapper = (col) =>
-      col >= colIndex ? col + count : col;
-    this.remapWorksheetState({
+      col > colIndex ? col + count : col;
+    this.#remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
       transformFormula: (formula) =>
@@ -1312,27 +1611,27 @@ export class Worksheet {
           count,
         ),
     });
-    this.colCount += count;
-    this._emitOrBuffer({ type: "sheet-mutated" });
+    this.#colCount += count;
+    this.#_emitOrBuffer({ type: "sheet-mutated" });
   }
 
   reorderRows(fromIndex: number, toIndex: number, count = 1): void {
-    this.validateReorderArgs(fromIndex, toIndex, count, this.rowCount, "row");
+    this.#validateReorderArgs(fromIndex, toIndex, count, this.#rowCount, "row");
     if (
       fromIndex === toIndex ||
       (toIndex >= fromIndex && toIndex < fromIndex + count)
     )
       return;
-    if (!this._inTransaction) {
+    if (!this.#_inTransaction) {
       return this.runTransaction(() =>
         this.reorderRows(fromIndex, toIndex, count),
       );
     }
 
     const rowMapper: IndexMapper = (row) =>
-      FormulaShiftingService.mapReorderedIndex(row, fromIndex, toIndex, count);
+      FormulaShiftingService.mapReorderedIndex(row - 1, fromIndex, toIndex, count) + 1;
     const colMapper: IndexMapper = (col) => col;
-    this.remapWorksheetState({
+    this.#remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
       transformFormula: (formula) =>
@@ -1343,15 +1642,15 @@ export class Worksheet {
           count,
         ),
     });
-    this._emitOrBuffer({ type: "sheet-mutated" });
+    this.#_emitOrBuffer({ type: "sheet-mutated" });
   }
 
   reorderColumns(fromIndex: number, toIndex: number, count = 1): void {
-    this.validateReorderArgs(
+    this.#validateReorderArgs(
       fromIndex,
       toIndex,
       count,
-      this.colCount,
+      this.#colCount,
       "column",
     );
     if (
@@ -1359,7 +1658,7 @@ export class Worksheet {
       (toIndex >= fromIndex && toIndex < fromIndex + count)
     )
       return;
-    if (!this._inTransaction) {
+    if (!this.#_inTransaction) {
       return this.runTransaction(() =>
         this.reorderColumns(fromIndex, toIndex, count),
       );
@@ -1368,7 +1667,7 @@ export class Worksheet {
     const rowMapper: IndexMapper = (row) => row;
     const colMapper: IndexMapper = (col) =>
       FormulaShiftingService.mapReorderedIndex(col, fromIndex, toIndex, count);
-    this.remapWorksheetState({
+    this.#remapWorksheetState({
       mapRowIndex: rowMapper,
       mapColumnIndex: colMapper,
       transformFormula: (formula) =>
@@ -1379,35 +1678,38 @@ export class Worksheet {
           count,
         ),
     });
-    this._emitOrBuffer({ type: "sheet-mutated" });
+    this.#_emitOrBuffer({ type: "sheet-mutated" });
   }
 
   getDrawingLayer(): DrawingLayer {
-    return this.drawingLayer;
+    return this.#drawingLayer;
   }
 
   insertImage(options: AddPictureOptions): PictureObject {
-    const picture = this.drawingLayer.addPicture(options);
-    this._emitOrBuffer({ type: "sheet-mutated" });
+    const picture = this.#drawingLayer.addPicture(options);
+    this.#_emitOrBuffer({ type: "sheet-mutated" });
     return picture;
   }
 
   getImages(): PictureObject[] {
-    return this.drawingLayer
+    const pictures = this.#drawingLayer
       .getAllObjects()
       .filter((obj): obj is PictureObject => obj.type === "picture");
+    return this.#ownedByWorkbook
+      ? pictures.map((picture) => detachOwnedEventValue(this.#cloneDrawingObject(picture)))
+      : pictures;
   }
 
   deleteImage(id: string): PictureObject | undefined {
-    const image = this.drawingLayer.getObject(id);
+    const image = this.#drawingLayer.getObject(id);
     if (!image || image.type !== "picture") return undefined;
-    const removed = this.drawingLayer.removeObject(id);
-    if (removed) this._emitOrBuffer({ type: "sheet-mutated" });
+    const removed = this.#drawingLayer.removeObject(id);
+    if (removed) this.#_emitOrBuffer({ type: "sheet-mutated" });
     return removed as PictureObject | undefined;
   }
 
   setFormulaEngine(engine?: IFormulaEngine) {
-    this.formulaEngine = engine;
+    this.#formulaEngine = engine;
   }
 
   // ==================== Phase 28: Pivot Registry Integration ====================
@@ -1417,7 +1719,7 @@ export class Worksheet {
    * Used by pivot registry to associate pivots with worksheets.
    */
   getWorksheetId(): string {
-    return this.worksheetId;
+    return this.#worksheetId;
   }
 
   // ==================== DAG / RecalcCoordinator APIs (Phase 4) ====================
@@ -1432,34 +1734,95 @@ export class Worksheet {
    * @param addr  The formula cell (the dependent).
    * @param deps  The cells this formula reads (the precedents).
    */
-  registerDependencies(addr: Address, deps: Address[]): void {
-    this.recalcCoordinator.registerFormula(addr.row, addr.col, deps);
+  registerDependencies(addr: Address, deps: Address[], ranges: AddressRange[] = []): void {
+    this.#recalcCoordinator.registerFormula(addr.row, addr.col, deps, ranges);
   }
 
   /**
    * Remove a formula cell's dependency edges from the DAG (e.g. after clearing).
    */
   clearDependencies(addr: Address): void {
-    this.recalcCoordinator.clearFormula(addr.row, addr.col);
+    this.#recalcCoordinator.clearFormula(addr.row, addr.col);
   }
 
   /**
    * Mark a cell dirty without changing its value (e.g. volatile refresh).
    */
   notifyChanged(addr: Address): void {
-    this.recalcCoordinator.notifyChanged(addr.row, addr.col);
+    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
   }
 
   /**
    * Number of cells in the dirty set — useful for testing and UI indicators.
    */
   get dirtyCount(): number {
-    return this.recalcCoordinator.dirtyCount;
+    return this.#recalcCoordinator.dirtyCount;
+  }
+
+  /** @internal Get formula cells in the graph's topological dirty order. */
+  getRecalculationPlan(): { addresses: Address[]; cycles: CycleDiagnostic[] } {
+    const { order, cycleNodes } = this.#recalcCoordinator.graph.getEvalOrder();
+    const addresses: Address[] = [];
+    for (const key of order) {
+      const addr = unpackKey(key);
+      if (this.#cells.get(addr.row, addr.col)?.formula) addresses.push(addr);
+    }
+    const cycles = cycleNodes.size === 0
+      ? []
+      : this.#recalcCoordinator.graph.findCycles()
+          .filter((scc) => scc.some((key) => cycleNodes.has(key)))
+          .map((cycle) => {
+            const orderedCycle = [...cycle].sort((a, b) => a - b);
+            const cells = orderedCycle.map(unpackKey);
+            return {
+              cycle: orderedCycle,
+              cells,
+              message: `Circular reference: ${cells.map((a) => `R${a.row}C${a.col}`).join(' → ')}`,
+            };
+          });
+    return { addresses, cycles };
+  }
+
+  /** Commit disabled-iteration circular errors to cycle cells and descendants. */
+  applyCircularReferenceResults(cycles: CycleDiagnostic[]): void {
+    const addresses = this.#getCircularErrorAddresses(cycles);
+    for (const addr of addresses) {
+      const cell = this.#cells.get(addr.row, addr.col);
+      if (!cell?.formula || cell.value === "#CIRC!") continue;
+      const previousValue = cell.value;
+      cell.value = "#CIRC!";
+      const event: SheetEvents = {
+        type: "cell-changed",
+        origin: "formula-result",
+        address: addr,
+        cell: { ...cell },
+        previousValue,
+        previousFormula: cell.formula,
+      };
+      if (this.#_formulaRecalculationDepth > 0) this.#_deferredFormulaResultEvents.push(event);
+      else this.#events.emit(event);
+    }
+  }
+
+  #getCircularErrorAddresses(cycles: CycleDiagnostic[]): Address[] {
+    if (cycles.length === 0) return [];
+    const cycleKeys = cycles.flatMap((cycle) => cycle.cycle);
+    const affected = this.#recalcCoordinator.graph.getDependentClosure(cycleKeys);
+    return [...affected]
+      .map(unpackKey)
+      .filter((addr) => Boolean(this.#cells.get(addr.row, addr.col)?.formula))
+      .sort((a, b) => a.row - b.row || a.col - b.col);
+  }
+
+  /** @internal Called once the engine scheduler has drained this graph pass. */
+  completeScheduledRecalculation(): void {
+    this.#recalcCoordinator.graph.clearDirty();
   }
 
   /** Return true when the given cell is currently awaiting recalculation. */
   isDirty(addr: Address): boolean {
-    return this.recalcCoordinator.isDirty(packKey(addr.row, addr.col));
+    assertWorksheetAddress(addr.row, addr.col);
+    return this.#recalcCoordinator.isDirty(packKey(addr.row, addr.col));
   }
 
   /**
@@ -1475,11 +1838,14 @@ export class Worksheet {
    * @returns         RecalcResult with `evaluated` count and `cycles` array.
    */
   recalc(evaluate: (key: number) => void): RecalcResult {
-    const result = this.recalcCoordinator.recalc(evaluate);
-    if (result.cycles.length > 0) {
-      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
-    }
-    return result;
+    return this.#withDeferredFormulaResultEvents(() => {
+      const result = this.#recalcCoordinator.recalc(evaluate);
+      this.applyCircularReferenceResults(result.cycles);
+      if (result.cycles.length > 0) {
+        this.#events.emit({ type: "cycle-detected", cycles: result.cycles });
+      }
+      return result;
+    });
   }
 
   /**
@@ -1494,19 +1860,19 @@ export class Worksheet {
    * @throws Error if no FormulaEngine is available
    *
    * @example
-   * worksheet.setCellValue({row: 0, col: 0}, 10);
-   * worksheet.setCellFormula({row: 0, col: 1}, '=A1*2');
+   * worksheet.setCellValue({row: 1, col: 1}, 10);
+   * worksheet.setCellFormula({row: 1, col: 2}, '=A1*2');
    * worksheet.autoRecalculate(); // B1 now has value 20
    */
   autoRecalculate(): RecalcResult {
-    if (!this.formulaEngine) {
+    if (!this.#formulaEngine) {
       throw new Error(
         "Cannot auto-recalculate: no FormulaEngine available. Pass an engine to the Worksheet constructor.",
       );
     }
 
     return this.recalc((nodeKey) => {
-      this.evaluateFormulaNode(nodeKey);
+      this.#evaluateFormulaNode(nodeKey);
     });
   }
 
@@ -1518,17 +1884,21 @@ export class Worksheet {
    * and leaves unrelated off-screen dirty cells untouched.
    */
   evaluateIfNeeded(addr: Address): Cell["value"] | undefined {
-    if (!this.formulaEngine) return this.getCellValue(addr);
+    assertWorksheetAddress(addr.row, addr.col);
+    if (!this.#formulaEngine) return this.getCellValue(addr);
     const key = packKey(addr.row, addr.col);
-    if (!this.recalcCoordinator.isDirty(key)) return this.getCellValue(addr);
+    if (!this.#recalcCoordinator.isDirty(key)) return this.getCellValue(addr);
 
-    const result = this.recalcCoordinator.recalcSubset([key], (nodeKey) => {
-      this.evaluateFormulaNode(nodeKey);
+    return this.#withDeferredFormulaResultEvents(() => {
+      const result = this.#recalcCoordinator.recalcSubset([key], (nodeKey) => {
+        this.#evaluateFormulaNode(nodeKey);
+      });
+      this.applyCircularReferenceResults(result.cycles);
+      if (result.cycles.length > 0) {
+        this.#events.emit({ type: "cycle-detected", cycles: result.cycles });
+      }
+      return this.getCellValue(addr);
     });
-    if (result.cycles.length > 0) {
-      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
-    }
-    return this.getCellValue(addr);
   }
 
   /**
@@ -1536,18 +1906,39 @@ export class Worksheet {
    * batch. Intended for renderer viewport reads and scroll updates.
    */
   evaluateBatch(addresses: Address[]): RecalcResult {
-    if (!this.formulaEngine || addresses.length === 0) {
+    for (const addr of addresses) assertWorksheetAddress(addr.row, addr.col);
+    if (!this.#formulaEngine || addresses.length === 0) {
       return { evaluated: 0, cycles: [] };
     }
 
     const keys = addresses.map((addr) => packKey(addr.row, addr.col));
-    const result = this.recalcCoordinator.recalcSubset(keys, (nodeKey) => {
-      this.evaluateFormulaNode(nodeKey);
+    return this.#withDeferredFormulaResultEvents(() => {
+      const result = this.#recalcCoordinator.recalcSubset(keys, (nodeKey) => {
+        this.#evaluateFormulaNode(nodeKey);
+      });
+      this.applyCircularReferenceResults(result.cycles);
+      if (result.cycles.length > 0) {
+        this.#events.emit({ type: "cycle-detected", cycles: result.cycles });
+      }
+      return result;
     });
-    if (result.cycles.length > 0) {
-      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
+  }
+
+  /** Flush formula-result notifications only after the graph pass is complete. */
+  #withDeferredFormulaResultEvents<T>(recalculate: () => T): T {
+    this.#_formulaRecalculationDepth++;
+    try {
+      return recalculate();
+    } finally {
+      this.#_formulaRecalculationDepth--;
+      if (this.#_formulaRecalculationDepth === 0 && this.#_deferredFormulaResultEvents.length > 0) {
+        const events = this.#_deferredFormulaResultEvents;
+        this.#_deferredFormulaResultEvents = [];
+        // Formula results are observable changes, but are not user-authored
+        // mutations and must not enter the transaction mutation journal.
+        for (const event of events) this.#events.emit(event);
+      }
     }
-    return result;
   }
 
   /**
@@ -1560,24 +1951,25 @@ export class Worksheet {
     for (let i = 0; i < count; i++) {
       const value = values[i];
       const addr = addresses[i];
-      const cell = this.cells.get(addr.row, addr.col);
+      const cell = this.#cells.get(addr.row, addr.col);
       if (!cell?.formula) continue;
       if (!Number.isNaN(value)) {
         cell.value = value;
       }
       clearKeys.push(packKey(addr.row, addr.col));
     }
-    this.recalcCoordinator.clearDirtyKeys(clearKeys);
+    this.#recalcCoordinator.clearDirtyKeys(clearKeys);
   }
 
-  private evaluateFormulaNode(nodeKey: number): CellValue {
+  #evaluateFormulaNode(nodeKey: number): CellValue {
     const { row, col } = unpackKey(nodeKey);
-    const cell = this.cells.get(row, col);
+    const cell = this.#cells.get(row, col);
 
     if (!cell?.formula) return (cell?.value as CellValue) ?? null;
 
+    const previousValue = cell.value;
     try {
-      const result = (this.formulaEngine as any).evaluate(cell.formula, {
+      const result = (this.#formulaEngine as any).evaluate(cell.formula, {
         worksheet: this as any,
         currentCell: { row, col },
       });
@@ -1599,6 +1991,22 @@ export class Worksheet {
       console.error(`Formula evaluation error at ${row}:${col}:`, error);
     }
 
+    if (cell.value !== previousValue) {
+      const event: SheetEvents = {
+        type: "cell-changed",
+        origin: "formula-result",
+        address: { row, col },
+        cell: { ...cell },
+        previousValue,
+        previousFormula: cell.formula,
+      };
+      if (this.#_formulaRecalculationDepth > 0) {
+        this.#_deferredFormulaResultEvents.push(event);
+      } else {
+        this.#events.emit(event);
+      }
+    }
+
     return cell.value as CellValue;
   }
 
@@ -1611,7 +2019,7 @@ export class Worksheet {
     dirty: number;
     volatiles: number;
   } {
-    return this.recalcCoordinator.stats;
+    return this.#recalcCoordinator.stats;
   }
 
   // ==================== DAG / RecalcCoordinator APIs (Phase 5) ====================
@@ -1627,7 +2035,7 @@ export class Worksheet {
    * @param deps  Cells this formula reads (may be empty for NOW/RAND).
    */
   registerVolatile(addr: Address, deps: Address[]): void {
-    this.recalcCoordinator.registerVolatile(addr.row, addr.col, deps);
+    this.#recalcCoordinator.registerVolatile(addr.row, addr.col, deps);
   }
 
   /**
@@ -1635,7 +2043,7 @@ export class Worksheet {
    * Call when a volatile formula is deleted or overwritten with a plain value.
    */
   clearVolatile(addr: Address): void {
-    this.recalcCoordinator.clearVolatile(addr.row, addr.col);
+    this.#recalcCoordinator.clearVolatile(addr.row, addr.col);
   }
 
   /**
@@ -1647,12 +2055,12 @@ export class Worksheet {
    * @complexity O(V_volatile_reach + E_volatile_reach)
    */
   flushVolatiles(): void {
-    this.recalcCoordinator.flushVolatiles();
+    this.#recalcCoordinator.flushVolatiles();
   }
 
   /** Number of cells currently registered as volatile. */
   get volatileCount(): number {
-    return this.recalcCoordinator.volatileCount;
+    return this.#recalcCoordinator.volatileCount;
   }
 
   /**
@@ -1677,9 +2085,9 @@ export class Worksheet {
     evaluate: (key: number) => CellValue,
     policy?: RecalcIterationPolicy,
   ): IterativeRecalcResult {
-    const result = this.recalcCoordinator.recalcIterative(evaluate, policy);
+    const result = this.#recalcCoordinator.recalcIterative(evaluate, policy);
     if (result.cycles.length > 0) {
-      this.events.emit({ type: "cycle-detected", cycles: result.cycles });
+      this.#events.emit({ type: "cycle-detected", cycles: result.cycles });
     }
     return result;
   }
@@ -1700,7 +2108,7 @@ export class Worksheet {
    * @throws RangeError if the range is a single cell.
    */
   mergeCells(range: Range): void {
-    const norm = this.normalizeRange(range);
+    const norm = this.#normalizeRange(range);
     const region: MergedRegion = {
       startRow: norm.start.row,
       startCol: norm.start.col,
@@ -1709,19 +2117,19 @@ export class Worksheet {
     };
 
     // Throws MergeConflictError on any overlap — propagates to caller.
-    this.mergeStore.add(region);
+    this.#mergeStore.add(region);
 
     // Clear non-anchor cells from ICellStore — their data is now inaccessible
     // and must not participate in searches or formula evaluation.
     for (let r = region.startRow; r <= region.endRow; r++) {
       for (let c = region.startCol; c <= region.endCol; c++) {
         if (r === region.startRow && c === region.startCol) continue; // keep anchor
-        this.cells.delete(r, c);
+        this.#cells.delete(r, c);
       }
     }
 
-    this.events.emit({ type: "merge-added", region });
-    this.events.emit({ type: "sheet-mutated" });
+    this.#events.emit({ type: "merge-added", region });
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1734,17 +2142,17 @@ export class Worksheet {
    * Non-merged ranges are silently ignored (no error).
    */
   cancelMerge(range: Range): void {
-    const norm = this.normalizeRange(range);
-    const removed = this.mergeStore.removeOverlapping(
+    const norm = this.#normalizeRange(range);
+    const removed = this.#mergeStore.removeOverlapping(
       norm.start.row,
       norm.start.col,
       norm.end.row,
       norm.end.col,
     );
     for (const region of removed) {
-      this.events.emit({ type: "merge-removed", region });
+      this.#events.emit({ type: "merge-removed", region });
     }
-    if (removed.length > 0) this.events.emit({ type: "sheet-mutated" });
+    if (removed.length > 0) this.#events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1752,7 +2160,7 @@ export class Worksheet {
    * O(1) via MergeStoreV1.getRegion().
    */
   getMergedRangeForCell(addr: Address): Range | null {
-    const region = this.mergeStore.getRegion(addr.row, addr.col);
+    const region = this.#mergeStore.getRegion(addr.row, addr.col);
     if (!region) return null;
     return {
       start: { row: region.startRow, col: region.startCol },
@@ -1762,7 +2170,7 @@ export class Worksheet {
 
   /** All merged regions as Range[]. O(n_merges). */
   getMergedRanges(): Range[] {
-    return this.mergeStore.getAll().map((r) => ({
+    return this.#mergeStore.getAll().map((r) => ({
       start: { row: r.startRow, col: r.startCol },
       end: { row: r.endRow, col: r.endCol },
     }));
@@ -1773,7 +2181,7 @@ export class Worksheet {
    * O(1). Used by SpillEngine to block spill over merged areas.
    */
   isInMerge(addr: Address): boolean {
-    return this.mergeStore.isInMerge(addr.row, addr.col);
+    return this.#mergeStore.isInMerge(addr.row, addr.col);
   }
 
   /**
@@ -1782,7 +2190,7 @@ export class Worksheet {
    * O(1). Used by formula engine and rendering.
    */
   getMergeAnchorFor(addr: Address): Address | null {
-    return this.mergeStore.getAnchor(addr.row, addr.col);
+    return this.#mergeStore.getAnchor(addr.row, addr.col);
   }
   // ==================== Visibility API (Phase 3) ====================
   //
@@ -1799,10 +2207,10 @@ export class Worksheet {
    * Does NOT affect cell data — cells in hidden rows are still accessible via getCell().
    */
   hideRow(row: number): void {
-    if (this.visibilityStore.isRowHidden(row)) return; // already hidden — no-op
-    this.visibilityStore.hideRow(row);
-    this.events.emit({ type: "row-hidden", row });
-    this.events.emit({ type: "sheet-mutated" });
+    if (this.#visibilityStore.isRowHidden(row)) return; // already hidden — no-op
+    this.#visibilityStore.hideRow(row);
+    this.#events.emit({ type: "row-hidden", row });
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   /**
@@ -1810,40 +2218,40 @@ export class Worksheet {
    * find() and findIterator() will immediately include it again.
    */
   showRow(row: number): void {
-    if (!this.visibilityStore.isRowHidden(row)) return; // already visible — no-op
-    this.visibilityStore.showRow(row);
-    this.events.emit({ type: "row-shown", row });
-    this.events.emit({ type: "sheet-mutated" });
+    if (!this.#visibilityStore.isRowHidden(row)) return; // already visible — no-op
+    this.#visibilityStore.showRow(row);
+    this.#events.emit({ type: "row-shown", row });
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   /**
    * Hide a column. Idempotent. O(1).
    */
   hideCol(col: number): void {
-    if (this.visibilityStore.isColHidden(col)) return; // already hidden — no-op
-    this.visibilityStore.hideCol(col);
-    this.events.emit({ type: "col-hidden", col });
-    this.events.emit({ type: "sheet-mutated" });
+    if (this.#visibilityStore.isColHidden(col)) return; // already hidden — no-op
+    this.#visibilityStore.hideCol(col);
+    this.#events.emit({ type: "col-hidden", col });
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   /**
    * Restore a hidden column to visible. Idempotent. O(1).
    */
   showCol(col: number): void {
-    if (!this.visibilityStore.isColHidden(col)) return; // already visible — no-op
-    this.visibilityStore.showCol(col);
-    this.events.emit({ type: "col-shown", col });
-    this.events.emit({ type: "sheet-mutated" });
+    if (!this.#visibilityStore.isColHidden(col)) return; // already visible — no-op
+    this.#visibilityStore.showCol(col);
+    this.#events.emit({ type: "col-shown", col });
+    this.#events.emit({ type: "sheet-mutated" });
   }
 
   /** Returns true if the row is currently hidden. O(1). */
   isRowHidden(row: number): boolean {
-    return this.visibilityStore.isRowHidden(row);
+    return this.#visibilityStore.isRowHidden(row);
   }
 
   /** Returns true if the column is currently hidden. O(1). */
   isColHidden(col: number): boolean {
-    return this.visibilityStore.isColHidden(col);
+    return this.#visibilityStore.isColHidden(col);
   }
 
   /**
@@ -1851,23 +2259,23 @@ export class Worksheet {
    * Used by the formula engine and renderers — O(1).
    */
   isCellHidden(addr: Address): boolean {
-    return this.visibilityStore.isCellHidden(addr.row, addr.col);
+    return this.#visibilityStore.isCellHidden(addr.row, addr.col);
   }
 
   /**
-   * Returns the set of all currently hidden row indices.
-   * O(1) — returns the live ReadonlySet reference.
+   * Returns a snapshot of all currently hidden row indices.
+   * The returned Set is detached from the visibility store.
    */
   getHiddenRows(): ReadonlySet<number> {
-    return this.visibilityStore.getHiddenRows();
+    return new Set(this.#visibilityStore.getHiddenRows());
   }
 
   /**
-   * Returns the set of all currently hidden column indices.
-   * O(1) — returns the live ReadonlySet reference.
+   * Returns a snapshot of all currently hidden column indices.
+   * The returned Set is detached from the visibility store.
    */
   getHiddenCols(): ReadonlySet<number> {
-    return this.visibilityStore.getHiddenCols();
+    return new Set(this.#visibilityStore.getHiddenCols());
   }
   /**
    * Delete a cell: clears all its data.
@@ -1892,26 +2300,29 @@ export class Worksheet {
   forEachNonEmptyCell(
     callback: (row: number, col: number, cell: any) => void,
   ): void {
-    this.cells.forEach((row, col, cell) => {
-      callback(row, col, cell);
+    this.#cells.forEach((row, col, cell) => {
+      callback(row, col, this.#ownedByWorkbook ? detachOwnedEventValue(cell) : cell);
     });
   }
 
   deleteCell(addr: Address): void {
     // Resolve to anchor in case a non-anchor cell was passed.
-    const resolved = this.resolveAnchor(addr);
+    const resolved = this.#resolveAnchor(addr);
 
     // INVARIANT 10: State Minimality - actually remove cell from storage
-    const cell = this.cells.get(resolved.row, resolved.col);
+    const cell = this.#cells.get(resolved.row, resolved.col);
     if (!cell) {
       return; // Already deleted
     }
 
+    const previousValue = cell.value;
+    const previousFormula = cell.formula;
+
     // If anchor of a merged region, cancel the merge first.
-    if (this.mergeStore.isAnchor(resolved.row, resolved.col)) {
-      const region = this.mergeStore.getRegion(resolved.row, resolved.col)!;
-      this.mergeStore.removeByAnchor(resolved.row, resolved.col);
-      this.events.emit({ type: "merge-removed", region });
+    if (this.#mergeStore.isAnchor(resolved.row, resolved.col)) {
+      const region = this.#mergeStore.getRegion(resolved.row, resolved.col)!;
+      this.#mergeStore.removeByAnchor(resolved.row, resolved.col);
+      this.#events.emit({ type: "merge-removed", region });
     }
 
     // Phase 3: Clear formula dependencies if cell had a formula
@@ -1920,19 +2331,21 @@ export class Worksheet {
     }
 
     // Remove cell from storage (not just clear - actually delete)
-    this.cells.delete(resolved.row, resolved.col);
+    this.#cells.delete(resolved.row, resolved.col);
 
     // Phase 3: Notify change to mark dependents dirty (if any cells reference this one)
-    this.recalcCoordinator.notifyChanged(resolved.row, resolved.col);
+    this.#recalcCoordinator.notifyChanged(resolved.row, resolved.col);
 
-    this.events.emit({
+    this.#events.emit({
       type: "cell-changed",
       address: resolved,
       cell: { value: null },
+      previousValue,
+      previousFormula,
     });
   }
 
-  private normalizeRange(r: Range): Range {
+  #normalizeRange(r: Range): Range {
     return {
       start: {
         row: Math.min(r.start.row, r.end.row),
@@ -1953,22 +2366,24 @@ export class Worksheet {
   }
 
   setHyperlink(addr: Address, hyperlink: CellHyperlink | undefined): void {
-    if (!this._inTransaction) {
+    if (!this.#_inTransaction) {
       return this.runTransaction(() => this.setHyperlink(addr, hyperlink));
     }
 
-    const c = this.ensureCell(addr);
+    const c = this.#ensureCell(addr);
+    const previousFormula = c.formula;
     if (hyperlink) {
       c.hyperlink = { ...hyperlink };
     } else {
       delete c.hyperlink;
     }
 
-    this._emitOrBuffer({
+    this.#_emitOrBuffer({
       type: "cell-changed",
       address: addr,
       cell: { ...c },
       previousValue: c.value ?? null,
+      previousFormula,
     });
   }
 
@@ -1985,17 +2400,17 @@ export class Worksheet {
     addr: Address,
     comment: Omit<CellComment, "id" | "createdAt">,
   ): CellComment {
-    const c = this.cells.getOrCreate(addr.row, addr.col);
+    const c = this.#cells.getOrCreate(addr.row, addr.col);
     if (!c.comments) c.comments = [];
 
     const newComment: CellComment = {
-      id: this.generateCommentId(),
+      id: this.#generateCommentId(),
       createdAt: new Date(),
       ...comment,
     };
 
     c.comments.push(newComment);
-    this.events.emit({
+    this.#events.emit({
       type: "comment-added",
       address: addr,
       comment: newComment,
@@ -2018,7 +2433,7 @@ export class Worksheet {
     commentId: string,
     updates: Partial<Omit<CellComment, "id" | "createdAt">>,
   ): boolean {
-    const c = this.cells.get(addr.row, addr.col);
+    const c = this.#cells.get(addr.row, addr.col);
     if (!c?.comments) return false;
 
     const idx = c.comments.findIndex((cm) => cm.id === commentId);
@@ -2030,7 +2445,7 @@ export class Worksheet {
       editedAt: new Date(),
     };
 
-    this.events.emit({
+    this.#events.emit({
       type: "comment-updated",
       address: addr,
       commentId,
@@ -2047,7 +2462,7 @@ export class Worksheet {
     commentId: string,
     deleteReplies = true,
   ): boolean {
-    const c = this.cells.get(addr.row, addr.col);
+    const c = this.#cells.get(addr.row, addr.col);
     if (!c?.comments) return false;
 
     const before = c.comments.length;
@@ -2080,7 +2495,7 @@ export class Worksheet {
     // `delete obj.prop` changes the hidden class; `obj.prop = undefined` does not.
     if (c.comments.length === 0) c.comments = undefined;
 
-    this.events.emit({ type: "comment-deleted", address: addr, commentId });
+    this.#events.emit({ type: "comment-deleted", address: addr, commentId });
     return true;
   }
 
@@ -2090,7 +2505,7 @@ export class Worksheet {
   getAllComments(): Array<{ address: Address; comments: CellComment[] }> {
     const result: Array<{ address: Address; comments: CellComment[] }> = [];
 
-    this.cells.forEach((row, col, cell) => {
+    this.#cells.forEach((row, col, cell) => {
       if (cell.comments && cell.comments.length > 0) {
         result.push({
           address: { row, col },
@@ -2105,7 +2520,7 @@ export class Worksheet {
       return a.address.col - b.address.col;
     });
 
-    return result;
+    return this.#ownedByWorkbook ? detachOwnedEventValue(result) : result;
   }
 
   /**
@@ -2150,9 +2565,9 @@ export class Worksheet {
    * Set an icon for a cell
    */
   setIcon(addr: Address, icon: CellIcon | undefined): void {
-    const c = this.cells.getOrCreate(addr.row, addr.col);
+    const c = this.#cells.getOrCreate(addr.row, addr.col);
     c.icon = icon;
-    this.events.emit({ type: "icon-changed", address: addr, icon });
+    this.#events.emit({ type: "icon-changed", address: addr, icon });
   }
 
   /**
@@ -2168,11 +2583,11 @@ export class Worksheet {
   getAllIcons(): Array<{ address: Address; icon: CellIcon }> {
     const result: Array<{ address: Address; icon: CellIcon }> = [];
 
-    this.cells.forEach((row, col, cell) => {
+    this.#cells.forEach((row, col, cell) => {
       if (cell.icon) result.push({ address: { row, col }, icon: cell.icon });
     });
 
-    return result;
+    return this.#ownedByWorkbook ? detachOwnedEventValue(result) : result;
   }
 
   // ==================== Custom Cell Component APIs ====================
@@ -2181,9 +2596,9 @@ export class Worksheet {
     addr: Address,
     component: CustomCellComponent | undefined,
   ): void {
-    const c = this.cells.getOrCreate(addr.row, addr.col);
+    const c = this.#cells.getOrCreate(addr.row, addr.col);
     c.customComponent = component;
-    this.events.emit({
+    this.#events.emit({
       type: "cell-component-changed",
       address: addr,
       component,
@@ -2205,7 +2620,7 @@ export class Worksheet {
     const result: Array<{ address: Address; component: CustomCellComponent }> =
       [];
 
-    this.cells.forEach((row, col, cell) => {
+    this.#cells.forEach((row, col, cell) => {
       if (cell.customComponent) {
         result.push({ address: { row, col }, component: cell.customComponent });
       }
@@ -2216,7 +2631,7 @@ export class Worksheet {
       return a.address.col - b.address.col;
     });
 
-    return result;
+    return this.#ownedByWorkbook ? detachOwnedEventValue(result) : result;
   }
 
   // ==================== General Search API (Phase 1) ====================
@@ -2239,7 +2654,7 @@ export class Worksheet {
    */
   getFormulaAddresses(): Address[] {
     const result: Address[] = [];
-    this.cells.forEach((row, col, cell) => {
+    this.#cells.forEach((row, col, cell) => {
       if (cell.formula != null) result.push({ row, col });
     });
     return result;
@@ -2255,7 +2670,8 @@ export class Worksheet {
    * O(e) where e = number of edges from this node.
    */
   getPrecedents(addr: Address): Address[] {
-    return this.recalcCoordinator.graph.getDependencies(addr.row, addr.col);
+    assertWorksheetAddress(addr.row, addr.col);
+    return this.#recalcCoordinator.graph.getDependencies(addr.row, addr.col);
   }
 
   /**
@@ -2265,7 +2681,8 @@ export class Worksheet {
    * O(e) where e = number of edges into this node.
    */
   getDependents(addr: Address): Address[] {
-    return this.recalcCoordinator.graph.getDependents(addr.row, addr.col);
+    assertWorksheetAddress(addr.row, addr.col);
+    return this.#recalcCoordinator.graph.getDependents(addr.row, addr.col);
   }
 
   // ── Phase 18: Go To Special ──────────────────────────────────────────────
@@ -2342,7 +2759,7 @@ export class Worksheet {
     switch (type) {
       case "formulas": {
         const result: Address[] = [];
-        this.cells.forEach((row, col, cell) => {
+        this.#cells.forEach((row, col, cell) => {
           if (cell.formula == null) return;
           if (range && !inRange({ row, col }, range)) return;
           if (!passesFilter(cell.value, valueFilter)) return;
@@ -2353,7 +2770,7 @@ export class Worksheet {
 
       case "constants": {
         const result: Address[] = [];
-        this.cells.forEach((row, col, cell) => {
+        this.#cells.forEach((row, col, cell) => {
           if (cell.formula != null) return;
           if (cell.value === null || cell.value === undefined) return;
           if (range && !inRange({ row, col }, range)) return;
@@ -2387,7 +2804,7 @@ export class Worksheet {
 
       case "visible": {
         const result: Address[] = [];
-        this.cells.forEach((row, col, cell) => {
+        this.#cells.forEach((row, col, cell) => {
           if (this.isRowHidden(row) || this.isColHidden(col)) return;
           if (range && !inRange({ row, col }, range)) return;
           if (cell.value === null && cell.formula == null) return; // blank
@@ -2406,7 +2823,7 @@ export class Worksheet {
         const region = this.getContiguousRange(anchor);
         if (!region) return this.getCell(anchor) ? [anchor] : [];
         const result: Address[] = [];
-        this.cells.forEach((row, col) => {
+        this.#cells.forEach((row, col) => {
           if (inRange({ row, col }, region)) result.push({ row, col });
         });
         return result.sort(compareRowMajor);
@@ -2481,7 +2898,7 @@ export class Worksheet {
         if (rules.length === 0) return [];
         const seen = new Set<string>();
         const result: Address[] = [];
-        this.cells.forEach((row, col) => {
+        this.#cells.forEach((row, col) => {
           if (range && !inRange({ row, col }, range)) return;
           for (const rule of rules) {
             if (!rule.ranges || rule.ranges.length === 0) continue;
@@ -2574,15 +2991,15 @@ export class Worksheet {
     // Non-anchor merged cells are never in the ICellStore (cleared at merge time),
     // but we add an explicit guard as a safety net for any edge case.
     const addresses: Address[] = [];
-    this.cells.forEach((row, col) => {
+    this.#cells.forEach((row, col) => {
       // Safety net: skip non-anchor merged cells.
       // In normal operation these are absent from ICellStore, but guard defensively.
-      if (this.mergeStore.isNonAnchor(row, col)) return;
+      if (this.#mergeStore.isNonAnchor(row, col)) return;
 
       // ── Phase 3: skip hidden cells ────────────────────────────────────────
       // Default: skip cells whose row OR column is hidden (Excel Ctrl+F parity).
       // Pass includeHidden: true to search the raw data model.
-      if (!includeHidden && this.visibilityStore.isCellHidden(row, col)) return;
+      if (!includeHidden && this.#visibilityStore.isCellHidden(row, col)) return;
 
       // ── 2. Apply range filter ─────────────────────────────────────────────
       if (range) {
@@ -2599,7 +3016,7 @@ export class Worksheet {
 
     // ── 4. Yield matches ─────────────────────────────────────────────────────
     for (const addr of addresses) {
-      const cell = this.cells.get(addr.row, addr.col);
+      const cell = this.#cells.get(addr.row, addr.col);
       if (!cell) continue;
 
       let text: string | null = null;
@@ -2760,37 +3177,38 @@ export class Worksheet {
    */
   extractSnapshot(): WorksheetSnapshot {
     const cells: WorksheetSnapshot["cells"] = [];
-    this.cells.forEach((row, col, cell) =>
-      cells.push({ row, col, cell: this.cloneCell(cell) }),
+    this.#cells.forEach((row, col, cell) =>
+      cells.push({ row, col, cell: this.#cloneCell(cell) }),
     );
 
     const dagEdges: WorksheetSnapshot["dagEdges"] = [];
-    this.recalcCoordinator.forEachFormula((row, col, deps) => {
+    this.#recalcCoordinator.forEachFormula((row, col, deps) => {
       dagEdges.push({ row, col, deps });
     });
 
-    return {
+    const snapshot: WorksheetSnapshot = {
       version: FORMAT_VERSION,
-      rowCount: this.rowCount,
-      colCount: this.colCount,
+      rowCount: this.#rowCount,
+      colCount: this.#colCount,
       cells,
-      merges: this.mergeStore.getAll(),
-      hiddenRows: [...this.visibilityStore.getHiddenRows()],
-      hiddenCols: [...this.visibilityStore.getHiddenCols()],
-      rowHeights: [...this.rowHeights].map(([row, height]) => ({
+      merges: this.#mergeStore.getAll(),
+      hiddenRows: [...this.#visibilityStore.getHiddenRows()],
+      hiddenCols: [...this.#visibilityStore.getHiddenCols()],
+      rowHeights: [...this.#rowHeights].map(([row, height]) => ({
         row,
         height,
       })),
-      columnWidths: [...this.colWidths].map(([col, width]) => ({ col, width })),
-      rowStyles: [...this.rowStyles].map(([row, style]) => ({ row, style })),
-      columnStyles: [...this.columnStyles].map(([col, style]) => ({
+      columnWidths: [...this.#colWidths].map(([col, width]) => ({ col, width })),
+      rowStyles: [...this.#rowStyles].map(([row, style]) => ({ row, style })),
+      columnStyles: [...this.#columnStyles].map(([col, style]) => ({
         col,
         style,
       })),
-      drawings: this.cloneDrawingLayerData(),
+      drawings: this.#cloneDrawingLayerData(),
       dagEdges,
-      volatiles: this.recalcCoordinator.getVolatileAddresses(),
+      volatiles: this.#recalcCoordinator.getVolatileAddresses(),
     };
+    return this.#ownedByWorkbook ? detachOwnedEventValue(snapshot) : snapshot;
   }
 
   /**
@@ -2804,76 +3222,111 @@ export class Worksheet {
    *                  decoded by SnapshotCodec.decode().
    */
   applySnapshot(snapshot: WorksheetSnapshot): void {
+    // Validate untrusted snapshot coordinates before replacing any live state.
+    // In particular, an out-of-range column can alias another packed graph key.
+    if (snapshot.rowCount !== undefined && (!Number.isInteger(snapshot.rowCount)
+      || snapshot.rowCount < 1 || snapshot.rowCount > MAX_WORKSHEET_ROW)) {
+      throw new RangeError(`Snapshot row count out of bounds: ${snapshot.rowCount}`);
+    }
+    if (snapshot.colCount !== undefined && (!Number.isInteger(snapshot.colCount)
+      || snapshot.colCount < 1 || snapshot.colCount > MAX_WORKSHEET_COLUMN)) {
+      throw new RangeError(`Snapshot column count out of bounds: ${snapshot.colCount}`);
+    }
+    const formulaByKey = new Map<number, string>();
+    for (const { row, col, cell } of snapshot.cells) {
+      assertWorksheetAddress(row, col);
+      if (cell.formula) formulaByKey.set(packKey(row, col), cell.formula);
+    }
+    for (const { row, col } of snapshot.volatiles) assertWorksheetAddress(row, col);
+    const graphEntries = snapshot.dagEdges.map(({ row, col, deps }) => {
+      assertWorksheetAddress(row, col);
+      for (const dep of deps) assertWorksheetAddress(dep.row, dep.col);
+      const formula = formulaByKey.get(packKey(row, col));
+      const ranges = formula
+        ? extractFormulaDependencies(formula, { row: row - 1, col: col - 1 }).ranges.map((range) => ({
+            startRow: range.startRow + 1,
+            endRow: range.endRow + 1,
+            startCol: range.startCol + 1,
+            endCol: range.endCol + 1,
+          }))
+        : [];
+      for (const range of ranges) {
+        assertWorksheetAddress(range.startRow, range.startCol);
+        assertWorksheetAddress(range.endRow, range.endCol);
+      }
+      return { row, col, deps, ranges };
+    });
+
     // ── Reset all stores ──────────────────────────────────────────────────
-    this.cells = new ColumnarCellStore();
-    this.mergeStore = new MergeStoreV1();
-    this.visibilityStore = new VisibilityStoreV1();
-    this.dag.clearAll();
-    if (snapshot.rowCount !== undefined) this.rowCount = snapshot.rowCount;
-    if (snapshot.colCount !== undefined) this.colCount = snapshot.colCount;
+    this.#cells = new ColumnarCellStore();
+    this.#mergeStore = new MergeStoreV1();
+    this.#visibilityStore = new VisibilityStoreV1();
+    this.#dag.clearAll();
+    if (snapshot.rowCount !== undefined) this.#rowCount = snapshot.rowCount;
+    if (snapshot.colCount !== undefined) this.#colCount = snapshot.colCount;
 
     // ── Restore cells ────────────────────────────────────────────────────
     for (const { row, col, cell } of snapshot.cells) {
-      this.cells.set(row, col, this.cloneCell(cell));
+      this.#cells.set(row, col, this.#cloneCell(cell));
     }
 
     // ── Restore merges ───────────────────────────────────────────────────
     for (const region of snapshot.merges) {
-      this.mergeStore.add(region);
+      this.#mergeStore.add(region);
     }
 
     // ── Restore visibility ───────────────────────────────────────────────
-    for (const row of snapshot.hiddenRows) this.visibilityStore.hideRow(row);
-    for (const col of snapshot.hiddenCols) this.visibilityStore.hideCol(col);
+    for (const row of snapshot.hiddenRows) this.#visibilityStore.hideRow(row);
+    for (const col of snapshot.hiddenCols) this.#visibilityStore.hideCol(col);
 
     // ── Restore structural styles and dimensions ─────────────────────────
     if (snapshot.rowHeights) {
-      this.rowHeights = new Map(
+      this.#rowHeights = new Map(
         snapshot.rowHeights.map(({ row, height }) => [row, height]),
       );
     }
     if (snapshot.columnWidths) {
-      this.colWidths = new Map(
+      this.#colWidths = new Map(
         snapshot.columnWidths.map(({ col, width }) => [col, width]),
       );
     }
     if (snapshot.rowStyles) {
-      this.rowStyles = new Map(
+      this.#rowStyles = new Map(
         snapshot.rowStyles.map(({ row, style }) => [
           row,
-          this.internStyle(style)!,
+          this.#internStyle(style)!,
         ]),
       );
     }
     if (snapshot.columnStyles) {
-      this.columnStyles = new Map(
+      this.#columnStyles = new Map(
         snapshot.columnStyles.map(({ col, style }) => [
           col,
-          this.internStyle(style)!,
+          this.#internStyle(style)!,
         ]),
       );
     }
 
     // ── Restore drawings ─────────────────────────────────────────────────
     if (snapshot.drawings) {
-      this.drawingLayer.deserialize(snapshot.drawings);
+      this.#drawingLayer.deserialize(snapshot.drawings);
     }
 
     // ── Restore DAG ──────────────────────────────────────────────────────
-    for (const { row, col, deps } of snapshot.dagEdges) {
-      this.recalcCoordinator.registerFormula(row, col, deps);
+    for (const { row, col, deps, ranges } of graphEntries) {
+      this.#recalcCoordinator.registerFormula(row, col, deps, ranges);
     }
 
     // ── Restore volatiles ────────────────────────────────────────────────
     for (const { row, col } of snapshot.volatiles) {
       // Re-register with empty local deps list; the DAG edges carry structural deps.
-      this.recalcCoordinator.registerVolatile(row, col, []);
+      this.#recalcCoordinator.registerVolatile(row, col, []);
     }
   }
 
   // ==================== Private Helpers ====================
 
-  private validateInsertArgs(
+  #validateInsertArgs(
     index: number,
     count: number,
     size: number,
@@ -2887,7 +3340,7 @@ export class Worksheet {
     }
   }
 
-  private validateReorderArgs(
+  #validateReorderArgs(
     fromIndex: number,
     toIndex: number,
     count: number,
@@ -2909,7 +3362,7 @@ export class Worksheet {
     }
   }
 
-  private remapWorksheetState(options: {
+  #remapWorksheetState(options: {
     mapRowIndex: IndexMapper;
     mapColumnIndex: IndexMapper;
     transformFormula?: (formula: string) => string;
@@ -2921,28 +3374,28 @@ export class Worksheet {
       return { row, col };
     };
 
-    const mappedVolatiles = this.recalcCoordinator
+    const mappedVolatiles = this.#recalcCoordinator
       .getVolatileAddresses()
       .map(mapAddress)
       .filter((addr): addr is Address => addr !== null);
 
     const nextCells: ICellStore = new ColumnarCellStore();
-    this.cells.forEach((row, col, cell) => {
+    this.#cells.forEach((row, col, cell) => {
       const mapped = mapAddress({ row, col });
       if (!mapped) return;
 
-      const nextCell = this.cloneCell(cell);
+      const nextCell = this.#cloneCell(cell);
       if (nextCell.formula && options.transformFormula) {
         nextCell.formula = options.transformFormula(nextCell.formula);
       }
-      this.remapCellMetadata(nextCell, mapAddress);
+      this.#remapCellMetadata(nextCell, mapAddress);
       nextCells.set(mapped.row, mapped.col, nextCell);
     });
 
-    const nextMerges = this.mergeStore
+    const nextMerges = this.#mergeStore
       .getAll()
       .map((region) =>
-        this.remapMergedRegion(
+        this.#remapMergedRegion(
           region,
           options.mapRowIndex,
           options.mapColumnIndex,
@@ -2950,35 +3403,35 @@ export class Worksheet {
       )
       .filter((region): region is MergedRegion => region !== null);
 
-    const hiddenRows = [...this.visibilityStore.getHiddenRows()]
+    const hiddenRows = [...this.#visibilityStore.getHiddenRows()]
       .map(options.mapRowIndex)
       .filter((row): row is number => row !== null);
-    const hiddenCols = [...this.visibilityStore.getHiddenCols()]
+    const hiddenCols = [...this.#visibilityStore.getHiddenCols()]
       .map(options.mapColumnIndex)
       .filter((col): col is number => col !== null);
 
-    this.cells = nextCells;
-    this.mergeStore = new MergeStoreV1();
+    this.#cells = nextCells;
+    this.#mergeStore = new MergeStoreV1();
     for (const region of nextMerges) {
-      this.mergeStore.add(region);
+      this.#mergeStore.add(region);
     }
 
-    this.visibilityStore = new VisibilityStoreV1();
-    for (const row of hiddenRows) this.visibilityStore.hideRow(row);
-    for (const col of hiddenCols) this.visibilityStore.hideCol(col);
+    this.#visibilityStore = new VisibilityStoreV1();
+    for (const row of hiddenRows) this.#visibilityStore.hideRow(row);
+    for (const col of hiddenCols) this.#visibilityStore.hideCol(col);
 
-    this.rowHeights = this.remapIndexMap(this.rowHeights, options.mapRowIndex);
-    this.colWidths = this.remapIndexMap(this.colWidths, options.mapColumnIndex);
-    this.rowStyles = this.remapIndexMap(this.rowStyles, options.mapRowIndex);
-    this.columnStyles = this.remapIndexMap(
-      this.columnStyles,
+    this.#rowHeights = this.#remapIndexMap(this.#rowHeights, options.mapRowIndex);
+    this.#colWidths = this.#remapIndexMap(this.#colWidths, options.mapColumnIndex);
+    this.#rowStyles = this.#remapIndexMap(this.#rowStyles, options.mapRowIndex);
+    this.#columnStyles = this.#remapIndexMap(
+      this.#columnStyles,
       options.mapColumnIndex,
     );
-    this.remapDrawingAnchors(mapAddress);
-    this.rebuildDependencyGraph(mappedVolatiles);
+    this.#remapDrawingAnchors(mapAddress);
+    this.#rebuildDependencyGraph(mappedVolatiles);
   }
 
-  private remapIndexMap<T>(
+  #remapIndexMap<T>(
     source: Map<number, T>,
     mapper: IndexMapper,
   ): Map<number, T> {
@@ -2990,13 +3443,13 @@ export class Worksheet {
     return next;
   }
 
-  private remapMergedRegion(
+  #remapMergedRegion(
     region: MergedRegion,
     rowMapper: IndexMapper,
     colMapper: IndexMapper,
   ): MergedRegion | null {
-    const rows = this.remapIndexSpan(region.startRow, region.endRow, rowMapper);
-    const cols = this.remapIndexSpan(region.startCol, region.endCol, colMapper);
+    const rows = this.#remapIndexSpan(region.startRow, region.endRow, rowMapper);
+    const cols = this.#remapIndexSpan(region.startCol, region.endCol, colMapper);
     if (!rows || !cols) return null;
     if (rows.min === rows.max && cols.min === cols.max) return null;
     return {
@@ -3007,7 +3460,7 @@ export class Worksheet {
     };
   }
 
-  private remapIndexSpan(
+  #remapIndexSpan(
     start: number,
     end: number,
     mapper: IndexMapper,
@@ -3023,7 +3476,7 @@ export class Worksheet {
     return min === Infinity ? null : { min, max };
   }
 
-  private remapCellMetadata(
+  #remapCellMetadata(
     cell: Cell,
     mapAddress: (addr: Address) => Address | null,
   ): void {
@@ -3039,10 +3492,10 @@ export class Worksheet {
     }
   }
 
-  private remapDrawingAnchors(
+  #remapDrawingAnchors(
     mapAddress: (addr: Address) => Address | null,
   ): void {
-    for (const obj of this.drawingLayer.getAllObjects()) {
+    for (const obj of this.#drawingLayer.getAllObjects()) {
       if (obj.type !== "picture") continue;
       const picture = obj as PictureObject;
       if (!picture.cellAnchor) continue;
@@ -3079,16 +3532,27 @@ export class Worksheet {
     }
   }
 
-  private rebuildDependencyGraph(volatileAddresses: Address[]): void {
-    this.dag.clearAll();
+  #rebuildDependencyGraph(volatileAddresses: Address[]): void {
+    this.#dag.clearAll();
 
-    this.cells.forEach((row, col, cell) => {
+    this.#cells.forEach((row, col, cell) => {
       if (!cell.formula) return;
       try {
-        this.recalcCoordinator.registerFormula(
+        const parserAddress = { row: row - 1, col: col - 1 };
+        const extracted = extractFormulaDependencies(cell.formula, parserAddress);
+        this.#recalcCoordinator.registerFormula(
           row,
           col,
-          extractReferences(cell.formula, { row, col }),
+          extracted.cells.map(({ row: dependencyRow, col: dependencyCol }) => ({
+            row: dependencyRow + 1,
+            col: dependencyCol + 1,
+          })),
+          extracted.ranges.map((range) => ({
+            startRow: range.startRow + 1,
+            endRow: range.endRow + 1,
+            startCol: range.startCol + 1,
+            endCol: range.endCol + 1,
+          })),
         );
       } catch (error) {
         console.warn(
@@ -3103,11 +3567,11 @@ export class Worksheet {
       const key = `${addr.row}:${addr.col}`;
       if (seenVolatiles.has(key)) continue;
       seenVolatiles.add(key);
-      this.recalcCoordinator.registerVolatile(addr.row, addr.col, []);
+      this.#recalcCoordinator.registerVolatile(addr.row, addr.col, []);
     }
   }
 
-  private cloneCell(cell: Cell): Cell {
+  #cloneCell(cell: Cell): Cell {
     return {
       value: cell.value ?? null,
       formula: cell.formula,
@@ -3148,51 +3612,40 @@ export class Worksheet {
     };
   }
 
-  private cloneDrawingLayerData(): SerializedDrawingLayer {
-    const serialized = this.drawingLayer.serialize();
+  #cloneDrawingLayerData(): SerializedDrawingLayer {
+    const serialized = this.#drawingLayer.serialize();
     return {
-      objects: serialized.objects.map((obj) => this.cloneDrawingObject(obj)),
+      objects: serialized.objects.map((obj) => this.#cloneDrawingObject(obj)),
       zOrder: [...serialized.zOrder],
     };
   }
 
-  private cloneDrawingObject<T extends DrawingObject>(obj: T): T {
-    const copy = {
-      ...obj,
-      position: { ...obj.position },
-      size: { ...obj.size },
-      anchor: obj.anchor ? { ...obj.anchor } : undefined,
-    } as T;
-
-    if (copy.type === "picture") {
-      const picture = copy as unknown as PictureObject;
-      picture.cellAnchor = picture.cellAnchor
-        ? { ...picture.cellAnchor }
-        : undefined;
-      picture.cropSettings = picture.cropSettings
-        ? { ...picture.cropSettings }
-        : undefined;
-      picture.loadedImage = undefined;
+  #cloneDrawingObject<T extends DrawingObject>(obj: T): T {
+    const data = Object.create(Object.getPrototypeOf(obj)) as object;
+    // Runtime image handles are not persisted drawing state and cannot be
+    // cloned safely across ownership boundaries.
+    for (const key of Reflect.ownKeys(obj)) {
+      if (key === 'loadedImage') continue;
+      Object.defineProperty(data, key, Object.getOwnPropertyDescriptor(obj, key)!);
     }
-
-    return copy;
+    return cloneDrawingData(data) as T;
   }
 
-  private internStyle(style: CellStyle | undefined): CellStyle | undefined {
-    if (style && this.workbook?.getStyleCache) {
-      return this.workbook.getStyleCache().intern(style);
+  #internStyle(style: CellStyle | undefined): CellStyle | undefined {
+    if (style && this.#workbook?.internStyle) {
+      return this.#workbook.internStyle(style);
     }
     return style;
   }
 
   /** Memo of merged (column + row + cell) styles, keyed by identity of the interned inputs. */
-  private mergedStyleMemo = new WeakMap<
+  #mergedStyleMemo = new WeakMap<
     CellStyle,
     WeakMap<CellStyle, WeakMap<CellStyle, CellStyle>>
   >();
   private static readonly NO_STYLE: CellStyle = Object.freeze({}) as CellStyle;
 
-  private mergeStyles(
+  #mergeStyles(
     ...styles: Array<CellStyle | undefined>
   ): CellStyle | undefined {
     let layers = 0;
@@ -3205,15 +3658,15 @@ export class Worksheet {
     if (layers <= 1) return only;
 
     // Inputs are immutable interned references only when a StyleCache is attached.
-    const cache = this.workbook?.getStyleCache
-      ? this.workbook.getStyleCache()
+    const cache = this.#workbook?.internStyle
+      ? { intern: (style: CellStyle) => this.#workbook!.internStyle(style) }
       : undefined;
     const a = styles[0] ?? Worksheet.NO_STYLE;
     const b = styles[1] ?? Worksheet.NO_STYLE;
     const c = styles[2] ?? Worksheet.NO_STYLE;
 
     if (cache) {
-      const hit = this.mergedStyleMemo.get(a)?.get(b)?.get(c);
+      const hit = this.#mergedStyleMemo.get(a)?.get(b)?.get(c);
       if (hit) return hit;
     }
 
@@ -3229,15 +3682,45 @@ export class Worksheet {
     // Without this the renderer's assertInternedStyle() throws whenever a cell has
     // its own style on top of a row/column style, aborting the whole redraw.
     const canonical: CellStyle = cache.intern(merged);
-    let byB = this.mergedStyleMemo.get(a);
-    if (!byB) this.mergedStyleMemo.set(a, (byB = new WeakMap()));
+    let byB = this.#mergedStyleMemo.get(a);
+    if (!byB) this.#mergedStyleMemo.set(a, (byB = new WeakMap()));
     let byC = byB.get(b);
     if (!byC) byB.set(b, (byC = new WeakMap()));
     byC.set(c, canonical);
     return canonical;
   }
 
-  private generateCommentId(): string {
+  #generateCommentId(): string {
     return `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }
+
+/** @internal Workbook-only adoption entry; not re-exported from the package API. */
+export function adoptWorksheetByWorkbook(worksheet: Worksheet, workbookId: string): void {
+  worksheet.adoptByWorkbook(workbookId, WORKBOOK_ADOPTION_KEY);
+}
+
+// The guard is installed on the prototype so retained handles and explicit
+// Worksheet.prototype.method.call(handle) use the same pre-write check.
+for (const methodName of OWNED_MUTATORS) {
+  const descriptor = Object.getOwnPropertyDescriptor(Worksheet.prototype, methodName);
+  if (!descriptor || typeof descriptor.value !== 'function') continue;
+  const original = descriptor.value as (...args: unknown[]) => unknown;
+  Object.defineProperty(Worksheet.prototype, methodName, {
+    ...descriptor,
+    configurable: false,
+    writable: false,
+    value: function (this: Worksheet, ...args: unknown[]) {
+      this.assertOwnedMutationEntry(methodName);
+      return Reflect.apply(original, this, args);
+    },
+  });
+}
+Object.defineProperty(Worksheet.prototype, 'assertOwnedMutationEntry', {
+  configurable: false,
+  writable: false,
+});
+Object.defineProperty(Worksheet.prototype, 'adoptByWorkbook', {
+  configurable: false,
+  writable: false,
+});

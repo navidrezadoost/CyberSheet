@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CustomCellComponent, Worksheet } from '@cyber-sheet/core';
+import type { CustomCellComponent, WorkbookSheetView } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '../../../renderer-canvas/src';
 import type { ComponentRegistry } from './ComponentRegistry';
 
 export interface CustomCellOverlayProps {
   container: HTMLElement | null;
-  sheet: Worksheet | null | undefined;
+  sheet: WorkbookSheetView | null | undefined;
   renderer: CanvasRenderer | null;
   registry: ComponentRegistry;
   zoom?: number;

@@ -55,10 +55,10 @@ function expectSameSnapshot(
 }
 
 // Sentinel addresses
-const A1 = { row: 0, col: 0 };
-const A2 = { row: 1, col: 0 };
-const A3 = { row: 2, col: 0 };
-const A4 = { row: 3, col: 0 };
+const A1 = { row: (0) + 1, col: (0) + 1 };
+const A2 = { row: (1) + 1, col: (0) + 1 };
+const A3 = { row: (2) + 1, col: (0) + 1 };
+const A4 = { row: (3) + 1, col: (0) + 1 };
 
 const WATCHED = [A1, A2, A3, A4];
 

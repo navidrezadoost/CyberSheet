@@ -12,7 +12,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { BorderPreset, BorderPayload } from "./borderTypes";
 import { BORDER_PRESETS, resolvePreset } from "./borderTypes";
 
-interface BorderPresetGridProps {
+export interface BorderPresetGridProps {
   /** Callback when user selects a preset */
   onSelect: (preset: BorderPreset, payloads: BorderPayload[]) => void;
 

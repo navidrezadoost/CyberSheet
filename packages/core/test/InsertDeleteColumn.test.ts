@@ -38,16 +38,16 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
   describe('Invariant 1: Degenerate Merge Rejection', () => {
     it('should remove merge that collapses to 1x1 after delete', () => {
       // Setup: A1:B1 merged (2x1 merge)
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
       // Verify initial merge exists
       const mergesBefore = worksheet.getMergedRanges();
       expect(mergesBefore).toHaveLength(1);
-      expect(mergesBefore[0].start).toEqual({ row: 0, col: 0 });
-      expect(mergesBefore[0].end).toEqual({ row: 0, col: 1 });
+      expect(mergesBefore[0].start).toEqual({ row: 1, col: 1 });
+      expect(mergesBefore[0].end).toEqual({ row: 1, col: 2 });
       
       // Delete column A (col 0)
-      const cmd = new DeleteColumnCommand(worksheet, 0);
+      const cmd = new DeleteColumnCommand(worksheet, 1);
       cmd.execute();
       
       // Verify: No merge should exist (would be 1x1 at A1, which is degenerate)
@@ -57,32 +57,32 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
 
     it('should preserve 2x1 merge after inserting column before it', () => {
       // Setup: B1:C1 merged (2x1 merge)
-      worksheet.mergeCells({ start: { row: 0, col: 1 }, end: { row: 0, col: 2 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (1) + 1 }, end: { row: (0) + 1, col: (2) + 1 } });
       
       // Insert column A (col 0) - should shift merge to C1:D1
-      const cmd = new InsertColumnCommand(worksheet, 0);
+      const cmd = new InsertColumnCommand(worksheet, 1);
       cmd.execute();
       
       // Verify: Merge still 2x1, now at C1:D1
       const mergesAfter = worksheet.getMergedRanges();
       expect(mergesAfter).toHaveLength(1);
-      expect(mergesAfter[0].start).toEqual({ row: 0, col: 2 });
-      expect(mergesAfter[0].end).toEqual({ row: 0, col: 3 });
+      expect(mergesAfter[0].start).toEqual({ row: 1, col: 3 });
+      expect(mergesAfter[0].end).toEqual({ row: 1, col: 4 });
     });
 
     it('should reject merge that becomes 1x2 (height only)', () => {
       // Setup: A1:A2 merged (1x2 merge)
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 1, col: 0 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (1) + 1, col: (0) + 1 } });
       
       // Insert column at A (col 0) - shifts merge to B1:B2
-      const cmd = new InsertColumnCommand(worksheet, 0);
+      const cmd = new InsertColumnCommand(worksheet, 1);
       cmd.execute();
       
       // Verify: Merge should still exist at B1:B2 (1x2 is valid)
       const mergesAfter = worksheet.getMergedRanges();
       expect(mergesAfter).toHaveLength(1);
-      expect(mergesAfter[0].start).toEqual({ row: 0, col: 1 });
-      expect(mergesAfter[0].end).toEqual({ row: 1, col: 1 });
+      expect(mergesAfter[0].start).toEqual({ row: 1, col: 2 });
+      expect(mergesAfter[0].end).toEqual({ row: 2, col: 2 });
     });
   });
 
@@ -96,70 +96,70 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
   describe('Invariant 2: Merge-Cell Consistency', () => {
     it('should preserve merge anchor value after insertColumn', () => {
       // Setup: A1:B1 merged, A1 = 10
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
-      worksheet.setCellValue({ row: 0, col: 0 }, 10);
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
       
       // Insert column at A (col 0)
-      const cmd = new InsertColumnCommand(worksheet, 0);
+      const cmd = new InsertColumnCommand(worksheet, 1);
       cmd.execute();
       
       // Verify: Merge at B1:C1, B1 still = 10
       const mergesAfter = worksheet.getMergedRanges();
       expect(mergesAfter).toHaveLength(1);
-      expect(mergesAfter[0].start).toEqual({ row: 0, col: 1 });
-      expect(mergesAfter[0].end).toEqual({ row: 0, col: 2 });
+      expect(mergesAfter[0].start).toEqual({ row: 1, col: 2 });
+      expect(mergesAfter[0].end).toEqual({ row: 1, col: 3 });
       
-      const anchorCell = worksheet.getCell({ row: 0, col: 1 });
+      const anchorCell = worksheet.getCell({ row: (0) + 1, col: (1) + 1 });
       expect(anchorCell?.value).toBe(10);
     });
 
     it('should preserve merge anchor formula after deleteColumn', () => {
       // Setup: B1:C1 merged, B1 = =A1+10, A1 = 5
-      worksheet.setCellValue({ row: 0, col: 0 }, 5);
-      worksheet.mergeCells({ start: { row: 0, col: 1 }, end: { row: 0, col: 2 } });
-      worksheet.setCellFormula({ row: 0, col: 1 }, '=A1+10');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 5);
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (1) + 1 }, end: { row: (0) + 1, col: (2) + 1 } });
+      worksheet.setCellFormula({ row: (0) + 1, col: (1) + 1 }, '=A1+10');
       
       // Delete column A (col 0) - merge shifts to A1:B1, formula becomes #REF!+10
-      const cmd = new DeleteColumnCommand(worksheet, 0);
+      const cmd = new DeleteColumnCommand(worksheet, 1);
       cmd.execute();
       
       // Verify: Merge at A1:B1, A1 has formula with #REF!
       const mergesAfter = worksheet.getMergedRanges();
       expect(mergesAfter).toHaveLength(1);
-      expect(mergesAfter[0].start).toEqual({ row: 0, col: 0 });
-      expect(mergesAfter[0].end).toEqual({ row: 0, col: 1 });
+      expect(mergesAfter[0].start).toEqual({ row: 1, col: 1 });
+      expect(mergesAfter[0].end).toEqual({ row: 1, col: 2 });
       
-      const anchorCell = worksheet.getCell({ row: 0, col: 0 });
+      const anchorCell = worksheet.getCell({ row: (0) + 1, col: (0) + 1 });
       expect(anchorCell?.formula).toBeDefined();
       expect(anchorCell?.formula).toContain('#REF!');
     });
 
     it('should maintain merge-cell consistency across multiple transforms', () => {
       // Setup: A1:B2 merged (2x2), A1 = "Merged"
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 1, col: 1 } });
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Merged');
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (1) + 1, col: (1) + 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Merged');
       
       // Transform 1: Insert column at A
-      const cmd1 = new InsertColumnCommand(worksheet, 0);
+      const cmd1 = new InsertColumnCommand(worksheet, 1);
       cmd1.execute();
       
       // Verify: Merge at B1:C2, B1 = "Merged"
       let merges = worksheet.getMergedRanges();
       expect(merges).toHaveLength(1);
-      expect(merges[0].start).toEqual({ row: 0, col: 1 });
-      expect(merges[0].end).toEqual({ row: 1, col: 2 });
-      expect(worksheet.getCell({ row: 0, col: 1 })?.value).toBe('Merged');
+      expect(merges[0].start).toEqual({ row: 1, col: 2 });
+      expect(merges[0].end).toEqual({ row: 2, col: 3 });
+      expect(worksheet.getCell({ row: (0) + 1, col: (1) + 1 })?.value).toBe('Merged');
       
       // Transform 2: Insert column at A again
-      const cmd2 = new InsertColumnCommand(worksheet, 0);
+      const cmd2 = new InsertColumnCommand(worksheet, 1);
       cmd2.execute();
       
       // Verify: Merge at C1:D2, C1 = "Merged"
       merges = worksheet.getMergedRanges();
       expect(merges).toHaveLength(1);
-      expect(merges[0].start).toEqual({ row: 0, col: 2 });
-      expect(merges[0].end).toEqual({ row: 1, col: 3 });
-      expect(worksheet.getCell({ row: 0, col: 2 })?.value).toBe('Merged');
+      expect(merges[0].start).toEqual({ row: 1, col: 3 });
+      expect(merges[0].end).toEqual({ row: 2, col: 4 });
+      expect(worksheet.getCell({ row: (0) + 1, col: (2) + 1 })?.value).toBe('Merged');
     });
   });
 
@@ -173,37 +173,37 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
   describe('Invariant 3: Deterministic Replay', () => {
     it('should produce identical state on repeated execution', () => {
       // Setup: A1 = 1, B1 = 2, A1:B1 merged
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
-      worksheet.setCellValue({ row: 0, col: 1 }, 2);
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 2);
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
       // Capture initial state
       const captureState = () => ({
-        a1: worksheet.getCell({ row: 0, col: 0 }),
-        b1: worksheet.getCell({ row: 0, col: 1 }),
-        c1: worksheet.getCell({ row: 0, col: 2 }),
+        a1: worksheet.getCell({ row: (0) + 1, col: (0) + 1 }),
+        b1: worksheet.getCell({ row: (0) + 1, col: (1) + 1 }),
+        c1: worksheet.getCell({ row: (0) + 1, col: (2) + 1 }),
         merges: worksheet.getMergedRanges().map(m => ({ ...m }))
       });
       
       // Run 1: insertColumn(0)
       workbook = new Workbook();
       worksheet = workbook.addSheet('Test');
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
-      worksheet.setCellValue({ row: 0, col: 1 }, 2);
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 2);
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
-      const cmd1 = new InsertColumnCommand(worksheet, 0);
+      const cmd1 = new InsertColumnCommand(worksheet, 1);
       cmd1.execute();
       const state1 = captureState();
       
       // Run 2: insertColumn(0) again (fresh workbook)
       workbook = new Workbook();
       worksheet = workbook.addSheet('Test');
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
-      worksheet.setCellValue({ row: 0, col: 1 }, 2);
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 2);
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
-      const cmd2 = new InsertColumnCommand(worksheet, 0);
+      const cmd2 = new InsertColumnCommand(worksheet, 1);
       cmd2.execute();
       const state2 = captureState();
       
@@ -215,44 +215,44 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
 
     it('should produce deterministic state under complex sequence', () => {
       // Setup: A1:C1 merged, values in each
-      worksheet.setCellValue({ row: 0, col: 0 }, 'A');
-      worksheet.setCellValue({ row: 0, col: 1 }, 'B');
-      worksheet.setCellValue({ row: 0, col: 2 }, 'C');
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 2 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
+      worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (2) + 1 } });
       
       // Sequence: insert(0), delete(0), insert(1)
-      const cmd1 = new InsertColumnCommand(worksheet, 0);
+      const cmd1 = new InsertColumnCommand(worksheet, 1);
       cmd1.execute();
       
-      const cmd2 = new DeleteColumnCommand(worksheet, 0);
+      const cmd2 = new DeleteColumnCommand(worksheet, 1);
       cmd2.execute();
       
-      const cmd3 = new InsertColumnCommand(worksheet, 1);
+      const cmd3 = new InsertColumnCommand(worksheet, 2);
       cmd3.execute();
       
       const state1 = {
         merges: worksheet.getMergedRanges(),
         cellCount: Array.from({ length: 5 }, (_, i) => 
-          worksheet.getCell({ row: 0, col: i })
+          worksheet.getCell({ row: (0) + 1, col: (i) + 1 })
         ).filter(c => c).length
       };
       
       // Replay same sequence
       workbook = new Workbook();
       worksheet = workbook.addSheet('Test');
-      worksheet.setCellValue({ row: 0, col: 0 }, 'A');
-      worksheet.setCellValue({ row: 0, col: 1 }, 'B');
-      worksheet.setCellValue({ row: 0, col: 2 }, 'C');
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 2 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
+      worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (2) + 1 } });
       
-      new InsertColumnCommand(worksheet, 0).execute();
-      new DeleteColumnCommand(worksheet, 0).execute();
       new InsertColumnCommand(worksheet, 1).execute();
+      new DeleteColumnCommand(worksheet, 1).execute();
+      new InsertColumnCommand(worksheet, 2).execute();
       
       const state2 = {
         merges: worksheet.getMergedRanges(),
         cellCount: Array.from({ length: 5 }, (_, i) => 
-          worksheet.getCell({ row: 0, col: i })
+          worksheet.getCell({ row: (0) + 1, col: (i) + 1 })
         ).filter(c => c).length
       };
       
@@ -272,16 +272,16 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
   describe('Invariant 4: Undo/Redo Stability', () => {
     it('should maintain merge stability through undo', () => {
       // Setup: A1:B1 merged
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
       // Execute: insert column at A
-      const cmd = new InsertColumnCommand(worksheet, 0);
+      const cmd = new InsertColumnCommand(worksheet, 1);
       cmd.execute();
       
       // Verify: Merge at B1:C1
       let merges = worksheet.getMergedRanges();
       expect(merges).toHaveLength(1);
-      expect(merges[0].start).toEqual({ row: 0, col: 1 });
+      expect(merges[0].start).toEqual({ row: 1, col: 2 });
       
       // Undo
       cmd.undo();
@@ -289,26 +289,26 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
       // Verify: Merge back at A1:B1, no duplication
       merges = worksheet.getMergedRanges();
       expect(merges).toHaveLength(1);
-      expect(merges[0].start).toEqual({ row: 0, col: 0 });
-      expect(merges[0].end).toEqual({ row: 0, col: 1 });
+      expect(merges[0].start).toEqual({ row: 1, col: 1 });
+      expect(merges[0].end).toEqual({ row: 1, col: 2 });
     });
 
     it('should handle double insert + double undo correctly', () => {
       // Setup: A1:B1 merged
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
       // Insert at A twice
-      const cmd1 = new InsertColumnCommand(worksheet, 0);
+      const cmd1 = new InsertColumnCommand(worksheet, 1);
       cmd1.execute();
       
-      const cmd2 = new InsertColumnCommand(worksheet, 0);
+      const cmd2 = new InsertColumnCommand(worksheet, 1);
       cmd2.execute();
       
       // Verify: Merge at C1:D1
       let merges = worksheet.getMergedRanges();
       expect(merges).toHaveLength(1);
-      expect(merges[0].start).toEqual({ row: 0, col: 2 });
-      expect(merges[0].end).toEqual({ row: 0, col: 3 });
+      expect(merges[0].start).toEqual({ row: 1, col: 3 });
+      expect(merges[0].end).toEqual({ row: 1, col: 4 });
       
       // Undo twice
       cmd2.undo();
@@ -317,8 +317,8 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
       // Verify: Back to A1:B1, exactly 1 merge
       merges = worksheet.getMergedRanges();
       expect(merges).toHaveLength(1);
-      expect(merges[0].start).toEqual({ row: 0, col: 0 });
-      expect(merges[0].end).toEqual({ row: 0, col: 1 });
+      expect(merges[0].start).toEqual({ row: 1, col: 1 });
+      expect(merges[0].end).toEqual({ row: 1, col: 2 });
     });
   });
 
@@ -335,10 +335,10 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
   describe('Invariant 5: Adversarial Structural Integrity', () => {
     it('should preserve structural invariants under random operations (small)', () => {
       // Setup: Initial state with some content
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
-      worksheet.setCellValue({ row: 0, col: 1 }, 2);
-      worksheet.setCellValue({ row: 0, col: 2 }, 3);
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 2);
+      worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 3);
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
       const undoStack: any[] = [];
       const random = (seed: number) => {
@@ -359,14 +359,14 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
         if (op < 0.33) {
           // Insert column at random position [0, 2]
           const col = Math.floor(rng() * 3);
-          const cmd = new InsertColumnCommand(worksheet, col);
+          const cmd = new InsertColumnCommand(worksheet, col + 1);
           cmd.execute();
           undoStack.push(cmd);
         } else if (op < 0.66) {
           // Delete column at random position [0, 2]
           const col = Math.floor(rng() * 3);
           try {
-            const cmd = new DeleteColumnCommand(worksheet, col);
+            const cmd = new DeleteColumnCommand(worksheet, col + 1);
             cmd.execute();
             undoStack.push(cmd);
           } catch {
@@ -405,10 +405,10 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
       };
 
       // Initial state with diverse content
-      worksheet.setCellValue({ row: 0, col: 0 }, 100);
-      worksheet.setCellValue({ row: 1, col: 1 }, '=A1*2');
-      worksheet.setCellValue({ row: 2, col: 2 }, '=B2+A1');
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
+      worksheet.setCellValue({ row: (1) + 1, col: (1) + 1 }, '=A1*2');
+      worksheet.setCellValue({ row: (2) + 1, col: (2) + 1 }, '=B2+A1');
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
 
       // INVARIANT 9: Bounded Resource Growth
       const MAX_HISTORY = 50; // Sliding window
@@ -436,7 +436,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
         if (action < 0.35) {
           // 35% insert
           const col = Math.floor(seededRandom() * 10);
-          const cmd = new InsertColumnCommand(worksheet, col);
+          const cmd = new InsertColumnCommand(worksheet, col + 1);
           cmd.execute();
           commandStack.push(cmd);
           insertCount++;
@@ -450,7 +450,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
           // 30% delete
           const col = Math.floor(seededRandom() * 10);
           try {
-            const cmd = new DeleteColumnCommand(worksheet, col);
+            const cmd = new DeleteColumnCommand(worksheet, col + 1);
             cmd.execute();
             commandStack.push(cmd);
             deleteCount++;
@@ -544,8 +544,8 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
         return seed / 0x7fffffff;
       };
 
-      worksheet.setCellValue({ row: 0, col: 0 }, 100);
-      worksheet.setCellValue({ row: 1, col: 1 }, '=A1*2');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
+      worksheet.setCellValue({ row: (1) + 1, col: (1) + 1 }, '=A1*2');
 
       const MAX_HISTORY = 50;
       const commandStack: Array<InsertColumnCommand | DeleteColumnCommand> = [];
@@ -563,7 +563,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
 
         if (action < 0.4) {
           const col = Math.floor(seededRandom() * 10);
-          const cmd = new InsertColumnCommand(worksheet, col);
+          const cmd = new InsertColumnCommand(worksheet, col + 1);
           cmd.execute();
           commandStack.push(cmd);
           ops++;
@@ -571,7 +571,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
         } else if (action < 0.7) {
           const col = Math.floor(seededRandom() * 10);
           try {
-            const cmd = new DeleteColumnCommand(worksheet, col);
+            const cmd = new DeleteColumnCommand(worksheet, col + 1);
             cmd.execute();
             commandStack.push(cmd);
             ops++;
@@ -614,8 +614,8 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
         return seed / 0x7fffffff;
       };
 
-      worksheet.setCellValue({ row: 0, col: 0 }, 100);
-      worksheet.setCellValue({ row: 1, col: 1 }, '=A1*2');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 100);
+      worksheet.setCellValue({ row: (1) + 1, col: (1) + 1 }, '=A1*2');
 
       const MAX_HISTORY = 50;
       const commandStack: Array<InsertColumnCommand | DeleteColumnCommand> = [];
@@ -634,7 +634,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
 
         if (action < 0.4) {
           const col = Math.floor(seededRandom() * 10);
-          const cmd = new InsertColumnCommand(worksheet, col);
+          const cmd = new InsertColumnCommand(worksheet, col + 1);
           cmd.execute();
           commandStack.push(cmd);
           ops++;
@@ -642,7 +642,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
         } else if (action < 0.7) {
           const col = Math.floor(seededRandom() * 10);
           try {
-            const cmd = new DeleteColumnCommand(worksheet, col);
+            const cmd = new DeleteColumnCommand(worksheet, col + 1);
             cmd.execute();
             commandStack.push(cmd);
             ops++;
@@ -707,25 +707,25 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
   describe('Bonus: Identity Law (Algebraic Property)', () => {
     it('should satisfy insert(k); delete(k) = identity', () => {
       // Setup: A1 = 10, B1 = 20, A1:B1 merged
-      worksheet.setCellValue({ row: 0, col: 0 }, 10);
-      worksheet.setCellValue({ row: 0, col: 1 }, 20);
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 0, col: 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 20);
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
       
       // Capture initial state
-      const initialA1 = worksheet.getCell({ row: 0, col: 0 });
-      const initialB1 = worksheet.getCell({ row: 0, col: 1 });
+      const initialA1 = worksheet.getCell({ row: (0) + 1, col: (0) + 1 });
+      const initialB1 = worksheet.getCell({ row: (0) + 1, col: (1) + 1 });
       const initialMerges = worksheet.getMergedRanges();
       
       // Apply: insert(1); delete(1)
-      const cmd1 = new InsertColumnCommand(worksheet, 1);
+      const cmd1 = new InsertColumnCommand(worksheet, 2);
       cmd1.execute();
       
-      const cmd2 = new DeleteColumnCommand(worksheet, 1);
+      const cmd2 = new DeleteColumnCommand(worksheet, 2);
       cmd2.execute();
       
       // Verify: Exact equality
-      const finalA1 = worksheet.getCell({ row: 0, col: 0 });
-      const finalB1 = worksheet.getCell({ row: 0, col: 1 });
+      const finalA1 = worksheet.getCell({ row: (0) + 1, col: (0) + 1 });
+      const finalB1 = worksheet.getCell({ row: (0) + 1, col: (1) + 1 });
       const finalMerges = worksheet.getMergedRanges();
       
       expect(finalA1?.value).toBe(initialA1?.value);

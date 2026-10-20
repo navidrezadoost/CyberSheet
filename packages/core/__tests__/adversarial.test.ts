@@ -14,13 +14,14 @@
 
 import { SpreadsheetEngine } from '../src/SpreadsheetEngine';
 import { ReferenceEngine } from '../src/ReferenceEngine';
-import { Address } from '../src/types';
+import type { Address, ExtendedCellValue } from '../src/types';
+import type { Worksheet } from '../src/worksheet';
 
 // Canonical state representation
 interface CanonicalCell {
   row: number;
   col: number;
-  value: string | number | boolean | null;
+  value: ExtendedCellValue;
   formula?: string;
 }
 
@@ -32,17 +33,21 @@ function canonicalize(cells: CanonicalCell[]): string {
   return JSON.stringify(sorted);
 }
 
+function worksheetForTest(engine: SpreadsheetEngine): Worksheet {
+  return (engine as unknown as { _ws: Worksheet })._ws;
+}
+
 function snapshotOptimized(engine: SpreadsheetEngine): CanonicalCell[] {
   const cells: CanonicalCell[] = [];
-  const ws = engine.getWorksheet();
+  const ws = worksheetForTest(engine);
   
   for (let row = 0; row < 100; row++) {
     for (let col = 0; col < 26; col++) {
-      const cell = ws.getCell({ row, col });
+      const cell = ws.getCell({ row: row + 1, col: col + 1 });
       if (cell && cell.value !== null) {
         cells.push({
-          row,
-          col,
+          row: row + 1,
+          col: col + 1,
           value: cell.value,
           ...(cell.formula ? { formula: cell.formula } : {}),
         });
@@ -130,14 +135,14 @@ describe('Adversarial Validation — Snapshot Delta', () => {
       
       // Apply to both engines
       if (op.type === 'setValue') {
-        await optimized.run((ws) => ws.setCellValue({ row: op.row, col: op.col }, op.value));
-        reference.setCellValue({ row: op.row, col: op.col }, op.value);
+        await optimized.run((ws) => ws.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value));
+        reference.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value);
       } else if (op.type === 'setFormula') {
-        await optimized.run((ws) => ws.setFormula({ row: op.row, col: op.col }, op.formula));
-        reference.setFormula({ row: op.row, col: op.col }, op.formula);
+        await optimized.run((ws) => ws.setCellFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula));
+        reference.setFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula);
       } else {
-        await optimized.run((ws) => ws.clearCell({ row: op.row, col: op.col }));
-        reference.clearCell({ row: op.row, col: op.col });
+        await optimized.run((ws) => ws.clearCellContent({ row: op.row + 1, col: op.col + 1 }));
+        reference.clearCell({ row: (op.row) + 1, col: (op.col) + 1 });
       }
       
       // Compare states IMMEDIATELY after each operation
@@ -164,14 +169,14 @@ describe('Adversarial Validation — Snapshot Delta', () => {
       const op = ops[i];
       
       if (op.type === 'setValue') {
-        await optimized.run((ws) => ws.setCellValue({ row: op.row, col: op.col }, op.value));
-        reference.setCellValue({ row: op.row, col: op.col }, op.value);
+        await optimized.run((ws) => ws.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value));
+        reference.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value);
       } else if (op.type === 'setFormula') {
-        await optimized.run((ws) => ws.setFormula({ row: op.row, col: op.col }, op.formula));
-        reference.setFormula({ row: op.row, col: op.col }, op.formula);
+        await optimized.run((ws) => ws.setCellFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula));
+        reference.setFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula);
       } else {
-        await optimized.run((ws) => ws.clearCell({ row: op.row, col: op.col }));
-        reference.clearCell({ row: op.row, col: op.col });
+        await optimized.run((ws) => ws.clearCellContent({ row: op.row + 1, col: op.col + 1 }));
+        reference.clearCell({ row: (op.row) + 1, col: (op.col) + 1 });
       }
       
       const stateOpt = canonicalize(snapshotOptimized(optimized));
@@ -198,11 +203,11 @@ describe('Adversarial Validation — Cross-Seed Divergence', () => {
       
       for (const op of ops) {
         if (op.type === 'setValue') {
-          await engine.run((ws) => ws.setCellValue({ row: op.row, col: op.col }, op.value));
+          await engine.run((ws) => ws.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value));
         } else if (op.type === 'setFormula') {
-          await engine.run((ws) => ws.setFormula({ row: op.row, col: op.col }, op.formula));
+          await engine.run((ws) => ws.setCellFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula));
         } else {
-          await engine.run((ws) => ws.clearCell({ row: op.row, col: op.col }));
+          await engine.run((ws) => ws.clearCellContent({ row: op.row + 1, col: op.col + 1 }));
         }
       }
       
@@ -223,11 +228,11 @@ describe('Adversarial Validation — Cross-Seed Divergence', () => {
     const engine1 = new SpreadsheetEngine('ADV4-1');
     for (const op of ops) {
       if (op.type === 'setValue') {
-        await engine1.run((ws) => ws.setCellValue({ row: op.row, col: op.col }, op.value));
+        await engine1.run((ws) => ws.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value));
       } else if (op.type === 'setFormula') {
-        await engine1.run((ws) => ws.setFormula({ row: op.row, col: op.col }, op.formula));
+        await engine1.run((ws) => ws.setCellFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula));
       } else {
-        await engine1.run((ws) => ws.clearCell({ row: op.row, col: op.col }));
+        await engine1.run((ws) => ws.clearCellContent({ row: op.row + 1, col: op.col + 1 }));
       }
     }
     const state1 = canonicalize(snapshotOptimized(engine1));
@@ -236,11 +241,11 @@ describe('Adversarial Validation — Cross-Seed Divergence', () => {
     const engine2 = new SpreadsheetEngine('ADV4-2');
     for (const op of ops) {
       if (op.type === 'setValue') {
-        await engine2.run((ws) => ws.setCellValue({ row: op.row, col: op.col }, op.value));
+        await engine2.run((ws) => ws.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value));
       } else if (op.type === 'setFormula') {
-        await engine2.run((ws) => ws.setFormula({ row: op.row, col: op.col }, op.formula));
+        await engine2.run((ws) => ws.setCellFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula));
       } else {
-        await engine2.run((ws) => ws.clearCell({ row: op.row, col: op.col }));
+        await engine2.run((ws) => ws.clearCellContent({ row: op.row + 1, col: op.col + 1 }));
       }
     }
     const state2 = canonicalize(snapshotOptimized(engine2));
@@ -268,11 +273,11 @@ describe('Adversarial Validation — Interleaved Operations', () => {
     
     for (const op of pattern) {
       if (op.type === 'setValue') {
-        await optimized.run((ws) => ws.setCellValue({ row: op.row, col: op.col }, op.value));
-        reference.setCellValue({ row: op.row, col: op.col }, op.value);
+        await optimized.run((ws) => ws.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value));
+        reference.setCellValue({ row: (op.row) + 1, col: (op.col) + 1 }, op.value);
       } else {
-        await optimized.run((ws) => ws.setFormula({ row: op.row, col: op.col }, op.formula));
-        reference.setFormula({ row: op.row, col: op.col }, op.formula);
+        await optimized.run((ws) => ws.setCellFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula));
+        reference.setFormula({ row: (op.row) + 1, col: (op.col) + 1 }, op.formula);
       }
     }
     
@@ -287,17 +292,17 @@ describe('Adversarial Validation — Interleaved Operations', () => {
     const reference = new ReferenceEngine();
     
     // Rapidly mutate A1: value → formula → value → formula
-    await optimized.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 10));
-    reference.setCellValue({ row: 0, col: 0 }, 10);
+    await optimized.run((ws) => ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10));
+    reference.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
     
-    await optimized.run((ws) => ws.setFormula({ row: 0, col: 0 }, '=5*2'));
-    reference.setFormula({ row: 0, col: 0 }, '=5*2');
+    await optimized.run((ws) => ws.setCellFormula({ row: (0) + 1, col: (0) + 1 }, '=5*2'));
+    reference.setFormula({ row: (0) + 1, col: (0) + 1 }, '=5*2');
     
-    await optimized.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 15));
-    reference.setCellValue({ row: 0, col: 0 }, 15);
+    await optimized.run((ws) => ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 15));
+    reference.setCellValue({ row: (0) + 1, col: (0) + 1 }, 15);
     
-    await optimized.run((ws) => ws.setFormula({ row: 0, col: 0 }, '=3*5'));
-    reference.setFormula({ row: 0, col: 0 }, '=3*5');
+    await optimized.run((ws) => ws.setCellFormula({ row: (0) + 1, col: (0) + 1 }, '=3*5'));
+    reference.setFormula({ row: (0) + 1, col: (0) + 1 }, '=3*5');
     
     const stateOpt = canonicalize(snapshotOptimized(optimized));
     const stateRef = canonicalize(snapshotReference(reference));
@@ -305,8 +310,8 @@ describe('Adversarial Validation — Interleaved Operations', () => {
     expect(stateOpt).toBe(stateRef);
     
     // Final value should be 15 (from formula 3*5)
-    const finalOpt = optimized.getWorksheet().getCellValue({ row: 0, col: 0 });
-    const finalRef = reference.getCellValue({ row: 0, col: 0 });
+    const finalOpt = worksheetForTest(optimized).getCellValue({ row: 1, col: 1 });
+    const finalRef = reference.getCellValue({ row: (0) + 1, col: (0) + 1 });
     
     expect(finalOpt).toBe(15);
     expect(finalRef).toBe(15);
@@ -320,24 +325,24 @@ describe('Adversarial Validation — Dependency Chains', () => {
     const reference = new ReferenceEngine();
     
     // A1 = 1
-    await optimized.run((ws) => ws.setCellValue({ row: 0, col: 0 }, 1));
-    reference.setCellValue({ row: 0, col: 0 }, 1);
+    await optimized.run((ws) => ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1));
+    reference.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
     
     // A2 = A1 + 1 (= 2)
-    await optimized.run((ws) => ws.setFormula({ row: 1, col: 0 }, '=A1+1'));
-    reference.setFormula({ row: 1, col: 0 }, '=A1+1');
+    await optimized.run((ws) => ws.setCellFormula({ row: (1) + 1, col: (0) + 1 }, '=A1+1'));
+    reference.setFormula({ row: (1) + 1, col: (0) + 1 }, '=A1+1');
     
     // A3 = A2 + 1 (= 3)
-    await optimized.run((ws) => ws.setFormula({ row: 2, col: 0 }, '=A2+1'));
-    reference.setFormula({ row: 2, col: 0 }, '=A2+1');
+    await optimized.run((ws) => ws.setCellFormula({ row: (2) + 1, col: (0) + 1 }, '=A2+1'));
+    reference.setFormula({ row: (2) + 1, col: (0) + 1 }, '=A2+1');
     
     // A4 = A3 + 1 (= 4)
-    await optimized.run((ws) => ws.setFormula({ row: 3, col: 0 }, '=A3+1'));
-    reference.setFormula({ row: 3, col: 0 }, '=A3+1');
+    await optimized.run((ws) => ws.setCellFormula({ row: (3) + 1, col: (0) + 1 }, '=A3+1'));
+    reference.setFormula({ row: (3) + 1, col: (0) + 1 }, '=A3+1');
     
     // A5 = A4 + 1 (= 5)
-    await optimized.run((ws) => ws.setFormula({ row: 4, col: 0 }, '=A4+1'));
-    reference.setFormula({ row: 4, col: 0 }, '=A4+1');
+    await optimized.run((ws) => ws.setCellFormula({ row: (4) + 1, col: (0) + 1 }, '=A4+1'));
+    reference.setFormula({ row: (4) + 1, col: (0) + 1 }, '=A4+1');
     
     const stateOpt = canonicalize(snapshotOptimized(optimized));
     const stateRef = canonicalize(snapshotReference(reference));
@@ -345,8 +350,8 @@ describe('Adversarial Validation — Dependency Chains', () => {
     expect(stateOpt).toBe(stateRef);
     
     // Verify final value
-    const a5Opt = optimized.getWorksheet().getCellValue({ row: 4, col: 0 });
-    const a5Ref = reference.getCellValue({ row: 4, col: 0 });
+    const a5Opt = worksheetForTest(optimized).getCellValue({ row: 5, col: 1 });
+    const a5Ref = reference.getCellValue({ row: (4) + 1, col: (0) + 1 });
     
     expect(a5Opt).toBe(5);
     expect(a5Ref).toBe(5);
@@ -363,24 +368,24 @@ describe('Adversarial Validation — Dependency Chains', () => {
     //      D1
     
     await optimized.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 10);
-      ws.setFormula({ row: 0, col: 1 }, '=A1*2'); // B1 = 20
-      ws.setFormula({ row: 0, col: 2 }, '=A1*3'); // C1 = 30
-      ws.setFormula({ row: 0, col: 3 }, '=B1+C1'); // D1 = 50
+      ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
+      ws.setCellFormula({ row: (0) + 1, col: (1) + 1 }, '=A1*2'); // B1 = 20
+      ws.setCellFormula({ row: (0) + 1, col: (2) + 1 }, '=A1*3'); // C1 = 30
+      ws.setCellFormula({ row: (0) + 1, col: (3) + 1 }, '=B1+C1'); // D1 = 50
     });
     
-    reference.setCellValue({ row: 0, col: 0 }, 10);
-    reference.setFormula({ row: 0, col: 1 }, '=A1*2');
-    reference.setFormula({ row: 0, col: 2 }, '=A1*3');
-    reference.setFormula({ row: 0, col: 3 }, '=B1+C1');
+    reference.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
+    reference.setFormula({ row: (0) + 1, col: (1) + 1 }, '=A1*2');
+    reference.setFormula({ row: (0) + 1, col: (2) + 1 }, '=A1*3');
+    reference.setFormula({ row: (0) + 1, col: (3) + 1 }, '=B1+C1');
     
     const stateOpt = canonicalize(snapshotOptimized(optimized));
     const stateRef = canonicalize(snapshotReference(reference));
     
     expect(stateOpt).toBe(stateRef);
     
-    const d1Opt = optimized.getWorksheet().getCellValue({ row: 0, col: 3 });
-    const d1Ref = reference.getCellValue({ row: 0, col: 3 });
+    const d1Opt = worksheetForTest(optimized).getCellValue({ row: 1, col: 4 });
+    const d1Ref = reference.getCellValue({ row: (0) + 1, col: (3) + 1 });
     
     expect(d1Opt).toBe(50);
     expect(d1Ref).toBe(50);
@@ -395,15 +400,15 @@ describe('Adversarial Validation — Error Handling', () => {
     
     // Invalid formula (division by zero)
     await optimized.run((ws) => {
-      ws.setCellValue({ row: 0, col: 0 }, 0);
-      ws.setFormula({ row: 1, col: 0 }, '=10/A1');
+      ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, 0);
+      ws.setCellFormula({ row: (1) + 1, col: (0) + 1 }, '=10/A1');
     });
     
-    reference.setCellValue({ row: 0, col: 0 }, 0);
-    reference.setFormula({ row: 1, col: 0 }, '=10/A1');
+    reference.setCellValue({ row: (0) + 1, col: (0) + 1 }, 0);
+    reference.setFormula({ row: (1) + 1, col: (0) + 1 }, '=10/A1');
     
-    const valOpt = optimized.getWorksheet().getCellValue({ row: 1, col: 0 });
-    const valRef = reference.getCellValue({ row: 1, col: 0 });
+    const valOpt = worksheetForTest(optimized).getCellValue({ row: 2, col: 1 });
+    const valRef = reference.getCellValue({ row: (1) + 1, col: (0) + 1 });
     
     // Both should produce error (exact error value may differ, but both should be non-numeric)
     expect(typeof valOpt).toBe('string'); // Error message
@@ -415,8 +420,8 @@ describe('Adversarial Validation — Error Handling', () => {
     const reference = new ReferenceEngine();
     
     // Reference cell that doesn't exist
-    await optimized.run((ws) => ws.setFormula({ row: 0, col: 0 }, '=Z99+1'));
-    reference.setFormula({ row: 0, col: 0 }, '=Z99+1');
+    await optimized.run((ws) => ws.setCellFormula({ row: (0) + 1, col: (0) + 1 }, '=Z99+1'));
+    reference.setFormula({ row: (0) + 1, col: (0) + 1 }, '=Z99+1');
     
     const stateOpt = canonicalize(snapshotOptimized(optimized));
     const stateRef = canonicalize(snapshotReference(reference));

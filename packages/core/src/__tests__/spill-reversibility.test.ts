@@ -35,16 +35,16 @@ describe('Spill Reversibility', () => {
     // Apply spill batch
     ws.applySpillBatch([
       {
-        addr: { row: 0, col: 0 },
-        spillSource: { dimensions: [3, 1], endAddress: { row: 2, col: 0 } },
+        addr: { row: (0) + 1, col: (0) + 1 },
+        spillSource: { dimensions: [3, 1], endAddress: { row: (2) + 1, col: (0) + 1 } },
       },
       {
-        addr: { row: 1, col: 0 },
-        spilledFrom: { row: 0, col: 0 },
+        addr: { row: (1) + 1, col: (0) + 1 },
+        spilledFrom: { row: (0) + 1, col: (0) + 1 },
       },
       {
-        addr: { row: 2, col: 0 },
-        spilledFrom: { row: 0, col: 0 },
+        addr: { row: (2) + 1, col: (0) + 1 },
+        spilledFrom: { row: (0) + 1, col: (0) + 1 },
       },
     ]);
 
@@ -59,9 +59,9 @@ describe('Spill Reversibility', () => {
     const ws = createWorksheet();
 
     const before = snapshotSpillState(ws, [
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
-      { row: 2, col: 0 },
+      { row: (0) + 1, col: (0) + 1 },
+      { row: (1) + 1, col: (0) + 1 },
+      { row: (2) + 1, col: (0) + 1 },
     ]);
 
     const recorder = new PatchRecorder(ws);
@@ -69,16 +69,16 @@ describe('Spill Reversibility', () => {
 
     ws.applySpillBatch([
       {
-        addr: { row: 0, col: 0 },
-        spillSource: { dimensions: [3, 1], endAddress: { row: 2, col: 0 } },
+        addr: { row: (0) + 1, col: (0) + 1 },
+        spillSource: { dimensions: [3, 1], endAddress: { row: (2) + 1, col: (0) + 1 } },
       },
       {
-        addr: { row: 1, col: 0 },
-        spilledFrom: { row: 0, col: 0 },
+        addr: { row: (1) + 1, col: (0) + 1 },
+        spilledFrom: { row: (0) + 1, col: (0) + 1 },
       },
       {
-        addr: { row: 2, col: 0 },
-        spilledFrom: { row: 0, col: 0 },
+        addr: { row: (2) + 1, col: (0) + 1 },
+        spilledFrom: { row: (0) + 1, col: (0) + 1 },
       },
     ]);
 
@@ -92,9 +92,9 @@ describe('Spill Reversibility', () => {
     recorder2.stop();
 
     const after = snapshotSpillState(ws, [
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
-      { row: 2, col: 0 },
+      { row: (0) + 1, col: (0) + 1 },
+      { row: (1) + 1, col: (0) + 1 },
+      { row: (2) + 1, col: (0) + 1 },
     ]);
 
     // Should match original state
@@ -109,23 +109,23 @@ describe('Spill Reversibility', () => {
     // Set up initial spill
     ws.applySpillBatch([
       {
-        addr: { row: 0, col: 0 },
-        spillSource: { dimensions: [3, 1], endAddress: { row: 2, col: 0 } },
+        addr: { row: (0) + 1, col: (0) + 1 },
+        spillSource: { dimensions: [3, 1], endAddress: { row: (2) + 1, col: (0) + 1 } },
       },
       {
-        addr: { row: 1, col: 0 },
-        spilledFrom: { row: 0, col: 0 },
+        addr: { row: (1) + 1, col: (0) + 1 },
+        spilledFrom: { row: (0) + 1, col: (0) + 1 },
       },
       {
-        addr: { row: 2, col: 0 },
-        spilledFrom: { row: 0, col: 0 },
+        addr: { row: (2) + 1, col: (0) + 1 },
+        spilledFrom: { row: (0) + 1, col: (0) + 1 },
       },
     ]);
 
     const before = snapshotSpillState(ws, [
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
-      { row: 2, col: 0 },
+      { row: (0) + 1, col: (0) + 1 },
+      { row: (1) + 1, col: (0) + 1 },
+      { row: (2) + 1, col: (0) + 1 },
     ]);
 
     const recorder = new PatchRecorder(ws);
@@ -134,15 +134,15 @@ describe('Spill Reversibility', () => {
     // Clear spill
     ws.applySpillBatch([
       {
-        addr: { row: 0, col: 0 },
+        addr: { row: (0) + 1, col: (0) + 1 },
         spillSource: undefined,
       },
       {
-        addr: { row: 1, col: 0 },
+        addr: { row: (1) + 1, col: (0) + 1 },
         spilledFrom: undefined,
       },
       {
-        addr: { row: 2, col: 0 },
+        addr: { row: (2) + 1, col: (0) + 1 },
         spilledFrom: undefined,
       },
     ]);
@@ -154,9 +154,9 @@ describe('Spill Reversibility', () => {
     recordingApplyPatch(ws, inverse);
 
     const after = snapshotSpillState(ws, [
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
-      { row: 2, col: 0 },
+      { row: (0) + 1, col: (0) + 1 },
+      { row: (1) + 1, col: (0) + 1 },
+      { row: (2) + 1, col: (0) + 1 },
     ]);
 
     // Should restore original spill structure
@@ -169,15 +169,15 @@ describe('Spill Reversibility', () => {
     const ws = createWorksheet();
 
     const original = snapshotSpillState(ws, [
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
+      { row: (0) + 1, col: (0) + 1 },
+      { row: (1) + 1, col: (0) + 1 },
     ]);
 
     const recorder1 = new PatchRecorder(ws);
     recorder1.start();
     ws.applySpillBatch([
-      { addr: { row: 0, col: 0 }, spillSource: { dimensions: [2, 1], endAddress: { row: 1, col: 0 } } },
-      { addr: { row: 1, col: 0 }, spilledFrom: { row: 0, col: 0 } },
+      { addr: { row: (0) + 1, col: (0) + 1 }, spillSource: { dimensions: [2, 1], endAddress: { row: (1) + 1, col: (0) + 1 } } },
+      { addr: { row: (1) + 1, col: (0) + 1 }, spilledFrom: { row: (0) + 1, col: (0) + 1 } },
     ]);
     const patch1 = recorder1.stop();
 
@@ -185,8 +185,8 @@ describe('Spill Reversibility', () => {
     recordingApplyPatch(ws, inv1);
 
     const afterUndo = snapshotSpillState(ws, [
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
+      { row: (0) + 1, col: (0) + 1 },
+      { row: (1) + 1, col: (0) + 1 },
     ]);
 
     // Check only spill metadata, not values (applySpillBatch may create cells with null values)

@@ -24,6 +24,56 @@ type RenderCellContext = {
   style?: CellStyle;
 };
 
+/** Give renderer plugins detached snapshots so retained callback arguments cannot
+ * mutate worksheet-owned cell values, styles, or address objects. */
+function detachRenderPluginValue<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (value === null || typeof value !== 'object') return value;
+  const previous = seen.get(value);
+  if (previous !== undefined) return previous as T;
+  if (value instanceof Date) return new Date(value.getTime()) as T;
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (const item of value) copy.push(detachRenderPluginValue(item, seen));
+    return copy as T;
+  }
+  if (value instanceof Map) {
+    const copy = new Map<unknown, unknown>();
+    seen.set(value, copy);
+    for (const [key, item] of value) copy.set(detachRenderPluginValue(key, seen), detachRenderPluginValue(item, seen));
+    return copy as T;
+  }
+  if (value instanceof Set) {
+    const copy = new Set<unknown>();
+    seen.set(value, copy);
+    for (const item of value) copy.add(detachRenderPluginValue(item, seen));
+    return copy as T;
+  }
+  const copy: Record<PropertyKey, unknown> = Object.create(
+    Object.getPrototypeOf(value) === null ? null : Object.prototype,
+  );
+  seen.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor && 'value' in descriptor) {
+      copy[key] = detachRenderPluginValue(descriptor.value, seen);
+    }
+  }
+  return copy as T;
+}
+
+export function createRenderPluginContext(
+  addr: Address,
+  value: ExtendedCellValue,
+  style?: CellStyle,
+): RenderCellContext {
+  return {
+    addr: detachRenderPluginValue(addr),
+    value: detachRenderPluginValue(value),
+    style: style === undefined ? undefined : detachRenderPluginValue(style),
+  };
+}
+
 export type AccessibilityMode = 'none' | 'high-contrast' | 'deuteranopia' | 'protanopia' | 'tritanopia';
 
 export interface RenderPlugin {

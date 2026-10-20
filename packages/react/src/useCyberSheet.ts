@@ -5,7 +5,7 @@
  */
 
 import * as React from 'react';
-import type { Worksheet, FormulaEngine, CollaborationEngine } from '@cyber-sheet/core';
+import type { WorkbookSheetView, FormulaEngine, CollaborationEngine } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 
 export interface UseCyberSheetOptions {
@@ -19,7 +19,8 @@ export interface UseCyberSheetOptions {
 
 export interface UseCyberSheetReturn {
   containerRef: { current: HTMLDivElement | null };
-  worksheet: Worksheet | null;
+  initializationError: Error | null;
+  worksheet: WorkbookSheetView | null;
   renderer: CanvasRenderer | null;
   formulaEngine: FormulaEngine | null;
   collaboration: CollaborationEngine | null;
@@ -30,53 +31,56 @@ export interface UseCyberSheetReturn {
 
 export function useCyberSheet(options: UseCyberSheetOptions = {}): UseCyberSheetReturn {
   const containerRef = React.useRef(null as HTMLDivElement | null);
-  const [worksheet, setWorksheet] = React.useState<Worksheet | null>(null);
+  const [worksheet, setWorksheet] = React.useState<WorkbookSheetView | null>(null);
   const [renderer, setRenderer] = React.useState<CanvasRenderer | null>(null);
+  const [initializationError, setInitializationError] = React.useState<Error | null>(null);
   const [formulaEngine, setFormulaEngine] = React.useState<FormulaEngine | null>(null);
   const [collaboration, setCollaboration] = React.useState<CollaborationEngine | null>(null);
 
   // Initialize
   React.useEffect(() => {
     if (!containerRef.current) return;
-
-    // Dynamic imports to avoid SSR issues
-    import('@cyber-sheet/core').then(({ Workbook, FormulaEngine, CollaborationEngine }) => {
-      import('@cyber-sheet/renderer-canvas').then(({ CanvasRenderer }) => {
-        const workbook = new Workbook();
-        const ws = workbook.addSheet('Sheet1');
-        
-        // Load initial data
-        if (options.data) {
-          options.data.forEach((row, rowIndex) => {
-            row.forEach((value, colIndex) => {
-              ws.setCellValue({ row: rowIndex, col: colIndex }, value);
-            });
-          });
+    let cancelled = false;
+    const initialize = async () => {
+      try {
+        if (options.data?.some((row) => row.length > 0)) {
+          throw new Error('Initial workbook cell data is unavailable until the R2 journal slice is authorized');
+        }
+        if (options.enableCollaboration) {
+          throw new Error('Workbook collaboration writes are unavailable until their journal slice is authorized');
         }
 
-        const r = new CanvasRenderer(containerRef.current!, ws, {
-          debug: false
-        });
+        // Dynamic imports avoid loading browser-only renderer code during SSR.
+        const [{ Workbook, FormulaEngine }, { CanvasRenderer }] = await Promise.all([
+          import('@cyber-sheet/core'),
+          import('@cyber-sheet/renderer-canvas'),
+        ]);
+        if (cancelled || !containerRef.current) return;
+
+        const workbook = Workbook.create({ sheets: [{ name: 'Sheet1' }] });
+        const ws = workbook.getSheet('Sheet1');
+        if (!ws) throw new Error('Workbook bootstrap failed to create Sheet1');
+
+        const r = new CanvasRenderer(containerRef.current, ws, { debug: false });
+        if (cancelled) {
+          r.dispose();
+          return;
+        }
 
         setWorksheet(ws);
         setRenderer(r);
-
-        // Enable formulas
-        if (options.enableFormulas) {
-          const fe = new FormulaEngine();
-          setFormulaEngine(fe);
+        if (options.enableFormulas) setFormulaEngine(new FormulaEngine());
+      } catch (cause) {
+        if (!cancelled) {
+          setInitializationError(cause instanceof Error ? cause : new Error(String(cause)));
         }
+      }
+    };
 
-        // Enable collaboration
-        if (options.enableCollaboration && options.collaborationUrl) {
-          const collab = new CollaborationEngine(ws);
-          collab.connect(options.collaborationUrl);
-          setCollaboration(collab);
-        }
-      });
-    });
+    void initialize();
 
     return () => {
+      cancelled = true;
       collaboration?.disconnect();
     };
   }, []);
@@ -97,7 +101,7 @@ export function useCyberSheet(options: UseCyberSheetOptions = {}): UseCyberSheet
   // API methods
   const setCell = function(row: number, col: number, value: any) {
     if (!worksheet) return;
-    worksheet.setCellValue({ row, col }, value);
+    throw new Error('Workbook cell writes are unavailable until the R2 journal slice is authorized');
   };
 
   const getCell = function(row: number, col: number) {
@@ -117,6 +121,7 @@ export function useCyberSheet(options: UseCyberSheetOptions = {}): UseCyberSheet
 
   return {
     containerRef,
+    initializationError,
     worksheet,
     renderer,
     formulaEngine,

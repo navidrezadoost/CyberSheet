@@ -8,7 +8,7 @@ export interface OrientationWidgetProps {
 
 const OrientationWidget: React.FC<OrientationWidgetProps> = ({ degrees, onChange }) => {
   const [isDragging, setIsDragging] = React.useState(false);
-  const widgetRef = React.useRef(null);
+  const widgetRef = React.useRef<HTMLDivElement>(null);
   
   const centerX = 75; // Center of the circular widget
   const centerY = 75;

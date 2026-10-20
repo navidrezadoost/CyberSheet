@@ -9,13 +9,17 @@
     "paths": {
       "@cyber-sheet/core": ["../core/src"],
       "@cyber-sheet/renderer-canvas": ["../renderer-canvas/src"],
+      "@cyber-sheet/io-xlsx": ["../io-xlsx/src"],
+      "@cyber-sheet/react": ["./src"],
       "@cyber-sheet/icons/*": ["../icons/*"]
     }
   },
   "include": ["src"],
+  "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.spec.ts", "src/**/*.spec.tsx"],
   "references": [
     { "path": "../core" },
     { "path": "../renderer-canvas" },
+    { "path": "../io-xlsx" },
     { "path": "../icons" }
   ]
 }

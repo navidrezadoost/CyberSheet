@@ -369,9 +369,13 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
       counter++;
       newName = `Sheet${counter}`;
     }
-    workbook.addSheet(newName);
-    setSheetName(newName);
-    forceUpdate({});
+    try {
+      workbook.addSheet(newName);
+      setSheetName(newName);
+      forceUpdate({});
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Sheet creation is unavailable until R5');
+    }
   };
 
   const handleRenameSheet = (oldName: string, newName: string) => {
@@ -383,7 +387,12 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
     }
     // If workbook has renameSheet method, use it
     if (typeof workbook.renameSheet === 'function') {
-      workbook.renameSheet(oldName, newName);
+      try {
+        workbook.renameSheet(oldName, newName);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : 'Sheet rename is unavailable until R5');
+        return;
+      }
     } else {
       // Fallback: recreate sheet with new name (lose data for now)
       console.warn('Workbook.renameSheet not implemented, skipping rename');
@@ -401,7 +410,12 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
     }
     // If workbook has deleteSheet method, use it
     if (typeof workbook.deleteSheet === 'function') {
-      workbook.deleteSheet(name);
+      try {
+        workbook.deleteSheet(name);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : 'Sheet deletion is unavailable until R5');
+        return;
+      }
       // Switch to first remaining sheet
       const remaining = workbook.getSheetNames();
       setSheetName(remaining[0]);
@@ -671,7 +685,7 @@ export const ReactCanvasViewer = ({ url = DEFAULT_URL }: { url?: string }) => {
                 const rect = { x: iconLeft, y: opts.headerHeight };
                 // Reuse renderer's contextmenu handler path by directly invoking the menu callback
                 // Build distinct values list here (same logic as in renderer)
-                const rows = (r.sheetReadonly as any).getVisibleRowIndicesExcluding?.(h.col) || [];
+                const rows = r.sheetReadonly.getVisibleRowIndicesExcluding(h.col);
                 const seen = new Map<string, number>();
                 for (const rr of rows) {
                   const v = r.sheetReadonly.getCellValue({ row: rr, col: h.col });

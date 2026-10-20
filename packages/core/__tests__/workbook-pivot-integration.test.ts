@@ -108,11 +108,12 @@ describe('Workbook - Pivot Registry Integration', () => {
     });
     
     expect(wb1.getPivotRegistry().has(id1)).toBe(true);
-    expect(wb1.getPivotRegistry().has(id2)).toBe(false);
-    
-    expect(wb2.getPivotRegistry().has(id1)).toBe(false);
     expect(wb2.getPivotRegistry().has(id2)).toBe(true);
-    
+    // Pivot IDs are workbook-local. The two registries may both issue
+    // "pivot-1"; resolving that ID must return each workbook's own metadata.
+    expect(id1).toBe(id2);
+    expect(wb1.getPivotRegistry().get(id1)?.name).toBe('P1');
+    expect(wb2.getPivotRegistry().get(id2)?.name).toBe('P2');
     expect(wb1.getPivotRegistry().list()).toHaveLength(1);
     expect(wb2.getPivotRegistry().list()).toHaveLength(1);
   });
@@ -186,12 +187,13 @@ describe('Worksheet - ID Assignment', () => {
     expect(id1).toBe(id2);
   });
 
-  test('worksheet ID includes sheet name', () => {
+  test('worksheet ID is independent of its mutable sheet name', () => {
     const wb = new Workbook();
     const ws = wb.addSheet('CustomSheet');
     
     const id = ws.getWorksheetId();
-    
-    expect(id).toContain('CustomSheet');
+    expect(id).not.toContain('CustomSheet');
+    wb.renameSheet('CustomSheet', 'Renamed');
+    expect(ws.getWorksheetId()).toBe(id);
   });
 });

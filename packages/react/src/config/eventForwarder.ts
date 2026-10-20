@@ -1,4 +1,4 @@
-import type { EventBus } from '@cyber-sheet/core';
+import type { EventAPI } from '@cyber-sheet/core';
 
 const FORWARDABLE_EVENTS = [
   'cell-value-change',
@@ -20,7 +20,7 @@ const FORWARDABLE_EVENTS = [
 ] as const;
 
 export function attachOnEventForwarder(
-  eventBus: EventBus,
+  eventBus: EventAPI,
   onEvent: (event: string, payload: unknown) => void,
   eventFilter?: (event: string) => boolean,
 ): () => void {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { Address, Range, Worksheet } from '@cyber-sheet/core';
+import type { Address, Range, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 import {
   defaultPivotTarget,
   formatAddressA1,
@@ -10,7 +10,7 @@ import {
 
 export interface CreatePivotTableDialogProps {
   isOpen: boolean;
-  worksheet: Worksheet;
+  worksheet: Worksheet | WorkbookSheetView;
   selection: Range | null;
   onClose: () => void;
   onCreate: (sourceRange: Range, target: Address) => void;

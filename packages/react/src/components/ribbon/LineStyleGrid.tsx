@@ -13,7 +13,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { BorderStyle } from "./borderTypes";
 import { LINE_STYLES } from "./borderTypes";
 
-interface LineStyleGridProps {
+export interface LineStyleGridProps {
   /** Currently selected style (highlighted in UI) */
   value?: BorderStyle;
 

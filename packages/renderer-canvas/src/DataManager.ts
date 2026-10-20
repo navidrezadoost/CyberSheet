@@ -4,8 +4,8 @@
  * Sorting, filtering, and grouping functionality
  */
 
-import type { Address, CellValue } from '@cyber-sheet/core';
-import type { Worksheet } from '@cyber-sheet/core';
+import { toDisplayValue } from '@cyber-sheet/core';
+import type { Address, CellValue, ExtendedCellValue, Worksheet } from '@cyber-sheet/core';
 
 export type SortOrder = 'asc' | 'desc';
 export type FilterOperator = 'equals' | 'notEquals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan' | 'greaterOrEqual' | 'lessOrEqual' | 'isEmpty' | 'isNotEmpty';
@@ -54,8 +54,8 @@ export class DataManager {
         const aCell = this.worksheet.getCell({ row: aIdx, col: config.column });
         const bCell = this.worksheet.getCell({ row: bIdx, col: config.column });
         
-        const aVal = aCell?.value ?? null;
-        const bVal = bCell?.value ?? null;
+        const aVal = toDisplayValue(aCell?.value ?? null);
+        const bVal = toDisplayValue(bCell?.value ?? null);
 
         let cmp: number;
         if (config.comparator) {
@@ -77,7 +77,7 @@ export class DataManager {
   /**
    * Default comparator for cell values
    */
-  private defaultComparator(a: CellValue, b: CellValue): number {
+  private defaultComparator(a: ExtendedCellValue, b: ExtendedCellValue): number {
     // Null values last
     if (a == null && b == null) return 0;
     if (a == null) return 1;
@@ -114,7 +114,7 @@ export class DataManager {
 
       for (const config of configs) {
         const cell = this.worksheet.getCell({ row, col: config.column });
-        const value = cell?.value ?? null;
+        const value = toDisplayValue(cell?.value ?? null);
 
         if (config.predicate) {
           if (!config.predicate(value)) {
@@ -140,7 +140,7 @@ export class DataManager {
   /**
    * Evaluate filter condition
    */
-  private evaluateFilter(value: CellValue, config: FilterConfig): boolean {
+  private evaluateFilter(value: ExtendedCellValue, config: FilterConfig): boolean {
     switch (config.operator) {
       case 'equals':
         return value === config.value;

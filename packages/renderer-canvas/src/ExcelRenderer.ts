@@ -17,7 +17,7 @@ import { MultiLayerCanvas, CanvasLayerType, ExcelBorderRenderer, ExcelBorderStyl
 import { TextMeasureCache } from './TextMeasureCache';
 import { FormatCache } from './FormatCache';
 import { Theme, ExcelLightTheme, mergeTheme } from './Theme';
-import { RenderPlugin } from './plugins';
+import { RenderPlugin, createRenderPluginContext } from './plugins';
 
 export interface ExcelRendererOptions {
   /** Header row height in pixels */
@@ -61,6 +61,15 @@ export class ExcelRenderer {
   private validationEngine = new DataValidationEngine();
   private validationRenderer: DataValidationRenderer;
   private _lastRenderMs = 0;
+  private hoveredCell: Address | null = null;
+
+  private get width(): number {
+    return this.container.clientWidth;
+  }
+
+  private get height(): number {
+    return this.container.clientHeight;
+  }
 
   constructor(container: HTMLElement, sheet: Worksheet, options: ExcelRendererOptions = {}) {
     this.container = container;
@@ -486,7 +495,11 @@ export class ExcelRenderer {
         // Plugin after-render hook
         for (const plugin of this.plugins) {
           if (plugin.afterCellRender) {
-            plugin.afterCellRender(ctx, { x, y, w: cw, h: rh }, { addr, value, style });
+            plugin.afterCellRender(
+              ctx,
+              { x, y, w: cw, h: rh },
+              createRenderPluginContext(addr, value, style),
+            );
           }
         }
 
@@ -681,7 +694,8 @@ export class ExcelRenderer {
     w: number,
     h: number,
     icon: IconRender
-  ) {size = Math.min(14, h - 4);
+  ) {
+    const size = Math.min(14, h - 4);
     const px = x + 4;
     const py = y + (h - size) / 2;
 
@@ -705,9 +719,7 @@ export class ExcelRenderer {
     for (const plugin of this.plugins) {
       if (plugin.getCellBackground) {
         const bg = plugin.getCellBackground({
-          addr,
-          value,
-          style,
+          ...createRenderPluginContext(addr, value, style),
           min: this.heatmapRange?.min,
           max: this.heatmapRange?.max,
         });
@@ -722,12 +734,16 @@ export class ExcelRenderer {
       ctx.fillStyle = pluginBg;
       ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
     } else if (style?.fill) {
-      let fillColor = this.resolveColor(style.fill, '#FFFFFF');
+      const fill = style.fill;
+      const fillColorSpec = typeof fill === 'object' && fill !== null
+        ? ('fgColor' in fill ? fill.fgColor : 'stops' in fill ? fill.stops[0]?.color : undefined)
+        : fill;
+      let fillColor = this.resolveColor(fillColorSpec, '#FFFFFF');
       
       // Apply color transform plugins
       for (const plugin of this.plugins) {
         if (plugin.transformColor) {
-          fillColor = plugin.transformColor(fillColor, { addr, value, style });
+          fillColor = plugin.transformColor(fillColor, createRenderPluginContext(addr, value, style));
         }
       }
       
@@ -747,9 +763,14 @@ export class ExcelRenderer {
   ) {
     if (!style?.border) return;
 
-    const transformBorder = (color?: string | ExcelColorSpec) => {
-      if (!color) return null;
-      return this.resolveColor(color, '#000000');
+    const transformBorder = (edge?: string | ExcelColorSpec | { color?: string | ExcelColorSpec }) => {
+      if (!edge) return null;
+      if (typeof edge === 'string') return this.resolveColor(edge, '#000000');
+      if ('color' in edge) return edge.color ? this.resolveColor(edge.color, '#000000') : null;
+      if ('theme' in edge || 'indexed' in edge || 'rgb' in edge || 'auto' in edge) {
+        return this.resolveColor(edge, '#000000');
+      }
+      return null;
     };
 
     // Use Excel border renderer for pixel-perfect borders
@@ -826,7 +847,7 @@ export class ExcelRenderer {
     // Apply custom font transform
     for (const plugin of this.plugins) {
       if (plugin.transformFont) {
-        font = plugin.transformFont(font, { addr, value, style });
+        font = plugin.transformFont(font, createRenderPluginContext(addr, value, style));
       }
     }
 
@@ -850,7 +871,7 @@ export class ExcelRenderer {
     // Apply color transform plugins
     for (const plugin of this.plugins) {
       if (plugin.transformColor) {
-        textColor = plugin.transformColor(textColor, { addr, value, style });
+        textColor = plugin.transformColor(textColor, createRenderPluginContext(addr, value, style));
       }
     }
 
@@ -861,7 +882,7 @@ export class ExcelRenderer {
 
     let tx = x + 4;
     // Compute vertical offset using layout function (pure layout concern)
-    const ty = y + computeVerticalOffset(style?.valign, h, fontSize, fontSize, 2, 4) - fontSize / 2 + 2;
+    const ty = y + computeVerticalOffset(style?.valign === 'justify' || style?.valign === 'distributed' ? 'middle' : style?.valign, h, fontSize, fontSize, 2, 4) - fontSize / 2 + 2;
 
     const textWidth = this.textCache.get(font, text) ?? ctx.measureText(text).width;
     this.textCache.set(font, text, textWidth as number);

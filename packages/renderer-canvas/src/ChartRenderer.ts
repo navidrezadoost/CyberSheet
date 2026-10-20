@@ -8,8 +8,8 @@
 import { ChartEngine } from './ChartEngine';
 import type { ChartData, ChartOptions } from './ChartEngine';
 import type { ChartObject } from '@cyber-sheet/core';
-import { ChartDataAdapter } from './ChartDataAdapter';
-import type { Worksheet } from '@cyber-sheet/core';
+import { assertChartWorksheetSource, ChartDataAdapter } from './ChartDataAdapter';
+import type { ChartWorksheetSource } from './ChartDataAdapter';
 
 /**
  * Selection handle positions
@@ -44,17 +44,18 @@ export interface ChartRenderContext {
  * ChartRenderer - Renders charts on sheet canvas
  */
 export class ChartRenderer {
-  private worksheet: Worksheet;
-  private chartCache: Map<string, ChartRenderContext>;
-  private handleSize: number = 8;
-  private selectionBorderColor: string = '#4285F4';
-  private selectionBorderWidth: number = 2;
-  private handleFillColor: string = '#FFFFFF';
-  private handleStrokeColor: string = '#4285F4';
+  #worksheet: ChartWorksheetSource;
+  #chartCache: Map<string, ChartRenderContext>;
+  #handleSize: number = 8;
+  #selectionBorderColor: string = '#4285F4';
+  #selectionBorderWidth: number = 2;
+  #handleFillColor: string = '#FFFFFF';
+  #handleStrokeColor: string = '#4285F4';
 
-  constructor(worksheet: Worksheet) {
-    this.worksheet = worksheet;
-    this.chartCache = new Map();
+  constructor(worksheet: ChartWorksheetSource) {
+    assertChartWorksheetSource(worksheet);
+    this.#worksheet = worksheet;
+    this.#chartCache = new Map();
   }
 
   /**
@@ -71,7 +72,7 @@ export class ChartRenderer {
     }
 
     // Get or create chart render context
-    let renderContext = this.chartCache.get(chart.id);
+    let renderContext = this.#chartCache.get(chart.id);
     
     if (!renderContext || renderContext.needsUpdate) {
       // Create offscreen canvas for this chart
@@ -87,7 +88,7 @@ export class ChartRenderer {
         needsUpdate: false,
         lastRendered: Date.now()
       };
-      this.chartCache.set(chart.id, renderContext);
+      this.#chartCache.set(chart.id, renderContext);
     }
 
     // Draw cached chart to main canvas
@@ -126,7 +127,7 @@ export class ChartRenderer {
   ): void {
     // Get chart data from worksheet
     const chartData = ChartDataAdapter.rangeToChartData(
-      this.worksheet,
+      this.#worksheet,
       chart.dataRange,
       {
         hasHeaderRow: chart.hasHeaderRow,
@@ -163,8 +164,8 @@ export class ChartRenderer {
     ctx.save();
 
     // Draw selection border
-    ctx.strokeStyle = this.selectionBorderColor;
-    ctx.lineWidth = this.selectionBorderWidth;
+    ctx.strokeStyle = this.#selectionBorderColor;
+    ctx.lineWidth = this.#selectionBorderWidth;
     ctx.setLineDash([5, 5]);
     ctx.strokeRect(x, y, width, height);
 
@@ -191,7 +192,7 @@ export class ChartRenderer {
     const halfSize = handle.size / 2;
 
     // Fill
-    ctx.fillStyle = this.handleFillColor;
+    ctx.fillStyle = this.#handleFillColor;
     ctx.fillRect(
       handle.x - halfSize,
       handle.y - halfSize,
@@ -200,7 +201,7 @@ export class ChartRenderer {
     );
 
     // Stroke
-    ctx.strokeStyle = this.handleStrokeColor;
+    ctx.strokeStyle = this.#handleStrokeColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(
       handle.x - halfSize,
@@ -216,20 +217,20 @@ export class ChartRenderer {
   getResizeHandles(chart: ChartObject): ResizeHandle[] {
     const { x, y } = chart.position;
     const { width, height } = chart.size;
-    const halfSize = this.handleSize / 2;
+    const halfSize = this.#handleSize / 2;
 
     return [
       // Corners
-      { position: 'nw', x: x, y: y, size: this.handleSize, cursor: 'nw-resize' },
-      { position: 'ne', x: x + width, y: y, size: this.handleSize, cursor: 'ne-resize' },
-      { position: 'sw', x: x, y: y + height, size: this.handleSize, cursor: 'sw-resize' },
-      { position: 'se', x: x + width, y: y + height, size: this.handleSize, cursor: 'se-resize' },
+      { position: 'nw', x: x, y: y, size: this.#handleSize, cursor: 'nw-resize' },
+      { position: 'ne', x: x + width, y: y, size: this.#handleSize, cursor: 'ne-resize' },
+      { position: 'sw', x: x, y: y + height, size: this.#handleSize, cursor: 'sw-resize' },
+      { position: 'se', x: x + width, y: y + height, size: this.#handleSize, cursor: 'se-resize' },
       
       // Edges
-      { position: 'n', x: x + width / 2, y: y, size: this.handleSize, cursor: 'n-resize' },
-      { position: 's', x: x + width / 2, y: y + height, size: this.handleSize, cursor: 's-resize' },
-      { position: 'w', x: x, y: y + height / 2, size: this.handleSize, cursor: 'w-resize' },
-      { position: 'e', x: x + width, y: y + height / 2, size: this.handleSize, cursor: 'e-resize' }
+      { position: 'n', x: x + width / 2, y: y, size: this.#handleSize, cursor: 'n-resize' },
+      { position: 's', x: x + width / 2, y: y + height, size: this.#handleSize, cursor: 's-resize' },
+      { position: 'w', x: x, y: y + height / 2, size: this.#handleSize, cursor: 'w-resize' },
+      { position: 'e', x: x + width, y: y + height / 2, size: this.#handleSize, cursor: 'e-resize' }
     ];
   }
 
@@ -242,7 +243,7 @@ export class ChartRenderer {
     }
 
     const handles = this.getResizeHandles(chart);
-    const tolerance = this.handleSize / 2 + 2; // 2px extra tolerance
+    const tolerance = this.#handleSize / 2 + 2; // 2px extra tolerance
 
     for (const handle of handles) {
       const dx = x - handle.x;
@@ -281,7 +282,7 @@ export class ChartRenderer {
    * Invalidate chart cache (force re-render)
    */
   invalidateChart(chartId: string): void {
-    const context = this.chartCache.get(chartId);
+    const context = this.#chartCache.get(chartId);
     if (context) {
       context.needsUpdate = true;
     }
@@ -291,7 +292,7 @@ export class ChartRenderer {
    * Invalidate all charts
    */
   invalidateAll(): void {
-    this.chartCache.forEach(context => {
+    this.#chartCache.forEach(context => {
       context.needsUpdate = true;
     });
   }
@@ -300,14 +301,14 @@ export class ChartRenderer {
    * Clear chart cache
    */
   clearCache(): void {
-    this.chartCache.clear();
+    this.#chartCache.clear();
   }
 
   /**
    * Remove chart from cache
    */
   removeFromCache(chartId: string): void {
-    this.chartCache.delete(chartId);
+    this.#chartCache.delete(chartId);
   }
 
   /**
@@ -427,15 +428,15 @@ export class ChartRenderer {
    * Set custom colors for selection and handles
    */
   setSelectionColors(borderColor?: string, handleFill?: string, handleStroke?: string): void {
-    if (borderColor) this.selectionBorderColor = borderColor;
-    if (handleFill) this.handleFillColor = handleFill;
-    if (handleStroke) this.handleStrokeColor = handleStroke;
+    if (borderColor) this.#selectionBorderColor = borderColor;
+    if (handleFill) this.#handleFillColor = handleFill;
+    if (handleStroke) this.#handleStrokeColor = handleStroke;
   }
 
   /**
    * Set handle size
    */
   setHandleSize(size: number): void {
-    this.handleSize = Math.max(4, Math.min(16, size)); // Clamp between 4 and 16
+    this.#handleSize = Math.max(4, Math.min(16, size)); // Clamp between 4 and 16
   }
 }

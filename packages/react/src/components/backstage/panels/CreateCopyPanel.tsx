@@ -51,8 +51,8 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
   const [isSuccess, setIsSuccess] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
   
-  const inputRef = useRef(null);
-  const debounceTimerRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Focus input on mount and select all text
   useEffect(() => {

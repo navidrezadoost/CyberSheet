@@ -57,7 +57,7 @@ export function CellStylesGallery({
   searchTerm = '',
   width = '420px',
   maxHeight = '500px',
-}: CellStylesGalleryProps): JSX.Element {
+}: CellStylesGalleryProps): React.JSX.Element {
   const [focusedStyleId, setFocusedStyleId] = useState<string | null>(null);
   const [hoveredStyleId, setHoveredStyleId] = useState<string | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
@@ -281,7 +281,7 @@ function StyleTile({
   onMouseEnter,
   onMouseLeave,
   onFocus,
-}: StyleTileProps): JSX.Element {
+}: StyleTileProps): React.JSX.Element {
   const { style, name, description } = preset;
 
   const bgColor = typeof style.fill === 'string' ? style.fill : '#ffffff';
@@ -334,7 +334,7 @@ export interface CellStylesGalleryWithSearchProps extends CellStylesGalleryProps
 export function CellStylesGalleryWithSearch({
   showSearch = true,
   ...props
-}: CellStylesGalleryWithSearchProps): JSX.Element {
+}: CellStylesGalleryWithSearchProps): React.JSX.Element {
   const [searchTerm, setSearchTerm] = useState('');
 
   return (

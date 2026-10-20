@@ -17,6 +17,8 @@
 
 import type { Address, Range, ExtendedCellValue, CellStyle } from './types';
 import type { Worksheet } from './worksheet';
+import type { WorkbookSheetView } from './workbook-access-types';
+type ClipboardReadSheet = Worksheet | WorkbookSheetView;
 
 /**
  * Serialized style representation — pure data, no object references.
@@ -163,7 +165,7 @@ export class ClipboardService {
    * @invariant Top-left cell maps to (0,0)
    * @invariant Merged cells stored as anchor only
    */
-  copy(worksheet: Worksheet, range: Range, mode: ClipboardCopyMode = 'all'): ClipboardPayload {
+  copy(worksheet: ClipboardReadSheet, range: Range, mode: ClipboardCopyMode = 'all'): ClipboardPayload {
     const payload = this.createSnapshot(worksheet, range, false, mode);
     this.currentPayload = payload;
     return payload;
@@ -182,7 +184,7 @@ export class ClipboardService {
    * @invariant No worksheet mutation
    * @invariant No DAG changes
    */
-  cut(worksheet: Worksheet, range: Range, mode: ClipboardCopyMode = 'all'): ClipboardPayload {
+  cut(worksheet: ClipboardReadSheet, range: Range, mode: ClipboardCopyMode = 'all'): ClipboardPayload {
     const payload = this.createSnapshot(worksheet, range, true, mode);
     this.currentPayload = payload;
     return payload;
@@ -295,7 +297,7 @@ export class ClipboardService {
    * @returns Immutable clipboard payload
    */
   private createSnapshot(
-    worksheet: Worksheet,
+    worksheet: ClipboardReadSheet,
     range: Range,
     isCut: boolean,
     mode: ClipboardCopyMode = 'all'
@@ -438,7 +440,7 @@ export class ClipboardService {
    * @returns Cell snapshot or null if cell is empty
    */
   private createCellSnapshot(
-    worksheet: Worksheet,
+    worksheet: ClipboardReadSheet,
     addr: Address,
     topLeft: Address,
     mergeHeight?: number,

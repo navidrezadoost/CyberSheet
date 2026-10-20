@@ -95,7 +95,6 @@ export type {
   FontColorCommand,
   FillColorCommand,
   BorderCommand,
-  NumberFormatCommand,
   SelectionState,
   CommandManager,
 } from './types';
@@ -106,7 +105,7 @@ export type {
   FontColorPayload,
   FillPayload,
   BorderOperation,
-  BorderPayload,
+  BorderPayload as CommandBorderPayload,
   AlignmentPayload,
   AlignmentCommand,
   CommandExecutionContext,

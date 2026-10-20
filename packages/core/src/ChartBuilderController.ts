@@ -10,8 +10,12 @@
  */
 
 import type { Worksheet } from './worksheet';
-import type { ChartManager } from '@cyber-sheet/renderer-canvas';
 import type { ChartObject, ChartCreateParams, CellRange } from './models/ChartObject';
+
+/** Narrow boundary to the renderer; core does not need its full implementation. */
+export interface ChartManagerAdapter {
+  create(params: ChartCreateParams): ChartObject;
+}
 
 /**
  * Chart type option
@@ -101,11 +105,11 @@ export const CHART_TYPES: ChartTypeOption[] = [
  */
 export class ChartBuilderController {
   private worksheet: Worksheet;
-  private chartManager: ChartManager;
+  private chartManager: ChartManagerAdapter;
   private state: ChartBuilderState;
   private listeners: ChartBuilderEventListener[] = [];
 
-  constructor(worksheet: Worksheet, chartManager: ChartManager) {
+  constructor(worksheet: Worksheet, chartManager: ChartManagerAdapter) {
     this.worksheet = worksheet;
     this.chartManager = chartManager;
     

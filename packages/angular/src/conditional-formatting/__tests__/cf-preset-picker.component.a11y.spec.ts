@@ -283,10 +283,14 @@ describe('ConditionalFormattingPresetPickerComponent - Accessibility', () => {
 
       if (cards.length > 0) {
         const firstCard = cards[0];
-        firstCard.focus();
+        firstCard.click();
+        fixture.detectChanges();
+        expect(applyBtn.disabled).toBe(false);
+        const selectedCard = compiled.querySelector('.cf-preset-picker__card') as HTMLButtonElement;
+        selectedCard.focus();
 
         const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
-        firstCard.dispatchEvent(escapeEvent);
+        selectedCard.dispatchEvent(escapeEvent);
         fixture.detectChanges();
 
         expect(document.activeElement).toBe(applyBtn);
@@ -475,9 +479,10 @@ describe('ConditionalFormattingPresetPickerComponent - Accessibility', () => {
       const popularCards = compiled.querySelectorAll('.cf-preset-picker__popular-card');
       if (popularCards.length > 0) {
         popularCards.forEach(card => {
-          expect(card.getAttribute('role')).toBe('listitem');
+          expect(card.parentElement?.getAttribute('role')).toBe('listitem');
+          expect(card.getAttribute('role')).toBeNull();
           expect(card.getAttribute('aria-label')).toBeTruthy();
-          expect(card.getAttribute('aria-selected')).toMatch(/^(true|false)$/);
+          expect(card.getAttribute('aria-pressed')).toMatch(/^(true|false)$/);
         });
       }
     });
@@ -495,7 +500,7 @@ describe('ConditionalFormattingPresetPickerComponent - Accessibility', () => {
 
   describe('Feature toggle testing', () => {
     it('should not add ARIA attributes when enableA11y is false', () => {
-      component.enableA11y = false;
+      fixture.componentRef.setInput('enableA11y', false);
       fixture.detectChanges();
 
       const wrapper = compiled.querySelector('.cf-preset-picker');
@@ -509,7 +514,7 @@ describe('ConditionalFormattingPresetPickerComponent - Accessibility', () => {
     });
 
     it('should not add keyboard navigation when enableA11y is false', () => {
-      component.enableA11y = false;
+      fixture.componentRef.setInput('enableA11y', false);
       fixture.detectChanges();
 
       const categoryBtns = compiled.querySelectorAll('.cf-preset-picker__category-btn') as NodeListOf<HTMLButtonElement>;

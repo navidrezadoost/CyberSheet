@@ -7,26 +7,32 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "sideEffects": false,
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "jest --config jest.config.js",
-    "test:watch": "jest --watch --config jest.config.js",
-    "test:a11y": "jest --config jest.config.js src/conditional-formatting/__tests__/cf-preset-picker.component.a11y.spec.ts"
+    "test": "jest --config jest.config.cjs",
+    "test:watch": "jest --watch --config jest.config.cjs",
+    "test:a11y": "jest --config jest.config.cjs src/conditional-formatting/__tests__/cf-preset-picker.component.a11y.spec.ts"
   },
   "peerDependencies": {
-    "@angular/core": ">=14.0.0",
     "@angular/common": ">=14.0.0",
+    "@angular/core": ">=14.0.0",
     "@cyber-sheet/core": "^0.1.0",
     "@cyber-sheet/renderer-canvas": "^0.1.0"
   },
   "devDependencies": {
-    "@angular/core": "^22.1.0",
-    "@angular/common": "^22.1.0",
-    "@angular/platform-browser-dynamic": "^22.1.0",
+    "@angular/common": "22.2.3",
+    "@angular/compiler": "22.2.3",
+    "@angular/compiler-cli": "22.2.3",
+    "@angular/core": "22.2.3",
+    "@angular/platform-browser": "22.2.3",
+    "@angular/platform-browser-dynamic": "22.2.3",
     "jest-axe": "^11.0.0",
+    "jest-preset-angular": "^17.0.3",
     "zone.js": "^0.16.2"
   },
   "dependencies": {

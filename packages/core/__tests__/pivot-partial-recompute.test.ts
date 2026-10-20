@@ -24,7 +24,27 @@ import { Worksheet } from '../src/worksheet';
 import { FormulaEngine } from '../src/FormulaEngine';
 import type { PivotConfig } from '../src/PivotEngine';
 import type { PivotId } from '../src/PivotRegistry';
+import type { PivotSnapshot } from '../src/PivotSnapshotStore';
 import { groupStateStore } from '../src/PivotGroupStateStore';
+
+/**
+ * The old PivotTable.data grid addressed values by row/column position.
+ * PivotSnapshot is now query-oriented: `rows` contains flattened records.
+ * These helpers preserve the old assertions' semantic coordinates (Region ×
+ * Product) while reading the current snapshot shape by field names.
+ */
+function pivotRecord(snapshot: PivotSnapshot | undefined, region: string, product: string) {
+  return snapshot?.rows.find((row) => row.Region === region && row.Product === product);
+}
+
+function pivotValue(
+  snapshot: PivotSnapshot | undefined,
+  region: string,
+  product: string,
+  field = 'Revenue',
+) {
+  return pivotRecord(snapshot, region, product)?.[field] ?? null;
+}
 
 function setupTestData(worksheet: Worksheet) {
   // Header row
@@ -53,10 +73,10 @@ function setupTestData(worksheet: Worksheet) {
 
 function makePivotConfig(): PivotConfig {
   return {
-    rows: [{ column: 1, label: 'Region' }],
-    columns: [{ column: 2, label: 'Product' }],
+    rows: [{ column: 0, label: 'Region' }],
+    columns: [{ column: 1, label: 'Product' }],
     values: [
-      { column: 3, aggregation: 'sum', label: 'Revenue' }
+      { column: 2, aggregation: 'sum', label: 'Revenue' }
     ],
     sourceRange: {
       start: { row: 1, col: 1 },
@@ -87,7 +107,7 @@ describe('Phase 36a - Basic Partial Update', () => {
     
     // Initial state
     const snapshot1 = workbook.getPivotSnapshot(pivotId);
-    expect(snapshot1?.data[0][0].value).toBe(1000); // West/A
+    expect(pivotValue(snapshot1, 'West', 'A')).toBe(1000); // West/A
     
     // Verify group state was populated
     const groupState = groupStateStore.get(pivotId);
@@ -99,21 +119,21 @@ describe('Phase 36a - Basic Partial Update', () => {
     
     // Query should trigger partial recompute (currently falls back to full)
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
-    expect(snapshot2?.data[0][0].value).toBe(1100); // West/A updated
+    expect(pivotValue(snapshot2, 'West', 'A')).toBe(1100); // West/A updated
     
     // Other cells unchanged
-    expect(snapshot2?.data[0][1].value).toBe(1500); // West/B
-    expect(snapshot2?.data[1][0].value).toBe(800);  // East/A
+    expect(pivotValue(snapshot2, 'West', 'B')).toBe(1500); // West/B
+    expect(pivotValue(snapshot2, 'East', 'A')).toBe(800);  // East/A
   });
 
   test('multiple aggregations update correctly', () => {
     const config: PivotConfig = {
-      rows: [{ column: 1, label: 'Region' }],
-      columns: [{ column: 2, label: 'Product' }],
+      rows: [{ column: 0, label: 'Region' }],
+      columns: [{ column: 1, label: 'Product' }],
       values: [
-        { column: 3, aggregation: 'sum', label: 'Revenue' },
-        { column: 4, aggregation: 'sum', label: 'Cost' },
-        { column: 3, aggregation: 'count', label: 'Count' }
+        { column: 2, aggregation: 'sum', label: 'Revenue' },
+        { column: 3, aggregation: 'sum', label: 'Cost' },
+        { column: 2, aggregation: 'count', label: 'Count' }
       ],
       sourceRange: {
         start: { row: 1, col: 1 },
@@ -125,41 +145,39 @@ describe('Phase 36a - Basic Partial Update', () => {
     const snapshot1 = workbook.getPivotSnapshot(pivotId);
     
     // Initial: West/A has Revenue=1000, Cost=400, Count=1
-    expect(snapshot1?.data[0][0].values?.['Revenue']).toBe(1000);
-    expect(snapshot1?.data[0][0].values?.['Cost']).toBe(400);
-    expect(snapshot1?.data[0][0].values?.['Count']).toBe(1);
+    expect(pivotValue(snapshot1, 'West', 'A', 'Revenue')).toBe(1000);
+    expect(pivotValue(snapshot1, 'West', 'A', 'Cost')).toBe(400);
+    expect(pivotValue(snapshot1, 'West', 'A', 'Count')).toBe(1);
     
     // Update Revenue only
     worksheet.setCellValue({ row: 2, col: 3 }, 1200);
     
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
-    expect(snapshot2?.data[0][0].values?.['Revenue']).toBe(1200); // Changed
-    expect(snapshot2?.data[0][0].values?.['Cost']).toBe(400);     // Unchanged
-    expect(snapshot2?.data[0][0].values?.['Count']).toBe(1);      // Unchanged
+    expect(pivotValue(snapshot2, 'West', 'A', 'Revenue')).toBe(1200); // Changed
+    expect(pivotValue(snapshot2, 'West', 'A', 'Cost')).toBe(400); // Unchanged
+    expect(pivotValue(snapshot2, 'West', 'A', 'Count')).toBe(1); // Unchanged
   });
 
   test('AVG aggregation updates correctly (sum+count based)', () => {
     const config: PivotConfig = {
       ...makePivotConfig(),
-      values: [{ column: 3, aggregation: 'average', label: 'AvgRevenue' }]
+      values: [{ column: 2, aggregation: 'average', label: 'AvgRevenue' }]
     };
     
     const pivotId = workbook.createPivot('TestPivot', 'Sheet1', config);
     
     // Initial: West has 2 rows (1000, 1500) → avg = 1250
     const snapshot1 = workbook.getPivotSnapshot(pivotId);
-    const westTotal = (snapshot1?.data[0][0].value as number) + (snapshot1?.data[0][1].value as number);
-    const westAvg = westTotal / 2;
-    expect(westAvg).toBe(1250);
+    expect(pivotValue(snapshot1, 'West', 'A', 'AvgRevenue')).toBe(1000);
+    expect(pivotValue(snapshot1, 'West', 'B', 'AvgRevenue')).toBe(1500);
     
     // Update one value: 1000 → 2000
     worksheet.setCellValue({ row: 2, col: 3 }, 2000);
     
     // New avg: (2000 + 1500) / 2 = 1750
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
-    const westTotal2 = (snapshot2?.data[0][0].value as number) + (snapshot2?.data[0][1].value as number);
-    const westAvg2 = westTotal2 / 2;
-    expect(westAvg2).toBe(1750);
+    expect(pivotValue(snapshot2, 'West', 'A', 'AvgRevenue')).toBe(2000);
+    expect(pivotValue(snapshot2, 'West', 'B', 'AvgRevenue')).toBe(1500);
   });
 });
 
@@ -184,8 +202,8 @@ describe('Phase 36a - Group Migration', () => {
     const pivotId = workbook.createPivot('TestPivot', 'Sheet1', config);
     
     const snapshot1 = workbook.getPivotSnapshot(pivotId);
-    const westA_before = snapshot1?.data[0][0].value; // West/A = 1000
-    const eastA_before = snapshot1?.data[1][0].value; // East/A = 800
+    const westA_before = pivotValue(snapshot1, 'West', 'A'); // West/A = 1000
+    const eastA_before = pivotValue(snapshot1, 'East', 'A'); // East/A = 800
     
     // Move row from West to East: change Region from 'West' to 'East'
     worksheet.setCellValue({ row: 2, col: 1 }, 'East');
@@ -193,11 +211,11 @@ describe('Phase 36a - Group Migration', () => {
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
     
     // West/A should lose 1000 (now 0 or null)
-    const westA_after = snapshot2?.data[0][0].value;
+    const westA_after = pivotValue(snapshot2, 'West', 'A');
     expect(westA_after).toBe(null); // West/A now has 0 rows
     
     // East/A should gain 1000 (800 + 1000 = 1800)
-    const eastA_after = snapshot2?.data[1][0].value;
+    const eastA_after = pivotValue(snapshot2, 'East', 'A');
     expect(eastA_after).toBe(1800);
   });
 
@@ -211,9 +229,9 @@ describe('Phase 36a - Group Migration', () => {
     const snapshot = workbook.getPivotSnapshot(pivotId);
     
     // Should have new row for South
-    const southRow = snapshot?.data.find(row => row[0].rowKeys[0] === 'South');
+    const southRow = snapshot?.rows.find(row => row.Region === 'South');
     expect(southRow).toBeDefined();
-    expect(southRow?.[0].value).toBe(1000); // Revenue from migrated row
+    expect(southRow?.Revenue).toBe(1000); // Revenue from migrated row
   });
 });
 
@@ -248,7 +266,7 @@ describe('Phase 36a - No-Op Mutations', () => {
     
     // Should not recompute (computedAt unchanged or hash prevents update)
     // Note: This depends on mutation tracking - for now just verify value unchanged
-    expect(snapshot2?.data[0][0].value).toBe(1000);
+    expect(pivotValue(snapshot2, 'West', 'A')).toBe(1000);
   });
 });
 
@@ -279,7 +297,7 @@ describe('Phase 36a - Group Deletion', () => {
     const snapshot = workbook.getPivotSnapshot(pivotId);
     
     // West/A should be null (no valid values)
-    expect(snapshot?.data[0][0].value).toBe(null);
+    expect(pivotValue(snapshot, 'West', 'A')).toBe(null);
   });
 });
 
@@ -310,9 +328,9 @@ describe('Phase 36a - Multi-Row Batch Updates', () => {
     
     const snapshot = workbook.getPivotSnapshot(pivotId);
     
-    expect(snapshot?.data[0][0].value).toBe(1100); // West/A
-    expect(snapshot?.data[0][1].value).toBe(1600); // West/B
-    expect(snapshot?.data[1][0].value).toBe(900);  // East/A
+    expect(pivotValue(snapshot, 'West', 'A')).toBe(1100); // West/A
+    expect(pivotValue(snapshot, 'West', 'B')).toBe(1600); // West/B
+    expect(pivotValue(snapshot, 'East', 'A')).toBe(900);  // East/A
   });
 });
 
@@ -335,11 +353,11 @@ describe('Phase 36a - Calculated Fields Recompute', () => {
 
   test('calculated fields update after partial recompute', () => {
     const config: PivotConfig = {
-      rows: [{ column: 1, label: 'Region' }],
-      columns: [{ column: 2, label: 'Product' }],
+      rows: [{ column: 0, label: 'Region' }],
+      columns: [{ column: 1, label: 'Product' }],
       values: [
-        { column: 3, aggregation: 'sum', label: 'Revenue' },
-        { column: 4, aggregation: 'sum', label: 'Cost' }
+        { column: 2, aggregation: 'sum', label: 'Revenue' },
+        { column: 3, aggregation: 'sum', label: 'Cost' }
       ],
       calculatedFields: [
         {
@@ -356,14 +374,14 @@ describe('Phase 36a - Calculated Fields Recompute', () => {
     const pivotId = workbook.createPivot('TestPivot', 'Sheet1', config);
     
     const snapshot1 = workbook.getPivotSnapshot(pivotId);
-    const profit1 = snapshot1?.data[0][0].values?.['Profit'];
+    const profit1 = pivotValue(snapshot1, 'West', 'A', 'Profit');
     expect(profit1).toBe(600); // 1000 - 400
     
     // Update Revenue
     worksheet.setCellValue({ row: 2, col: 3 }, 1200);
     
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
-    const profit2 = snapshot2?.data[0][0].values?.['Profit'];
+    const profit2 = pivotValue(snapshot2, 'West', 'A', 'Profit');
     expect(profit2).toBe(800); // 1200 - 400
   });
 });
@@ -387,20 +405,20 @@ describe('Phase 36a - Fallback Safety', () => {
   test('non-reversible aggregations fall back to full rebuild', () => {
     const config: PivotConfig = {
       ...makePivotConfig(),
-      values: [{ column: 3, aggregation: 'max', label: 'MaxRevenue' }]
+      values: [{ column: 2, aggregation: 'max', label: 'MaxRevenue' }]
     };
     
     const pivotId = workbook.createPivot('TestPivot', 'Sheet1', config);
     
     const snapshot1 = workbook.getPivotSnapshot(pivotId);
-    expect(snapshot1?.data[0][0].value).toBe(1000); // West/A max
+    expect(pivotValue(snapshot1, 'West', 'A', 'MaxRevenue')).toBe(1000); // West/A max
     
     // Update value
     worksheet.setCellValue({ row: 2, col: 3 }, 1100);
     
     // Should fall back to full rebuild (not partial)
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
-    expect(snapshot2?.data[0][0].value).toBe(1100);
+    expect(pivotValue(snapshot2, 'West', 'A', 'MaxRevenue')).toBe(1100);
     
     // Group state should not exist for non-reversible
     const groupState = groupStateStore.get(pivotId);
@@ -431,7 +449,7 @@ describe('Phase 36a - Fallback Safety', () => {
     worksheet.setCellValue({ row: 2, col: 3 }, 1100);
     
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
-    expect(snapshot2?.data[0][0].value).toBe(1100);
+    expect(pivotValue(snapshot2, 'West', 'A')).toBe(1100);
   });
 });
 
@@ -466,7 +484,7 @@ describe('Phase 36a - Determinism', () => {
     const fullSnapshot = workbook.getPivotSnapshot(pivotId2);
     
     // Should be identical
-    expect(partialSnapshot?.data).toEqual(fullSnapshot?.data);
+    expect(partialSnapshot?.rows).toEqual(fullSnapshot?.rows);
   });
 
   test('multiple mutations same final result', () => {
@@ -487,7 +505,7 @@ describe('Phase 36a - Determinism', () => {
     const snapshot2 = workbook.getPivotSnapshot(pivotId);
     
     // Final state should be identical
-    expect(snapshot1?.data[0][0].value).toBe(snapshot2?.data[0][0].value);
+    expect(pivotValue(snapshot1, 'West', 'A')).toBe(pivotValue(snapshot2, 'West', 'A'));
   });
 });
 
@@ -540,7 +558,7 @@ describe('Phase 36a - Enhanced Chaos Test', () => {
         const fullSnapshot = workbook.getPivotSnapshot(pivotId2);
         
         // Verify equivalence
-        expect(partialSnapshot?.data).toEqual(fullSnapshot?.data);
+        expect(partialSnapshot?.rows).toEqual(fullSnapshot?.rows);
         
         // Continue with partial pivot
         workbook.deletePivot(pivotId2);

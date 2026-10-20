@@ -1,6 +1,8 @@
 import { Workbook, FormulaEngine } from '@cyber-sheet/core';
 import { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 
+throw new Error('Vanilla JS demo is unavailable at the R1 checkpoint: sample content requires R2. No workbook was created or published.');
+
 console.log('🚀 Initializing CyberSheet...');
 
 // Create workbook

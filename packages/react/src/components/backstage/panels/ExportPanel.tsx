@@ -93,7 +93,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   const [pdfOrientation, setPdfOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [pdfFitToPage, setPdfFitToPage] = useState(true);
   
-  const progressIntervalRef = useRef(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {

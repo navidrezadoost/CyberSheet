@@ -1,3 +1,4 @@
+
 /**
  * CellStoreV1.ts — Phase 2 cell storage implementation
  *
@@ -238,15 +239,14 @@ export class CellStoreLegacy implements ICellStore {
 
 /**
  * Pack a (row, col) address into a single safe integer.
- * Hard-asserts col < COL_MULT in development / test environments.
+ * Rejects unsafe keys in every environment, including production.
  */
 export function packKey(row: number, col: number): number {
-  if (process.env['NODE_ENV'] !== 'production') {
-    if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || col < 0 || col >= COL_MULT) {
-      throw new RangeError(
-        `packKey: invalid address row=${row} col=${col}. col must be 0–${MAX_COL_INDEX}.`
-      );
-    }
+  if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row > 1_048_576
+    || col < 0 || col >= COL_MULT) {
+    throw new RangeError(
+      `packKey: invalid address row=${row} col=${col}. row must be 0–1048576 and col must be 0–${MAX_COL_INDEX}.`
+    );
   }
   return row * COL_MULT + col;
 }

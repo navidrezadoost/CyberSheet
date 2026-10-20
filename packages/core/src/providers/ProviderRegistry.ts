@@ -1,13 +1,13 @@
-import { FormulaValue, FormulaContext } from '../types/formula-types';
-import { IDataTypeProvider } from './IDataTypeProvider';
-import { ProviderRef } from './ProviderResolution';
+import { FormulaValue, FormulaContext } from "../types/formula-types";
+import type { IDataTypeProvider } from "./IDataTypeProvider";
+import { ProviderRef } from "./ProviderResolution";
 
 /**
  * Registry for external data type providers.
- * 
+ *
  * Manages provider registration, cache, and value resolution.
  * Cache is cleared per-evaluation for data freshness.
- * 
+ *
  * Week 3 Phase 2 (v2.3-provider-layer)
  */
 export class ProviderRegistry {
@@ -30,7 +30,7 @@ export class ProviderRegistry {
 
   /**
    * Get value from provider (sync via cache)
-   * 
+   *
    * @param entityType - Entity type (e.g., 'stock')
    * @param entityId - Entity identifier (e.g., 'AAPL')
    * @param field - Field name (e.g., 'Price')
@@ -43,7 +43,7 @@ export class ProviderRegistry {
     entityId: string,
     field: string,
     entity: any,
-    context: FormulaContext
+    context: FormulaContext,
   ): FormulaValue {
     // Check cache first
     const cacheKey = `${entityType}:${entityId}.${field}`;
@@ -54,15 +54,15 @@ export class ProviderRegistry {
     // Find provider
     const provider = this.providers.get(entityType);
     if (!provider) {
-      return new Error('#REF!'); // No provider for this type
+      return new Error("#REF!"); // No provider for this type
     }
 
     // Get value from provider
     const value = provider.getValue(field, entity, context);
-    
+
     // Cache result
     this.cache.set(cacheKey, value);
-    
+
     return value;
   }
 
@@ -99,18 +99,23 @@ export class ProviderRegistry {
    * Set a cached value directly (used by orchestrator to seed resolved values)
    * @internal
    */
-  setCachedValue(entityType: string, entityId: string, field: string, value: FormulaValue): void;
+  setCachedValue(
+    entityType: string,
+    entityId: string,
+    field: string,
+    value: FormulaValue,
+  ): void;
   setCachedValue(ref: ProviderRef, value: FormulaValue): void;
   setCachedValue(
     entityTypeOrRef: string | ProviderRef,
     entityIdOrValue: string | FormulaValue,
     field?: string,
-    value?: FormulaValue
+    value?: FormulaValue,
   ): void {
     let cacheKey: string;
     let cacheValue: FormulaValue;
 
-    if (typeof entityTypeOrRef === 'string') {
+    if (typeof entityTypeOrRef === "string") {
       // Old signature: (entityType, entityId, field, value)
       cacheKey = `${entityTypeOrRef}:${entityIdOrValue}.${field}`;
       cacheValue = value!;
@@ -127,7 +132,7 @@ export class ProviderRegistry {
   /**
    * Check if a value is already cached for the given provider reference.
    * Used by BatchResolver to avoid redundant fetches.
-   * 
+   *
    * @param ref - Provider reference
    * @returns true if value is cached (either success or error)
    */

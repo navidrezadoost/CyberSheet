@@ -7,15 +7,24 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "sideEffects": false,
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:a11y": "vitest run src/conditional-formatting/__tests__/ConditionalFormattingPresetPicker.a11y.test.ts"
   },
   "peerDependencies": {
-    "vue": ">=3.0.0",
     "@cyber-sheet/core": "^0.1.0",
-    "@cyber-sheet/renderer-canvas": "^0.1.0"
+    "@cyber-sheet/renderer-canvas": "^0.1.0",
+    "vue": ">=3.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/test-utils": "^2.5.1",
+    "vitest": "^5.0.5"
   }
 }

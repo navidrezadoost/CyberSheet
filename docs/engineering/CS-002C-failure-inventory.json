@@ -1,0 +1,1471 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CS-002C",
+  "generatedAt": "2026-10-17",
+  "branch": "main",
+  "head": "ec75a6e5d3e916047d42378f087e19251e30092b",
+  "worktree": "uncommitted",
+  "environment": {
+    "os": "Manjaro Linux 6.12.94-1 (x86_64)",
+    "node": "v24.22.0",
+    "npm": "11.19.1",
+    "typescript": "6.0.3",
+    "jest": "packages/core/jest.config.cjs",
+    "browser": "N/A"
+  },
+  "commands": {
+    "core": "PATH=/home/navidrezadoost/.nvm/versions/node/v24.22.0/bin:$PATH node ./node_modules/jest/bin/jest.js --config packages/core/jest.config.cjs --ci --runInBand --logHeapUsage --coverage=false --json --outputFile=/tmp/cs-002c-final-core-results.json",
+    "focused": "PATH=/home/navidrezadoost/.nvm/versions/node/v24.22.0/bin:$PATH node ./node_modules/jest/bin/jest.js --config packages/core/jest.config.cjs --ci --runInBand --coverage=false --silent packages/core/__tests__/cs-002b-cycle-handling.test.ts packages/core/__tests__/cs-002a-coordinate-contract.test.ts packages/core/__tests__/formula-dag-integration.test.ts packages/core/__tests__/differential.test.ts packages/core/__tests__/metamorphic.test.ts packages/core/__tests__/patch-engine.test.ts packages/core/__tests__/transaction-engine.test.ts packages/core/test/FuzzingWithShrinking.test.ts packages/core/test/DifferentialCorrectness.test.ts packages/core/test/MetamorphicProperties.test.ts packages/core/test/InsertDeleteColumn.test.ts packages/core/test/InsertColumn.debug.test.ts packages/core/__tests__/chaos.test.ts packages/core/__tests__/adversarial.test.ts packages/core/src/__tests__/spill-invariants.test.ts packages/core/src/__tests__/spill-reversibility.test.ts packages/core/src/__tests__/transaction-enforcement.test.ts packages/core/__tests__/clear-cells-undo-redo.test.ts packages/core/__tests__/search-api.test.ts packages/core/__tests__/ClipboardService.test.ts packages/core/__tests__/worksheet-structure.test.ts packages/core/__tests__/invariant-enforcement.test.ts packages/core/__tests__/PasteCommand.test.ts",
+    "xlsx": "NODE_OPTIONS=--experimental-vm-modules PATH=/home/navidrezadoost/.nvm/versions/node/v24.22.0/bin:$PATH node ./node_modules/jest/bin/jest.js --config packages/io-xlsx/jest.config.cjs --ci --runInBand --coverage=false",
+    "build": "PATH=/home/navidrezadoost/.nvm/versions/node/v24.22.0/bin:$PATH npm run build",
+    "focusedTestGuard": "PATH=/home/navidrezadoost/.nvm/versions/node/v24.22.0/bin:$PATH npm run check:no-focused-tests"
+  },
+  "comparison": {
+    "cs002bCapture": {
+      "totalSuites": 234,
+      "passedSuites": 195,
+      "failedSuites": 34,
+      "skippedSuites": 5,
+      "totalTests": 6928,
+      "passedTests": 6466,
+      "failedTests": 280,
+      "skippedTests": 173,
+      "todoTests": 9,
+      "failingTestIdentities": 280
+    },
+    "final": {
+      "totalSuites": 234,
+      "passedSuites": 211,
+      "failedSuites": 18,
+      "skippedSuites": 5,
+      "totalTests": 6929,
+      "passedTests": 6642,
+      "failedTests": 105,
+      "skippedTests": 173,
+      "todoTests": 9,
+      "runtimeErrorSuites": 0,
+      "durationSeconds": 61.139,
+      "failingTestIdentities": 105
+    },
+    "versusCs002b": {
+      "previousFailuresNowPassing": 175,
+      "newFailingIdentities": 0,
+      "stillFailing": 105
+    },
+    "acceptedCoreBaseline": {
+      "actualFailingIdentities": 138,
+      "reportedFailedTests": 138,
+      "stillFailing": 105,
+      "previousFailuresNowPassing": 33,
+      "newFailingIdentities": 0,
+      "acceptedInventoryFailureRows": 144,
+      "nonCoreRowsInAcceptedInventory": 6
+    }
+  },
+  "remainingFailureGroups": {
+    "CORE-ADAPTER-THROTTLE": 1,
+    "NUMERIC-CHI-SQUARE": 10,
+    "WORKSHEET-MERGE-PROJECTION": 1,
+    "PIVOT-CALCULATED-FIELDS": 16,
+    "NUMERIC-F-DIST": 9,
+    "PIVOT-STALE-SNAPSHOT": 7,
+    "PIVOT-AGGREGATE-FIELDS": 2,
+    "PIVOT-GROUP-UPDATE": 2,
+    "PIVOT-PARTIAL-FULL-DIVERGENCE": 3,
+    "FORMULA-SPILL-CLEANUP": 1,
+    "PIVOT-SLICER-FILTER": 11,
+    "PIVOT-GETPIVOTDATA": 15,
+    "FORMULA-DATE-TODAY": 2,
+    "CORE-SCHEDULER-INVALIDATION": 2,
+    "NUMERIC-STUDENT-T": 11,
+    "NUMERIC-NORMAL": 6,
+    "FORMULA-ADDRESS-CONTRACT": 1,
+    "PIVOT-PARTIAL-PATH": 1,
+    "PIVOT-GROUP-STORE-TEST-API": 2,
+    "PIVOT-REGISTRY-METADATA": 1,
+    "FORMULA-CF-LOGIC": 1
+  },
+  "failures": [
+    {
+      "suite": "packages/core/__tests__/AlphaVantageDriver.test.ts",
+      "test": "AlphaVantageDriver - PR #4 Integration throttle enforcement should not burst beyond throttle limit",
+      "errorType": "Error",
+      "message": "thrown: \"Exceeded timeout of 5000 ms for a test.",
+      "location": {
+        "line": 97,
+        "column": 5
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "CORE-ADAPTER-THROTTLE",
+      "owner": "Core data adapter owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.DIST.RT - Right-Tailed Chi-Square Oracle Test 1: Right tail at x=2, df=1",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 102,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.DIST.RT - Right-Tailed Chi-Square Oracle Test 2: Right tail at x=5, df=2",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 109,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.DIST.RT - Right-Tailed Chi-Square Oracle Test 3: Right tail at x=10, df=5",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 116,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.DIST.RT - Right-Tailed Chi-Square Oracle Test 4: Complement relationship",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 127,
+        "column": 32
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.INV.RT - Right-Tailed Inverse Oracle Test 1: Right-tail inverse at p=0.05, df=10",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 199,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.INV.RT - Right-Tailed Inverse Oracle Test 2: Right-tail inverse at p=0.95, df=10",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 206,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.INV.RT - Right-Tailed Inverse Oracle Test 3: Relationship with CHISQ.INV",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 216,
+        "column": 28
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) CHISQ.INV.RT - Right-Tailed Inverse Oracle Test 4: Round-trip with CHISQ.DIST.RT",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 227,
+        "column": 28
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) Integration Tests CHISQ.INV.RT and CHISQ.DIST.RT are inverses",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 340,
+        "column": 30
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day3.test.ts",
+      "test": "Statistical Functions - Week 2 Day 3 (Chi-Square) Integration Tests Sensitive df=1 case",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 370,
+        "column": 25
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-CHI-SQUARE",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/merge-api.test.ts",
+      "test": "Worksheet merge behavior table BT-2 · read non-anchor cell returns anchor cell object",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 261,
+        "column": 18
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "WORKSHEET-MERGE-PROJECTION",
+      "owner": "Worksheet owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Calculated Fields - Basic Arithmetic simple subtraction: Profit = Revenue - Cost",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 88,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Calculated Fields - Basic Arithmetic simple division: Margin = (Revenue - Cost) / Revenue",
+      "errorType": "TypeError",
+      "message": "TypeError: expect(received).toBeCloseTo(expected, precision)",
+      "location": {
+        "line": 103,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Calculated Fields - Basic Arithmetic multiple independent calculated fields",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 119,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Calculated Fields - Chained Dependencies calculated field depends on another calculated field",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 158,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Calculated Fields - Chained Dependencies three-level dependency chain",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 173,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Calculated Fields - Error Isolation one failing field does not affect others",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 293,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Calculated Fields - Determinism multiple builds produce identical results",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 340,
+        "column": 50
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "PivotCalculatedFieldEngine - Unit Tests evaluate with valid context returns number",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 396,
+        "column": 20
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Error Propagation error propagates through dependent calculations",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 457,
+        "column": 34
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Error Propagation error in one branch does not poison independent branch",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 478,
+        "column": 24
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Error Propagation different error types preserved correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 494,
+        "column": 41
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Caching cache hit reduces evaluation count",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 541,
+        "column": 31
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Caching cache cleared between builds",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 567,
+        "column": 21
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Edge Cases floating-point stability",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 607,
+        "column": 27
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Edge Cases null vs missing field distinction",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeNull()",
+      "location": {
+        "line": 628,
+        "column": 20
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-calculated-fields.test.ts",
+      "test": "Phase 33b - Edge Cases deep dependency chain (5 levels)",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 648,
+        "column": 44
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-CALCULATED-FIELDS",
+      "owner": "Pivot calculated-field owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.DIST.RT - Right-Tailed F Distribution Oracle Test 1: Right tail at x=1",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 98,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.DIST.RT - Right-Tailed F Distribution Oracle Test 2: Right tail at x=2",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 106,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.DIST.RT - Right-Tailed F Distribution Oracle Test 3: Right tail at high x",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 113,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.DIST.RT - Right-Tailed F Distribution Oracle Test 4: Complement relationship",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 123,
+        "column": 32
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.INV.RT - Right-Tailed Inverse F Distribution Oracle Test 1: Right-tail inverse at p=0.01",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 189,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.INV.RT - Right-Tailed Inverse F Distribution Oracle Test 2: Right-tail inverse at p=0.05",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 196,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.INV.RT - Right-Tailed Inverse F Distribution Oracle Test 3: Relationship with F.INV",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 205,
+        "column": 28
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) F.INV.RT - Right-Tailed Inverse F Distribution Oracle Test 4: Round-trip with F.DIST.RT",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 215,
+        "column": 28
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day2.test.ts",
+      "test": "Statistical Functions - Week 2 Day 2 (F-Distribution) Integration Tests F.INV.RT and F.DIST.RT are inverses",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 327,
+        "column": 30
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-F-DIST",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Basic Partial Update single cell change updates aggregates correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 122,
+        "column": 48
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-STALE-SNAPSHOT",
+      "owner": "Pivot registry and worksheet mutation owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Basic Partial Update multiple aggregations update correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 149,
+        "column": 56
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-AGGREGATE-FIELDS",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Basic Partial Update AVG aggregation updates correctly (sum+count based)",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 179,
+        "column": 62
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-STALE-SNAPSHOT",
+      "owner": "Pivot registry and worksheet mutation owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Group Migration row changes group updates both groups correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 215,
+        "column": 25
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GROUP-UPDATE",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Group Migration dimension change creates new group if needed",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeDefined()",
+      "location": {
+        "line": 233,
+        "column": 22
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GROUP-UPDATE",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Group Deletion removing last row in group deletes group",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 300,
+        "column": 47
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-STALE-SNAPSHOT",
+      "owner": "Pivot registry and worksheet mutation owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Multi-Row Batch Updates multiple mutations in batch handled correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 331,
+        "column": 47
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-STALE-SNAPSHOT",
+      "owner": "Pivot registry and worksheet mutation owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Calculated Fields Recompute calculated fields update after partial recompute",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 378,
+        "column": 21
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-AGGREGATE-FIELDS",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Fallback Safety non-reversible aggregations fall back to full rebuild",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 421,
+        "column": 62
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-STALE-SNAPSHOT",
+      "owner": "Pivot registry and worksheet mutation owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Fallback Safety config change forces full rebuild",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 452,
+        "column": 48
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-STALE-SNAPSHOT",
+      "owner": "Pivot registry and worksheet mutation owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Determinism partial recompute produces same result as full rebuild",
+      "errorType": "Error",
+      "message": "Error: expect(received).toEqual(expected) // deep equality",
+      "location": {
+        "line": 487,
+        "column": 35
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-PARTIAL-FULL-DIVERGENCE",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-recompute.test.ts",
+      "test": "Phase 36a - Enhanced Chaos Test 1000 random mutations maintain correctness",
+      "errorType": "Error",
+      "message": "Error: expect(received).toEqual(expected) // deep equality",
+      "location": {
+        "line": 561,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-PARTIAL-FULL-DIVERGENCE",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/spill.test.ts",
+      "test": "SpillEngine - Dynamic Array Spill Behavior Spill Cleanup clearSpill removes spill metadata",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeUndefined()",
+      "location": {
+        "line": 121,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "FORMULA-SPILL-CLEANUP",
+      "owner": "Spill engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Basic Slicer Filtering single slicer include mode filters correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 86,
+        "column": 37
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Basic Slicer Filtering single slicer exclude mode filters correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toEqual(expected) // deep equality",
+      "location": {
+        "line": 110,
+        "column": 45
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Basic Slicer Filtering empty selectedValues means no filter (ALL)",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 128,
+        "column": 37
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Basic Slicer Filtering no slicers means no filtering",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 137,
+        "column": 37
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Multi-Slicer Composition two slicers AND together correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 181,
+        "column": 37
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Lazy Recompute Integration slicer change triggers lazy rebuild on query",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 304,
+        "column": 44
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Edge Cases null values handled correctly",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeGreaterThan(expected)",
+      "location": {
+        "line": 444,
+        "column": 31
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Edge Cases multiple values in single slicer (OR within slicer)",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 480,
+        "column": 37
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Determinism same slicers produce identical results",
+      "errorType": "TypeError",
+      "message": "TypeError: Cannot read properties of undefined (reading '0')",
+      "location": {
+        "line": 519,
+        "column": 33
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Determinism slicer order does not affect result",
+      "errorType": "TypeError",
+      "message": "TypeError: Cannot read properties of undefined (reading '0')",
+      "location": {
+        "line": 543,
+        "column": 26
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-slicers.test.ts",
+      "test": "Phase 35 - Calculated Fields Integration calculated fields evaluate on filtered data",
+      "errorType": "TypeError",
+      "message": "TypeError: Cannot read properties of undefined (reading '0')",
+      "location": {
+        "line": 597,
+        "column": 25
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-SLICER-FILTER",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Basic Pivot Resolution pivot exists at reference → returns correct value",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 138,
+        "column": 20
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Basic Pivot Resolution no pivot at reference → #REF!",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 154,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Basic Pivot Resolution invalid value field → #REF!",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 171,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Filter Handling single filter → correct value",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 203,
+        "column": 20
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Filter Handling multiple filters → correct value",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 217,
+        "column": 20
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Filter Handling missing filter field → #REF!",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 232,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Data Condition Errors no matching data → #N/A",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 280,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Lazy Recompute Integration dirty pivot → formula → auto-rebuild → value",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 319,
+        "column": 58
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Lazy Recompute Integration mutation → dirty → formula → auto-rebuild",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 346,
+        "column": 58
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Anchor Lifecycle pivot moved → formula with new reference works",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 386,
+        "column": 20
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Anchor Lifecycle pivot deleted → formula returns #REF!",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 407,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Deterministic Evaluation same inputs → same outputs (10 evaluations)",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 445,
+        "column": 43
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "Phase 32: Performance 100 GETPIVOTDATA formulas on dirty pivot → only 1 rebuild",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 487,
+        "column": 43
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "GETPIVOTDATA - Anchor Lifecycle Cleanup formula returns #REF! after deletePivot()",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 561,
+        "column": 39
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-formula-integration.test.ts",
+      "test": "GETPIVOTDATA - Cross-Sheet Isolation formulas on different sheets resolve to correct pivots",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 615,
+        "column": 21
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GETPIVOTDATA",
+      "owner": "Formula engine and pivot registry owners"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/datetime-arithmetic.test.ts",
+      "test": "Date Arithmetic Functions EOMONTH works with TODAY",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeLessThanOrEqual(expected)",
+      "location": {
+        "line": 213,
+        "column": 21
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "FORMULA-DATE-TODAY",
+      "owner": "Date/time function owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/datetime-arithmetic.test.ts",
+      "test": "Date Arithmetic Functions Integration Tests next month end from today",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeLessThanOrEqual(expected)",
+      "location": {
+        "line": 370,
+        "column": 21
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "FORMULA-DATE-TODAY",
+      "owner": "Date/time function owner"
+    },
+    {
+      "suite": "packages/core/__tests__/scheduler-composition.test.ts",
+      "test": "Composition Test 3 — Interrupt + Mutation Safety mutation during scheduling cancels stale tasks",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 297,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "CORE-SCHEDULER-INVALIDATION",
+      "owner": "Scheduler and formula engine owners"
+    },
+    {
+      "suite": "packages/core/__tests__/scheduler-composition.test.ts",
+      "test": "GOLDEN TEST — Full Stack Integration realistic scenario: transaction → schedule → time-slice → viewport → correct result",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 504,
+        "column": 49
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "CORE-SCHEDULER-INVALIDATION",
+      "owner": "Scheduler and formula engine owners"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.DIST.RT - Right-Tailed T Distribution Oracle Test 1: Right tail at positive value",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 85,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.DIST.RT - Right-Tailed T Distribution Oracle Test 2: Right tail at 0",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 92,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.DIST.RT - Right-Tailed T Distribution Oracle Test 3: Right tail at large value",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 99,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.DIST.RT - Right-Tailed T Distribution Oracle Test 4: Complement of T.DIST",
+      "errorType": "TypeError",
+      "message": "TypeError: expect(received).toBeCloseTo(expected, precision)",
+      "location": {
+        "line": 111,
+        "column": 25
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.DIST.2T - Two-Tailed T Distribution Oracle Test 1: Two-tailed at 1.96",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 119,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.DIST.2T - Two-Tailed T Distribution Oracle Test 2: Two-tailed equals 2 * right tail",
+      "errorType": "TypeError",
+      "message": "TypeError: expect(received).toBeCloseTo(expected, precision)",
+      "location": {
+        "line": 129,
+        "column": 23
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.DIST.2T - Two-Tailed T Distribution Oracle Test 4: Two-tailed at critical value",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 140,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.INV.2T - Two-Tailed Inverse T Distribution Oracle Test 1: Two-tailed inverse at 0.05",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 192,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.INV.2T - Two-Tailed Inverse T Distribution Oracle Test 2: Two-tailed inverse at 0.01",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 199,
+        "column": 29
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) T.INV.2T - Two-Tailed Inverse T Distribution Oracle Test 3: Round-trip with T.DIST.2T",
+      "errorType": "TypeError",
+      "message": "TypeError: expect(received).toBeCloseTo(expected, precision)",
+      "location": {
+        "line": 210,
+        "column": 22
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/statistical-week2-day1.test.ts",
+      "test": "Statistical Functions - Week 2 Day 1 (T-Distribution) Integration Tests T.DIST.2T and T.DIST.RT relationship",
+      "errorType": "TypeError",
+      "message": "TypeError: expect(received).toBeCloseTo(expected, precision)",
+      "location": {
+        "line": 308,
+        "column": 23
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-STUDENT-T",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/distribution-oracle-validation.test.ts",
+      "test": "Oracle Validation Wave: Distribution Excel Parity NORM.DIST - Normal Distribution Validation Matrix: Symmetry Identities Standard normal symmetry: Φ(-z) = 1 - Φ(z)",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeLessThanOrEqual(expected)",
+      "location": {
+        "line": 158,
+        "column": 43
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-NORMAL",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/distribution-oracle-validation.test.ts",
+      "test": "Oracle Validation Wave: Distribution Excel Parity NORM.S.DIST - Standard Normal (μ=0, σ=1) z=0 should give 0.5 for CDF",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeLessThanOrEqual(expected)",
+      "location": {
+        "line": 171,
+        "column": 48
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-NORMAL",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/distribution-oracle-validation.test.ts",
+      "test": "Oracle Validation Wave: Distribution Excel Parity NORM.S.DIST - Standard Normal (μ=0, σ=1) z=1.96 should give ≈0.975 (95th percentile)",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeLessThanOrEqual(expected)",
+      "location": {
+        "line": 178,
+        "column": 53
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-NORMAL",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/distribution-oracle-validation.test.ts",
+      "test": "Oracle Validation Wave: Distribution Excel Parity NORM.S.DIST - Standard Normal (μ=0, σ=1) z=1 PDF should match standard normal peak/√e",
+      "errorType": "TypeError",
+      "message": "TypeError: expect(received).toBeCloseTo(expected, precision)",
+      "location": {
+        "line": 184,
+        "column": 22
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-NORMAL",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/distribution-oracle-validation.test.ts",
+      "test": "Oracle Validation Wave: Distribution Excel Parity NORM.S.DIST - Standard Normal (μ=0, σ=1) z=0 PDF should be 1/√(2π)",
+      "errorType": "TypeError",
+      "message": "TypeError: expect(received).toBeCloseTo(expected, precision)",
+      "location": {
+        "line": 191,
+        "column": 22
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-NORMAL",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/functions/distribution-oracle-validation.test.ts",
+      "test": "Oracle Validation Wave: Distribution Excel Parity Inverse Round-Trip Validation NORM.S.INV(NORM.S.DIST(z)) should equal z",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeLessThanOrEqual(expected)",
+      "location": {
+        "line": 370,
+        "column": 43
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "NUMERIC-NORMAL",
+      "owner": "Statistics/formula owner"
+    },
+    {
+      "suite": "packages/core/__tests__/dag-debug.test.ts",
+      "test": "DAG Debug Test basic formula evaluation",
+      "errorType": "RangeError",
+      "message": "RangeError: Worksheet address out of bounds: row=0, col=0; expected rows 1–1048576 and columns 1–16384.",
+      "location": {
+        "line": 214,
+        "column": 11
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "FORMULA-ADDRESS-CONTRACT",
+      "owner": "Worksheet and formula engine owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-sanity.test.ts",
+      "test": "Phase 36a: Minimal Sanity Test SANITY: Single cell change triggers partial recompute",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBeDefined()",
+      "location": {
+        "line": 81,
+        "column": 24
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-STALE-SNAPSHOT",
+      "owner": "Pivot registry and worksheet mutation owners"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-sanity.test.ts",
+      "test": "Phase 36a: Minimal Sanity Test DETERMINISM: Partial === Full Rebuild",
+      "errorType": "Error",
+      "message": "Error: expect(received).toEqual(expected) // deep equality",
+      "location": {
+        "line": 156,
+        "column": 27
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-PARTIAL-FULL-DIVERGENCE",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-partial-sanity.test.ts",
+      "test": "Phase 36a: Minimal Sanity Test INSTRUMENTATION: Verify partial recompute path executes",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 194,
+        "column": 33
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-PARTIAL-PATH",
+      "owner": "Pivot engine owner"
+    },
+    {
+      "suite": "packages/core/src/__tests__/phase36a-forced-proof.test.ts",
+      "test": "Phase 36a: FORCED Determinism Proof (In-Memory) TRUTH FUNCTION: partial === full (single mutation)",
+      "errorType": "TypeError",
+      "message": "TypeError: PivotGroupStateStore_1.groupStateStore.set is not a function",
+      "location": {
+        "line": 145,
+        "column": 30
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GROUP-STORE-TEST-API",
+      "owner": "Pivot test owner"
+    },
+    {
+      "suite": "packages/core/src/__tests__/phase36a-forced-proof.test.ts",
+      "test": "Phase 36a: FORCED Determinism Proof (In-Memory) CHAOS TEST: 100 random mutations (all must preserve determinism)",
+      "errorType": "TypeError",
+      "message": "TypeError: PivotGroupStateStore_1.groupStateStore.set is not a function",
+      "location": {
+        "line": 294,
+        "column": 30
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-GROUP-STORE-TEST-API",
+      "owner": "Pivot test owner"
+    },
+    {
+      "suite": "packages/core/__tests__/pivot-registry.test.ts",
+      "test": "PivotRegistry - Metadata Integrity metadata contains no computed data",
+      "errorType": "Error",
+      "message": "Error: expect(received).toEqual(expected) // deep equality",
+      "location": {
+        "line": 324,
+        "column": 37
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "PIVOT-REGISTRY-METADATA",
+      "owner": "Pivot registry owner"
+    },
+    {
+      "suite": "packages/core/__tests__/conditional-formatting-formula-compiler.test.ts",
+      "test": "ConditionalFormattingFormulaCompiler Formula Evaluation should evaluate AND/OR logic",
+      "errorType": "Error",
+      "message": "Error: expect(received).toBe(expected) // Object.is equality",
+      "location": {
+        "line": 214,
+        "column": 48
+      },
+      "classification": "existing-unresolved",
+      "baselineGroup": "FORMULA-CF-LOGIC",
+      "owner": "Conditional formatting owner"
+    }
+  ],
+  "focusedResult": {
+    "suitesPassed": 23,
+    "testsPassed": 456,
+    "testsSkipped": 4
+  },
+  "cycleLifecycleCoverage": [
+    "creation and downstream propagation",
+    "expansion from a two-formula to a three-formula strongly connected component",
+    "breaking a cycle and recovering via scheduled evaluation",
+    "snapshot restoration and transaction rollback",
+    "derived formula-result event emission"
+  ],
+  "addedSuites": [
+    "packages/core/__tests__/cs-002a-coordinate-contract.test.ts",
+    "packages/core/__tests__/cs-002b-cycle-handling.test.ts"
+  ]
+}

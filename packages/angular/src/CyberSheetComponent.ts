@@ -16,7 +16,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CyberSheetService } from './internal';
-import type { Worksheet, CollaborationEngine } from '@cyber-sheet/core';
+import type { WorkbookSheetView, CollaborationEngine } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 
 @Component({
@@ -47,7 +47,7 @@ export class CyberSheetComponent implements OnInit, OnDestroy {
   @Output() cellChange = new EventEmitter<{ row: number; col: number; value: any }>();
   @Output() selectionChange = new EventEmitter<{ start: { row: number; col: number }; end: { row: number; col: number } }>();
 
-  worksheet: Worksheet | null = null;
+  worksheet: WorkbookSheetView | null = null;
   renderer: CanvasRenderer | null = null;
   collaboration: CollaborationEngine | null = null;
 
@@ -97,7 +97,8 @@ export class CyberSheetComponent implements OnInit, OnDestroy {
 
   setCell(row: number, col: number, value: any) {
     if (!this.worksheet) return;
-    this.worksheet.setCellValue({ row, col }, value);
+    void row; void col; void value;
+    throw new Error('Workbook cell writes are unavailable until the R2 journal slice is authorized');
   }
 
   getCell(row: number, col: number) {

@@ -9,6 +9,7 @@
 
 import type { Address } from '../types';
 import type { Worksheet } from '../worksheet';
+import type { WorkbookSheetView } from '../workbook-access-types';
 import type { SearchOptions, SearchLookIn, SearchLookAt, SearchOrder } from '../types/search-types';
 import { cellValueToString, escapeRegexLiteral } from '../search-engine';
 
@@ -61,12 +62,12 @@ function applyTextReplacement(
 }
 
 export class FindService {
-  private worksheet: Worksheet;
+  private worksheet: Worksheet | WorkbookSheetView;
   private lastResults: FindResult[] = [];
   private currentIndex = -1;
   private lastOptions: SearchOptions | null = null;
 
-  constructor(worksheet: Worksheet) {
+  constructor(worksheet: Worksheet | WorkbookSheetView) {
     this.worksheet = worksheet;
   }
 
@@ -141,6 +142,9 @@ export class FindService {
   }
 
   replaceCurrent(replacement: string): boolean {
+    if ('workbookId' in this.worksheet) {
+      throw new Error('Workbook-owned replace is unavailable until its journal slice is authorized');
+    }
     const current = this.getCurrentMatch();
     if (!current || !this.lastOptions) return false;
 
@@ -183,6 +187,9 @@ export class FindService {
   }
 
   replaceAllMatches(query: string, replacement: string, options?: Partial<FindServiceOptions>): number {
+    if ('workbookId' in this.worksheet) {
+      throw new Error('Workbook-owned replace is unavailable until its journal slice is authorized');
+    }
     if (!query) return 0;
 
     const searchOptions = this.buildSearchOptions(query, options);

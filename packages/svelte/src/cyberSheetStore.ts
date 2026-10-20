@@ -5,11 +5,11 @@
  */
 
 import { writable, type Writable } from 'svelte/store';
-import type { Worksheet, FormulaEngine, CollaborationEngine } from '@cyber-sheet/core';
+import type { WorkbookSheetView, FormulaEngine, CollaborationEngine } from '@cyber-sheet/core';
 import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 
 export interface CyberSheetState {
-  worksheet: Worksheet | null;
+  worksheet: WorkbookSheetView | null;
   renderer: CanvasRenderer | null;
   formulaEngine: FormulaEngine | null;
   collaboration: CollaborationEngine | null;
@@ -36,20 +36,18 @@ export async function initializeCyberSheet(
     collaborationUrl?: string;
   } = {}
 ) {
-  const { Workbook, FormulaEngine, CollaborationEngine } = await import('@cyber-sheet/core');
+  const { Workbook, FormulaEngine } = await import('@cyber-sheet/core');
   const { CanvasRenderer } = await import('@cyber-sheet/renderer-canvas');
 
-  const workbook = new Workbook();
-  const worksheet = workbook.addSheet('Sheet1');
-
-  // Load initial data
-  if (options.data) {
-    options.data.forEach((row, rowIndex) => {
-      row.forEach((value, colIndex) => {
-        worksheet.setCellValue({ row: rowIndex, col: colIndex }, value);
-      });
-    });
+  if (options.data?.some((row) => row.length > 0)) {
+    throw new Error('Initial workbook cell data is unavailable until the R2 journal slice is authorized');
   }
+  if (options.enableCollaboration) {
+    throw new Error('Workbook collaboration writes are unavailable until their journal slice is authorized');
+  }
+  const workbook = Workbook.create({ sheets: [{ name: 'Sheet1' }] });
+  const worksheet = workbook.getSheet('Sheet1');
+  if (!worksheet) throw new Error('Workbook bootstrap failed to create Sheet1');
 
   const renderer = new CanvasRenderer(container, worksheet, {
     debug: false
@@ -66,13 +64,6 @@ export async function initializeCyberSheet(
   if (options.enableFormulas) {
     const formulaEngine = new FormulaEngine();
     state.formulaEngine = formulaEngine;
-  }
-
-  // Enable collaboration
-  if (options.enableCollaboration && options.collaborationUrl) {
-    const collaboration = new CollaborationEngine(worksheet);
-    collaboration.connect(options.collaborationUrl);
-    state.collaboration = collaboration;
   }
 
   store.set(state);

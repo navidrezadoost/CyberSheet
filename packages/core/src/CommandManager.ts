@@ -14,11 +14,14 @@
 
 import type { Address, CellValue, ExtendedCellValue, CellStyle } from './types';
 import type { Worksheet } from './worksheet';
-import type { EventBus } from './EventBus';
+import type { EventAPI } from './EventBus';
 import { getCommandEventType } from './eventBridge';
 import { GraphInvariantValidator } from './dag/GraphInvariantValidator';
 import { GraphTransformationValidator } from './dag/GraphTransformationValidator';
 import type { AddressTransform } from './dag/AddressTransform';
+import { isProductionEnvironment } from './utils/runtime-environment';
+
+type CommandEventSink = EventAPI & { emit?: (event: string, payload?: unknown) => void };
 
 /**
  * Command interface: Pure pointer operations
@@ -314,18 +317,18 @@ export class CommandManager {
   private redoStack: Command[] = [];
   private maxHistorySize: number;
   private changeListeners = new Set<() => void>();
-  private eventBus?: EventBus;
+  private eventBus?: CommandEventSink;
   
   /** Optional worksheet reference for DAG validation (DEV/TEST only) */
   private worksheet?: Worksheet;
   
-  constructor(maxHistorySize: number = 100, worksheet?: Worksheet, eventBus?: EventBus) {
+  constructor(maxHistorySize: number = 100, worksheet?: Worksheet, eventBus?: EventAPI) {
     this.maxHistorySize = maxHistorySize;
     this.worksheet = worksheet;
     this.eventBus = eventBus;
   }
 
-  setEventBus(eventBus: EventBus | undefined): void {
+  setEventBus(eventBus: EventAPI | undefined): void {
     this.eventBus = eventBus;
   }
   
@@ -339,7 +342,7 @@ export class CommandManager {
     command.execute();
     
     // DEV/TEST only: Validate DAG invariants after command execution
-    if (process.env.NODE_ENV !== 'production' && this.worksheet && !command.skipGraphValidation) {
+    if (!isProductionEnvironment() && this.worksheet && !command.skipGraphValidation) {
       // Access private DAG through worksheet's internal structure
       // This is safe because validators only read state
       const dag = (this.worksheet as any).dag;
@@ -367,7 +370,7 @@ export class CommandManager {
     // Clear redo stack when new command executed
     this.redoStack = [];
     this.notifyChange();
-    this.eventBus?.emit('command-execute', {
+    this.eventBus?.emit?.('command-execute', {
       commandType: getCommandEventType(command),
       description: command.description,
       command,
@@ -406,7 +409,7 @@ export class CommandManager {
     this.redoStack.push(command);
     
     // DEV/TEST only: Validate DAG invariants after undo
-    if (process.env.NODE_ENV !== 'production' && this.worksheet && !command.skipGraphValidation) {
+    if (!isProductionEnvironment() && this.worksheet && !command.skipGraphValidation) {
       const dag = (this.worksheet as any).dag;
       if (dag) {
         // For transformation commands: Use undo transform for validation
@@ -424,7 +427,7 @@ export class CommandManager {
     }
 
     this.notifyChange();
-    this.eventBus?.emit('command-undo', {
+    this.eventBus?.emit?.('command-undo', {
       commandType: getCommandEventType(command),
       description: command.description,
       command,
@@ -447,7 +450,7 @@ export class CommandManager {
     this.undoStack.push(command);
     
     // DEV/TEST only: Validate DAG invariants after redo
-    if (process.env.NODE_ENV !== 'production' && this.worksheet && !command.skipGraphValidation) {
+    if (!isProductionEnvironment() && this.worksheet && !command.skipGraphValidation) {
       const dag = (this.worksheet as any).dag;
       if (dag) {
         // For transformation commands: Use forward transform for validation
@@ -465,7 +468,7 @@ export class CommandManager {
     }
 
     this.notifyChange();
-    this.eventBus?.emit('command-redo', {
+    this.eventBus?.emit?.('command-redo', {
       commandType: getCommandEventType(command),
       description: command.description,
       command,

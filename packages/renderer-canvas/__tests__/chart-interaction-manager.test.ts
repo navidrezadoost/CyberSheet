@@ -5,6 +5,7 @@
 
 import { ChartInteractionManager } from '../src/ChartInteractionManager';
 import { Worksheet } from '@cyber-sheet/core';
+import { adoptWorksheetByWorkbook } from '../../core/src/worksheet';
 
 // Mock HTMLCanvasElement
 class MockCanvas {
@@ -34,8 +35,8 @@ describe('ChartInteractionManager', () => {
 
     // Setup test data
     for (let i = 0; i < 10; i++) {
-      worksheet.setCellValue({ row: i, col: 0 }, `Label ${i}`);
-      worksheet.setCellValue({ row: i, col: 1 }, Math.random() * 100);
+      worksheet.setCellValue({ row: i + 1, col: 1 }, `Label ${i}`);
+      worksheet.setCellValue({ row: i + 1, col: 2 }, Math.random() * 100);
     }
   });
 
@@ -44,11 +45,111 @@ describe('ChartInteractionManager', () => {
     expect(manager.getChartRenderer()).toBeDefined();
   });
 
+  test('manager reflection cannot replace state or suppress command-driven cache invalidation', () => {
+    const chartManager = manager.getChartManager();
+    const chartRenderer = manager.getChartRenderer();
+    expect(Reflect.get(chartManager, 'charts')).toBeUndefined();
+    expect(Reflect.get(chartManager, 'listeners')).toBeUndefined();
+    expect(Reflect.get(chartManager, 'nextZIndex')).toBeUndefined();
+    expect(Reflect.get(manager, 'chartManager')).toBeUndefined();
+    expect(Reflect.get(manager, 'chartRenderer')).toBeUndefined();
+    expect(Reflect.get(manager, 'redrawCallback')).toBeUndefined();
+    expect(Reflect.get(chartRenderer, 'chartCache')).toBeUndefined();
+
+    Reflect.set(chartManager, 'charts', new Map());
+    Reflect.set(chartManager, 'listeners', []);
+    Reflect.set(chartManager, 'nextZIndex', 900);
+    Reflect.set(manager, 'redrawCallback', () => {});
+    Reflect.set(manager, 'chartRenderer', {});
+    Reflect.set(chartRenderer, 'chartCache', new Map());
+    expect(manager.getChartRenderer()).toBe(chartRenderer);
+    const invalidateSpy = jest.spyOn(chartRenderer, 'invalidateChart');
+    const chart = chartManager.create({
+      type: 'bar',
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
+      position: { x: 100, y: 100 },
+      size: { width: 400, height: 300 },
+      options: {},
+      seriesDirection: 'columns',
+      hasHeaderRow: true,
+      hasHeaderCol: false,
+      zIndex: 0,
+    });
+    invalidateSpy.mockClear();
+    redrawCalled = false;
+
+    chartManager.update(chart.id, { title: 'Updated through command API' });
+
+    expect(chart.zIndex).toBe(0);
+    expect(chartManager.getChartsAtPosition(200, 150).map((item) => item.id)).toEqual([chart.id]);
+    expect(JSON.parse(chartManager.exportToJSON())[0].title).toBe('Updated through command API');
+    expect(invalidateSpy).toHaveBeenCalledWith(chart.id);
+    expect(redrawCalled).toBe(true);
+  });
+
+  test('rejects workbook-owned sheets until chart metadata has an owner-backed API', () => {
+    const adopted = new Worksheet('WorkbookOwnedInteractionSheet');
+    adoptWorksheetByWorkbook(adopted, 'chart-interaction-owner');
+
+    expect(() => new ChartInteractionManager(adopted, canvas as any, () => {})).toThrow(
+      /Workbook-owned chart interactions require a WorkbookSheetView/,
+    );
+  });
+
+  test('retained event snapshots cannot alter interaction or render-cache state after adoption', () => {
+    const chartManager = manager.getChartManager();
+    let retainedEventChart: ReturnType<typeof chartManager.create> | undefined;
+    chartManager.on((event) => {
+      if (event.type === 'create') retainedEventChart = event.chart;
+    });
+    const chart = chartManager.create({
+      type: 'bar',
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
+      position: { x: 100, y: 100 },
+      size: { width: 400, height: 300 },
+      options: { colors: ['#123456'] },
+      seriesDirection: 'columns',
+      hasHeaderRow: true,
+      hasHeaderCol: false,
+      zIndex: 0,
+    });
+    expect(retainedEventChart).not.toBe(chart);
+    chartManager.select(chart.id);
+    const chartRenderer = manager.getChartRenderer();
+    expect(Reflect.get(chartRenderer, 'chartCache')).toBeUndefined();
+    Reflect.set(chartRenderer, 'chartCache', new Map());
+    const invalidateSpy = jest.spyOn(chartRenderer, 'invalidateChart');
+    invalidateSpy.mockClear();
+    redrawCalled = false;
+
+    adoptWorksheetByWorkbook(worksheet, 'retained-chart-interaction-owner');
+    expect(Reflect.get(chartManager, 'worksheet')).toBeUndefined();
+    Reflect.set(manager, 'redrawCallback', () => {});
+    Reflect.set(manager, 'chartRenderer', {});
+    Reflect.set(chartRenderer, 'chartCache', new Map());
+    expect(manager.getChartRenderer()).toBe(chartRenderer);
+    retainedEventChart!.position.x = 600;
+    retainedEventChart!.position.y = 350;
+    retainedEventChart!.size.width = 150;
+    retainedEventChart!.size.height = 100;
+    retainedEventChart!.options.colors?.push('#abcdef');
+    retainedEventChart!.dataRange.startRow = 2;
+    retainedEventChart!.seriesDirection = 'rows';
+    retainedEventChart!.metadata = { nested: { series: ['retained'] } };
+
+    expect(manager.handleMouseMove(700, 400)).toEqual({ handled: false });
+    expect(manager.handleMouseMove(250, 250)).toEqual({ handled: true, cursor: 'move' });
+    expect(() => chartManager.update(chart.id, { title: 'blocked after adoption' })).toThrow(/unavailable until R5/);
+    expect(redrawCalled).toBe(false);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(chartManager.get(chart.id)?.options.colors).toEqual(['#123456']);
+  });
+
   test('should select chart on click', () => {
     const chartMgr = manager.getChartManager();
     chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -67,7 +168,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     const chart = chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -86,7 +187,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     const chart = chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -108,7 +209,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -127,7 +228,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     const chart = chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -150,7 +251,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -171,7 +272,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     const chart = chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -192,7 +293,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     const chart = chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -214,7 +315,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     const chart = chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -236,7 +337,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -261,7 +362,7 @@ describe('ChartInteractionManager', () => {
 
     chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},
@@ -278,7 +379,7 @@ describe('ChartInteractionManager', () => {
     const chartMgr = manager.getChartManager();
     chartMgr.create({
       type: 'bar',
-      dataRange: { startRow: 0, startCol: 0, endRow: 9, endCol: 1 },
+      dataRange: { startRow: 1, startCol: 1, endRow: 10, endCol: 2 },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
       options: {},

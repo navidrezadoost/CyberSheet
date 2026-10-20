@@ -2,6 +2,11 @@
   "name": "cyber-sheet-excel-monorepo",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": "24.22.x",
+    "npm": "11.19.x"
+  },
+  "packageManager": "npm@11.19.1",
   "workspaces": [
     "packages/*",
     "examples/*"
@@ -16,6 +21,8 @@
     "test": "jest --passWithNoTests --config jest.config.js",
     "test:watch": "jest --watch --config jest.config.js",
     "test:ci": "jest --ci --runInBand --config jest.config.js",
+    "check:no-focused-tests": "node scripts/check-no-focused-tests.mjs",
+    "generate:react-icons": "node scripts/generate-react-icons.mjs",
     "test:behavioral": "node scripts/run-behavioral-tests.js",
     "test:behavioral:phase1": "node scripts/run-behavioral-tests.js --phase=1",
     "test:behavioral:phase2": "node scripts/run-behavioral-tests.js --phase=2",
@@ -40,8 +47,8 @@
     "@smilodon/core": "^1.9.1-debug.0",
     "@smilodon/react": "^1.9.2",
     "fflate": "^0.8.3",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
     "vue": "^3.5.41"
   },
   "devDependencies": {

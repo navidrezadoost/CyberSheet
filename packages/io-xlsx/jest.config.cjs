@@ -9,12 +9,16 @@ module.exports = {
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
+      useESM: true,
       tsconfig: {
+        module: 'ES2020',
+        moduleResolution: 'Bundler',
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
       }
     }]
   },
+  extensionsToTreatAsEsm: ['.ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

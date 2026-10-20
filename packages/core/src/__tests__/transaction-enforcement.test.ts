@@ -19,7 +19,7 @@ describe('Transaction Enforcement', () => {
     ws.on(e => events.push(e));
 
     // Single setCellValue call should emit exactly one event
-    ws.setCellValue({ row: 0, col: 0 }, '10');
+    ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, '10');
     
     expect(events.length).toBe(1);
     expect(events[0].type).toBe('cell-changed');
@@ -32,9 +32,9 @@ describe('Transaction Enforcement', () => {
     ws.on(e => events.push(e));
 
     ws.runTransaction(() => {
-      ws.setCellValue({ row: 0, col: 0 }, '1');
-      ws.setCellValue({ row: 1, col: 0 }, '2');
-      ws.setCellValue({ row: 2, col: 0 }, '3');
+      ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, '1');
+      ws.setCellValue({ row: (1) + 1, col: (0) + 1 }, '2');
+      ws.setCellValue({ row: (2) + 1, col: (0) + 1 }, '3');
     });
 
     // Three setCellValue calls in one transaction = 1 emitted event
@@ -55,8 +55,8 @@ describe('Transaction Enforcement', () => {
     });
 
     ws.runTransaction(() => {
-      ws.setCellValue({ row: 0, col: 0 }, '1');
-      ws.setCellValue({ row: 1, col: 0 }, '2');
+      ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, '1');
+      ws.setCellValue({ row: (1) + 1, col: (0) + 1 }, '2');
     });
 
     expect(sawEventDuringTransaction).toBe(false);
@@ -69,7 +69,7 @@ describe('Transaction Enforcement', () => {
     const events: any[] = [];
     ws.on(e => events.push(e));
 
-    ws.setSpillSource({ row: 0, col: 0 }, { dimensions: [2, 2], endAddress: { row: 1, col: 1 } });
+    ws.setSpillSource({ row: (0) + 1, col: (0) + 1 }, { dimensions: [2, 2], endAddress: { row: 1, col: 1 } });
     
     expect(events.length).toBe(1);
     expect(events[0].type).toBe('spill-source-changed');
@@ -82,7 +82,7 @@ describe('Transaction Enforcement', () => {
     const events: any[] = [];
     ws.on(e => events.push(e));
 
-    ws.setCellStyle({ row: 0, col: 0 }, { bold: true });
+    ws.setCellStyle({ row: (0) + 1, col: (0) + 1 }, { bold: true });
     
     expect(events.length).toBe(1);
     expect(events[0].type).toBe('style-changed');
@@ -95,13 +95,13 @@ describe('Transaction Enforcement', () => {
     ws.on(e => events.push(e));
 
     ws.runTransaction(() => {
-      ws.setCellValue({ row: 0, col: 0 }, '1');
+      ws.setCellValue({ row: (0) + 1, col: (0) + 1 }, '1');
       
       ws.runTransaction(() => {
-        ws.setCellValue({ row: 1, col: 0 }, '2');
+        ws.setCellValue({ row: (1) + 1, col: (0) + 1 }, '2');
       });
       
-      ws.setCellValue({ row: 2, col: 0 }, '3');
+      ws.setCellValue({ row: (2) + 1, col: (0) + 1 }, '3');
     });
 
     // Nested transactions should coalesce into one event

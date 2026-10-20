@@ -4,6 +4,7 @@
  */
 
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import '@testing-library/jest-dom';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import ConditionalFormattingPresetPicker from '../ConditionalFormattingPresetPicker.svelte';
 import type { CFPreset } from '@cyber-sheet/cf-ui-core';
@@ -202,7 +203,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
       expect(categories?.getAttribute('aria-label')).toBe('Category filters');
     });
 
-    it('should have role="radio" on category buttons with aria-checked', () => {
+    it('should have role="radio" on category buttons with aria-checked', async () => {
       const { container } = render(ConditionalFormattingPresetPicker, {
         props: {
           onPresetSelect: mockOnPresetSelect,
@@ -213,6 +214,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
 
       const categoryBtns = container.querySelectorAll('.cf-preset-picker__category-btn');
       expect(categoryBtns.length).toBeGreaterThan(0);
+      await waitFor(() => expect(container.querySelector('.cf-preset-picker__category-btn--active')).toBeTruthy());
 
       categoryBtns.forEach(btn => {
         expect(btn.getAttribute('role')).toBe('radio');
@@ -278,7 +280,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
   });
 
   describe('Keyboard navigation - Tab order', () => {
-    it('should have correct tabindex on focusable elements', () => {
+    it('should have correct tabindex on focusable elements', async () => {
       const { container } = render(ConditionalFormattingPresetPicker, {
         props: {
           onPresetSelect: mockOnPresetSelect,
@@ -290,6 +292,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
       const searchInput = container.querySelector('.cf-preset-picker__search-input');
       expect(searchInput?.hasAttribute('tabindex')).toBe(false); // Native tabindex
 
+      await waitFor(() => expect(container.querySelector('.cf-preset-picker__category-btn--active')?.getAttribute('tabindex')).toBe('0'));
       const activeCategory = container.querySelector('.cf-preset-picker__category-btn--active');
       expect(activeCategory?.getAttribute('tabindex')).toBe('0');
 
@@ -441,9 +444,11 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
       });
 
       const cards = container.querySelectorAll('.cf-preset-picker__card') as NodeListOf<HTMLButtonElement>;
-      const applyBtn = container.querySelector('.cf-preset-picker__apply-btn') as HTMLButtonElement;
       const firstCard = cards[0];
 
+      await fireEvent.click(firstCard);
+      const applyBtn = container.querySelector('.cf-preset-picker__apply-btn') as HTMLButtonElement;
+      expect(applyBtn.disabled).toBe(false);
       firstCard.focus();
 
       await fireEvent.keyDown(firstCard, { key: 'Escape' });
@@ -561,7 +566,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
   });
 
   describe('Focus management', () => {
-    it('should use roving tabindex for category buttons', () => {
+    it('should use roving tabindex for category buttons', async () => {
       const { container } = render(ConditionalFormattingPresetPicker, {
         props: {
           onPresetSelect: mockOnPresetSelect,
@@ -570,6 +575,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
         },
       });
 
+      await waitFor(() => expect(container.querySelector('.cf-preset-picker__category-btn--active')?.getAttribute('tabindex')).toBe('0'));
       const activeBtn = container.querySelector('.cf-preset-picker__category-btn--active');
       expect(activeBtn?.getAttribute('tabindex')).toBe('0');
 
@@ -591,7 +597,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
       const firstBtn = container.querySelectorAll('.cf-preset-picker__category-btn')[0] as HTMLButtonElement;
       const secondBtn = container.querySelectorAll('.cf-preset-picker__category-btn')[1] as HTMLButtonElement;
 
-      expect(firstBtn.getAttribute('tabindex')).toBe('0');
+      await waitFor(() => expect(firstBtn.getAttribute('tabindex')).toBe('0'));
       expect(secondBtn.getAttribute('tabindex')).toBe('-1');
 
       await fireEvent.click(secondBtn);
@@ -719,8 +725,9 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
 
       const popular = container.querySelector('.cf-preset-picker__popular');
       if (popular) {
-        expect(popular.getAttribute('role')).toBe('list');
-        expect(popular.getAttribute('aria-label')).toBe('Popular presets');
+        const list = popular.querySelector('.cf-preset-picker__popular-grid');
+        expect(list?.getAttribute('role')).toBe('list');
+        expect(list?.getAttribute('aria-label')).toBe('Popular presets');
       }
     });
 
@@ -737,9 +744,9 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
       const popularCards = container.querySelectorAll('.cf-preset-picker__popular-card');
       if (popularCards.length > 0) {
         popularCards.forEach(card => {
-          expect(card.getAttribute('role')).toBe('listitem');
+          expect(card.parentElement?.getAttribute('role')).toBe('listitem');
           expect(card.getAttribute('aria-label')).toBeTruthy();
-          expect(card.getAttribute('aria-selected')).toMatch(/^(true|false)$/);
+          expect(card.getAttribute('aria-pressed')).toMatch(/^(true|false)$/);
         });
       }
     });
@@ -860,7 +867,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
 
   describe('Svelte-specific reactivity', () => {
     it('should reactively update ARIA attributes on prop changes', async () => {
-      const { container, component } = render(ConditionalFormattingPresetPicker, {
+      const { container, rerender } = render(ConditionalFormattingPresetPicker, {
         props: {
           onPresetSelect: mockOnPresetSelect,
           onApply: mockOnApply,
@@ -874,7 +881,7 @@ describe('ConditionalFormattingPresetPicker - Accessibility', () => {
       expect(popular).toBeInTheDocument();
 
       // Update props
-      await component.$set({ showPopular: false });
+      await rerender({ showPopular: false });
 
       await waitFor(() => {
         popular = container.querySelector('.cf-preset-picker__popular');

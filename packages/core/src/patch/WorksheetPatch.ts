@@ -109,6 +109,15 @@ export type ClearCellOp = {
   before: ExtendedCellValue;
 };
 
+/** Set cell value and formula metadata as one reversible content transition. */
+export type SetCellContentOp = {
+  op: 'setCellContent';
+  row: number;
+  col: number;
+  before: { value: ExtendedCellValue; formula?: string };
+  after: { value: ExtendedCellValue; formula?: string };
+};
+
 /** Change a cell's style object; stores full before/after for undo. */
 export type SetCellStyleOp = {
   op:     'setCellStyle';
@@ -274,6 +283,7 @@ export type SetSpillOp = {
 export type PatchOp =
   | SetCellValueOp
   | ClearCellOp
+  | SetCellContentOp
   | SetCellStyleOp
   | SetSpillOp
   | MergeCellsOp
@@ -337,6 +347,9 @@ export function invertPatch(patch: WorksheetPatch, seq = 0): WorksheetPatch {
       case 'clearCell':
         // Inverse of clearCell restores the previous value.
         ops.push({ op: 'setCellValue', row: op.row, col: op.col, before: null, after: op.before });
+        break;
+      case 'setCellContent':
+        ops.push({ op: 'setCellContent', row: op.row, col: op.col, before: op.after, after: op.before });
         break;
       case 'setCellStyle':
         ops.push({ op: 'setCellStyle', row: op.row, col: op.col, before: op.after, after: op.before });
@@ -447,6 +460,11 @@ export function applyPatch(ws: Worksheet, patch: WorksheetPatch): void {
       case 'clearCell':
         ws.setCellValue({ row: op.row, col: op.col }, null);
         break;
+      case 'setCellContent': {
+        const addr = { row: op.row, col: op.col };
+        ws.restoreCellContent(addr, op.after);
+        break;
+      }
       case 'setCellStyle':
         ws.setCellStyle({ row: op.row, col: op.col }, op.after);
         break;
@@ -535,6 +553,14 @@ export const PatchOps = {
   },
   clearCell(row: number, col: number, before: ExtendedCellValue): ClearCellOp {
     return { op: 'clearCell', row, col, before };
+  },
+  setCellContent(
+    row: number,
+    col: number,
+    before: SetCellContentOp['before'],
+    after: SetCellContentOp['after'],
+  ): SetCellContentOp {
+    return { op: 'setCellContent', row, col, before, after };
   },
   setCellStyle(row: number, col: number, before: CellStyle | undefined, after: CellStyle | undefined): SetCellStyleOp {
     return { op: 'setCellStyle', row, col, before, after };

@@ -32,33 +32,33 @@ describe('ClipboardService', () => {
   describe('Snapshot Integrity', () => {
     test('Copy creates immutable payload - modifying sheet does NOT affect payload', () => {
       // Set initial value
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Original');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Original');
       
       // Copy
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       // Modify original cell
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Modified');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Modified');
       
       // Payload should be unchanged
       expect(payload.cells[0].value).toBe('Original');
     });
     
     test('Copy twice produces identical payloads', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
-      worksheet.setCellValue({ row: 0, col: 1 }, 42);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 42);
       
       const payload1 = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 1 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (1) + 1 }
       });
       
       const payload2 = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 1 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (1) + 1 }
       });
       
       // Should have same structure
@@ -70,15 +70,15 @@ describe('ClipboardService', () => {
     });
     
     test('Payload is fully detached from worksheet', () => {
-      worksheet.setCellValue({ row: 5, col: 5 }, 'Data');
+      worksheet.setCellValue({ row: (5) + 1, col: (5) + 1 }, 'Data');
       
       const payload = service.copy(worksheet, {
-        start: { row: 5, col: 5 },
-        end: { row: 5, col: 5 }
+        start: { row: (5) + 1, col: (5) + 1 },
+        end: { row: (5) + 1, col: (5) + 1 }
       });
       
       // Delete entire worksheet content
-      worksheet.setCellValue({ row: 5, col: 5 }, null);
+      worksheet.setCellValue({ row: (5) + 1, col: (5) + 1 }, null);
       
       // Payload should still have data
       expect(payload.cells[0].value).toBe('Data');
@@ -89,11 +89,11 @@ describe('ClipboardService', () => {
   
   describe('Offset Correctness', () => {
     test('Top-left cell always maps to (0,0)', () => {
-      worksheet.setCellValue({ row: 10, col: 10 }, 'TopLeft');
+      worksheet.setCellValue({ row: (10) + 1, col: (10) + 1 }, 'TopLeft');
       
       const payload = service.copy(worksheet, {
-        start: { row: 10, col: 10 },
-        end: { row: 12, col: 12 }
+        start: { row: (10) + 1, col: (10) + 1 },
+        end: { row: (12) + 1, col: (12) + 1 }
       });
       
       const topLeftCell = payload.cells.find((c: CellSnapshot) => c.rowOffset === 0 && c.colOffset === 0);
@@ -103,14 +103,14 @@ describe('ClipboardService', () => {
     
     test('Offsets are correct for multi-cell range', () => {
       // Set up 2×2 grid
-      worksheet.setCellValue({ row: 5, col: 5 }, 'A1');
-      worksheet.setCellValue({ row: 5, col: 6 }, 'B1');
-      worksheet.setCellValue({ row: 6, col: 5 }, 'A2');
-      worksheet.setCellValue({ row: 6, col: 6 }, 'B2');
+      worksheet.setCellValue({ row: (5) + 1, col: (5) + 1 }, 'A1');
+      worksheet.setCellValue({ row: (5) + 1, col: (6) + 1 }, 'B1');
+      worksheet.setCellValue({ row: (6) + 1, col: (5) + 1 }, 'A2');
+      worksheet.setCellValue({ row: (6) + 1, col: (6) + 1 }, 'B2');
       
       const payload = service.copy(worksheet, {
-        start: { row: 5, col: 5 },
-        end: { row: 6, col: 6 }
+        start: { row: (5) + 1, col: (5) + 1 },
+        end: { row: (6) + 1, col: (6) + 1 }
       });
       
       // Verify offsets
@@ -121,11 +121,11 @@ describe('ClipboardService', () => {
     });
     
     test('Negative offsets never exist', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 5, col: 5 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (5) + 1, col: (5) + 1 }
       });
       
       // All offsets must be >= 0
@@ -137,8 +137,8 @@ describe('ClipboardService', () => {
     
     test('Width and height calculated correctly', () => {
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 2, col: 4 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (2) + 1, col: (4) + 1 }
       });
       
       expect(payload.width).toBe(5);  // cols 0-4 = 5 columns
@@ -156,12 +156,12 @@ describe('ClipboardService', () => {
         fontSize: 14,
       };
       
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Bold');
-      worksheet.setCellStyle({ row: 0, col: 0 }, style);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Bold');
+      worksheet.setCellStyle({ row: (0) + 1, col: (0) + 1 }, style);
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       const cellSnapshot = payload.cells[0];
@@ -177,12 +177,12 @@ describe('ClipboardService', () => {
     test('Mutating original style does not affect payload', () => {
       const style: CellStyle = { bold: true };
       
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
-      worksheet.setCellStyle({ row: 0, col: 0 }, style);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
+      worksheet.setCellStyle({ row: (0) + 1, col: (0) + 1 }, style);
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       // Modify original style object
@@ -209,12 +209,12 @@ describe('ClipboardService', () => {
         numberFormat: '#,##0.00',
       };
       
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Styled');
-      worksheet.setCellStyle({ row: 0, col: 0 }, style);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Styled');
+      worksheet.setCellStyle({ row: (0) + 1, col: (0) + 1 }, style);
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       const serialized = payload.cells[0].style!;
@@ -236,12 +236,12 @@ describe('ClipboardService', () => {
   
   describe('Merge Handling', () => {
     test('Only merge anchor is stored', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Merged');
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 1, col: 1 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Merged');
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (1) + 1, col: (1) + 1 } });
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 1, col: 1 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (1) + 1, col: (1) + 1 }
       });
       
       // Should have exactly 1 cell (the anchor)
@@ -253,12 +253,12 @@ describe('ClipboardService', () => {
     });
     
     test('Merge dimensions are correct', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'BigMerge');
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 2, col: 3 } });
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'BigMerge');
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (2) + 1, col: (3) + 1 } });
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 2, col: 3 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (2) + 1, col: (3) + 1 }
       });
       
       const anchor = payload.cells[0];
@@ -268,13 +268,13 @@ describe('ClipboardService', () => {
     });
     
     test('Non-anchor merged cells are not stored', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Anchor');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Anchor');
       // Try to set values in non-anchor cells (should be redirected to anchor)
-      worksheet.mergeCells({ start: { row: 0, col: 0 }, end: { row: 1, col: 1 } });
+      worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (1) + 1, col: (1) + 1 } });
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 1, col: 1 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (1) + 1, col: (1) + 1 }
       });
       
       // Only the anchor should be in payload
@@ -287,46 +287,46 @@ describe('ClipboardService', () => {
   
   describe('Cut Semantics', () => {
     test('cut() sets isCut flag to true', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Cut me');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Cut me');
       
       const payload = service.cut(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(payload.isCut).toBe(true);
     });
     
     test('copy() sets isCut flag to false', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Copy me');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Copy me');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(payload.isCut).toBe(false);
     });
     
     test('cut() does NOT mutate source cells', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Original');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Original');
       
       service.cut(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       // Source cell should still have value
-      expect(worksheet.getCellValue({ row: 0, col: 0 })).toBe('Original');
+      expect(worksheet.getCellValue({ row: (0) + 1, col: (0) + 1 })).toBe('Original');
     });
     
     test('cut() creates identical snapshot to copy() except for flag', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
-      worksheet.setCellValue({ row: 0, col: 1 }, 42);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 42);
       
       const range: Range = {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 1 }
+        start: { row: 1, col: 1 },
+        end: { row: 1, col: 2 }
       };
       
       const copyPayload = service.copy(worksheet, range);
@@ -346,44 +346,44 @@ describe('ClipboardService', () => {
   
   describe('Immutability', () => {
     test('Payload is frozen', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(Object.isFrozen(payload)).toBe(true);
     });
     
     test('Payload cells array is frozen', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(Object.isFrozen(payload.cells)).toBe(true);
     });
     
     test('Individual cell snapshots are frozen', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(Object.isFrozen(payload.cells[0])).toBe(true);
     });
     
     test('Cannot mutate payload after creation', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       }) as any;
       
       // Attempt to mutate should fail (or be ignored in strict mode)
@@ -399,21 +399,21 @@ describe('ClipboardService', () => {
     test('Empty cells are not included in snapshot', () => {
       // Copy range with no data
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 5, col: 5 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (5) + 1, col: (5) + 1 }
       });
       
       expect(payload.cells.length).toBe(0);
     });
     
     test('Range with some empty cells includes only non-empty', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'A');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
       // Skip (0,1)
-      worksheet.setCellValue({ row: 0, col: 2 }, 'C');
+      worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 2 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (2) + 1 }
       });
       
       expect(payload.cells.length).toBe(2);
@@ -426,11 +426,11 @@ describe('ClipboardService', () => {
   
   describe('Formulas', () => {
     test('Formula is captured without leading =', () => {
-      worksheet.setCellFormula({ row: 0, col: 0 }, '=SUM(A1:A10)');
+      worksheet.setCellFormula({ row: (0) + 1, col: (0) + 1 }, '=SUM(A1:A10)');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(payload.cells[0].formula).toBe('SUM(A1:A10)');
@@ -438,11 +438,11 @@ describe('ClipboardService', () => {
     
     test('Formula without leading = is preserved as-is', () => {
       // Directly set formula without =
-      (worksheet as any).cells.getOrCreate(0, 0).formula = 'A1+B1';
+      (worksheet as any).cells.getOrCreate(1, 1).formula = 'A1+B1';
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(payload.cells[0].formula).toBe('A1+B1');
@@ -457,21 +457,21 @@ describe('ClipboardService', () => {
     });
     
     test('getPayload returns current payload after copy', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       expect(service.getPayload()).toBe(payload);
     });
     
     test('clear() removes current payload', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'Test');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'Test');
       service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
       service.clear();
@@ -480,16 +480,16 @@ describe('ClipboardService', () => {
     });
     
     test('New copy replaces old payload', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'First');
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'First');
       const payload1 = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 0 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (0) + 1 }
       });
       
-      worksheet.setCellValue({ row: 1, col: 1 }, 'Second');
+      worksheet.setCellValue({ row: (1) + 1, col: (1) + 1 }, 'Second');
       const payload2 = service.copy(worksheet, {
-        start: { row: 1, col: 1 },
-        end: { row: 1, col: 1 }
+        start: { row: (1) + 1, col: (1) + 1 },
+        end: { row: (1) + 1, col: (1) + 1 }
       });
       
       expect(service.getPayload()).toBe(payload2);
@@ -501,11 +501,11 @@ describe('ClipboardService', () => {
   
   describe('Edge Cases', () => {
     test('Single cell copy', () => {
-      worksheet.setCellValue({ row: 5, col: 5 }, 'Single');
+      worksheet.setCellValue({ row: (5) + 1, col: (5) + 1 }, 'Single');
       
       const payload = service.copy(worksheet, {
-        start: { row: 5, col: 5 },
-        end: { row: 5, col: 5 }
+        start: { row: (5) + 1, col: (5) + 1 },
+        end: { row: (5) + 1, col: (5) + 1 }
       });
       
       expect(payload.width).toBe(1);
@@ -518,12 +518,12 @@ describe('ClipboardService', () => {
     test('Large range copy', () => {
       // Set some cells in large range
       for (let i = 0; i < 10; i++) {
-        worksheet.setCellValue({ row: i, col: i }, i * i);
+        worksheet.setCellValue({ row: (i) + 1, col: (i) + 1 }, i * i);
       }
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 9, col: 9 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (9) + 1, col: (9) + 1 }
       });
       
       expect(payload.width).toBe(10);
@@ -532,14 +532,14 @@ describe('ClipboardService', () => {
     });
     
     test('Copy range with mixed data types', () => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 'String');
-      worksheet.setCellValue({ row: 0, col: 1 }, 42);
-      worksheet.setCellValue({ row: 0, col: 2 }, true);
-      worksheet.setCellValue({ row: 0, col: 3 }, null);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'String');
+      worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 42);
+      worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, true);
+      worksheet.setCellValue({ row: (0) + 1, col: (3) + 1 }, null);
       
       const payload = service.copy(worksheet, {
-        start: { row: 0, col: 0 },
-        end: { row: 0, col: 3 }
+        start: { row: (0) + 1, col: (0) + 1 },
+        end: { row: (0) + 1, col: (3) + 1 }
       });
       
       expect(payload.cells[0].value).toBe('String');

@@ -6,7 +6,7 @@
  * into the main ChartEngine rendering pipeline
  */
 
-import { ChartEngine, ChartData, ChartOptions } from './ChartEngine';
+import { ChartEngine, ChartData, ChartOptions, getCanvas2DContext } from './ChartEngine';
 import { AdvancedChartRenderer, AdvancedChartData } from './AdvancedChartRenderer';
 import { TrendlineCalculator } from './TrendlineCalculator';
 import { AxisScaler } from './AxisScaler';
@@ -42,7 +42,7 @@ export class ChartEngineIntegrated extends ChartEngine {
 
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
     super(canvas);
-    const ctx = canvas.getContext('2d')!;
+    const ctx = getCanvas2DContext(canvas);
     this.advancedRenderer = new AdvancedChartRenderer(ctx);
   }
 

@@ -4,10 +4,12 @@ import './ribbon.css';
 export interface RibbonButtonProps {
   icon: React.ReactNode;
   label?: string;
+  /** Value used by RibbonToggleGroup to track this button. */
+  value?: string;
   tooltip: string;
   active?: boolean;
   disabled?: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   size?: 'small' | 'medium' | 'large';
   className?: string;
 }
@@ -48,7 +50,7 @@ export const RibbonButton: React.FC<RibbonButtonProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (!disabled) {
-      onClick();
+      onClick?.();
     }
   };
 
@@ -61,7 +63,7 @@ export const RibbonButton: React.FC<RibbonButtonProps> = ({
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (!disabled) {
-        onClick();
+        onClick?.();
       }
     }
   };

@@ -20,7 +20,7 @@ import { getDefaultBorder, resolvePreset } from "./borderTypes";
 import { resolveBorder, isMixedBorder, getBorderColor } from "./borderUtils";
 import type { StyleState } from "./types";
 
-interface BorderButtonProps {
+export interface BorderButtonProps {
   /** Current selection's border state (may be "mixed") */
   selectionBorder?: StyleState<BorderValue>;
 

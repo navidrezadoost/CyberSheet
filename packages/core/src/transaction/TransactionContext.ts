@@ -15,10 +15,8 @@
  *      emitted while the transaction is open.  On commit the recorder
  *      produces the aggregate forward WorksheetPatch covering all ops.
  *
- *   2. An `inverseStack: WorksheetPatch[]` that accumulates the per-op inverse
- *      patches returned by each `recordingApplyPatch` call.  On rollback these
- *      are applied in LIFO order to atomically restore the pre-transaction
- *      state.
+ *   2. A first-write cell snapshot journal, which preserves cell values and
+ *      formulas for direct Worksheet API mutations as well as patch calls.
  *
  * ==========================================================================
  * PM DIRECTED INVARIANTS (Phase 11)
@@ -49,14 +47,8 @@
  * ROLLBACK ORDERING
  * ==========================================================================
  *
- * If ops P1, P2, P3 are applied during a transaction, the inverseStack holds
- * [inv(P1), inv(P2), inv(P3)].  Rollback applies them in reverse:
- *
- *   applyPatch(ws, inv(P3))  →  applyPatch(ws, inv(P2))  →  applyPatch(ws, inv(P1))
- *
- * This guarantees correct restoration regardless of whether ops are
- * commutative (which, for cell-value writes, they generally are not once
- * formulas are involved).
+ * Rollback inverts the complete recorded mutation patch, then restores each
+ * cell's original formula from the first-write snapshot journal.
  *
  * ==========================================================================
  * hasPendingEvaluation
@@ -96,6 +88,7 @@
  */
 
 import type { Worksheet } from '../worksheet';
+import type { Address, ExtendedCellValue } from '../types';
 import {
   type WorksheetPatch,
   invertPatch,
@@ -130,11 +123,16 @@ export type CommitResult = {
 export class TransactionContext {
   private readonly _ws: Worksheet;
   private readonly _recorder: PatchRecorder;
+  private readonly _cellSnapshots = new Map<string, {
+    address: Address;
+    value: ExtendedCellValue;
+    formula: string | undefined;
+  }>();
+  private readonly _mutationSubscription: { dispose(): void };
 
   /**
-   * Per-op inverse patches in application order.
-   * Used exclusively by rollback() — applied LIFO.
-   * NOT used by commit() (the recorder gives a cleaner aggregate inverse).
+   * Per-op inverse patches registered by worker callers. Retained for the
+   * opCount compatibility surface; rollback uses the complete worksheet journal.
    */
   private readonly _inverseStack: WorksheetPatch[] = [];
 
@@ -147,16 +145,26 @@ export class TransactionContext {
     this._ws       = ws;
     this._recorder = new PatchRecorder(ws);
     this._recorder.start();
+    this._mutationSubscription = ws.onMutation((event) => {
+      if (event.type !== 'cell-changed') return;
+      const key = `${event.address.row}:${event.address.col}`;
+      if (this._cellSnapshots.has(key)) return;
+      this._cellSnapshots.set(key, {
+        address: event.address,
+        value: event.previousValue ?? null,
+        formula: event.previousFormula,
+      });
+    });
   }
 
   // ── Public API ─────────────────────────────────────────────────────────
 
   /**
-   * Register the inverse patch produced by `recordingApplyPatch` for one op.
+   * Register an inverse patch produced by `recordingApplyPatch` for one op.
    *
    * Called by EngineWorkerHost immediately after applying each applyPatch
-   * request inside an open transaction.  The inverses are accumulated in
-   * application order; rollback() reverses this list.
+   * request inside an open transaction. The worksheet journal is authoritative
+   * for rollback; this list remains available for transaction metrics.
    */
   addInverse(inverse: WorksheetPatch): void {
     this._inverseStack.push(inverse);
@@ -195,6 +203,7 @@ export class TransactionContext {
    */
   commit(): CommitResult {
     const patch   = this._recorder.stop();
+    this._mutationSubscription.dispose();
     const inverse = invertPatch(patch);
     return { patch, inverse };
   }
@@ -202,20 +211,28 @@ export class TransactionContext {
   /**
    * Roll back the transaction.
    *
-   * Aborts the PatchRecorder (discards forward patch), then applies the
-   * per-op inverses in LIFO order to fully restore pre-transaction state.
+   * Inverts the complete recorded patch and restores the original formula
+   * metadata captured at each cell's first mutation.
    *
    * Does NOT run recalc — the caller must call `ws.recalc(() => {})` after.
    *
    * After this call the TransactionContext is consumed and must not be reused.
    */
   rollback(): void {
-    // Discard the forward recording first so rollback events are not captured.
-    this._recorder.abort();
-
-    // Apply inverses in LIFO order — P3_inv, P2_inv, P1_inv
-    for (let i = this._inverseStack.length - 1; i >= 0; i--) {
-      applyPatch(this._ws, this._inverseStack[i]!);
+    // The worksheet mutation journal is authoritative: it includes direct
+    // Worksheet API calls made by SpreadsheetEngine.run(), not only patches
+    // registered by worker callers. Stop recording before applying its inverse.
+    const forward = this._recorder.stop();
+    this._mutationSubscription.dispose();
+    applyPatch(this._ws, invertPatch(forward));
+    for (const snapshot of this._cellSnapshots.values()) {
+      const current = this._ws.getCell(snapshot.address);
+      if (current?.formula === snapshot.formula) continue;
+      if (snapshot.formula !== undefined) {
+        this._ws.setCellFormula(snapshot.address, snapshot.formula, snapshot.value);
+      } else if (current?.formula !== undefined) {
+        this._ws.clearCellFormula(snapshot.address);
+      }
     }
   }
 
@@ -230,6 +247,7 @@ export class TransactionContext {
     if (this._recorder.isRecording) {
       this._recorder.abort();
     }
+    this._mutationSubscription.dispose();
   }
 
   // ── Defensive invariant assertion (called at commitTransaction dispatch) ─

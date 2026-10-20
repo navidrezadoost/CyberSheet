@@ -69,7 +69,7 @@ describe('ConditionalFormattingRuleManager', () => {
 			/>
 		);
 
-		const stopBadges = screen.getAllByText(/Stop/i);
+		const stopBadges = document.querySelectorAll('.cf-rule-stop-if-true');
 		expect(stopBadges).toHaveLength(1); // Only rule-2 has stopIfTrue
 	});
 

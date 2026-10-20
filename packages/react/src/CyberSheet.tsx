@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Workbook, Worksheet, autoFill, FormulaWorkerProxy, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, SetCellComponentCommand } from '@cyber-sheet/core';
+import { Workbook, FormulaWorkerProxy, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, type WorkbookSheetView } from '@cyber-sheet/core';
 import { ComponentRegistry, CustomCellOverlay, type CustomCellComponentRenderProps, type RegisteredCellComponent } from './customComponents';
 // Import locally to ensure dev picks up latest CanvasRenderer implementation
 import { CanvasRenderer, CanvasRendererOptions, type ViewMode } from '../../renderer-canvas/src';
@@ -25,7 +25,7 @@ export type CyberSheetProps = {
 
 export interface CyberSheetHandle extends EventAPI {
   getWorkbook: () => Workbook;
-  getActiveSheet: () => Worksheet | undefined;
+  getActiveSheet: () => WorkbookSheetView | undefined;
   executeCommand: (command: Command) => void;
   registerComponent: (id: string, component: RegisteredCellComponent) => void;
   unregisterComponent: (id: string) => void;
@@ -71,20 +71,18 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
   const cyberSheetConfig = useCyberSheetConfig();
   const effectiveFontFamily = fontFamily ?? cyberSheetConfig.fonts.defaultFamily;
   const effectiveFontSize = fontSize ?? cyberSheetConfig.fonts.defaultSize;
-  const containerRef = useRef(null as any);
-  const rendererRef = useRef(null as any);
-  const sheetRef = useRef(undefined as any);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const rendererRef = useRef<CanvasRenderer | null>(null);
+  const sheetRef = useRef<WorkbookSheetView | undefined>(undefined);
   const overlayHostRef = useRef<HTMLElement | null>(null);
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   const [overlayTick, setOverlayTick] = useState(0);
-  const commandManagerRef = useRef(commandManager);
-  commandManagerRef.current = commandManager;
   const componentRegistryRef = useRef(new ComponentRegistry());
   const [selections, setSelections] = useState<Array<{ start: { row: number; col: number }; end: { row: number; col: number } }>>([]);
   const [horizontalScroll, setHorizontalScroll] = useState({ x: 0, maxX: 0, contentWidth: 0, viewportWidth: 0 });
-  const selectionsRef = useRef(selections as any);
+  const selectionsRef = useRef(selections);
   const horizontalScrollbarRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { selectionsRef.current = selections; }, [selections]);
 
@@ -121,10 +119,8 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
     getWorkbook: () => workbook,
     getActiveSheet: () => sheetRef.current ?? workbook.activeSheet,
     executeCommand: (command: Command) => {
-      if (!commandManagerRef.current) {
-        throw new Error('CyberSheet executeCommand requires a commandManager prop');
-      }
-      commandManagerRef.current.execute(command);
+      void command;
+      throw new Error('Workbook commands are unavailable until their journal-backed mutation slice is authorized');
     },
     registerComponent: (id: string, component: RegisteredCellComponent) => {
       componentRegistryRef.current.register(id, component);
@@ -134,31 +130,16 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
     },
     listRegisteredComponents: () => componentRegistryRef.current.list(),
     setCellComponent: (address: Address, component: CustomCellComponent | null) => {
-      const sheet = sheetRef.current ?? workbook.activeSheet;
-      if (!sheet) return;
-      const apply = () => sheet.setCellComponent(address, component ?? undefined);
-      if (commandManagerRef.current) {
-        commandManagerRef.current.execute(new SetCellComponentCommand(sheet, address, component ?? undefined));
-      } else {
-        apply();
-      }
-      rendererRef.current?.invalidateRange(address.row, address.col, address.row, address.col);
-      rendererRef.current?.scheduleRedraw?.();
+      void address; void component;
+      throw new Error('Workbook cell-component writes are unavailable until the R5 metadata journal slice is authorized');
     },
     getCellComponent: (address: Address) => {
       const sheet = sheetRef.current ?? workbook.activeSheet;
       return sheet?.getCellComponent(address);
     },
     clearCellComponent: (address: Address) => {
-      const sheet = sheetRef.current ?? workbook.activeSheet;
-      if (!sheet) return;
-      if (commandManagerRef.current) {
-        commandManagerRef.current.execute(new SetCellComponentCommand(sheet, address, undefined));
-      } else {
-        sheet.clearCellComponent(address);
-      }
-      rendererRef.current?.invalidateRange(address.row, address.col, address.row, address.col);
-      rendererRef.current?.scheduleRedraw?.();
+      void address;
+      throw new Error('Workbook cell-component writes are unavailable until the R5 metadata journal slice is authorized');
     },
   }), [workbook]);
 
@@ -382,9 +363,9 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
 
   // Update selection position with inertia; also autoscroll when near edges
   const stepSelection = (r: any, sel: { start: any; end: any }, s: { index: number; dirX: number; dirY: number; vx: number; vy: number }, update: any) => {
-    const sheet: Worksheet = sheetRef.current;
+    const sheet = sheetRef.current;
     const vp = r.getViewportSize?.();
-    if (!vp) return false;
+    if (!vp || !sheet) return false;
     // Decay velocity
     s.vx *= 0.9; s.vy *= 0.9;
     const speed = Math.hypot(s.vx, s.vy);
@@ -417,171 +398,14 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
     return true;
   };
 
-  // Selection (single + multi-range) & resizing interactions
-  // DISABLED: CanvasRenderer handles mouse events directly
-  useEffect(() => {
-    const el = containerRef.current as any;
-    const r = rendererRef.current as any;
-    const sheet = sheetRef.current as any;
-  if (!el || !r || !sheet) return;
-    
-    return; // Skip all mouse handling - let CanvasRenderer do it
-
-    draggingRef.current = null;
-
-    const onMouseDown = (e: MouseEvent) => {
-      const hit = r.hitTest(e.clientX, e.clientY);
-      if (!hit) return;
-      if (hit.type === 'fill-handle') {
-        // Start auto-fill drag
-        const idx = (hit as any).rangeIndex;
-        const sel = selections[idx];
-        if (!sel) return; // Safety check for undefined selection
-        const r1 = Math.min(sel.start.row, sel.end.row);
-        const r2 = Math.max(sel.start.row, sel.end.row);
-        const c1 = Math.min(sel.start.col, sel.end.col);
-        const c2 = Math.max(sel.start.col, sel.end.col);
-        draggingRef.current = { type: 'auto-fill', rangeIndex: idx, sourceRange: { r1, c1, r2, c2 }, fillStart: { row: r2, col: c2 } } as any;
-        e.preventDefault();
-      } else if (hit.type === 'col-resize') {
-        draggingRef.current = { type: 'col-resize', col: (hit as any).col, startX: e.clientX, startW: sheet.getColumnWidth((hit as any).col) } as any;
-        e.preventDefault();
-      } else if (hit.type === 'row-resize') {
-        draggingRef.current = { type: 'row-resize', row: (hit as any).row, startY: e.clientY, startH: sheet.getRowHeight((hit as any).row) } as any;
-        e.preventDefault();
-      } else if (hit.type === 'cell') {
-        const additive = e.ctrlKey || e.metaKey;
-        const addr = (hit as any).addr;
-        if (additive) {
-          const next = selections.slice();
-          next.push({ start: addr, end: addr });
-          draggingRef.current = { type: 'select', start: addr, index: next.length - 1 } as any;
-          r.setSelections(next);
-          setSelections(next);
-        } else {
-          const sel = { start: addr, end: addr };
-          draggingRef.current = { type: 'select', start: addr, index: 0 } as any;
-          r.setSelections([sel]);
-          setSelections([sel]);
-        }
-      }
-    };
-
-    const onMouseMove = (e: MouseEvent) => {
-      const dragging = draggingRef.current as any;
-      if (!dragging) return;
-      if (dragging.type === 'auto-fill') {
-        // Update fill preview range
-        const addr = r.cellAt(e.clientX, e.clientY);
-        if (addr) {
-          const src = dragging.sourceRange;
-          let fillR2 = addr.row, fillC2 = addr.col;
-          // Clamp to sheet bounds
-          fillR2 = Math.min(Math.max(src.r2, fillR2), sheet.rowCount);
-          fillC2 = Math.min(Math.max(src.c2, fillC2), sheet.colCount);
-          dragging.fillEnd = { row: fillR2, col: fillC2 };
-          // Show preview by extending active selection visually
-          const preview = { start: { row: src.r1, col: src.c1 }, end: { row: fillR2, col: fillC2 } };
-          const next = selections.slice();
-          next[dragging.rangeIndex] = preview;
-          r.setSelections(next);
-          setSelections(next);
-        }
-      } else if (dragging.type === 'col-resize') {
-        const dx = e.clientX - dragging.startX;
-        const newW = Math.max(20, dragging.startW + dx);
-        sheet.setColumnWidth(dragging.col, newW);
-        r.redraw?.();
-      } else if (dragging.type === 'row-resize') {
-        const dy = e.clientY - dragging.startY;
-        const newH = Math.max(12, dragging.startH + dy);
-        sheet.setRowHeight(dragging.row, newH);
-        r.redraw?.();
-      } else if (dragging.type === 'select') {
-        // track velocity of mouse
-        const now = performance.now();
-        if (lastMouseRef.current.t) {
-          const dt = Math.max(1, now - lastMouseRef.current.t);
-          velRef.current.vx = (e.clientX - lastMouseRef.current.x) / dt * 16; // normalize per ~frame
-          velRef.current.vy = (e.clientY - lastMouseRef.current.y) / dt * 16;
-        }
-        lastMouseRef.current = { x: e.clientX, y: e.clientY, t: now };
-        const addr = r.cellAt(e.clientX, e.clientY);
-        if (addr) {
-          const next = selections.slice();
-          const idx = dragging.index;
-          next[idx] = { start: dragging.start, end: addr };
-          r.setSelections(next);
-          setSelections(next);
-          // If near edges, autoscroll and prepare inertia vector based on mouse movement
-          const rect = r.rectForRange?.(addr.row, addr.col, addr.row, addr.col);
-          if (rect) {
-            const margin = p.edgeMargin || 24;
-            const step = p.autoScrollStep || 10;
-            const opts = r.optionsReadonly ? r.optionsReadonly : { headerWidth: 48, headerHeight: 24 };
-            if (rect.x < opts.headerWidth + margin) r.scrollBy(-step, 0);
-            if (rect.y < opts.headerHeight + margin) r.scrollBy(0, -step);
-            const vp = r.getViewportSize?.();
-            if (vp) {
-              if (rect.x + rect.w > opts.headerWidth + vp.width - margin) r.scrollBy(step, 0);
-              if (rect.y + rect.h > opts.headerHeight + vp.height - margin) r.scrollBy(0, step);
-            }
-          }
-        }
-      }
-    };
-
-    const onMouseUp = () => {
-      const dragging = draggingRef.current as any;
-      if (dragging && dragging.type === 'auto-fill') {
-        // Apply auto-fill to sheet
-        if (dragging.fillEnd) {
-          const src = dragging.sourceRange;
-          const targetR2 = dragging.fillEnd.row;
-          const targetC2 = dragging.fillEnd.col;
-          // Only fill if we extended beyond source
-          if (targetR2 > src.r2 || targetC2 > src.c2) {
-            const targetRange = { r1: src.r2 + 1, c1: src.c1, r2: targetR2, c2: targetC2 };
-            const fillResult = autoFill(src, targetRange, (addr) => sheet.getCellValue(addr));
-            fillResult.forEach((value, key) => {
-              const [row, col] = key.split(':').map(Number);
-              sheet.setCellValue({ row, col }, value);
-            });
-            // Reset selection to filled range
-            const filled = { start: { row: src.r1, col: src.c1 }, end: { row: targetR2, col: targetC2 } };
-            r.setSelections([filled]);
-            setSelections([filled]);
-          }
-        }
-      } else if (dragging && dragging.type === 'select') {
-        if (p.selectionInertia) {
-          // Fire a brief selection inertia towards last move direction
-          const idx = dragging.index;
-          const vx = Math.max(-60, Math.min(60, velRef.current.vx * 8));
-          const vy = Math.max(-60, Math.min(60, velRef.current.vy * 8));
-          inertialSelectingRef.current = { index: idx, dirX: 1, dirY: 1, vx, vy };
-          if (rafRef.current == null) rafRef.current = requestAnimationFrame(() => animate(r));
-        }
-      }
-      draggingRef.current = null;
-    };
-
-    el.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      el.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [rendererRef.current, sheetRef.current]);
+  // CanvasRenderer owns pointer selection and drag handling.
 
   // Arrow-key navigation only — clipboard shortcuts are handled by ExcelApp via PasteCommand
   // so undo/redo stays on the command stack.
   useEffect(() => {
     const el = containerRef.current as any;
     const r = rendererRef.current as any;
-    const sheet = sheetRef.current as Worksheet | undefined;
+    const sheet = sheetRef.current;
     if (!el || !r || !sheet) return;
     const onKeyDown = (e: KeyboardEvent) => {
       const ranges = selections;
@@ -635,7 +459,8 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
 
   const findSnapX = (r: any, sx: number) => {
     let acc = 0;
-    const sheet = sheetRef.current as Worksheet;
+    const sheet = sheetRef.current;
+    if (!sheet) return sx;
     for (let c = 1; c <= sheet.colCount; c++) {
       const w = sheet.getColumnWidth(c);
       if (acc + w > sx) {
@@ -650,7 +475,8 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
   };
   const findSnapY = (r: any, sy: number) => {
     let acc = 0;
-    const sheet = sheetRef.current as Worksheet;
+    const sheet = sheetRef.current;
+    if (!sheet) return sy;
     for (let rr = 1; rr <= sheet.rowCount; rr++) {
       const h = sheet.getRowHeight(rr);
       if (acc + h > sy) {
@@ -667,7 +493,7 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
   useEffect(() => {
     const el = containerRef.current as any;
     const r = rendererRef.current as any;
-    const sheet = sheetRef.current as Worksheet | undefined;
+    const sheet = sheetRef.current;
     if (!el || !r || !sheet || !p.allowTouch) return;
 
     const onTouchStart = (e: TouchEvent) => {

@@ -10,6 +10,7 @@
 
 import { DEFAULT_WORKSHEET_COLS, DEFAULT_WORKSHEET_ROWS, Workbook, Worksheet } from '@cyber-sheet/core';
 import { LightweightXLSXParser, XLSXParseOptions, XLSXMetadata } from './LightweightParser';
+import { applyParsedCellToWorksheet } from './internal/applyParsedCell';
 
 export interface ImportOptions extends XLSXParseOptions {
   /** Create Workbook instance automatically */
@@ -108,21 +109,9 @@ class LazyWorksheet extends Worksheet {
       
       const addr = { row, col };
       
-      if (cell.value !== null && cell.value !== undefined) {
-        this.setCellValue(addr, cell.value);
-      }
-      
-      if (cell.formula) {
-        // Store formula in cell
-        const k = `${addr.row}:${addr.col}`;
-        const existingCell = (this as any).cells.get(k) || { value: null };
-        existingCell.formula = cell.formula;
-        (this as any).cells.set(k, existingCell);
-      }
-      
-      if (cell.style) {
-        this.setCellStyle(addr, cell.style);
-      }
+      // Uses only the worksheet API. Standalone parsing remains supported;
+      // adopted handles reject these writes before changing owner state.
+      applyParsedCellToWorksheet(this, addr, cell);
     }
     
     this.loadedViewport = viewport;
@@ -176,137 +165,10 @@ class LazyWorksheet extends Worksheet {
  * Import Excel file with high-fidelity parsing and lazy loading
  */
 export async function importXLSX(
-  buffer: ArrayBuffer,
-  options: ImportOptions = {}
+  _buffer: ArrayBuffer,
+  _options: ImportOptions = {},
 ): Promise<ImportResult> {
-  const parser = new LightweightXLSXParser();
-  
-  // Step 1: Parse metadata (fast - no cell data)
-  const metadata = await parser.parseMetadata(buffer);
-  
-  // Step 2: Create workbook
-  const workbook = new Workbook();
-  const lazySheets = new Map<string, LazyWorksheet>();
-  
-  // Step 3: Create worksheets (lazy or eager)
-  for (let i = 0; i < metadata.sheetNames.length; i++) {
-    const sheetName = metadata.sheetNames[i];
-    const dims = metadata.sheetDimensions.get(sheetName) || { rows: 1000, cols: 26 };
-    const displayDims = sheetDisplayDimensions(dims);
-    
-    if (options.lazySheets) {
-      // Create lazy worksheet
-      const sheet = new LazyWorksheet(
-        sheetName,
-        displayDims.rows,
-        displayDims.cols,
-        parser,
-        i
-      );
-      
-      // Add sheet to workbook by creating it first, then replacing
-      workbook.addSheet(sheetName, displayDims.rows, displayDims.cols);
-      const addedSheet = workbook.getSheet(sheetName)!;
-      // Copy lazy sheet reference
-      lazySheets.set(sheetName, sheet);
-      // Replace with lazy version
-      (workbook as any).sheets.set(sheetName, sheet);
-    } else {
-      // Load sheet immediately
-      const sheet = workbook.addSheet(sheetName, displayDims.rows, displayDims.cols);
-      
-      // Load cells
-      const cells = await parser.parseSheet(i, {
-        viewport: options.initialViewport,
-        maxRows: options.maxRows,
-        maxCols: options.maxCols,
-        includeStyles: options.includeStyles !== false,
-        includeFormulas: options.includeFormulas !== false,
-        onProgress: options.onProgress
-      });
-      
-      // Apply cells
-      for (const [ref, cell] of cells) {
-        const match = ref.match(/^([A-Z]+)(\d+)$/);
-        if (!match) continue;
-        
-        const colStr = match[1];
-        const row = parseInt(match[2]);
-        
-        let col = 0;
-        for (let i = 0; i < colStr.length; i++) {
-          col = col * 26 + (colStr.charCodeAt(i) - 64);
-        }
-        
-        const addr = { row, col };
-        
-        if (cell.value !== null && cell.value !== undefined) {
-          sheet.setCellValue(addr, cell.value);
-        }
-        
-        if (cell.formula) {
-          // Store formula in cell
-          const k = `${addr.row}:${addr.col}`;
-          const existingCell = (sheet as any).cells.get(k) || { value: null };
-          existingCell.formula = cell.formula;
-          (sheet as any).cells.set(k, existingCell);
-        }
-        
-        if (cell.style) {
-          sheet.setCellStyle(addr, cell.style);
-        }
-      }
-    }
-  }
-  
-  // Helper functions
-  const loadSheet = async (
-    nameOrIndex: string | number,
-    loadOptions?: XLSXParseOptions
-  ): Promise<Worksheet> => {
-    const sheetName = typeof nameOrIndex === 'number' 
-      ? metadata.sheetNames[nameOrIndex]
-      : nameOrIndex;
-    
-    const lazySheet = lazySheets.get(sheetName);
-    if (lazySheet) {
-      // Load viewport if not already loaded
-      if (!lazySheet.getLoadedViewport() && options.initialViewport) {
-        await lazySheet.loadViewport(options.initialViewport);
-      }
-      return lazySheet;
-    }
-    
-    // Sheet already loaded eagerly
-    const sheet = workbook.getSheet(sheetName);
-    if (!sheet) {
-      throw new Error(`Sheet not found: ${sheetName}`);
-    }
-    return sheet;
-  };
-  
-  const expandViewport = async (
-    sheetNameOrIndex: string | number,
-    newViewport: { startRow: number; endRow: number; startCol: number; endCol: number }
-  ): Promise<void> => {
-    const sheetName = typeof sheetNameOrIndex === 'number'
-      ? metadata.sheetNames[sheetNameOrIndex]
-      : sheetNameOrIndex;
-    
-    const lazySheet = lazySheets.get(sheetName);
-    if (lazySheet) {
-      await lazySheet.ensureViewportLoaded(newViewport);
-    } else {
-      throw new Error('Sheet is not lazy-loaded, cannot expand viewport');
-    }
-  };
-  
-  return {
-    workbook,
-    metadata,
-    loadSheet,
-    expandViewport
-  };
+  throw new Error('XLSX import is unavailable until R6 staged restore is authorized');
 }
 
 /**

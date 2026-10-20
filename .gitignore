@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
+test-projects/vanilla-js/package-lock.json
 pnpm-lock.yaml
 .pnp
 .pnp.js

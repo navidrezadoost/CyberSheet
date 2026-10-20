@@ -18,6 +18,7 @@ import type {
   IconObject,
   CommandManager,
   Worksheet,
+  WorkbookSheetView,
 } from '@cyber-sheet/core';
 import {
   DeleteDrawingObjectsCommand,
@@ -51,6 +52,7 @@ import {
   isWordArtObject,
 } from '../utils/wordArtFactory';
 import { parseA1Reference } from '../utils/parseA1Reference';
+import { rejectWorkbookMutation, requireStandaloneWorksheet } from '../utils/workbookSheetAccess';
 import {
   isClickOnOptionButtonCircle,
   selectOptionButtonInGroup,
@@ -66,7 +68,7 @@ export interface DrawingCanvasProps {
   scrollLeft: number;
   scrollTop: number;
   zoom: number;
-  worksheet?: Worksheet;
+  worksheet?: Worksheet | WorkbookSheetView;
   commandManager?: CommandManager;
   onObjectChange?: () => void;
   onFormControlContextMenu?: (objectId: string, clientX: number, clientY: number) => void;
@@ -211,6 +213,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
     originalText: string;
   } | null>(null);
   const textEditRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const rejectOwnedDrawingMutation = useCallback(() => {
+    if (worksheet && ('workbookId' in worksheet || worksheet.isWorkbookOwned())) {
+      rejectWorkbookMutation();
+    }
+  }, [worksheet]);
 
   const passClickToSpreadsheet = useCallback((clientX: number, clientY: number, sourceEvent: MouseEvent) => {
     const canvas = canvasRef.current;
@@ -359,6 +367,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
 
   const finalizeInsert = useCallback(
     (startX: number, startY: number, endX: number, endY: number) => {
+      rejectOwnedDrawingMutation();
       const mode = insertModeRef.current;
       if (mode === 'none') return;
 
@@ -485,11 +494,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
         setTextEdit({ objectId: tb.id, text: tb.text, originalText: tb.text });
       }
     },
-    [drawingLayer, commandManager, cancelInsertMode, onObjectChange],
+    [drawingLayer, commandManager, cancelInsertMode, onObjectChange, rejectOwnedDrawingMutation],
   );
 
   const toggleFormControlCheckbox = useCallback(
     (obj: FormControlObject) => {
+      rejectOwnedDrawingMutation();
       const checked = !obj.controlProperties.checked;
       drawingLayer.updateObject(obj.id, {
         controlProperties: { ...obj.controlProperties, checked },
@@ -498,39 +508,42 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       if (obj.linkedCell && worksheet) {
         const addr = parseA1Reference(obj.linkedCell);
         if (addr) {
-          worksheet.setCellValue(addr, checked);
+          requireStandaloneWorksheet(worksheet).setCellValue(addr, checked);
         }
       }
 
       onObjectChange?.();
     },
-    [drawingLayer, worksheet, onObjectChange],
+    [drawingLayer, worksheet, onObjectChange, rejectOwnedDrawingMutation],
   );
 
   const selectFormControlOptionButton = useCallback(
     (obj: FormControlObject) => {
       if (obj.controlProperties.checked) return;
-      selectOptionButtonInGroup(obj, drawingLayer, worksheet);
+      rejectOwnedDrawingMutation();
+      if (worksheet) selectOptionButtonInGroup(obj, drawingLayer, requireStandaloneWorksheet(worksheet));
       onObjectChange?.();
     },
-    [drawingLayer, worksheet, onObjectChange],
+    [drawingLayer, worksheet, onObjectChange, rejectOwnedDrawingMutation],
   );
 
   const commitTextEdit = useCallback(() => {
     if (!textEdit) return;
+    rejectOwnedDrawingMutation();
     drawingLayer.updateObject(textEdit.objectId, { text: textEdit.text } as Partial<TextBoxObject>);
     setTextEdit(null);
     onObjectChange?.();
-  }, [textEdit, drawingLayer, onObjectChange]);
+  }, [textEdit, drawingLayer, onObjectChange, rejectOwnedDrawingMutation]);
 
   const cancelTextEdit = useCallback(() => {
     if (!textEdit) return;
+    rejectOwnedDrawingMutation();
     drawingLayer.updateObject(textEdit.objectId, {
       text: textEdit.originalText,
     } as Partial<TextBoxObject>);
     setTextEdit(null);
     onObjectChange?.();
-  }, [textEdit, drawingLayer, onObjectChange]);
+  }, [textEdit, drawingLayer, onObjectChange, rejectOwnedDrawingMutation]);
 
   const beginTextEdit = useCallback(
     (objectId: string) => {
@@ -1413,6 +1426,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
         return;
       }
 
+      rejectOwnedDrawingMutation();
+
       const dx = (e.clientX - dragState.startMouseX) / zoom;
       const dy = (e.clientY - dragState.startMouseY) / zoom;
 
@@ -1466,7 +1481,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
 
       onObjectChange?.();
     },
-    [dragState, drawingLayer, zoom, scrollLeft, scrollTop, onObjectChange]
+    [dragState, drawingLayer, zoom, scrollLeft, scrollTop, onObjectChange, rejectOwnedDrawingMutation]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -1545,6 +1560,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       // Delete or Backspace: Remove selected objects
       if (e.code === 'Delete' || e.code === 'Backspace') {
         if (selectedIds.length > 0) {
+          rejectOwnedDrawingMutation();
           e.preventDefault();
           const objectsToDelete = selectedIds
             .map(id => drawingLayer.getObject(id))
@@ -1586,6 +1602,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       // Ctrl+V or Cmd+V: Paste objects from clipboard
       if (isCtrlLetter(e, 'v')) {
         if (clipboard.length > 0) {
+          rejectOwnedDrawingMutation();
           e.preventDefault();
           const newPasteCount = pasteCount + 1;
           setPasteCount(newPasteCount);
@@ -1615,6 +1632,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       // Ctrl+X or Cmd+X: Cut selected objects
       if (isCtrlLetter(e, 'x')) {
         if (selectedIds.length > 0) {
+          rejectOwnedDrawingMutation();
           e.preventDefault();
           const objects = selectedIds
             .map(id => drawingLayer.getObject(id))

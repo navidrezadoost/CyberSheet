@@ -100,7 +100,6 @@ export function RibbonToggleGroup<T extends string>({
 
     // Clone with enhanced props
     return cloneElement(child, {
-      ...child.props,
       active: isChildActive(childValue),
       onClick: () => handleChildClick(childValue),
       disabled: disabled || (child.props as any).disabled,

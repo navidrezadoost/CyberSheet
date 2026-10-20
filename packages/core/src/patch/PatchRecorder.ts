@@ -145,6 +145,7 @@ export class PatchRecorder {
   private readonly ws: Worksheet;
   private _ops: PatchOp[] | null = null;
   private _disposable: Disposable | null = null;
+  private readonly _seenMutationEvents = new WeakSet<object>();
 
   constructor(ws: Worksheet) {
     this.ws = ws;
@@ -164,9 +165,26 @@ export class PatchRecorder {
       throw new PatchRecorderError('already recording — call stop() or abort() first.');
     }
     this._ops = [];
-    this._disposable = (this.ws as unknown as { on(l: (e: SheetEvents) => void): Disposable }).on(
-      this._onEvent,
-    );
+    const worksheet = this.ws as unknown as {
+      onMutation(l: (e: SheetEvents) => void): Disposable;
+      on(l: (e: SheetEvents) => void): Disposable;
+    };
+    const mutations = worksheet.onMutation((event) => {
+      this._seenMutationEvents.add(event);
+      this._onEvent(event);
+    });
+    const publicEvents = worksheet.on((event) => {
+      // Mutations routed through _emitOrBuffer arrive on both channels. Direct
+      // Worksheet events arrive only here and must still be recorded.
+      if (this._seenMutationEvents.has(event)) return;
+      this._onEvent(event);
+    });
+    this._disposable = {
+      dispose: () => {
+        mutations.dispose();
+        publicEvents.dispose();
+      },
+    };
   }
 
   /**
@@ -202,14 +220,29 @@ export class PatchRecorder {
    */
   private readonly _onEvent = (event: SheetEvents): void => {
     if (this._ops === null) return;
+    // Formula-result notifications describe derived cache updates, not user
+    // mutations. They are observable to sheet listeners but must not become
+    // undo/redo or transaction journal operations.
+    if (event.type === 'cell-changed' && event.origin === 'formula-result') return;
 
     switch (event.type) {
       case 'cell-changed': {
         const { row, col } = event.address;
         const key = `${row}:${col}`;
-        const before: ExtendedCellValue = this._beforeMap.has(key)
-          ? this._beforeMap.get(key)!
-          : null;
+        const before: ExtendedCellValue = event.previousValue !== undefined
+          ? event.previousValue
+          : (this._beforeMap.get(key) ?? null);
+
+        if (event.previousFormula !== event.cell.formula) {
+          this._ops.push({
+            op: 'setCellContent',
+            row,
+            col,
+            before: { value: before, formula: event.previousFormula },
+            after: { value: event.cell.value, formula: event.cell.formula },
+          });
+          break;
+        }
 
         if (event.cell.value === null || event.cell.value === undefined) {
           this._ops.push({ op: 'clearCell', row, col, before });
@@ -224,7 +257,7 @@ export class PatchRecorder {
         const styleKey = `${row}:${col}:style`;
         const before: CellStyle | undefined = this._beforeStyleMap.has(styleKey)
           ? this._beforeStyleMap.get(styleKey)
-          : undefined;
+          : event.previousStyle;
         // Deep-clone the after-style to detach from Worksheet's internal ref
         const after = event.style !== undefined ? deepCloneStyle(event.style) : undefined;
         this._ops.push({ op: 'setCellStyle', row, col, before, after } as SetCellStyleOp);

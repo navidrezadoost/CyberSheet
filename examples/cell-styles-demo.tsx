@@ -23,6 +23,7 @@ import { createRoot } from 'react-dom/client';
 import { ExcelApp } from '@cyber-sheet/react';
 import { Workbook, Worksheet, CommandManager, FormattingController } from '@cyber-sheet/core';
 import type { Address } from '@cyber-sheet/core';
+import { rejectR1ExampleInitialization } from './r1-initialization-gate';
 
 /**
  * Demo Instructions Overlay
@@ -131,6 +132,7 @@ function CellStylesDemo() {
 
   // Create sample workbook
   const workbook = React.useMemo(() => {
+    rejectR1ExampleInitialization('Cell styles demo', 'R2 initial cell content and R5 styles');
     const wb = new Workbook();
     
     // Sheet 1: Financial Report

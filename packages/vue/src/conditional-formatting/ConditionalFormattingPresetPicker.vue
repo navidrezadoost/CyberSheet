@@ -87,22 +87,36 @@
         class="cf-preset-picker__popular-grid"
         role="list"
       >
-        <button
+        <div
           v-for="preset in popularPresets"
           :key="preset.id"
           role="listitem"
-          @click="handlePresetClick(preset)"
-          @keydown="handlePopularPresetKeyDown"
-          :class="[
-            'cf-preset-picker__popular-card',
-            { 'cf-preset-picker__popular-card--selected': selectedPresetId === preset.id }
-          ]"
           :aria-label="`${preset.name}: ${preset.description}`"
         >
-          <div class="cf-preset-picker__popular-icon">{{ getPresetIcon(preset) }}</div>
-          <div class="cf-preset-picker__popular-name">{{ preset.name }}</div>
-        </button>
+          <button
+            @click="handlePresetClick(preset)"
+            @keydown="handlePopularPresetKeyDown"
+            :class="[
+              'cf-preset-picker__popular-card',
+              { 'cf-preset-picker__popular-card--selected': selectedPresetId === preset.id }
+            ]"
+            :aria-label="`${preset.name}: ${preset.description}`"
+          >
+            <div class="cf-preset-picker__popular-icon">{{ getPresetIcon(preset) }}</div>
+            <div class="cf-preset-picker__popular-name">{{ preset.name }}</div>
+          </button>
+        </div>
       </div>
+    </div>
+
+    <!-- Status announcement for screen readers -->
+    <div
+      v-if="enableA11y"
+      role="status"
+      aria-live="polite"
+      class="cf-preset-picker__sr-only"
+    >
+      {{ filteredPresets.length }} preset{{ filteredPresets.length !== 1 ? 's' : '' }} available
     </div>
 
     <!-- Main Preset Grid -->
@@ -113,46 +127,38 @@
       :aria-rowcount="Math.ceil(filteredPresets.length / 2)"
       aria-colcount="2"
     >
-      <!-- Status announcement for screen readers -->
-      <div 
-        v-if="enableA11y"
-        role="status" 
-        aria-live="polite" 
-        class="cf-preset-picker__sr-only"
-      >
-        {{ filteredPresets.length }} preset{{ filteredPresets.length !== 1 ? 's' : '' }} available
-      </div>
-
-      <button
-        v-for="(preset, index) in filteredPresets"
-        :key="preset.id"
-        :data-preset-id="preset.id"
-        role="gridcell"
-        @click="handlePresetClick(preset)"
-        @keydown="(e) => handlePresetKeyDown(e, preset, index)"
-        :class="[
-          'cf-preset-picker__card',
-          { 'cf-preset-picker__card--selected': selectedPresetId === preset.id }
-        ]"
-        :tabindex="selectedPresetId === preset.id ? 0 : -1"
-        :aria-label="`${preset.name}: ${preset.description}`"
-        :aria-selected="selectedPresetId === preset.id"
-      >
-        <div class="cf-preset-picker__card-icon">{{ getPresetIcon(preset) }}</div>
-        <div class="cf-preset-picker__card-content">
-          <div class="cf-preset-picker__card-name">{{ preset.name }}</div>
-          <div class="cf-preset-picker__card-description">{{ preset.description }}</div>
-          <div v-if="preset.tags && preset.tags.length > 0" class="cf-preset-picker__card-tags">
-            <span
-              v-for="tag in preset.tags"
-              :key="tag"
-              class="cf-preset-picker__card-tag"
-            >
-              {{ tag }}
-            </span>
+      <div v-for="(row, rowIndex) in presetRows" :key="rowIndex" role="row">
+        <button
+          v-for="(preset, columnIndex) in row"
+          :key="preset.id"
+          :data-preset-id="preset.id"
+          role="gridcell"
+          @click="handlePresetClick(preset)"
+          @keydown="(e) => handlePresetKeyDown(e, preset, rowIndex * 2 + columnIndex)"
+          :class="[
+            'cf-preset-picker__card',
+            { 'cf-preset-picker__card--selected': selectedPresetId === preset.id }
+          ]"
+          :tabindex="selectedPresetId === preset.id ? 0 : -1"
+          :aria-label="`${preset.name}: ${preset.description}`"
+          :aria-selected="selectedPresetId === preset.id"
+        >
+          <div class="cf-preset-picker__card-icon">{{ getPresetIcon(preset) }}</div>
+          <div class="cf-preset-picker__card-content">
+            <div class="cf-preset-picker__card-name">{{ preset.name }}</div>
+            <div class="cf-preset-picker__card-description">{{ preset.description }}</div>
+            <div v-if="preset.tags && preset.tags.length > 0" class="cf-preset-picker__card-tags">
+              <span
+                v-for="tag in preset.tags"
+                :key="tag"
+                class="cf-preset-picker__card-tag"
+              >
+                {{ tag }}
+              </span>
+            </div>
           </div>
-        </div>
-      </button>
+        </button>
+      </div>
     </div>
 
     <!-- Footer -->
@@ -211,13 +217,21 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Controller instance (created once)
 const controller = new PresetPickerController();
+const initialState = controller.getState();
 
 // Reactive state
-const selectedPresetId: Ref<string | null> = ref(null);
-const selectedCategory: Ref<PresetCategory | 'all'> = ref('all');
-const searchQuery: Ref<string> = ref('');
-const filteredPresets: Ref<CFPreset[]> = ref([]);
-const popularPresets: Ref<CFPreset[]> = ref([]);
+const selectedPresetId: Ref<string | null> = ref(initialState.selectedPresetId);
+const selectedCategory: Ref<PresetCategory | 'all'> = ref(initialState.selectedCategory);
+const searchQuery: Ref<string> = ref(initialState.searchQuery);
+const filteredPresets: Ref<CFPreset[]> = ref(initialState.filteredPresets);
+const popularPresets: Ref<CFPreset[]> = ref(controller.getPopularPresets(6));
+const presetRows = computed(() => {
+  const rows: CFPreset[][] = [];
+  for (let index = 0; index < filteredPresets.value.length; index += 2) {
+    rows.push(filteredPresets.value.slice(index, index + 2));
+  }
+  return rows;
+});
 
 // Refs for accessibility
 const containerRef = ref<HTMLDivElement | null>(null);

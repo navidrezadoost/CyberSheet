@@ -20,11 +20,11 @@ export type ConditionalFormattingPresetPickerProps = {
 
 /**
  * ConditionalFormattingPresetPicker - React Component
- * 
+ *
  * Preset picker UI with categories, search, and thumbnails
- * 
+ *
  * This is a THIN ADAPTER around PresetPickerController (framework-agnostic core)
- * 
+ *
  * Accessibility Features (WCAG 2.1 AA):
  * - Keyboard navigation (Tab, Arrow keys, Enter, Escape)
  * - ARIA labels, roles, and descriptions
@@ -43,20 +43,20 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 	const [state, setState] = useState(controller.getState());
 	const [categories, setCategories] = useState(controller.getCategories());
 	const [popularPresets, setPopularPresets] = useState(controller.getPopularPresets(6));
-	
+
 	// Refs for accessibility
 	const containerRef = useRef<HTMLDivElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 	const announcerRef = useRef<HTMLDivElement>(null);
 	const applyButtonRef = useRef<HTMLButtonElement>(null);
-	
+
 	// Screen reader announcement helper
 	const announce = (message: string, priority: 'polite' | 'assertive' = 'polite') => {
 		if (!enableA11y || !announcerRef.current) return;
-		
+
 		announcerRef.current.setAttribute('aria-live', priority);
 		announcerRef.current.textContent = message;
-		
+
 		// Clear after 1 second to allow re-announcing same message
 		setTimeout(() => {
 			if (announcerRef.current) {
@@ -70,7 +70,7 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 		const unsubscribe = controller.on('*', () => {
 			const newState = controller.getState();
 			setState(newState);
-			
+
 			// Announce filter changes
 			if (enableA11y) {
 				if (newState.filteredPresets.length === 0) {
@@ -84,7 +84,7 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 	const handleCategoryChange = (category: PresetCategory | 'all') => {
 		controller.selectCategory(category);
 		setCategories(controller.getCategories());
-		
+
 		// Announce category change
 		const categoryLabel = categories.find((c) => c.id === category)?.label || 'All';
 		const count = controller.getState().filteredPresets.length;
@@ -93,7 +93,7 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 
 	const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		controller.setSearchQuery(e.target.value);
-		
+
 		// Announce search results after a delay (debounced announcement)
 		const query = e.target.value;
 		setTimeout(() => {
@@ -107,10 +107,10 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 	const handlePresetClick = (preset: CFPreset) => {
 		controller.selectPreset(preset.id);
 		onPresetSelect(preset);
-		
+
 		// Announce selection
 		announce(`Selected preset: ${preset.name}`, 'polite');
-		
+
 		// Move focus to apply button if available
 		if (onApply && applyButtonRef.current) {
 			applyButtonRef.current.focus();
@@ -124,13 +124,13 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 			announce(`Applied ${selectedPreset.name} preset`, 'assertive');
 		}
 	};
-	
+
 	// Keyboard navigation for preset grid
 	const handlePresetKeyDown = (e: React.KeyboardEvent, preset: CFPreset, index: number) => {
 		if (!enableA11y) return;
-		
+
 		const presets = state.filteredPresets;
-		
+
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
 			handlePresetClick(preset);
@@ -165,11 +165,11 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 			lastElement?.focus();
 		}
 	};
-	
+
 	// Keyboard navigation for category buttons
 	const handleCategoryKeyDown = (e: React.KeyboardEvent, index: number) => {
 		if (!enableA11y) return;
-		
+
 		if (e.key === 'ArrowRight') {
 			e.preventDefault();
 			const nextIndex = (index + 1) % categories.length;
@@ -195,6 +195,7 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 	return (
 		<div
 			ref={containerRef}
+			className="cf-preset-picker"
 			role="region"
 			aria-label="Conditional Formatting Preset Picker"
 			aria-describedby="picker-description"
@@ -209,7 +210,7 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 			}}
 		>
 			{/* Screen Reader Announcer (hidden) */}
-			<div
+			{enableA11y && <div
 				ref={announcerRef}
 				role="status"
 				aria-live="polite"
@@ -225,32 +226,32 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 					whiteSpace: 'nowrap',
 					border: 0,
 				}}
-			/>
-			
+				></div>}
+
 			{/* Header */}
 			<div style={{ marginBottom: '16px' }}>
-				<h3 
+				<h3
 					id="picker-title"
 					style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 600 }}
 				>
 					Conditional Formatting Presets
 				</h3>
-				<p 
+				<p
 					id="picker-description"
 					style={{ margin: 0, fontSize: '13px', color: '#666' }}
 				>
 					Choose from 20+ Excel-style presets to quickly format your data
 				</p>
-			</div>
+				</div>
 
 			{/* Search */}
 			<div style={{ marginBottom: '16px' }}>
-				<label 
-					htmlFor="preset-search" 
-					style={{ 
-						display: 'block', 
-						fontSize: '12px', 
-						fontWeight: 600, 
+				<label
+					htmlFor="preset-search"
+					style={{
+						display: 'block',
+						fontSize: '12px',
+						fontWeight: 600,
 						marginBottom: '4px',
 						color: '#666',
 					}}
@@ -263,6 +264,7 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 					type="text"
 					role="searchbox"
 					placeholder="Search by name, category, or tags..."
+					tabIndex={0}
 					value={state.searchQuery}
 					onChange={handleSearchChange}
 					aria-label="Search presets by name, category, or tags"
@@ -279,11 +281,12 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 			</div>
 
 			{/* Categories */}
-			<div 
-				role="toolbar" 
+			<div
+				role="toolbar"
 				aria-label="Category filters"
 				style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}
 			>
+				<div role="radiogroup" aria-label="Preset categories" style={{ display: 'contents' }}>
 				{categories.map((cat, index) => (
 					<button
 						key={cat.id}
@@ -316,25 +319,26 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 						{cat.label} <span aria-hidden="true">({cat.count})</span>
 					</button>
 				))}
+				</div>
 			</div>
 
 			{/* Popular Presets (Quick Access) */}
 			{showPopular && state.selectedCategory === 'all' && state.searchQuery === '' && (
-				<section 
+				<div
+					role="group"
 					aria-label="Popular presets"
 					style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid #e0e0e0' }}
 				>
 					<h4 style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', margin: '0 0 8px 0', color: '#666' }}>
 						<span aria-label="Star icon">⭐</span> Popular Presets
 					</h4>
-					<div 
+					<div
 						role="list"
 						style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}
 					>
-						{popularPresets.map((preset, index) => (
+						{popularPresets.map((preset) => (
+							<div key={preset.id} role="listitem" aria-label={`${preset.name}: ${preset.description}`}>
 							<button
-								key={preset.id}
-								role="listitem"
 								onClick={() => handlePresetClick(preset)}
 								onKeyDown={(e) => {
 									if (e.key === 'Enter' || e.key === ' ') {
@@ -342,8 +346,8 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 										handlePresetClick(preset);
 									}
 								}}
-								aria-selected={state.selectedPresetId === preset.id}
-								aria-label={`${preset.name}: ${preset.description}`}
+								aria-pressed={state.selectedPresetId === preset.id}
+								aria-label={`Select ${preset.name} preset`}
 								style={{
 									padding: '8px',
 									border: state.selectedPresetId === preset.id ? '2px solid #007acc' : '1px solid #ddd',
@@ -371,9 +375,10 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 								</div>
 								<div style={{ fontWeight: 500, fontSize: '11px' }}>{preset.name}</div>
 							</button>
+							</div>
 						))}
 					</div>
-				</section>
+				</div>
 			)}
 
 			{/* Preset Grid */}
@@ -392,16 +397,16 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 					marginBottom: '16px',
 				}}
 			>
-				{state.filteredPresets.map((preset, index) => {
-					const rowIndex = Math.floor(index / 2) + 1;
-					const colIndex = (index % 2) + 1;
-					
-					return (
+				{Array.from({ length: Math.ceil(state.filteredPresets.length / 2) }, (_, row) => (
+					<div key={`row-${row + 1}`} role="row" aria-rowindex={row + 1} style={{ display: 'contents' }}>
+					{state.filteredPresets.slice(row * 2, row * 2 + 2).map((preset, column) => {
+						const index = row * 2 + column;
+						const colIndex = column + 1;
+						return (
 						<button
 							key={preset.id}
 							data-preset-id={preset.id}
 							role="gridcell"
-							aria-rowindex={rowIndex}
 							aria-colindex={colIndex}
 							aria-selected={state.selectedPresetId === preset.id}
 							aria-describedby={`preset-${preset.id}-desc`}
@@ -446,7 +451,7 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 							</div>
 
 							{/* Preset Description */}
-							<div 
+							<div
 								id={`preset-${preset.id}-desc`}
 								style={{ fontSize: '11px', color: '#666', textAlign: 'center' }}
 							>
@@ -472,13 +477,15 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 								))}
 							</div>
 						</button>
-					);
-				})}
+						);
+					})}
+					</div>
+				))}
 			</div>
 
 			{/* No Results */}
 			{state.filteredPresets.length === 0 && (
-				<div 
+				<div
 					role="status"
 					aria-live="polite"
 					style={{ textAlign: 'center', padding: '32px', color: '#999', fontSize: '13px' }}
@@ -489,9 +496,11 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 
 			{/* Footer */}
 			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-				<div 
+					<div
 					id="preset-count"
-					aria-live="polite"
+						role={enableA11y ? 'status' : undefined}
+						aria-label={enableA11y ? `${state.filteredPresets.length} presets available` : undefined}
+						aria-live={enableA11y ? 'polite' : undefined}
 					aria-atomic="true"
 					style={{ fontSize: '12px', color: '#666' }}
 				>
@@ -503,9 +512,9 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 						onClick={handleApplyClick}
 						disabled={!state.selectedPresetId}
 						aria-label={
-							state.selectedPresetId 
-								? `Apply ${controller.getSelectedPreset()?.name} preset to target range` 
-								: 'Select a preset to apply'
+							state.selectedPresetId
+								? `Apply preset: ${controller.getSelectedPreset()?.name} to target range`
+								: 'Apply preset (select a preset first)'
 						}
 						aria-describedby="apply-hint"
 						style={{
@@ -534,8 +543,8 @@ export const ConditionalFormattingPresetPicker: React.FC<ConditionalFormattingPr
 						Apply Preset
 					</button>
 				)}
-				<span 
-					id="apply-hint" 
+				<span
+					id="apply-hint"
 					style={{
 						position: 'absolute',
 						width: '1px',

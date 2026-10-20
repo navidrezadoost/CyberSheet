@@ -193,32 +193,32 @@ class DualExecutionHarness {
     try {
       switch (op.type) {
         case 'insertCol':
-          const insertCmd = new InsertColumnCommand(this.worksheet, op.k);
+          const insertCmd = new InsertColumnCommand(this.worksheet, op.k + 1);
           insertCmd.execute();
           this.commandStack.push(insertCmd);
           this.redoStack = []; // Clear redo stack
-          if (!this.hasUsedUndo) this.naive.insertColumn(op.k);
+          if (!this.hasUsedUndo) this.naive.insertColumn(op.k + 1);
           break;
 
         case 'deleteCol':
-          const deleteCmd = new DeleteColumnCommand(this.worksheet, op.k);
+          const deleteCmd = new DeleteColumnCommand(this.worksheet, op.k + 1);
           deleteCmd.execute();
           this.commandStack.push(deleteCmd);
           this.redoStack = [];
-          if (!this.hasUsedUndo) this.naive.deleteColumn(op.k);
+          if (!this.hasUsedUndo) this.naive.deleteColumn(op.k + 1);
           break;
 
         case 'setValue':
-          this.worksheet.setCellValue({ row: op.row, col: op.col }, op.value);
-          if (!this.hasUsedUndo) this.naive.setCellValue({ row: op.row, col: op.col }, op.value);
+          this.worksheet.setCellValue({ row: op.row + 1, col: op.col + 1 }, op.value);
+          if (!this.hasUsedUndo) this.naive.setCellValue({ row: op.row + 1, col: op.col + 1 }, op.value);
           break;
 
         case 'setFormula':
           // Set formula with '=' prefix for worksheet API
-          this.worksheet.setCellValue({ row: op.row, col: op.col }, `=${op.formula.startsWith('=') ? op.formula.slice(1) : op.formula}`);
+          this.worksheet.setCellValue({ row: op.row + 1, col: op.col + 1 }, `=${op.formula.startsWith('=') ? op.formula.slice(1) : op.formula}`);
           if (!this.hasUsedUndo) {
             // Naive sheet expects formula with '=' prefix
-            this.naive.setCellValue({ row: op.row, col: op.col }, `=${op.formula.startsWith('=') ? op.formula.slice(1) : op.formula}`);
+            this.naive.setCellValue({ row: op.row + 1, col: op.col + 1 }, `=${op.formula.startsWith('=') ? op.formula.slice(1) : op.formula}`);
           }
           break;
 
@@ -260,8 +260,8 @@ class DualExecutionHarness {
         // Compare states
         for (let r = 0; r < 10; r++) {
           for (let c = 0; c < 12; c++) {
-            const optVal = this.worksheet.getCellValue({ row: r, col: c });
-            const naiveVal = this.naive.getCellValue({ row: r, col: c });
+            const optVal = this.worksheet.getCellValue({ row: r + 1, col: c + 1 });
+            const naiveVal = this.naive.getCellValue({ row: r + 1, col: c + 1 });
             if (optVal !== naiveVal) {
               return {
                 valid: false,

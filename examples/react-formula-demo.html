@@ -296,6 +296,10 @@
         import React from 'https://esm.sh/react@18.2.0';
         import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
         import { Workbook, FormulaController } from './packages/core/dist/index.js';
+
+        document.getElementById('root').textContent =
+            'Formula demo unavailable: initial cell content and formulas require the R2 journal. No workbook was created or published.';
+        throw new Error('Formula demo initialization is unavailable at the R1 checkpoint (R2 required).');
         
         const { useState, useEffect, useRef } = React;
 

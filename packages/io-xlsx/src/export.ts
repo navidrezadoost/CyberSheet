@@ -12,7 +12,20 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import { zipSync, strToU8 } from 'fflate';
-import { Workbook, Worksheet, CellStyle } from '@cyber-sheet/core';
+import { Workbook, Worksheet, CellStyle, WorkbookSheetView } from '@cyber-sheet/core';
+
+type ReadableSheet = WorkbookSheetView | Worksheet;
+interface XLSXExportSource {
+  getSheetNames(): string[];
+  getSheet(name: string): ReadableSheet | undefined;
+}
+
+function exportSource(source: Workbook | Worksheet): XLSXExportSource {
+  if (source instanceof Worksheet) {
+    return { getSheetNames: () => [source.name], getSheet: (name) => name === source.name ? source : undefined };
+  }
+  return source;
+}
 
 /**
  * Export workbook to XLSX ArrayBuffer.
@@ -20,26 +33,29 @@ import { Workbook, Worksheet, CellStyle } from '@cyber-sheet/core';
  * Reads canonical styles via getCellStyle() and projects to Excel XML.
  * Never touches cell.style directly - enforces access discipline.
  */
-export async function exportXLSX(workbook: Workbook): Promise<ArrayBuffer> {
+export async function exportXLSX(source: Workbook | Worksheet): Promise<ArrayBuffer> {
+  const workbook = exportSource(source);
   // Collect all unique canonical styles (reference-based deduplication)
   const styleMap = new Map<CellStyle, number>(); // canonical reference → xf index
-  const styles: CellStyle[] = [];
+  // OOXML reserves cell format index 0 for the default style. Keep the default
+  // entry even when the sheet has no explicit cell styles so mapped styles
+  // always use a valid, nonzero style index.
+  const styles: CellStyle[] = [{}];
   
   // Scan all sheets for styles
   for (const sheetName of workbook.getSheetNames()) {
     const sheet = workbook.getSheet(sheetName);
     if (!sheet) continue;
     
-    for (let row = 1; row <= sheet.rowCount; row++) {
-      for (let col = 1; col <= sheet.colCount; col++) {
-        // Discipline: Read via getCellStyle() only
-        const style = sheet.getCellStyle({ row, col });
-        if (style && !styleMap.has(style)) {
-          styleMap.set(style, styles.length);
-          styles.push(style); // Store canonical reference
-        }
+    sheet.forEachNonEmptyCell((row, col) => {
+      // Discipline: Read via getCellStyle() only. Iterating stored cells keeps
+      // widely separated addresses proportional to populated cells, not area.
+      const style = sheet.getCellStyle({ row, col });
+      if (style && !styleMap.has(style)) {
+        styleMap.set(style, styles.length);
+        styles.push(style); // Store canonical reference
       }
-    }
+    });
   }
   
   // Generate XLSX XML parts
@@ -81,7 +97,7 @@ interface XLSXParts {
 }
 
 function generateXLSXParts(
-  workbook: Workbook,
+  workbook: XLSXExportSource,
   styles: CellStyle[],
   styleMap: Map<CellStyle, number>
 ): XLSXParts {
@@ -103,7 +119,7 @@ function generateXLSXParts(
   return parts;
 }
 
-function generateWorkbookXML(workbook: Workbook): string {
+function generateWorkbookXML(workbook: XLSXExportSource): string {
   const sheetNames = workbook.getSheetNames();
   const sheetsXml = sheetNames
     .map((name, idx) => {
@@ -118,7 +134,7 @@ function generateWorkbookXML(workbook: Workbook): string {
 </workbook>`;
 }
 
-function generateWorkbookRels(workbook: Workbook): string {
+function generateWorkbookRels(workbook: XLSXExportSource): string {
   const sheetNames = workbook.getSheetNames();
   const relsXml = sheetNames
     .map((_, idx) => {
@@ -281,47 +297,73 @@ function styleToAlignmentXML(style: CellStyle): string {
   if (style.rotation !== undefined) attrs.push(`textRotation="${style.rotation}"`);
   
   // Phase 1 UI: Export semantic indent value (not render pixels)
-  if ((style as any).indent !== undefined) {
-    attrs.push(`indent="${(style as any).indent}"`);
+  if (typeof style.indent === 'number' && style.indent > 0) {
+    attrs.push(`indent="${style.indent}"`);
   }
   
   return attrs.length > 0 ? `<alignment ${attrs.join(' ')}/>` : '';
 }
 
-function generateSheetXML(sheet: Worksheet, styleMap: Map<CellStyle, number>): string {
+function generateSheetXML(sheet: ReadableSheet, styleMap: Map<CellStyle, number>): string {
   const rows: string[] = [];
-  
-  for (let row = 1; row <= sheet.rowCount; row++) {
-    const cells: string[] = [];
-    
-    for (let col = 1; col <= sheet.colCount; col++) {
-      const addr = { row, col };
-      const value = sheet.getCellValue(addr);
-      
-      // Discipline: Read via getCellStyle() only
-      const style = sheet.getCellStyle(addr);
-      const styleIdx = style ? styleMap.get(style) : undefined;
-      
-      if (value !== null || styleIdx !== undefined) {
-        const cellRef = colToA1(col) + row;
-        const styleAttr = styleIdx !== undefined ? ` s="${styleIdx}"` : '';
-        
-        if (typeof value === 'string') {
-          cells.push(`<c r="${cellRef}"${styleAttr} t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`);
-        } else if (typeof value === 'number') {
-          cells.push(`<c r="${cellRef}"${styleAttr}><v>${value}</v></c>`);
-        } else if (typeof value === 'boolean') {
-          cells.push(`<c r="${cellRef}"${styleAttr} t="b"><v>${value ? '1' : '0'}</v></c>`);
-        } else if (styleIdx !== undefined) {
-          // Empty cell with style
-          cells.push(`<c r="${cellRef}"${styleAttr}/>`);
-        }
+  const cellsByRow = new Map<number, Array<{ col: number; xml: string }>>();
+  sheet.forEachNonEmptyCell((row, col, cell) => {
+    const addr = { row, col };
+    const value = sheet.getCellValue(addr);
+    const formula = cell.formula as string | undefined;
+
+    // Discipline: Read via getCellStyle() only
+    const style = sheet.getCellStyle(addr);
+    const styleIdx = style ? styleMap.get(style) : undefined;
+    if (value === null && styleIdx === undefined && !formula) return;
+
+    const cellRef = colToA1(col) + row;
+    const styleAttr = styleIdx !== undefined ? ` s="${styleIdx}"` : '';
+    let cellXml: string;
+    if (formula) {
+      const formulaXml = `<f>${escapeXml(formula.startsWith('=') ? formula.slice(1) : formula)}</f>`;
+      if (typeof value === 'string') {
+        cellXml = `<c r="${cellRef}"${styleAttr} t="str">${formulaXml}<v>${escapeXml(value)}</v></c>`;
+      } else if (typeof value === 'number') {
+        cellXml = `<c r="${cellRef}"${styleAttr}>${formulaXml}<v>${value}</v></c>`;
+      } else if (typeof value === 'boolean') {
+        cellXml = `<c r="${cellRef}"${styleAttr} t="b">${formulaXml}<v>${value ? '1' : '0'}</v></c>`;
+      } else if (value === null || value === undefined) {
+        cellXml = `<c r="${cellRef}"${styleAttr}>${formulaXml}<v></v></c>`;
+      } else {
+        cellXml = `<c r="${cellRef}"${styleAttr} t="str">${formulaXml}<v>${escapeXml(String(value))}</v></c>`;
       }
+    } else if (typeof value === 'string') {
+      const preserveSpace = /^[\t\n\r ]|[\t\n\r ]$|[\t\n\r]/.test(value)
+        ? ' xml:space="preserve"'
+        : '';
+      cellXml = `<c r="${cellRef}"${styleAttr} t="inlineStr"><is><t${preserveSpace}>${escapeXml(value)}</t></is></c>`;
+    } else if (typeof value === 'number') {
+      cellXml = `<c r="${cellRef}"${styleAttr}><v>${value}</v></c>`;
+    } else if (typeof value === 'boolean') {
+      cellXml = `<c r="${cellRef}"${styleAttr} t="b"><v>${value ? '1' : '0'}</v></c>`;
+    } else if (styleIdx !== undefined) {
+      // Empty cell with style
+      cellXml = `<c r="${cellRef}"${styleAttr}/>`;
+    } else {
+      return;
     }
-    
-    if (cells.length > 0) {
-      rows.push(`<row r="${row}">${cells.join('')}</row>`);
-    }
+
+    const rowCells = cellsByRow.get(row) ?? [];
+    rowCells.push({ col, xml: cellXml });
+    cellsByRow.set(row, rowCells);
+  });
+
+  if (cellsByRow.size === 0) {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData></sheetData>
+</worksheet>`;
+  }
+
+  for (const [row, cells] of [...cellsByRow].sort(([a], [b]) => a - b)) {
+    cells.sort((a, b) => a.col - b.col);
+    rows.push(`<row r="${row}">${cells.map(({ xml }) => xml).join('')}</row>`);
   }
   
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -370,7 +412,7 @@ function colToA1(col: number): string {
   return s;
 }
 
-function generateContentTypesXML(workbook: Workbook): string {
+function generateContentTypesXML(workbook: XLSXExportSource): string {
   const sheetNames = workbook.getSheetNames();
   const overrides = sheetNames
     .map((_, idx) => `<Override PartName="/xl/worksheets/sheet${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`)

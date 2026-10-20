@@ -145,6 +145,7 @@ import {
 import { TransactionContext, TransactionError, type CommitResult } from './transaction';
 import { PatchRecorder } from './patch/PatchRecorder';
 import { type WorksheetPatch } from './patch/WorksheetPatch';
+import type { CycleDiagnostic } from './dag/DependencyGraph';
 import type { Address, CellValue, ExtendedCellValue } from './types';
 
 // ---------------------------------------------------------------------------
@@ -188,6 +189,7 @@ export interface FormulasEvaluatedEvent {
   type: 'formulasEvaluated';
   count: number;
   hasCycles: boolean;
+  cycles: CycleDiagnostic[];
 }
 
 export type EngineEvent = CellsChangedEvent | FormulasEvaluatedEvent;
@@ -232,7 +234,15 @@ export class SpreadsheetEngine {
         });
       },
       onComplete: (task: ScheduledTask, value: unknown) => {
-        this._ws.setCellValue(task, value as CellValue);
+        // A scheduled address can be a changed input cell as well as a formula.
+        // The evaluator returns null for a non-formula cell, but that must never
+        // be written back over the user's value.
+        const current = this._ws.getCell(task);
+        if (!current?.formula) return;
+        this._ws.applyCalculatedValue(
+          task,
+          value instanceof Error ? value.message as CellValue : value as CellValue,
+        );
       },
     });
   }
@@ -266,6 +276,7 @@ export class SpreadsheetEngine {
     }
 
     this._state = ExecutionState.MUTATING;
+    let formulaResultBatchOpen = false;
 
     try {
       // Begin transaction
@@ -273,8 +284,13 @@ export class SpreadsheetEngine {
 
       // Execute callback (mutations allowed)
       // CRITICAL: Reject async callbacks to prevent mutations after state transition
-      const result = callback(this._ws);
+      const result: unknown = callback(this._ws);
       if (result && typeof result === 'object' && 'then' in result) {
+        // Keep the mutation guard active until the rejected callback has
+        // finished. Async functions continue after their first await even
+        // though their returned promise is rejected by this API; releasing
+        // the guard first turns that continuation into an unhandled error.
+        await Promise.resolve(result).catch(() => undefined);
         throw new ExecutionError(
           'ILLEGAL_STATE',
           'engine.run() callback must be synchronous. Async callbacks create '
@@ -293,13 +309,21 @@ export class SpreadsheetEngine {
       // Extract dirty addresses from patch
       const dirtyAddresses = this._extractDirtyAddresses(patch);
 
-      // Schedule dirty cells (topological order from DependencyGraph would go here)
-      for (const addr of dirtyAddresses) {
-        this._scheduler.schedule(addr, TaskPriority.High);
-      }
+      // The worksheet graph owns invalidation and topological ordering. Keep
+      // the async scheduler as the execution mechanism, fed only affected
+      // formula cells in dependency order.
+      // Start a fresh generation for every committed transaction so formulas
+      // enqueued in an earlier transaction can be scheduled again.
+      this._scheduler.invalidate();
+      const recalcPlan = this._ws.getRecalculationPlan();
+      this._ws.beginFormulaResultEventBatch();
+      formulaResultBatchOpen = true;
+      this._scheduler.scheduleAll(recalcPlan.addresses, TaskPriority.High);
 
       // Flush scheduler (evaluate all formulas)
       await this._scheduler.flush();
+      this._ws.applyCircularReferenceResults(recalcPlan.cycles);
+      this._ws.completeScheduledRecalculation();
 
       // Emit events (AFTER recompute completes — E4)
       this._emit({
@@ -311,11 +335,15 @@ export class SpreadsheetEngine {
       this._emit({
         type: 'formulasEvaluated',
         count: this._scheduler.metrics.completed,
-        hasCycles: false, // TODO: wire from DependencyGraph
+        hasCycles: recalcPlan.cycles.length > 0,
+        cycles: recalcPlan.cycles,
       });
 
-      // Return to IDLE
+      // Derived-result listeners run only after all graph and scheduler state
+      // is stable and the engine can accept a subsequent scheduled transaction.
       this._state = ExecutionState.IDLE;
+      this._ws.endFormulaResultEventBatch(true);
+      formulaResultBatchOpen = false;
 
     } catch (err) {
       // Rollback on error
@@ -329,6 +357,10 @@ export class SpreadsheetEngine {
 
       // Return to IDLE
       this._state = ExecutionState.IDLE;
+      if (formulaResultBatchOpen) {
+        this._ws.endFormulaResultEventBatch(false);
+        formulaResultBatchOpen = false;
+      }
 
       throw err;
     }
@@ -340,6 +372,11 @@ export class SpreadsheetEngine {
    */
   isMutating(): boolean {
     return this._state === ExecutionState.MUTATING;
+  }
+
+  /** Used by Worksheet to authorize internal formula-result writes. */
+  isComputing(): boolean {
+    return this._state === ExecutionState.COMPUTING;
   }
 
   /**
@@ -401,7 +438,7 @@ export class SpreadsheetEngine {
     const seen = new Set<string>();
 
     for (const op of patch.ops) {
-      if (op.op === 'setCellValue' || op.op === 'clearCell') {
+      if (op.op === 'setCellValue' || op.op === 'clearCell' || op.op === 'setCellContent') {
         const key = `${op.row},${op.col}`;
         if (!seen.has(key)) {
           seen.add(key);

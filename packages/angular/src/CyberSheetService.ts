@@ -6,7 +6,7 @@
 
 import { Injectable } from '@angular/core';
 import {
-  Worksheet,
+  WorkbookSheetView,
   CollaborationEngine,
   FormulaEngine
 } from '@cyber-sheet/core';
@@ -27,7 +27,7 @@ export class CyberSheetService {
       collaborationUrl?: string;
     } = {}
   ): Promise<{
-    worksheet: Worksheet;
+    worksheet: WorkbookSheetView;
     renderer: CanvasRenderer;
     formulaEngine?: FormulaEngine;
     collaboration?: CollaborationEngine;
@@ -35,17 +35,15 @@ export class CyberSheetService {
     const { Workbook } = await import('@cyber-sheet/core');
     const { CanvasRenderer } = await import('@cyber-sheet/renderer-canvas');
 
-    const workbook = new Workbook();
-    const worksheet = workbook.addSheet('Sheet1');
-
-    // Load initial data
-    if (options.data) {
-      options.data.forEach((row, rowIndex) => {
-        row.forEach((value, colIndex) => {
-          worksheet.setCellValue({ row: rowIndex, col: colIndex }, value);
-        });
-      });
+    if (options.data?.some((row) => row.length > 0)) {
+      throw new Error('Initial workbook cell data is unavailable until the R2 journal slice is authorized');
     }
+    if (options.enableCollaboration) {
+      throw new Error('Workbook collaboration writes are unavailable until their journal slice is authorized');
+    }
+    const workbook = Workbook.create({ sheets: [{ name: 'Sheet1' }] });
+    const worksheet = workbook.getSheet('Sheet1');
+    if (!worksheet) throw new Error('Workbook bootstrap failed to create Sheet1');
 
     const renderer = new CanvasRenderer(container, worksheet, {
       debug: false
@@ -57,13 +55,6 @@ export class CyberSheetService {
     if (options.enableFormulas) {
       const formulaEngine = new FormulaEngine();
       result.formulaEngine = formulaEngine;
-    }
-
-    // Enable collaboration
-    if (options.enableCollaboration && options.collaborationUrl) {
-      const collaboration = new CollaborationEngine(worksheet);
-      collaboration.connect(options.collaborationUrl);
-      result.collaboration = collaboration;
     }
 
     return result;

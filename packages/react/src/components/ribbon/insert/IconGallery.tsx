@@ -15,7 +15,7 @@ interface IconGalleryProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectIcon: (icon: IconDefinition) => void;
-  triggerRef: React.RefObject<HTMLElement>;
+  triggerRef: React.RefObject<HTMLElement | null>;
 }
 
 export const IconGallery: React.FC<IconGalleryProps> = ({

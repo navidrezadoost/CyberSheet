@@ -128,6 +128,10 @@ export function afterFormatControlApplied(
   drawingLayer: DrawingLayer,
   worksheet?: Worksheet,
 ): void {
+  if (worksheet?.isWorkbookOwned()) {
+    throw new Error('Workbook-owned drawing mutations are unavailable until their journal slice is authorized');
+  }
+
   const control = drawingLayer.getObject(objectId) as FormControlObject | undefined;
   if (!control || control.type !== 'formControl') return;
 

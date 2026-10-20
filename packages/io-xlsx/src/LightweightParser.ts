@@ -242,6 +242,15 @@ class StreamingXMLParser {
     while (pos < xml.length) {
       const start = xml.indexOf(openTag, pos);
       if (start === -1) break;
+
+      // Avoid matching a longer element name such as <sheets> while looking
+      // for <sheet>.
+      const nameEnd = start + openTag.length;
+      const boundary = xml[nameEnd];
+      if (boundary && !/[\s/>]/.test(boundary)) {
+        pos = nameEnd;
+        continue;
+      }
       
       // Find end of tag
       let end = xml.indexOf('>', start);

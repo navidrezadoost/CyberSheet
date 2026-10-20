@@ -1,4 +1,5 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { PresetPickerController } from '@cyber-sheet/cf-ui-core';
 import type { CFPreset, PresetCategory } from '@cyber-sheet/cf-ui-core';
 
@@ -8,166 +9,12 @@ import type { CFPreset, PresetCategory } from '@cyber-sheet/cf-ui-core';
  */
 
 interface CategoryWithCount {
-  value: PresetCategory;
+  value: PresetCategory | 'all';
   label: string;
   count: number;
 }
 
-@Component({
-  selector: 'cf-preset-picker',
-  template: `
-    <div 
-      #container
-      class="cf-preset-picker" 
-      [style.max-width.px]="maxWidth"
-      [attr.role]="enableA11y ? 'region' : null"
-      [attr.aria-label]="enableA11y ? 'Conditional Formatting Preset Picker' : null"
-      [attr.aria-describedby]="enableA11y ? 'cf-preset-picker-desc' : null"
-    >
-      <!-- Screen reader announcements -->
-      <div 
-        #announcer
-        [attr.aria-live]="enableA11y ? announcementPriority : null"
-        [attr.aria-atomic]="enableA11y ? 'true' : null"
-        class="cf-preset-picker__sr-only"
-      >
-        {{ announcementText }}
-      </div>
-
-      <!-- Header -->
-      <div class="cf-preset-picker__header">
-        <h3 class="cf-preset-picker__title">Conditional Formatting Presets</h3>
-        <p id="cf-preset-picker-desc" class="cf-preset-picker__description">
-          Choose from 20+ Excel-style presets to quickly format your data
-        </p>
-      </div>
-
-      <!-- Search -->
-      <div class="cf-preset-picker__search">
-        <input
-          #searchInput
-          type="text"
-          [value]="searchQuery"
-          (input)="handleSearchChange($event)"
-          placeholder="Search presets..."
-          class="cf-preset-picker__search-input"
-          [attr.role]="enableA11y ? 'searchbox' : null"
-          [attr.aria-label]="enableA11y ? 'Search presets' : null"
-          [attr.aria-controls]="enableA11y ? 'cf-preset-grid' : null"
-        />
-      </div>
-
-      <!-- Category Filters -->
-      <div 
-        class="cf-preset-picker__categories"
-        [attr.role]="enableA11y ? 'toolbar' : null"
-        [attr.aria-label]="enableA11y ? 'Category filters' : null"
-      >
-        <button
-          *ngFor="let cat of categories; let i = index"
-          (click)="handleCategoryChange(cat.value)"
-          (keydown)="enableA11y && handleCategoryKeyDown($event, i)"
-          [class.cf-preset-picker__category-btn--active]="selectedCategory === cat.value"
-          class="cf-preset-picker__category-btn"
-          [attr.role]="enableA11y ? 'radio' : null"
-          [attr.aria-checked]="enableA11y ? (selectedCategory === cat.value) : null"
-          [attr.tabindex]="enableA11y ? (selectedCategory === cat.value ? 0 : -1) : null"
-        >
-          {{ cat.label }}
-          <span 
-            class="cf-preset-picker__category-badge"
-            [attr.aria-label]="enableA11y ? (cat.count + ' presets') : null"
-          >
-            {{ cat.count }}
-          </span>
-        </button>
-      </div>
-
-      <!-- Popular Presets -->
-      <div
-        *ngIf="showPopular && selectedCategory === 'all' && !searchQuery && popularPresets.length > 0"
-        class="cf-preset-picker__popular"
-        [attr.role]="enableA11y ? 'list' : null"
-        [attr.aria-label]="enableA11y ? 'Popular presets' : null"
-      >
-        <h4 class="cf-preset-picker__popular-title">Popular Presets</h4>
-        <div class="cf-preset-picker__popular-grid">
-          <button
-            *ngFor="let preset of popularPresets; let i = index"
-            (click)="handlePresetClick(preset)"
-            (keydown)="enableA11y && handlePopularKeyDown($event, preset, i)"
-            [class.cf-preset-picker__popular-card--selected]="selectedPresetId === preset.id"
-            class="cf-preset-picker__popular-card"
-            [attr.role]="enableA11y ? 'listitem' : null"
-            [attr.aria-label]="enableA11y ? preset.name : null"
-            [attr.aria-selected]="enableA11y ? (selectedPresetId === preset.id) : null"
-            [attr.tabindex]="enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : null"
-          >
-            <div class="cf-preset-picker__popular-icon" aria-hidden="true">{{ getPresetIcon(preset) }}</div>
-            <div class="cf-preset-picker__popular-name">{{ preset.name }}</div>
-          </button>
-        </div>
-      </div>
-
-      <!-- Main Preset Grid -->
-      <div 
-        id="cf-preset-grid"
-        class="cf-preset-picker__grid"
-        [attr.role]="enableA11y ? 'grid' : null"
-        [attr.aria-label]="enableA11y ? 'Preset grid' : null"
-        [attr.aria-rowcount]="enableA11y ? Math.ceil(filteredPresets.length / 2) : null"
-        [attr.aria-colcount]="enableA11y ? 2 : null"
-      >
-        <button
-          *ngFor="let preset of filteredPresets; let i = index"
-          (click)="handlePresetClick(preset)"
-          (keydown)="enableA11y && handlePresetKeyDown($event, preset, i)"
-          [class.cf-preset-picker__card--selected]="selectedPresetId === preset.id"
-          class="cf-preset-picker__card"
-          [attr.role]="enableA11y ? 'gridcell' : null"
-          [attr.aria-label]="enableA11y ? (preset.name + '. ' + preset.description) : null"
-          [attr.aria-selected]="enableA11y ? (selectedPresetId === preset.id) : null"
-          [attr.aria-rowindex]="enableA11y ? Math.floor(i / 2) + 1 : null"
-          [attr.aria-colindex]="enableA11y ? (i % 2) + 1 : null"
-          [attr.tabindex]="enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : null"
-        >
-          <div class="cf-preset-picker__card-icon" aria-hidden="true">{{ getPresetIcon(preset) }}</div>
-          <div class="cf-preset-picker__card-content">
-            <div class="cf-preset-picker__card-name">{{ preset.name }}</div>
-            <div class="cf-preset-picker__card-description">{{ preset.description }}</div>
-            <div *ngIf="preset.tags && preset.tags.length > 0" class="cf-preset-picker__card-tags">
-              <span
-                *ngFor="let tag of preset.tags"
-                class="cf-preset-picker__card-tag"
-              >
-                {{ tag }}
-              </span>
-            </div>
-          </div>
-        </button>
-      </div>
-
-      <!-- Footer -->
-      <div class="cf-preset-picker__footer">
-        <span 
-          class="cf-preset-picker__count"
-          [attr.aria-live]="enableA11y ? 'polite' : null"
-        >
-          {{ filteredPresets.length }} preset{{ filteredPresets.length !== 1 ? 's' : '' }}
-        </span>
-        <button
-          #applyButton
-          (click)="handleApplyClick()"
-          [disabled]="!selectedPresetId"
-          class="cf-preset-picker__apply-btn"
-          [attr.aria-label]="enableA11y ? 'Apply selected preset' : null"
-        >
-          Apply Preset
-        </button>
-      </div>
-    </div>
-  `,
-  styles: [`
+const componentStyles = [`
     .cf-preset-picker {
       background: white;
       border-radius: 8px;
@@ -424,7 +271,7 @@ interface CategoryWithCount {
       padding: 8px 16px;
       background: #007acc;
       color: white;
-      border: none;
+      border: 1px solid currentColor;
       border-radius: 4px;
       font-size: 13px;
       cursor: pointer;
@@ -474,7 +321,166 @@ interface CategoryWithCount {
         transition: none;
       }
     }
-  `]
+  `];
+
+@Component({
+  selector: 'cf-preset-picker',
+  imports: [CommonModule],
+  template: `
+    <div
+      #container
+      class="cf-preset-picker"
+      [style.max-width.px]="maxWidth"
+      [attr.role]="enableA11y ? 'region' : null"
+      [attr.aria-label]="enableA11y ? 'Conditional Formatting Preset Picker' : null"
+      [attr.aria-describedby]="enableA11y ? 'cf-preset-picker-desc' : null"
+    >
+      <!-- Screen reader announcements -->
+      <div
+        #announcer
+        [attr.aria-live]="enableA11y ? announcementPriority : null"
+        [attr.aria-atomic]="enableA11y ? 'true' : null"
+        class="cf-preset-picker__sr-only"
+      >
+        {{ announcementText }}
+      </div>
+
+      <!-- Header -->
+      <div class="cf-preset-picker__header">
+        <h3 class="cf-preset-picker__title">Conditional Formatting Presets</h3>
+        <p id="cf-preset-picker-desc" class="cf-preset-picker__description">
+          Choose from 20+ Excel-style presets to quickly format your data
+        </p>
+      </div>
+
+      <!-- Search -->
+      <div class="cf-preset-picker__search">
+        <input
+          #searchInput
+          type="text"
+          [value]="searchQuery"
+          (input)="handleSearchChange($event)"
+          placeholder="Search presets..."
+          class="cf-preset-picker__search-input"
+          [attr.role]="enableA11y ? 'searchbox' : null"
+          [attr.aria-label]="enableA11y ? 'Search presets' : null"
+          [attr.aria-controls]="enableA11y ? 'cf-preset-grid' : null"
+        />
+      </div>
+
+      <!-- Category Filters -->
+      <div
+        class="cf-preset-picker__categories"
+        [attr.role]="enableA11y ? 'toolbar' : null"
+        [attr.aria-label]="enableA11y ? 'Category filters' : null"
+      >
+        <div [attr.role]="enableA11y ? 'radiogroup' : null" [attr.aria-label]="enableA11y ? 'Preset categories' : null">
+          <button
+            *ngFor="let cat of categories; let i = index"
+            (click)="handleCategoryChange(cat.value)"
+            (keydown)="enableA11y && handleCategoryKeyDown($event, i)"
+            [class.cf-preset-picker__category-btn--active]="selectedCategory === cat.value"
+            class="cf-preset-picker__category-btn"
+            [attr.role]="enableA11y ? 'radio' : null"
+            [attr.aria-checked]="enableA11y ? (selectedCategory === cat.value) : null"
+            [attr.tabindex]="enableA11y ? (selectedCategory === cat.value ? 0 : -1) : null"
+          >
+            {{ cat.label }}
+            <span
+              class="cf-preset-picker__category-badge"
+              [attr.aria-label]="enableA11y ? (cat.count + ' presets') : null"
+            >
+              {{ cat.count }}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Popular Presets -->
+      <div
+        *ngIf="showPopular && selectedCategory === 'all' && !searchQuery && popularPresets.length > 0"
+        class="cf-preset-picker__popular-section"
+      >
+        <h4 class="cf-preset-picker__popular-title">Popular Presets</h4>
+        <div class="cf-preset-picker__popular cf-preset-picker__popular-grid" [attr.role]="enableA11y ? 'list' : null" [attr.aria-label]="enableA11y ? 'Popular presets' : null">
+          <div *ngFor="let preset of popularPresets; let i = index" role="listitem" [attr.aria-label]="enableA11y ? preset.name : null">
+          <button
+            (click)="handlePresetClick(preset)"
+            (keydown)="enableA11y && handlePopularKeyDown($event, preset, i)"
+            [class.cf-preset-picker__popular-card--selected]="selectedPresetId === preset.id"
+            class="cf-preset-picker__popular-card"
+            [attr.aria-label]="enableA11y ? preset.name : null"
+            [attr.aria-pressed]="enableA11y ? (selectedPresetId === preset.id) : null"
+            [attr.tabindex]="enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : null"
+          >
+            <div class="cf-preset-picker__popular-icon" aria-hidden="true">{{ getPresetIcon(preset) }}</div>
+            <div class="cf-preset-picker__popular-name">{{ preset.name }}</div>
+          </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Preset Grid -->
+      <div
+        id="cf-preset-grid"
+        class="cf-preset-picker__grid"
+        [attr.role]="enableA11y ? 'grid' : null"
+        [attr.aria-label]="enableA11y ? 'Preset grid' : null"
+        [attr.aria-rowcount]="enableA11y ? Math.ceil(filteredPresets.length / 2) : null"
+        [attr.aria-colcount]="enableA11y ? 2 : null"
+      >
+        <div *ngFor="let row of filteredPresetRows; let rowIndex = index; trackBy: trackByIndex" [attr.role]="enableA11y ? 'row' : null" class="cf-preset-picker__grid-row">
+        <button
+          *ngFor="let preset of row; let columnIndex = index"
+          (click)="handlePresetClick(preset)"
+          (keydown)="enableA11y && handlePresetKeyDown($event, preset, rowIndex * 2 + columnIndex)"
+          [class.cf-preset-picker__card--selected]="selectedPresetId === preset.id"
+          class="cf-preset-picker__card"
+          [attr.role]="enableA11y ? 'gridcell' : null"
+          [attr.aria-label]="enableA11y ? (preset.name + '. ' + preset.description) : null"
+          [attr.aria-selected]="enableA11y ? (selectedPresetId === preset.id) : null"
+          [attr.aria-rowindex]="enableA11y ? rowIndex + 1 : null"
+          [attr.aria-colindex]="enableA11y ? columnIndex + 1 : null"
+          [attr.tabindex]="enableA11y ? (selectedPresetId === preset.id ? 0 : -1) : null"
+        >
+          <div class="cf-preset-picker__card-icon" aria-hidden="true">{{ getPresetIcon(preset) }}</div>
+          <div class="cf-preset-picker__card-content">
+            <div class="cf-preset-picker__card-name">{{ preset.name }}</div>
+            <div class="cf-preset-picker__card-description">{{ preset.description }}</div>
+            <div *ngIf="preset.tags && preset.tags.length > 0" class="cf-preset-picker__card-tags">
+              <span
+                *ngFor="let tag of preset.tags"
+                class="cf-preset-picker__card-tag"
+              >
+                {{ tag }}
+              </span>
+            </div>
+          </div>
+        </button>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="cf-preset-picker__footer">
+        <span
+          class="cf-preset-picker__count"
+          [attr.aria-live]="enableA11y ? 'polite' : null"
+        >
+          {{ filteredPresets.length }} preset{{ filteredPresets.length !== 1 ? 's' : '' }}
+        </span>
+        <button
+          #applyButton
+          (click)="handleApplyClick()"
+          [disabled]="!selectedPresetId"
+          class="cf-preset-picker__apply-btn"
+          [attr.aria-label]="enableA11y ? 'Apply selected preset' : null"
+        >
+          Apply Preset
+        </button>
+      </div>
+    </div>
+  `,
+  styles: componentStyles
 })
 export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDestroy {
   @Input() showPopular: boolean = true;
@@ -494,7 +500,7 @@ export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDes
 
   // State
   selectedPresetId: string | null = null;
-  selectedCategory: PresetCategory = 'all';
+  selectedCategory: PresetCategory | 'all' = 'all';
   searchQuery: string = '';
   filteredPresets: CFPreset[] = [];
   popularPresets: CFPreset[] = [];
@@ -507,6 +513,18 @@ export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDes
   // Make Math available in template
   Math = Math;
 
+  get filteredPresetRows(): CFPreset[][] {
+    const rows: CFPreset[][] = [];
+    for (let index = 0; index < this.filteredPresets.length; index += 2) {
+      rows.push(this.filteredPresets.slice(index, index + 2));
+    }
+    return rows;
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
+
   ngOnInit(): void {
     // Initialize controller
     this.controller = new PresetPickerController();
@@ -518,15 +536,15 @@ export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDes
     this.searchQuery = state.searchQuery;
     this.filteredPresets = state.filteredPresets;
     this.popularPresets = this.controller.getPopularPresets(6);
-    this.categories = this.controller.getCategories();
+    this.categories = this.controller.getCategories().map(({ id, ...category }) => ({ ...category, value: id }));
 
     // Subscribe to controller events
     this.controller.on('category-changed', () => {
       const state = this.controller.getState();
       this.selectedCategory = state.selectedCategory;
       this.filteredPresets = state.filteredPresets;
-      this.categories = this.controller.getCategories();
-      
+      this.categories = this.controller.getCategories().map(({ id, ...category }) => ({ ...category, value: id }));
+
       // Announce category change
       const category = this.categories.find(c => c.value === state.selectedCategory);
       if (category) {
@@ -538,7 +556,7 @@ export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDes
       const state = this.controller.getState();
       this.searchQuery = state.searchQuery;
       this.filteredPresets = state.filteredPresets;
-      
+
       // Announce search results
       this.announce(`${this.filteredPresets.length} preset${this.filteredPresets.length !== 1 ? 's' : ''} found.`);
     });
@@ -546,7 +564,7 @@ export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDes
     this.controller.on('preset-selected', () => {
       const state = this.controller.getState();
       this.selectedPresetId = state.selectedPresetId;
-      
+
       // Announce preset selection
       const preset = this.controller.getSelectedPreset();
       if (preset) {
@@ -559,7 +577,7 @@ export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDes
     // Cleanup (future: controller.destroy())
   }
 
-  handleCategoryChange(category: PresetCategory): void {
+  handleCategoryChange(category: PresetCategory | 'all'): void {
     this.controller.selectCategory(category);
   }
 
@@ -739,7 +757,7 @@ export class ConditionalFormattingPresetPickerComponent implements OnInit, OnDes
   }
 
   getPresetIcon(preset: CFPreset): string {
-    const icons: Record<PresetCategory, string> = {
+    const icons: Record<PresetCategory | 'all', string> = {
       'data-bars': '📊',
       'color-scales': '🌈',
       'icon-sets': '🎯',

@@ -132,6 +132,38 @@ describe('ChartEngine', () => {
     chartEngine = new ChartEngine(mockCanvas as any);
   });
 
+  test('fails during construction when the 2D context is unavailable', () => {
+    const canvas = document.createElement('canvas');
+    const getContext = jest.spyOn(canvas, 'getContext').mockReturnValue(null);
+
+    expect(() => new ChartEngine(canvas)).toThrow('Unable to acquire a 2D canvas context');
+    expect(getContext).toHaveBeenCalledWith('2d');
+  });
+
+  test('uses the structural fallback when canvas constructors are unavailable', () => {
+    const htmlCanvasDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'HTMLCanvasElement');
+    const offscreenCanvasDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'OffscreenCanvas');
+
+    Object.defineProperty(globalThis, 'HTMLCanvasElement', { configurable: true, value: undefined });
+    Object.defineProperty(globalThis, 'OffscreenCanvas', { configurable: true, value: undefined });
+
+    try {
+      expect(new ChartEngine(new MockCanvas() as any)).toBeInstanceOf(ChartEngine);
+    } finally {
+      if (htmlCanvasDescriptor) {
+        Object.defineProperty(globalThis, 'HTMLCanvasElement', htmlCanvasDescriptor);
+      } else {
+        delete (globalThis as any).HTMLCanvasElement;
+      }
+
+      if (offscreenCanvasDescriptor) {
+        Object.defineProperty(globalThis, 'OffscreenCanvas', offscreenCanvasDescriptor);
+      } else {
+        delete (globalThis as any).OffscreenCanvas;
+      }
+    }
+  });
+
   // ============================================================================
   // Bar Chart Tests (5 tests)
   // ============================================================================

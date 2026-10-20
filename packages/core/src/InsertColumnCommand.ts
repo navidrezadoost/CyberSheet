@@ -137,11 +137,13 @@ export class InsertColumnCommand implements TransformCommand {
       // Still need to handle merges even if no cell data
       if (affectedMerges.length === 0) return;
       
-      // Set minimal bounds for merge-only case
-      minRow = 0;
-      maxRow = 0;
-      minCol = 0;
-      maxCol = k;
+      // Anchor the merge-only payload at real worksheet coordinates.
+      // The worksheet public Address contract is one-based; zero here makes
+      // PasteCommand's dependency cleanup issue an invalid graph address.
+      minRow = Math.min(...affectedMerges.map(({ range }) => range.start.row));
+      maxRow = Math.max(...affectedMerges.map(({ range }) => range.end.row));
+      minCol = Math.min(...affectedMerges.map(({ range }) => range.start.col));
+      maxCol = Math.max(...affectedMerges.map(({ range }) => range.end.col));
     }
     
     // Create snapshot payload with normalized offsets

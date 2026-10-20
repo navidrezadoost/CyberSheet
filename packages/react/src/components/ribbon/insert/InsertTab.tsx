@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import type { DrawingLayer, Worksheet, PictureObject } from '@cyber-sheet/core';
+import type { DrawingLayer, Worksheet, WorkbookSheetView, PictureObject } from '@cyber-sheet/core';
 import type { PictureInsertTemplate } from '../../DrawingCanvas';
 import type { IconInsertTemplate } from '../../../utils/createDrawingObject';
 import type { FormControlInsertTemplate } from '../../../utils/formControlFactory';
@@ -25,7 +25,7 @@ import { SymbolsGroup } from './SymbolsGroup';
 import '../ribbon.css';
 
 export interface InsertTabProps {
-  worksheet?: Worksheet;
+  worksheet?: Worksheet | WorkbookSheetView;
   drawingLayer?: DrawingLayer;
   onInsertTable?: () => void;
   onInsertPivotTable?: () => void;

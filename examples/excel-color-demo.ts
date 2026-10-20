@@ -31,7 +31,7 @@ import {
 } from '@cyber-sheet/renderer-canvas';
 
 // Create worksheet
-const sheet = new Worksheet(50, 10);
+const sheet = new Worksheet('Excel Color Demo', 50, 10);
 
 // ========================================
 // 1. Theme Colors with Tint
@@ -284,7 +284,7 @@ data.forEach((rowData, rowIdx) => {
   let total = 0;
   rowData.slice(1).forEach((value, colIdx) => {
     const col = colIdx + 2;
-    total += value;
+    if (typeof value === 'number') total += value;
     
     sheet.setCellValue({ row, col }, value);
     sheet.setCellStyle({ row, col }, {
@@ -323,21 +323,11 @@ const renderer = new CanvasRenderer(container, sheet, {
 });
 
 // Add color grading plugin
-const colorGrading = new ColorGradingPlugin({
-  id: 'color-grading',
-  priority: 10,
-  hueShift: 0,      // No shift by default
-  saturation: 1.0,  // Normal saturation
-  lightness: 1.0    // Normal lightness
-});
+const colorGrading = new ColorGradingPlugin();
 renderer.addPlugin(colorGrading);
 
 // Add accessibility plugin (disabled by default)
-const accessibility = new AccessibilityPlugin({
-  id: 'accessibility',
-  priority: 5,
-  mode: 'normal' // Can switch to 'high-contrast', 'deuteranopia', etc.
-});
+const accessibility = new AccessibilityPlugin();
 // renderer.addPlugin(accessibility); // Uncomment to enable
 
 // Render
@@ -393,38 +383,41 @@ const accessMode = document.getElementById('access-mode') as HTMLSelectElement;
 const hueVal = document.getElementById('hue-val')!;
 const satVal = document.getElementById('sat-val')!;
 const lightVal = document.getElementById('light-val')!;
+let hueShift = 0;
+let saturationAdjustment = 0;
+let lightnessAdjustment = 0;
+
+function updateColorGrading(): void {
+  colorGrading.setHSL(hueShift, saturationAdjustment, lightnessAdjustment);
+  renderer.redraw();
+}
 
 hueSlider.addEventListener('input', () => {
-  const val = parseInt(hueSlider.value);
-  hueVal.textContent = val + '°';
-  colorGrading.hueShift = val;
-  renderer.redraw();
+  hueShift = parseInt(hueSlider.value, 10);
+  hueVal.textContent = `${hueShift}°`;
+  updateColorGrading();
 });
 
 satSlider.addEventListener('input', () => {
-  const val = parseInt(satSlider.value) / 100;
-  satVal.textContent = Math.round(val * 100) + '%';
-  colorGrading.saturation = val;
-  renderer.redraw();
+  const value = parseInt(satSlider.value, 10);
+  saturationAdjustment = value - 100;
+  satVal.textContent = `${value}%`;
+  updateColorGrading();
 });
 
 lightSlider.addEventListener('input', () => {
-  const val = parseInt(lightSlider.value) / 100;
-  lightVal.textContent = Math.round(val * 100) + '%';
-  colorGrading.lightness = val;
-  renderer.redraw();
+  const value = parseInt(lightSlider.value, 10);
+  lightnessAdjustment = value - 100;
+  lightVal.textContent = `${value}%`;
+  updateColorGrading();
 });
 
 accessMode.addEventListener('change', () => {
-  const mode = accessMode.value as any;
+  const mode = accessMode.value;
   renderer.removePlugin('accessibility');
   
-  if (mode !== 'normal') {
-    const newPlugin = new AccessibilityPlugin({
-      id: 'accessibility',
-      priority: 5,
-      mode
-    });
+  if (isAccessibilityMode(mode) && mode !== 'none') {
+    const newPlugin = new AccessibilityPlugin(mode);
     renderer.addPlugin(newPlugin);
   }
   
@@ -433,5 +426,9 @@ accessMode.addEventListener('change', () => {
 
 console.log('✅ Excel Color System Demo Complete!');
 console.log('Use the controls on the right to adjust colors in real-time.');
+
+function isAccessibilityMode(value: string): value is import('../packages/renderer-canvas/src/plugins').AccessibilityMode {
+  return value === 'none' || value === 'high-contrast' || value === 'deuteranopia' || value === 'protanopia' || value === 'tritanopia';
+}
 
 export { sheet, renderer };

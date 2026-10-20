@@ -230,7 +230,7 @@ describe('Phase 35 - Invalidation Integration', () => {
 
     // Register pivot
     const config = makePivotConfig();
-    pivotId = workbook.getPivotRegistry().register('TestPivot', config, 'Sheet1');
+    pivotId = workbook.getPivotRegistry().register({ name: 'TestPivot', config, sourceRange: 'B2:D8', worksheetId: 'Sheet1' });
   });
 
   test('setSlicer marks pivot dirty', () => {
@@ -251,7 +251,7 @@ describe('Phase 35 - Invalidation Integration', () => {
     workbook.setSlicer(pivotId, 'regionSlicer', 'Region', ['West']);
     
     // Mark clean manually (simulate rebuild)
-    workbook.getPivotRegistry().markClean(pivotId);
+    workbook.getPivotRegistry().markClean(pivotId, Date.now());
     expect(workbook.getPivotRegistry().get(pivotId)?.dirty).toBe(false);
 
     // Clear slicer
@@ -269,7 +269,7 @@ describe('Phase 35 - Invalidation Integration', () => {
 
   test('setSlicer throws for non-existent pivot', () => {
     expect(() => {
-      workbook.setSlicer('fakePivot', 'slicer', 'Region', ['West']);
+      workbook.setSlicer('fakePivot' as PivotId, 'slicer', 'Region', ['West']);
     }).toThrow(/Pivot 'fakePivot' not found/);
   });
 });
@@ -294,7 +294,7 @@ describe('Phase 35 - Lazy Recompute Integration', () => {
 
     // Register pivot
     const config = makePivotConfig();
-    pivotId = workbook.getPivotRegistry().register('TestPivot', config, 'Sheet1');
+    pivotId = workbook.getPivotRegistry().register({ name: 'TestPivot', config, sourceRange: 'B2:D8', worksheetId: 'Sheet1' });
   });
 
   test('slicer change triggers lazy rebuild on query', () => {
@@ -335,7 +335,7 @@ describe('Phase 35 - SDK Methods', () => {
     setupTestData(worksheet);
 
     const config = makePivotConfig();
-    pivotId = workbook.getPivotRegistry().register('TestPivot', config, 'Sheet1');
+    pivotId = workbook.getPivotRegistry().register({ name: 'TestPivot', config, sourceRange: 'B2:D8', worksheetId: 'Sheet1' });
   });
 
   test('getSlicer returns undefined for non-existent slicer', () => {
@@ -513,7 +513,7 @@ describe('Phase 35 - Determinism', () => {
       }
     };
 
-    const results = [];
+    const results: unknown[] = [];
     for (let i = 0; i < 5; i++) {
       const pivot = engine.generate(config);
       results.push(pivot.data[0][0].value);
@@ -577,7 +577,7 @@ describe('Phase 35 - Calculated Fields Integration', () => {
     worksheet.setCellValue({ row: 7, col: 4 }, 650);  // North B
 
     config.sourceRange.end.col = 4;
-    config.values.push({ column: 4, aggregation: 'sum', label: 'Cost' });
+    config.values.push({ type: 'aggregate', column: 4, aggregation: 'sum', label: 'Cost' });
     config.calculatedFields = [
       { name: 'Profit', formula: 'Revenue - Cost' }
     ];

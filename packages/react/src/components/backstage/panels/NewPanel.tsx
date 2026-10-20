@@ -226,8 +226,7 @@ export const NewPanel: React.FC<NewPanelProps> = ({
       setTimeout(() => {
         // Create blank workbook if callback is available
         if (onWorkbookLoaded) {
-          const blank = new Workbook();
-          blank.addSheet('Sheet1');
+          const blank = Workbook.create({ sheets: [{ name: 'Sheet1' }] });
           onWorkbookLoaded(blank);
         }
         onCreateBlank();

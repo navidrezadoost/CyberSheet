@@ -4,8 +4,12 @@
  */
 
 import { ChartRenderer } from '../src/ChartRenderer';
+import { ChartEngine } from '../src/ChartEngine';
+import { ChartManager } from '../src/ChartManager';
 import { Worksheet } from '@cyber-sheet/core';
-import type { ChartObject } from '@cyber-sheet/core';
+import type { ChartObject, WorkbookId, WorksheetId } from '@cyber-sheet/core';
+import { adoptWorksheetByWorkbook } from '../../core/src/worksheet';
+import { OwnerBackedWorkbookSheetView } from '../../core/src/WorkbookSheetView';
 
 // Mock OffscreenCanvas and HTMLCanvasElement
 class MockCanvas {
@@ -81,24 +85,24 @@ describe('ChartRenderer', () => {
     mockCtx = new MockCanvasRenderingContext2D();
 
     // Setup test data
-    worksheet.setCellValue({ row: 0, col: 0 }, 'Category');
-    worksheet.setCellValue({ row: 0, col: 1 }, 'Sales');
-    worksheet.setCellValue({ row: 1, col: 0 }, 'Q1');
-    worksheet.setCellValue({ row: 1, col: 1 }, 100);
-    worksheet.setCellValue({ row: 2, col: 0 }, 'Q2');
-    worksheet.setCellValue({ row: 2, col: 1 }, 150);
-    worksheet.setCellValue({ row: 3, col: 0 }, 'Q3');
-    worksheet.setCellValue({ row: 3, col: 1 }, 120);
+    worksheet.setCellValue({ row: 1, col: 1 }, 'Category');
+    worksheet.setCellValue({ row: 1, col: 2 }, 'Sales');
+    worksheet.setCellValue({ row: 2, col: 1 }, 'Q1');
+    worksheet.setCellValue({ row: 2, col: 2 }, 100);
+    worksheet.setCellValue({ row: 3, col: 1 }, 'Q2');
+    worksheet.setCellValue({ row: 3, col: 2 }, 150);
+    worksheet.setCellValue({ row: 4, col: 1 }, 'Q3');
+    worksheet.setCellValue({ row: 4, col: 2 }, 120);
 
     // Default chart object
     chart = {
       id: 'chart-1',
       type: 'bar',
       dataRange: {
-        startRow: 0,
-        startCol: 0,
-        endRow: 3,
-        endCol: 1
+        startRow: 1,
+        startCol: 1,
+        endRow: 4,
+        endCol: 2
       },
       position: { x: 100, y: 100 },
       size: { width: 400, height: 300 },
@@ -111,6 +115,101 @@ describe('ChartRenderer', () => {
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
+  });
+
+  test('requires an owner view when an invalidated renderer cache reads after adoption', () => {
+    const renderedData: Array<{ labels: string[]; datasets: Array<{ label: string; data: number[] }> }> = [];
+    const renderSpy = jest.spyOn(ChartEngine.prototype, 'render').mockImplementation((data) => {
+      renderedData.push(data);
+    });
+
+    try {
+      renderer.renderChart(mockCtx as any, chart);
+      expect(renderedData).toHaveLength(1);
+      expect(renderedData[0].datasets[1].data).toEqual([100, 150, 120]);
+
+      worksheet.setCellValue({ row: 2, col: 2 }, 125);
+      adoptWorksheetByWorkbook(worksheet, 'chart-renderer-read-owner');
+
+      // An unchanged chart cache uses its rendered canvas. A refresh through
+      // this retained raw Worksheet is rejected after ownership changes.
+      renderer.renderChart(mockCtx as any, chart);
+      expect(renderedData).toHaveLength(1);
+      renderer.invalidateChart(chart.id);
+      expect(() => renderer.renderChart(mockCtx as any, chart)).toThrow(/require a WorkbookSheetView/);
+      expect(renderedData).toHaveLength(1);
+      expect(worksheet.getCellValue({ row: 2, col: 2 })).toBe(125);
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
+
+  test('renders workbook-owned formula data through a view without retaining a raw worksheet field', () => {
+    const ownerId = 'chart-renderer-view-owner' as WorkbookId;
+    const sheetId = worksheet.getWorksheetId() as WorksheetId;
+    worksheet.setCellFormula({ row: 2, col: 2 }, '=100+1', 101);
+    adoptWorksheetByWorkbook(worksheet, ownerId);
+    const view = new OwnerBackedWorkbookSheetView(ownerId, sheetId, () => worksheet);
+    const ownerRenderer = new ChartRenderer(view);
+    const renderedData: Array<{ labels: string[]; datasets: Array<{ label: string; data: number[] }> }> = [];
+    const renderSpy = jest.spyOn(ChartEngine.prototype, 'render').mockImplementation((data) => {
+      renderedData.push(data);
+    });
+
+    try {
+      expect(Reflect.get(ownerRenderer, 'worksheet')).toBeUndefined();
+      expect(() => new ChartRenderer(worksheet)).toThrow(/require a WorkbookSheetView/);
+      ownerRenderer.renderChart(mockCtx as any, chart);
+      expect(renderedData).toHaveLength(1);
+      expect(renderedData[0].datasets[1].data).toEqual([0, 150, 120]);
+      renderedData[0].datasets[1].data[1] = 999;
+      expect(view.getCellValue({ row: 3, col: 2 })).toBe(150);
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
+
+  test('characterizes direct chart input identity and explicit cache invalidation', () => {
+    const manager = new ChartManager(worksheet);
+    const callerChart = manager.create({ ...chart });
+    const managerSnapshot = manager.get(callerChart.id)!;
+    callerChart.options.title = 'Initial title';
+    const renderCalls: Array<{ data: unknown; options: unknown }> = [];
+    const renderSpy = jest.spyOn(ChartEngine.prototype, 'render').mockImplementation((data, options) => {
+      renderCalls.push({ data, options });
+    });
+
+    try {
+      expect(managerSnapshot).not.toBe(callerChart);
+      expect(managerSnapshot.dataRange).not.toBe(callerChart.dataRange);
+      renderer.renderChart(mockCtx as any, callerChart);
+      expect(renderCalls).toHaveLength(1);
+      expect((renderCalls[0].data as any).datasets[1].data).toEqual([100, 150, 120]);
+      expect((renderCalls[0].options as any).title).toBe('Initial title');
+
+      // Direct renderer input is retained by the cache context (source-traced),
+      // while current-call geometry is used immediately for canvas placement.
+      callerChart.position.x = 240;
+      callerChart.dataRange.endRow = 3;
+      callerChart.options.title = 'Changed after render';
+      mockCtx.clearDrawCalls();
+      renderer.renderChart(mockCtx as any, callerChart);
+
+      expect(renderCalls).toHaveLength(1);
+      expect(mockCtx.getDrawCalls().find((call) => call.type === 'drawImage')?.x).toBe(240);
+      expect((renderCalls[0].options as any).title).toBe('Initial title');
+      expect(manager.get(callerChart.id)).toEqual(managerSnapshot);
+
+      renderer.invalidateChart(callerChart.id);
+      renderer.renderChart(mockCtx as any, callerChart);
+
+      expect(renderCalls).toHaveLength(2);
+      expect((renderCalls[1].data as any).datasets[1].data).toEqual([100, 150]);
+      expect((renderCalls[1].options as any).title).toBe('Changed after render');
+      expect(manager.get(callerChart.id)).toEqual(managerSnapshot);
+    } finally {
+      renderSpy.mockRestore();
+    }
   });
 
   describe('Basic Rendering', () => {

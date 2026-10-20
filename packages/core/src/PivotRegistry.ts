@@ -61,7 +61,7 @@ export interface PivotRegistry {
    * Register a pivot configuration.
    * Returns unique ID.
    */
-  register(metadata: Omit<PivotMetadata, 'id' | 'createdAt'>): PivotId;
+  register(metadata: Omit<PivotMetadata, 'id' | 'createdAt' | 'dirty' | 'lastBuiltAt' | 'hasNonReversibleAggregations'>): PivotId;
 
   /**
    * Retrieve metadata by ID.
@@ -140,6 +140,10 @@ export class PivotRegistryImpl implements PivotRegistry {
   private pivots = new Map<PivotId, PivotMetadata>();
   private idCounter = 0;
 
+  private storeMetadata(metadata: PivotMetadata): void {
+    this.pivots.set(metadata.id, Object.freeze(metadata));
+  }
+
   /**
    * Register a pivot configuration.
    * Assigns sequential ID within session.
@@ -152,7 +156,7 @@ export class PivotRegistryImpl implements PivotRegistry {
     // Phase 36a: Check if any aggregations are non-reversible
     const hasNonReversible = this.checkNonReversibleAggregations(meta.config);
     
-    this.pivots.set(id, {
+    this.storeMetadata({
       ...meta,
       id,
       createdAt: Date.now(),
@@ -231,7 +235,7 @@ export class PivotRegistryImpl implements PivotRegistry {
     const pivot = this.pivots.get(id);
     if (!pivot) return; // Graceful no-op for missing pivots
 
-    this.pivots.set(id, {
+    this.storeMetadata({
       ...pivot,
       dirty: true,
     });
@@ -246,7 +250,7 @@ export class PivotRegistryImpl implements PivotRegistry {
     const pivot = this.pivots.get(id);
     if (!pivot) return; // Graceful no-op for missing pivots
 
-    this.pivots.set(id, {
+    this.storeMetadata({
       ...pivot,
       dirty: false,
       lastBuiltAt: builtAt,
@@ -270,7 +274,7 @@ export class PivotRegistryImpl implements PivotRegistry {
     const pivot = this.pivots.get(id);
     if (!pivot) return; // Graceful no-op for missing pivots
 
-    this.pivots.set(id, {
+    this.storeMetadata({
       ...pivot,
       rebuilding,
     });

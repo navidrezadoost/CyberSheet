@@ -71,7 +71,7 @@ export const SmilodonSelectCore: React.FC<SmilodonSelectCoreProps> = ({
   onClick,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const hostRef = useRef(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   const selectedValue = value ?? defaultValue ?? items[0]?.value ?? '';
   const selectedItem = items.find((item) => String(item.value) === String(selectedValue));
 

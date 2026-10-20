@@ -65,10 +65,7 @@ function makeIntegratedScheduler(ws: Worksheet, engine: FormulaEngine) {
 
 /** Set a formula and register the cell as dirty (manual orchestration). */
 function setFormula(ws: Worksheet, addr: Address, formula: string, scheduler: RecomputeScheduler) {
-  const cell = ws.getCell(addr);
-  if (cell) {
-    cell.formula = formula;
-  }
+  ws.setCellFormula(addr, formula);
   scheduler.schedule(addr, TaskPriority.High);
 }
 
@@ -126,13 +123,9 @@ describe('Composition Test 1 — Sync vs Scheduled Equivalence', () => {
       ws.setCellValue({ row: 1, col: 1 }, 10);
       ws.setCellValue({ row: 2, col: 1 }, 20);
       
-      const cell1 = ws.getCell({ row: 3, col: 1 });
-      const cell2 = ws.getCell({ row: 4, col: 1 });
-      const cell3 = ws.getCell({ row: 5, col: 1 });
-      
-      if (cell1) cell1.formula = '=A1+A2';
-      if (cell2) cell2.formula = '=A3*2';
-      if (cell3) cell3.formula = '=A4+100';
+      ws.setCellFormula({ row: 3, col: 1 }, '=A1+A2');
+      ws.setCellFormula({ row: 4, col: 1 }, '=A3*2');
+      ws.setCellFormula({ row: 5, col: 1 }, '=A4+100');
     };
 
     setup(ws1);
@@ -176,13 +169,9 @@ describe('Composition Test 2 — Time-Slicing Preserves Topology', () => {
     // Build a chain: A1=1, A2=A1+1, A3=A2+1, A4=A3+1
     ws.setCellValue({ row: 1, col: 1 }, 1);
     
-    const c2 = ws.getCell({ row: 2, col: 1 });
-    const c3 = ws.getCell({ row: 3, col: 1 });
-    const c4 = ws.getCell({ row: 4, col: 1 });
-    
-    if (c2) c2.formula = '=A1+1';
-    if (c3) c3.formula = '=A2+1';
-    if (c4) c4.formula = '=A3+1';
+    ws.setCellFormula({ row: 2, col: 1 }, '=A1+1');
+    ws.setCellFormula({ row: 3, col: 1 }, '=A2+1');
+    ws.setCellFormula({ row: 4, col: 1 }, '=A3+1');
 
     // Create scheduler with TINY time slice (force multiple yields)
     const evaluated: Array<{ addr: Address; value: CellValue }> = [];
@@ -221,11 +210,8 @@ describe('Composition Test 2 — Time-Slicing Preserves Topology', () => {
 
     ws.setCellValue({ row: 1, col: 1 }, 10);
     
-    const c2 = ws.getCell({ row: 2, col: 1 });
-    const c3 = ws.getCell({ row: 3, col: 1 });
-    
-    if (c2) c2.formula = '=A1*2';
-    if (c3) c3.formula = '=A2+5';
+    ws.setCellFormula({ row: 2, col: 1 }, '=A1*2');
+    ws.setCellFormula({ row: 3, col: 1 }, '=A2+5');
 
     const evaluated: Address[] = [];
     const scheduler = new RecomputeScheduler({
@@ -272,8 +258,7 @@ describe('Composition Test 3 — Interrupt + Mutation Safety', () => {
 
     ws.setCellValue({ row: 1, col: 1 }, 5);
     
-    const c2 = ws.getCell({ row: 2, col: 1 });
-    if (c2) c2.formula = '=A1*10';
+    ws.setCellFormula({ row: 2, col: 1 }, '=A1*10');
 
     let evaluationCount = 0;
     const scheduler = new RecomputeScheduler({
@@ -320,8 +305,7 @@ describe('Composition Test 3 — Interrupt + Mutation Safety', () => {
     const engine = new FormulaEngine();
 
     ws.setCellValue({ row: 1, col: 1 }, 1);
-    const c2 = ws.getCell({ row: 2, col: 1 });
-    if (c2) c2.formula = '=A1+1';
+    ws.setCellFormula({ row: 2, col: 1 }, '=A1+1');
 
     const executed: number[] = [];
     const scheduler = new RecomputeScheduler({
@@ -373,10 +357,7 @@ describe('Composition Test 4 — Viewport Priority Does Not Break Correctness', 
     ws.setCellValue({ row: 1, col: 1 }, 1);
 
     for (let i = 2; i <= 10; i++) {
-      const cell = ws.getCell({ row: i, col: 1 });
-      if (cell) {
-        cell.formula = `=A${i - 1}+1`;
-      }
+      ws.setCellFormula({ row: i, col: 1 }, `=A${i - 1}+1`);
     }
 
     const { scheduler } = makeIntegratedScheduler(ws, engine);
@@ -405,8 +386,7 @@ describe('Composition Test 4 — Viewport Priority Does Not Break Correctness', 
     ws.setCellValue({ row: 1, col: 1 }, 100);
 
     for (let i = 2; i <= 5; i++) {
-      const cell = ws.getCell({ row: i, col: 1 });
-      if (cell) cell.formula = `=A${i - 1}+1`;
+      ws.setCellFormula({ row: i, col: 1 }, `=A${i - 1}+1`);
     }
 
     const evalOrder: number[] = [];
@@ -469,24 +449,20 @@ describe('GOLDEN TEST — Full Stack Integration', () => {
     ws.setCellValue({ row: 1, col: 2 }, 1000);  // Freelance
 
     // Row 2: Total income (formula)
-    const incomeTotal = ws.getCell({ row: 2, col: 1 });
-    if (incomeTotal) incomeTotal.formula = '=A1+B1';
+    ws.setCellFormula({ row: 2, col: 1 }, '=A1+B1');
 
     // Row 3: Expenses
     ws.setCellValue({ row: 3, col: 1 }, 2000);  // Rent
     ws.setCellValue({ row: 3, col: 2 }, 800);   // Food
 
     // Row 4: Total expenses (formula)
-    const expenseTotal = ws.getCell({ row: 4, col: 1 });
-    if (expenseTotal) expenseTotal.formula = '=A3+B3';
+    ws.setCellFormula({ row: 4, col: 1 }, '=A3+B3');
 
     // Row 5: Net (formula)
-    const net = ws.getCell({ row: 5, col: 1 });
-    if (net) net.formula = '=A2-A4';
+    ws.setCellFormula({ row: 5, col: 1 }, '=A2-A4');
 
     // Row 6: Savings rate (formula)
-    const savingsRate = ws.getCell({ row: 6, col: 1 });
-    if (savingsRate) savingsRate.formula = '=A5/A2';
+    ws.setCellFormula({ row: 6, col: 1 }, '=A5/A2');
 
     const { scheduler, evaluated } = makeIntegratedScheduler(ws, engine);
 

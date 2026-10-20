@@ -6,30 +6,12 @@ export interface LineStyleGridIcon1Props extends SVGProps<SVGSVGElement> {
 }
 
 const LineStyleGridIcon1 = React.forwardRef<SVGSVGElement, LineStyleGridIcon1Props>(
-  ({ size, className, style, ...props }, ref) => {
-    const dimensions = size ? { width: size, height: size } : {
-      width: props.width || 100,
-      height: props.height || 12
-    };
-
-    return (
-      <svg
-        ref={ref}
-        viewBox="0 0 24 24"
-        xmlns="http://www.w3.org/2000/svg"
-        width={dimensions.width}
-        height={dimensions.height}
-        fill={props.fill || "currentColor"}
-        className={className}
-        style={style}
-        {...props}
-      >
-        <line x1="0" y1="3" x2="100" y2="3" stroke={color} strokeWidth="1" /> <line x1="0" y1="9" x2="100" y2="9" stroke={color} strokeWidth="1" />
-      </svg>
-    );
-  }
+  ({ size, className, style, ...props }, ref) => (
+    <svg ref={ref} viewBox="0 0 100 12" xmlns="http://www.w3.org/2000/svg" width={size ?? props.width ?? 100} height={size ?? props.height ?? 12} fill={props.fill || "currentColor"} className={className} style={style} {...props}>
+      <path d="M0 3h100M0 9h100" stroke="currentColor"/>
+    </svg>
+  )
 );
 
 LineStyleGridIcon1.displayName = "LineStyleGridIcon1";
-
 export default LineStyleGridIcon1;

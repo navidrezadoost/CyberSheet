@@ -4,7 +4,7 @@
  * Advanced editing features: clipboard, undo/redo, fill handle, multi-cell selection
  */
 
-import type { Address, CellValue, Cell } from '@cyber-sheet/core';
+import type { Address, ExtendedCellValue, Cell } from '@cyber-sheet/core';
 import type { Worksheet } from '@cyber-sheet/core';
 
 export interface ClipboardData {
@@ -148,7 +148,7 @@ export class EditingManager {
    * Paste cells at the specified position
    */
   private pasteCells(cells: Cell[][], start: Address): void {
-    const oldValues: Array<{ addr: Address; value: CellValue; cell: Cell | null }> = [];
+    const oldValues: Array<{ addr: Address; value: ExtendedCellValue; cell: Cell | null }> = [];
 
     // Capture old values for undo
     for (let r = 0; r < cells.length; r++) {
@@ -177,7 +177,7 @@ export class EditingManager {
             if (cell.style) {
               const targetCell = this.worksheet.getCell(addr);
               if (targetCell) {
-                targetCell.style = { ...cell.style };
+                this.worksheet.setCellStyle(addr, { ...cell.style });
               }
             }
           }
@@ -332,7 +332,7 @@ export class EditingManager {
     const sourceCell = this.worksheet.getCell(source);
     if (!sourceCell) return;
 
-    const oldValues: Array<{ addr: Address; value: CellValue }> = [];
+    const oldValues: Array<{ addr: Address; value: ExtendedCellValue }> = [];
 
     this.executeCommand({
       type: 'setValue',

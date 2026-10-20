@@ -2,11 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Workbook } from '@cyber-sheet/core';
 import { CyberSheet } from '../packages/react/src';
+import { rejectR1ExampleInitialization } from './r1-initialization-gate';
 
 export const TestColors = () => {
   const [workbook, setWorkbook] = useState<Workbook | null>(null);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
 
   useEffect(() => {
+    try {
+      rejectR1ExampleInitialization('Test colors demo', 'R2 initial cell content and R5 styles');
+    } catch (error) {
+      setInitializationError(error instanceof Error ? error.message : String(error));
+      return;
+    }
     // Create a test workbook with colored cells
     const wb = new Workbook();
     const ws = wb.addSheet('Test', 20, 10);
@@ -41,6 +49,9 @@ export const TestColors = () => {
   }, []);
 
   if (!workbook) {
+    if (initializationError) {
+      return <div role="alert" style={{ padding: 16 }}>{initializationError}</div>;
+    }
     return <div style={{ padding: 16 }}>Creating test workbook...</div>;
   }
 

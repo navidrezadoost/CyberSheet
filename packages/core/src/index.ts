@@ -1,14 +1,18 @@
 export * from './types';
-export * from './worksheet';
+export { toDisplayValue } from './utils/cell-value-normalizer';
+export { Worksheet, DEFAULT_WORKSHEET_ROWS, DEFAULT_WORKSHEET_COLS } from './worksheet';
+export type { WorksheetSnapshot } from './worksheet';
 export * from './workbook';
+export type { WorkbookId, WorksheetId, WorkbookSheetView, WorkbookCellRead, ReadonlyCellSnapshot, WorkbookMutationPort } from './workbook-access-types';
 export * from './events';
 export * from './EventBus';
-export * from './eventBridge';
+export { getCommandEventType } from './eventBridge';
 export * from './fillPatterns';
 export * from './ExcelColor';
 export * from './I18nManager';
 export * from './FormulaEngine';
 export * from './FormulaController';
+export * from './ChartBuilderController';
 export * from './CollaborationEngine';
 export * from './PivotEngine';
 export * from './PivotRegistry'; // Phase 28

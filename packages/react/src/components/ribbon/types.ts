@@ -10,6 +10,8 @@
  * Imported from fillTypes to avoid circular dependencies
  */
 import type { Fill } from './fillTypes';
+import type { BorderValue } from './borderTypes';
+import type { NumberFormatValue } from './numberFormatTypes';
 
 /**
  * Color value in hex format
@@ -125,11 +127,11 @@ export interface SelectionState {
   fillColor?: StyleState<Fill>;
   
   // Border support (style + color)
-  border?: StyleState<{ style: string; color: string }>;
+  border?: StyleState<BorderValue>;
   
   // Number format support (semantic state)
   // ⚠️ formatString is source of truth, type is optional hint
-  numberFormat?: StyleState<{ formatString: string; type?: string }>;
+  numberFormat?: StyleState<NumberFormatValue>;
   
   // Alignment support (compound state)
   horizontalAlign?: StyleState<"left" | "center" | "right" | "justify">;

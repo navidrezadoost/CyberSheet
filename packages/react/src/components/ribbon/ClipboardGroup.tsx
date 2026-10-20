@@ -12,7 +12,7 @@
  */
 
 import React, { useRef, useState } from 'react';
-import type { Address, Range, Worksheet } from '@cyber-sheet/core';
+import type { Address, Range, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 import { FormattingController, CommandManager, ClipboardService } from '@cyber-sheet/core';
 import {
   performCopy,
@@ -22,9 +22,9 @@ import {
 } from '../../utils/clipboardOperations';
 
 export interface ClipboardGroupProps {
-  worksheet: Worksheet;
+  worksheet: Worksheet | WorkbookSheetView;
   clipboardService: ClipboardService;
-  formattingController: FormattingController;
+  formattingController?: FormattingController | null;
   commandManager: CommandManager;
   selectedCells: Address[];
   currentRange?: Range;
@@ -120,6 +120,7 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
   };
 
   const deactivateFormatPainter = () => {
+    if (!formattingController) return;
     formattingController.clearFormatPainter();
     setFormatPainterActive(false);
     document.body.classList.remove('format-painter-active');
@@ -129,6 +130,7 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     if (formatPainterActive) {
       deactivateFormatPainter();
     } else {
+      if (!formattingController) return;
       formattingController.copyFormat(selectedCells, persistent);
       setFormatPainterActive(true);
       document.body.classList.add('format-painter-active');
@@ -147,6 +149,7 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
 
   const handleFormatPainterDoubleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
+    if (!formattingController) return;
     if (formatPainterClickTimerRef.current) {
       clearTimeout(formatPainterClickTimerRef.current);
       formatPainterClickTimerRef.current = null;

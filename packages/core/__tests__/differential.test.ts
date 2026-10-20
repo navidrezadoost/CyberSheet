@@ -128,8 +128,8 @@ function generateOps(seed: number, count: number): Op[] {
       // Set value (40%)
       ops.push({
         type: 'setValue',
-        row: rng.int(0, 20),
-        col: rng.int(0, 5),
+        row: rng.int(0, 20) + 1,
+        col: rng.int(0, 5) + 1,
         value: rng.int(1, 50),
       });
     } else if (r < 0.70) {
@@ -149,16 +149,16 @@ function generateOps(seed: number, count: number): Op[] {
 
       ops.push({
         type: 'setFormula',
-        row: targetRow,
-        col: targetCol,
+        row: targetRow + 1,
+        col: targetCol + 1,
         formula: rng.choice(formulas),
       });
     } else {
       // Clear cell (30%)
       ops.push({
         type: 'clearCell',
-        row: rng.int(0, 20),
-        col: rng.int(0, 5),
+        row: rng.int(0, 20) + 1,
+        col: rng.int(0, 5) + 1,
       });
     }
   }
@@ -180,14 +180,7 @@ async function applyToOptimized(engine: SpreadsheetEngine, op: Op): Promise<void
         break;
 
       case 'setFormula': {
-        const cell = ws.getCell(addr);
-        if (cell) {
-          cell.formula = op.formula;
-        } else {
-          ws.setCellValue(addr, null);
-          const newCell = ws.getCell(addr);
-          if (newCell) newCell.formula = op.formula;
-        }
+        ws.setCellFormula(addr, op.formula);
         break;
       }
 
@@ -224,13 +217,15 @@ function snapshotOptimized(engine: SpreadsheetEngine): CanonicalCell[] {
   const ws = (engine as any)._ws; // Access internal worksheet
   const cells: CanonicalCell[] = [];
 
-  for (let row = 0; row < 100; row++) {
-    for (let col = 0; col < 26; col++) {
+  for (let row = 1; row <= 100; row++) {
+    for (let col = 1; col <= 26; col++) {
       const addr: Address = { row, col };
       const value = engine.getCellValue(addr);
 
-      if (value !== null) {
-        const cell = ws.getCell(addr);
+      const cell = ws.getCell(addr);
+      // Formula-only cells with a null cached value are part of worksheet
+      // state and must remain visible to the differential oracle.
+      if (value !== null || cell?.formula) {
         const entry: CanonicalCell = { row, col, value };
         if (cell?.formula) {
           entry.formula = cell.formula;
@@ -247,6 +242,46 @@ function snapshotReference(engine: ReferenceEngine): CanonicalCell[] {
   return engine.snapshot();
 }
 
+async function applyAndCompareEachOperation(
+  optimized: SpreadsheetEngine,
+  reference: ReferenceEngine,
+  ops: Op[],
+): Promise<void> {
+  for (let index = 0; index < ops.length; index++) {
+    const op = ops[index];
+    await applyToOptimized(optimized, op);
+    applyToReference(reference, op);
+
+    const actual = snapshotOptimized(optimized);
+    const expected = snapshotReference(reference);
+    const actualCanonical = canonicalize(actual);
+    const expectedCanonical = canonicalize(expected);
+    if (actualCanonical !== expectedCanonical) {
+      const ws = (optimized as any)._ws;
+      const actualByAddress = new Map(actual.map((cell) => [`${cell.row}:${cell.col}`, cell]));
+      const expectedByAddress = new Map(expected.map((cell) => [`${cell.row}:${cell.col}`, cell]));
+      const divergentAddresses = [...new Set([...actualByAddress.keys(), ...expectedByAddress.keys()])]
+        .filter((key) => JSON.stringify(actualByAddress.get(key)) !== JSON.stringify(expectedByAddress.get(key)))
+        .sort((a, b) => {
+          const [ar, ac] = a.split(':').map(Number);
+          const [br, bc] = b.split(':').map(Number);
+          return ar - br || ac - bc;
+        });
+      const graph = ws.getFormulaAddresses().map((address: Address) => ({
+        address,
+        precedents: ws.getPrecedents(address),
+      }));
+      throw new Error([
+        `First differential divergence at operation ${index + 1}/${ops.length}.`,
+        `operation=${JSON.stringify(op)}`,
+        `expectedState=${JSON.stringify(divergentAddresses.map((key) => expectedByAddress.get(key) ?? null))}`,
+        `actualState=${JSON.stringify(divergentAddresses.map((key) => actualByAddress.get(key) ?? null))}`,
+        `graph=${JSON.stringify({ stats: ws.dagStats, formulas: graph })}`,
+      ].join('\n'));
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Differential Tests
 // ---------------------------------------------------------------------------
@@ -260,10 +295,7 @@ describe('Differential Testing — Optimized vs Reference', () => {
     const optimized = new SpreadsheetEngine('OptimizedSheet');
     const reference = new ReferenceEngine();
 
-    for (const op of ops) {
-      await applyToOptimized(optimized, op);
-      applyToReference(reference, op);
-    }
+    await applyAndCompareEachOperation(optimized, reference, ops);
 
     const stateOpt = snapshotOptimized(optimized);
     const stateRef = snapshotReference(reference);
@@ -281,10 +313,7 @@ describe('Differential Testing — Optimized vs Reference', () => {
     const optimized = new SpreadsheetEngine('FormulaTest');
     const reference = new ReferenceEngine();
 
-    for (const op of ops) {
-      await applyToOptimized(optimized, op);
-      applyToReference(reference, op);
-    }
+    await applyAndCompareEachOperation(optimized, reference, ops);
 
     const stateOpt = snapshotOptimized(optimized);
     const stateRef = snapshotReference(reference);
@@ -302,10 +331,7 @@ describe('Differential Testing — Optimized vs Reference', () => {
     const optimized = new SpreadsheetEngine('LargeTest');
     const reference = new ReferenceEngine();
 
-    for (const op of ops) {
-      await applyToOptimized(optimized, op);
-      applyToReference(reference, op);
-    }
+    await applyAndCompareEachOperation(optimized, reference, ops);
 
     const stateOpt = snapshotOptimized(optimized);
     const stateRef = snapshotReference(reference);
@@ -321,18 +347,18 @@ describe('Differential Testing — Optimized vs Reference', () => {
     const reference = new ReferenceEngine();
 
     // Set up chain: A1=10, A2=A1+1, A3=A2+1
-    await applyToOptimized(optimized, { type: 'setValue', row: 0, col: 0, value: 10 });
-    applyToReference(reference, { type: 'setValue', row: 0, col: 0, value: 10 });
+    await applyToOptimized(optimized, { type: 'setValue', row: 1, col: 1, value: 10 });
+    applyToReference(reference, { type: 'setValue', row: 1, col: 1, value: 10 });
 
-    await applyToOptimized(optimized, { type: 'setFormula', row: 1, col: 0, formula: '=A1+1' });
-    applyToReference(reference, { type: 'setFormula', row: 1, col: 0, formula: '=A1+1' });
+    await applyToOptimized(optimized, { type: 'setFormula', row: 2, col: 1, formula: '=A1+1' });
+    applyToReference(reference, { type: 'setFormula', row: 2, col: 1, formula: '=A1+1' });
 
-    await applyToOptimized(optimized, { type: 'setFormula', row: 2, col: 0, formula: '=A2+1' });
-    applyToReference(reference, { type: 'setFormula', row: 2, col: 0, formula: '=A2+1' });
+    await applyToOptimized(optimized, { type: 'setFormula', row: 3, col: 1, formula: '=A2+1' });
+    applyToReference(reference, { type: 'setFormula', row: 3, col: 1, formula: '=A2+1' });
 
     // Both should have A3=12
-    const valOpt = optimized.getCellValue({ row: 2, col: 0 });
-    const valRef = reference.getCellValue({ row: 2, col: 0 });
+    const valOpt = optimized.getCellValue({ row: 3, col: 1 });
+    const valRef = reference.getCellValue({ row: 3, col: 1 });
 
     expect(valOpt).toBe(12);
     expect(valRef).toBe(12);
@@ -344,15 +370,15 @@ describe('Differential Testing — Optimized vs Reference', () => {
     const reference = new ReferenceEngine();
 
     // Set A1=5, A2=A1+1
-    await applyToOptimized(optimized, { type: 'setValue', row: 0, col: 0, value: 5 });
-    applyToReference(reference, { type: 'setValue', row: 0, col: 0, value: 5 });
+    await applyToOptimized(optimized, { type: 'setValue', row: 1, col: 1, value: 5 });
+    applyToReference(reference, { type: 'setValue', row: 1, col: 1, value: 5 });
 
-    await applyToOptimized(optimized, { type: 'setFormula', row: 1, col: 0, formula: '=A1+1' });
-    applyToReference(reference, { type: 'setFormula', row: 1, col: 0, formula: '=A1+1' });
+    await applyToOptimized(optimized, { type: 'setFormula', row: 2, col: 1, formula: '=A1+1' });
+    applyToReference(reference, { type: 'setFormula', row: 2, col: 1, formula: '=A1+1' });
 
     // Clear A1
-    await applyToOptimized(optimized, { type: 'clearCell', row: 0, col: 0 });
-    applyToReference(reference, { type: 'clearCell', row: 0, col: 0 });
+    await applyToOptimized(optimized, { type: 'clearCell', row: 1, col: 1 });
+    applyToReference(reference, { type: 'clearCell', row: 1, col: 1 });
 
     const stateOpt = snapshotOptimized(optimized);
     const stateRef = snapshotReference(reference);
@@ -364,7 +390,7 @@ describe('Differential Testing — Optimized vs Reference', () => {
     const optimized = new SpreadsheetEngine('RapidTest');
     const reference = new ReferenceEngine();
 
-    const addr: Address = { row: 5, col: 2 };
+    const addr: Address = { row: 6, col: 3 };
 
     // Mutate same cell 20 times
     for (let i = 0; i < 20; i++) {
@@ -385,15 +411,15 @@ describe('Differential Testing — Optimized vs Reference', () => {
     const reference = new ReferenceEngine();
 
     // Set A1=10, A2=A1+1
-    await applyToOptimized(optimized, { type: 'setValue', row: 0, col: 0, value: 10 });
-    applyToReference(reference, { type: 'setValue', row: 0, col: 0, value: 10 });
+    await applyToOptimized(optimized, { type: 'setValue', row: 1, col: 1, value: 10 });
+    applyToReference(reference, { type: 'setValue', row: 1, col: 1, value: 10 });
 
-    await applyToOptimized(optimized, { type: 'setFormula', row: 1, col: 0, formula: '=A1+1' });
-    applyToReference(reference, { type: 'setFormula', row: 1, col: 0, formula: '=A1+1' });
+    await applyToOptimized(optimized, { type: 'setFormula', row: 2, col: 1, formula: '=A1+1' });
+    applyToReference(reference, { type: 'setFormula', row: 2, col: 1, formula: '=A1+1' });
 
     // Overwrite A2 formula with value
-    await applyToOptimized(optimized, { type: 'setValue', row: 1, col: 0, value: 99 });
-    applyToReference(reference, { type: 'setValue', row: 1, col: 0, value: 99 });
+    await applyToOptimized(optimized, { type: 'setValue', row: 2, col: 1, value: 99 });
+    applyToReference(reference, { type: 'setValue', row: 2, col: 1, value: 99 });
 
     const stateOpt = snapshotOptimized(optimized);
     const stateRef = snapshotReference(reference);
@@ -401,8 +427,8 @@ describe('Differential Testing — Optimized vs Reference', () => {
     expect(canonicalize(stateOpt)).toBe(canonicalize(stateRef));
 
     // A2 should be 99 (not 11)
-    expect(optimized.getCellValue({ row: 1, col: 0 })).toBe(99);
-    expect(reference.getCellValue({ row: 1, col: 0 })).toBe(99);
+    expect(optimized.getCellValue({ row: 2, col: 1 })).toBe(99);
+    expect(reference.getCellValue({ row: 2, col: 1 })).toBe(99);
   }, 10000);
 });
 
@@ -419,10 +445,7 @@ describe('Differential Stress Testing', () => {
     const optimized = new SpreadsheetEngine('StressTest');
     const reference = new ReferenceEngine();
 
-    for (const op of ops) {
-      await applyToOptimized(optimized, op);
-      applyToReference(reference, op);
-    }
+    await applyAndCompareEachOperation(optimized, reference, ops);
 
     const stateOpt = snapshotOptimized(optimized);
     const stateRef = snapshotReference(reference);

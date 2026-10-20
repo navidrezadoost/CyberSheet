@@ -252,6 +252,33 @@ describe('EngineWorkerHost — handleMessage dispatch', () => {
 // ---------------------------------------------------------------------------
 
 describe('WorkerEngineProxy — async API (MockWorker)', () => {
+  test('setCellContent patch survives the worker message boundary and returns an inverse', async () => {
+    const { proxy } = makeEngine();
+    const patch = {
+      seq: 41,
+      ops: [{
+        op: 'setCellContent' as const,
+        row: 1,
+        col: 2,
+        before: { value: null },
+        after: { value: 12, formula: '=A1*3' },
+      }],
+    };
+
+    const workerPayload = JSON.parse(JSON.stringify(patch));
+    const inverse = await proxy.applyPatch(workerPayload);
+    expect(await proxy.getCellValue(1, 2)).toBe(12);
+    expect(inverse.ops).toEqual([{
+      op: 'setCellContent',
+      row: 1,
+      col: 2,
+      before: { value: 12, formula: '=A1*3' },
+      after: { value: null },
+    }]);
+    await proxy.applyPatch(inverse);
+    expect(await proxy.getCellValue(1, 2)).toBeNull();
+  });
+
 
   it('ping resolves to pong', async () => {
     const { proxy } = makeEngine();

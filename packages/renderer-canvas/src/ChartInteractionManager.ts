@@ -7,6 +7,7 @@
 
 import { ChartManager } from './ChartManager';
 import { ChartRenderer, HandlePosition } from './ChartRenderer';
+import { assertChartWorksheetSource } from './ChartDataAdapter';
 import type { ChartObject } from '@cyber-sheet/core';
 import type { Worksheet } from '@cyber-sheet/core';
 
@@ -22,32 +23,33 @@ type InteractionState =
  * ChartInteractionManager - Handles chart interactions
  */
 export class ChartInteractionManager {
-  private chartManager: ChartManager;
-  private chartRenderer: ChartRenderer;
-  private state: InteractionState = { type: 'idle' };
-  private canvas: HTMLCanvasElement;
-  private redrawCallback: () => void;
+  #chartManager: ChartManager;
+  #chartRenderer: ChartRenderer;
+  #state: InteractionState = { type: 'idle' };
+  #canvas: HTMLCanvasElement;
+  #redrawCallback: () => void;
 
   constructor(
     worksheet: Worksheet,
     canvas: HTMLCanvasElement,
     redrawCallback: () => void
   ) {
-    this.chartManager = new ChartManager(worksheet);
-    this.chartRenderer = new ChartRenderer(worksheet);
-    this.canvas = canvas;
-    this.redrawCallback = redrawCallback;
+    assertChartWorksheetSource(worksheet, 'chart interactions');
+    this.#chartManager = new ChartManager(worksheet);
+    this.#chartRenderer = new ChartRenderer(worksheet);
+    this.#canvas = canvas;
+    this.#redrawCallback = redrawCallback;
 
     // Subscribe to chart events to invalidate cache
-    this.chartManager.on((event) => {
+    this.#chartManager.on((event) => {
       if (event.type === 'update' || event.type === 'create') {
-        this.chartRenderer.invalidateChart(event.chart.id);
-        this.redrawCallback();
+        this.#chartRenderer.invalidateChart(event.chart.id);
+        this.#redrawCallback();
       } else if (event.type === 'delete') {
-        this.chartRenderer.removeFromCache(event.chart.id);
-        this.redrawCallback();
+        this.#chartRenderer.removeFromCache(event.chart.id);
+        this.#redrawCallback();
       } else if (event.type === 'select' || event.type === 'deselect') {
-        this.redrawCallback();
+        this.#redrawCallback();
       }
     });
   }
@@ -56,14 +58,14 @@ export class ChartInteractionManager {
    * Get the ChartManager instance
    */
   getChartManager(): ChartManager {
-    return this.chartManager;
+    return this.#chartManager;
   }
 
   /**
    * Get the ChartRenderer instance
    */
   getChartRenderer(): ChartRenderer {
-    return this.chartRenderer;
+    return this.#chartRenderer;
   }
 
   /**
@@ -71,14 +73,14 @@ export class ChartInteractionManager {
    */
   handleMouseDown(canvasX: number, canvasY: number): boolean {
     // Check if clicking on a chart
-    const charts = this.chartManager.getChartsAtPosition(canvasX, canvasY);
-    const topChart = this.chartManager.getTopmostChartAtPosition(canvasX, canvasY);
+    const charts = this.#chartManager.getChartsAtPosition(canvasX, canvasY);
+    const topChart = this.#chartManager.getTopmostChartAtPosition(canvasX, canvasY);
 
     if (!topChart) {
       // Click outside charts - deselect all
-      const selected = this.chartManager.getSelected();
+      const selected = this.#chartManager.getSelected();
       if (selected) {
-        this.chartManager.deselect(selected.id);
+        this.#chartManager.deselect(selected.id);
         return true; // Handled
       }
       return false; // Not handled
@@ -86,15 +88,15 @@ export class ChartInteractionManager {
 
     // Select the chart if not already selected
     if (!topChart.selected) {
-      this.chartManager.select(topChart.id);
+      this.#chartManager.select(topChart.id);
     }
 
     // Check if clicking on a resize handle
-    const handle = this.chartRenderer.getHandleAtPoint(topChart, canvasX, canvasY);
+    const handle = this.#chartRenderer.getHandleAtPoint(topChart, canvasX, canvasY);
     
     if (handle) {
       // Start resizing
-      this.state = {
+      this.#state = {
         type: 'resizing',
         chartId: topChart.id,
         handle: handle.position,
@@ -105,7 +107,7 @@ export class ChartInteractionManager {
       };
     } else {
       // Start dragging
-      this.state = {
+      this.#state = {
         type: 'dragging',
         chartId: topChart.id,
         startX: canvasX,
@@ -121,56 +123,56 @@ export class ChartInteractionManager {
    * Handle mouse move event
    */
   handleMouseMove(canvasX: number, canvasY: number): { handled: boolean; cursor?: string } {
-    if (this.state.type === 'dragging') {
-      const deltaX = canvasX - this.state.startX;
-      const deltaY = canvasY - this.state.startY;
+    if (this.#state.type === 'dragging') {
+      const deltaX = canvasX - this.#state.startX;
+      const deltaY = canvasY - this.#state.startY;
 
-      const newX = this.state.initialPos.x + deltaX;
-      const newY = this.state.initialPos.y + deltaY;
+      const newX = this.#state.initialPos.x + deltaX;
+      const newY = this.#state.initialPos.y + deltaY;
 
-      this.chartManager.move(this.state.chartId, newX, newY);
+      this.#chartManager.move(this.#state.chartId, newX, newY);
       
       return { handled: true, cursor: 'move' };
     }
 
-    if (this.state.type === 'resizing') {
-      const deltaX = canvasX - this.state.startX;
-      const deltaY = canvasY - this.state.startY;
+    if (this.#state.type === 'resizing') {
+      const deltaX = canvasX - this.#state.startX;
+      const deltaY = canvasY - this.#state.startY;
 
-      const result = this.chartRenderer.calculateResize(
+      const result = this.#chartRenderer.calculateResize(
         {
-          id: this.state.chartId,
-          position: this.state.initialPos,
-          size: this.state.initialSize
+          id: this.#state.chartId,
+          position: this.#state.initialPos,
+          size: this.#state.initialSize
         } as ChartObject,
-        this.state.handle,
+        this.#state.handle,
         deltaX,
         deltaY
       );
 
       // Update chart position and size
-      const chart = this.chartManager.get(this.state.chartId);
+      const chart = this.#chartManager.get(this.#state.chartId);
       if (chart) {
-        this.chartManager.update(this.state.chartId, {
+        this.#chartManager.update(this.#state.chartId, {
           position: result.position,
           size: result.size
         });
       }
 
-      const handlePosition = this.state.handle;
-      const handle = this.chartRenderer.getResizeHandles({
-        id: this.state.chartId,
-        position: this.state.initialPos,
-        size: this.state.initialSize
+      const handlePosition = this.#state.handle;
+      const handle = this.#chartRenderer.getResizeHandles({
+        id: this.#state.chartId,
+        position: this.#state.initialPos,
+        size: this.#state.initialSize
       } as ChartObject).find(h => h.position === handlePosition);
 
       return { handled: true, cursor: handle?.cursor || 'nwse-resize' };
     }
 
     // Not dragging or resizing - check for hover cursor
-    const topChart = this.chartManager.getTopmostChartAtPosition(canvasX, canvasY);
+    const topChart = this.#chartManager.getTopmostChartAtPosition(canvasX, canvasY);
     if (topChart) {
-      const cursor = this.chartRenderer.getCursor(topChart, canvasX, canvasY);
+      const cursor = this.#chartRenderer.getCursor(topChart, canvasX, canvasY);
       return { handled: true, cursor };
     }
 
@@ -181,8 +183,8 @@ export class ChartInteractionManager {
    * Handle mouse up event
    */
   handleMouseUp(canvasX: number, canvasY: number): boolean {
-    const wasInteracting = this.state.type !== 'idle';
-    this.state = { type: 'idle' };
+    const wasInteracting = this.#state.type !== 'idle';
+    this.#state = { type: 'idle' };
     return wasInteracting;
   }
 
@@ -190,12 +192,12 @@ export class ChartInteractionManager {
    * Handle keyboard event
    */
   handleKeyDown(event: KeyboardEvent): boolean {
-    const selected = this.chartManager.getSelected();
+    const selected = this.#chartManager.getSelected();
     if (!selected) return false;
 
     // Delete key - delete selected chart
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      this.chartManager.delete(selected.id);
+      this.#chartManager.delete(selected.id);
       event.preventDefault();
       return true;
     }
@@ -206,19 +208,19 @@ export class ChartInteractionManager {
 
     switch (event.key) {
       case 'ArrowLeft':
-        this.chartManager.move(selected.id, selected.position.x - moveDistance, selected.position.y);
+        this.#chartManager.move(selected.id, selected.position.x - moveDistance, selected.position.y);
         handled = true;
         break;
       case 'ArrowRight':
-        this.chartManager.move(selected.id, selected.position.x + moveDistance, selected.position.y);
+        this.#chartManager.move(selected.id, selected.position.x + moveDistance, selected.position.y);
         handled = true;
         break;
       case 'ArrowUp':
-        this.chartManager.move(selected.id, selected.position.x, selected.position.y - moveDistance);
+        this.#chartManager.move(selected.id, selected.position.x, selected.position.y - moveDistance);
         handled = true;
         break;
       case 'ArrowDown':
-        this.chartManager.move(selected.id, selected.position.x, selected.position.y + moveDistance);
+        this.#chartManager.move(selected.id, selected.position.x, selected.position.y + moveDistance);
         handled = true;
         break;
     }
@@ -234,31 +236,31 @@ export class ChartInteractionManager {
    * Check if currently interacting with a chart
    */
   isInteracting(): boolean {
-    return this.state.type !== 'idle';
+    return this.#state.type !== 'idle';
   }
 
   /**
    * Get current cursor based on interaction state
    */
   getCursor(canvasX: number, canvasY: number): string | null {
-    if (this.state.type === 'dragging') {
+    if (this.#state.type === 'dragging') {
       return 'move';
     }
 
-    if (this.state.type === 'resizing') {
-      const chart = this.chartManager.get(this.state.chartId);
+    if (this.#state.type === 'resizing') {
+      const chart = this.#chartManager.get(this.#state.chartId);
       if (chart) {
-        const handlePosition = this.state.handle;
-        const handle = this.chartRenderer.getResizeHandles(chart).find(
+        const handlePosition = this.#state.handle;
+        const handle = this.#chartRenderer.getResizeHandles(chart).find(
           h => h.position === handlePosition
         );
         return handle?.cursor || 'nwse-resize';
       }
     }
 
-    const topChart = this.chartManager.getTopmostChartAtPosition(canvasX, canvasY);
+    const topChart = this.#chartManager.getTopmostChartAtPosition(canvasX, canvasY);
     if (topChart) {
-      return this.chartRenderer.getCursor(topChart, canvasX, canvasY);
+      return this.#chartRenderer.getCursor(topChart, canvasX, canvasY);
     }
 
     return null;
@@ -271,14 +273,14 @@ export class ChartInteractionManager {
     ctx: CanvasRenderingContext2D,
     viewport?: { x: number; y: number; width: number; height: number }
   ): void {
-    const charts = this.chartManager.getAll();
-    this.chartRenderer.renderAllCharts(ctx, charts, viewport);
+    const charts = this.#chartManager.getAll();
+    this.#chartRenderer.renderAllCharts(ctx, charts, viewport);
   }
 
   /**
    * Dispose resources
    */
   dispose(): void {
-    this.chartRenderer.clearCache();
+    this.#chartRenderer.clearCache();
   }
 }

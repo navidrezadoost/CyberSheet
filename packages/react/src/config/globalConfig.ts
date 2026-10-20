@@ -193,7 +193,7 @@ export function registerCyberSheetFonts(fonts: CyberSheetFontDefinition[]) {
 
 export function subscribeCyberSheetConfig(listener: (config: CyberSheetGlobalConfig) => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => { listeners.delete(listener); };
 }
 
 /** @deprecated Use module-level font sync via configureCyberSheet; prefer CyberSheetConfigProvider for app flags. */

@@ -175,20 +175,11 @@ export const GETPIVOTDATA: ContextAwareFormulaFunction = (context: FormulaContex
   } else {
     return new Error('#VALUE!'); // Invalid pivot reference
   }
+  if (!pivotAddress) return new Error('#REF!');
 
-  // Get workbook from context (via worksheet)
   const worksheet = context.worksheet;
-  if (!worksheet || !(worksheet as any).workbook) {
+  if (!worksheet) {
     return new Error('#REF!'); // No workbook context
-  }
-
-  const workbook = (worksheet as any).workbook;
-
-  // Resolve pivot ID from anchor cell on current sheet
-  // Phase 32 patch: Pass worksheet name as sheetId for cross-sheet safety
-  const pivotId = workbook.resolvePivotAt(pivotAddress, worksheet.name);
-  if (!pivotId) {
-    return new Error('#REF!'); // No pivot at reference
   }
 
   // Build filters from field/item pairs
@@ -208,17 +199,8 @@ export const GETPIVOTDATA: ContextAwareFormulaFunction = (context: FormulaContex
     filters.push({ field, value });
   }
 
-  // Get GetPivotData query engine from workbook
-  const registry = workbook.getPivotRegistry();
-  const snapshotStore = workbook.getPivotSnapshotStore();
-  const recomputeEngine = workbook.getPivotRecomputeEngine();
-
-  // Import GetPivotData class dynamically (to avoid circular dependency)
-  const { GetPivotData } = require('../../GetPivotData');
-  const queryEngine = new GetPivotData(registry, snapshotStore, recomputeEngine);
-
-  // Execute query (Phase 31a: ensureFresh happens here)
-  const result = queryEngine.query(pivotId, dataField, filters);
+  // Query through a narrow owner API; pivot service instances stay private.
+  const result = worksheet.queryPivotDataAt(pivotAddress, dataField, filters);
 
   // Map pivot errors to formula errors
   if (result === '#REF!') {

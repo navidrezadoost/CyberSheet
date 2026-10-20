@@ -291,7 +291,9 @@ export class GraphInvariantValidator {
     for (const token of tokens) {
       if (token.type === 'CELL_REF') {
         // Single cell reference - pack into NodeKey
-        const key = packKey(token.row, token.col);
+        // FormulaShiftingService tokens use zero-based coordinates; worksheet
+        // graph nodes follow the public one-based Address contract.
+        const key = packKey(token.row + 1, token.col + 1);
         if (!seen.has(key)) {
           seen.add(key);
           refs.push(key);
@@ -303,7 +305,7 @@ export class GraphInvariantValidator {
 
         for (let row = start.row; row <= end.row; row++) {
           for (let col = start.col; col <= end.col; col++) {
-            const key = packKey(row, col);
+            const key = packKey(row + 1, col + 1);
             if (!seen.has(key)) {
               seen.add(key);
               refs.push(key);

@@ -71,7 +71,7 @@ export interface UseGridNavigationResult {
   isFocused: (index: number) => boolean;
 
   /** Auto-focus the grid container on mount */
-  gridRef: React.RefObject<HTMLDivElement>;
+  gridRef: React.RefObject<HTMLDivElement | null>;
 }
 
 /**

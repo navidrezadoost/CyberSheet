@@ -21,6 +21,7 @@
 
 import { SpreadsheetEngine, ExecutionError } from '../src/SpreadsheetEngine';
 import { Worksheet } from '../src/worksheet';
+import { FormulaEngine } from '../src/FormulaEngine';
 import type { Address, CellValue, ExtendedCellValue } from '../src/types';
 
 // ---------------------------------------------------------------------------
@@ -74,7 +75,7 @@ function snapshot(ws: Worksheet): StateSnapshot {
   // Collect all non-null cells
   for (let row = 0; row < 100; row++) {
     for (let col = 0; col < 26; col++) {
-      const addr: Address = { row, col };
+      const addr: Address = { row: row + 1, col: col + 1 };
       const value = ws.getCellValue(addr);
       
       if (value !== null) {
@@ -181,7 +182,7 @@ function generateOps(seed: number, count: number): Op[] {
 // ---------------------------------------------------------------------------
 
 function applyOp(ws: Worksheet, op: Op): void {
-  const addr: Address = { row: op.row, col: op.col };
+  const addr: Address = { row: op.row + 1, col: op.col + 1 };
 
   switch (op.type) {
     case 'setValue':
@@ -189,14 +190,7 @@ function applyOp(ws: Worksheet, op: Op): void {
       break;
 
     case 'setFormula': {
-      const cell = ws.getCell(addr);
-      if (cell) {
-        cell.formula = op.formula;
-      } else {
-        ws.setCellValue(addr, null);
-        const newCell = ws.getCell(addr);
-        if (newCell) newCell.formula = op.formula;
-      }
+      ws.setCellFormula(addr, op.formula);
       break;
     }
 
@@ -327,19 +321,19 @@ describe('Chaos Testing — Invariant Validation Under Entropy', () => {
     const ws = engine['_ws'];
 
     let reentryAttempts = 0;
-    let reentryBlocked = 0;
+    const reentryResults: Promise<boolean>[] = [];
 
     engine.on('cellsChanged', () => {
       reentryAttempts++;
-      try {
-        engine.run((worksheet) => {
-          worksheet.setCellValue({ row: 99, col: 99 }, 'illegal');
-        });
-      } catch (err) {
-        if (err instanceof ExecutionError && err.code === 'CONCURRENT_RUN') {
-          reentryBlocked++;
-        }
-      }
+      // run() is async: the rejection must be observed as a Promise, not with
+      // synchronous try/catch. Attach the rejection handler during emission so
+      // Node never sees an unhandled CONCURRENT_RUN.
+      reentryResults.push(engine.run((worksheet) => {
+        worksheet.setCellValue({ row: (99) + 1, col: (99) + 1 }, 'illegal');
+      }).then(
+        () => false,
+        (err: unknown) => err instanceof ExecutionError && err.code === 'CONCURRENT_RUN',
+      ));
     });
 
     const ops = generateOps(333, 30);
@@ -350,8 +344,12 @@ describe('Chaos Testing — Invariant Validation Under Entropy', () => {
       });
     }
 
+    const reentryBlocked = await Promise.all(reentryResults);
     expect(reentryAttempts).toBe(ops.length);
-    expect(reentryBlocked).toBe(ops.length); // All blocked
+    expect(reentryBlocked).toHaveLength(ops.length);
+    expect(reentryBlocked.every(Boolean)).toBe(true); // All rejected predictably
+    expect(ws.getCellValue({ row: (99) + 1, col: (99) + 1 })).toBeNull(); // No callback ran
+    expect(engine.executionState).toBe('IDLE');
   }, 15000);
 
   // -------------------------------------------------------------------------
@@ -374,18 +372,19 @@ describe('Chaos Testing — Invariant Validation Under Entropy', () => {
     const incrementalState = snapshot(ws);
 
     // Now create fresh worksheet and apply same ops without scheduler
-    const freshWs = new Worksheet('Fresh');
+    const freshWs = new Worksheet('Fresh', undefined, undefined, new FormulaEngine() as any);
     for (const op of ops) {
       applyOp(freshWs, op);
     }
 
-    // Force synchronous full recompute
+    // Force synchronous full recompute through the public worksheet path.
+    freshWs.autoRecalculate();
     const allAddrs: Address[] = [];
     for (let row = 0; row < 100; row++) {
       for (let col = 0; col < 26; col++) {
-        const cell = freshWs.getCell({ row, col });
+        const cell = freshWs.getCell({ row: row + 1, col: col + 1 });
         if (cell?.formula) {
-          allAddrs.push({ row, col });
+          allAddrs.push({ row: row + 1, col: col + 1 });
         }
       }
     }
@@ -416,8 +415,8 @@ describe('Chaos Testing — Invariant Validation Under Entropy', () => {
       });
 
       // Read random cells after each write
-      const readRow = i % 50;
-      const readCol = i % 10;
+      const readRow = (i % 50) + 1;
+      const readCol = (i % 10) + 1;
       const value = engine.getCellValue({ row: readRow, col: readCol });
 
       // Value should be either null or a valid CellValue
@@ -485,15 +484,11 @@ describe('Chaos Testing — Invariant Validation Under Entropy', () => {
 
     // Set up chain: A1 → A2 → A3 → A4
     await engine.run((worksheet) => {
-      worksheet.setCellValue({ row: 0, col: 0 }, 10);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 10);
       
-      const c2 = worksheet.getCell({ row: 1, col: 0 });
-      const c3 = worksheet.getCell({ row: 2, col: 0 });
-      const c4 = worksheet.getCell({ row: 3, col: 0 });
-      
-      if (c2) c2.formula = '=A1+1';
-      if (c3) c3.formula = '=A2+1';
-      if (c4) c4.formula = '=A3+1';
+      worksheet.setCellFormula({ row: (1) + 1, col: (0) + 1 }, '=A1+1');
+      worksheet.setCellFormula({ row: (2) + 1, col: (0) + 1 }, '=A2+1');
+      worksheet.setCellFormula({ row: (3) + 1, col: (0) + 1 }, '=A3+1');
     });
 
     // Apply random mutations to other cells
@@ -508,7 +503,7 @@ describe('Chaos Testing — Invariant Validation Under Entropy', () => {
     }
 
     // Chain should still be correct
-    expect(engine.getCellValue({ row: 3, col: 0 })).toBe(13); // 10+1+1+1
+    expect(engine.getCellValue({ row: 4, col: 1 })).toBe(13); // 10+1+1+1
   }, 20000);
 });
 
@@ -526,13 +521,10 @@ describe('Performance Envelope — System-Level Stress', () => {
 
     await engine.run((worksheet) => {
       // Create 1000 formulas: A1=1, A2=A1+1, A3=A2+1, ...
-      worksheet.setCellValue({ row: 0, col: 0 }, 1);
+      worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
       
       for (let i = 1; i < 1000; i++) {
-        const cell = worksheet.getCell({ row: i, col: 0 });
-        if (cell) {
-          cell.formula = `=A${i}+1`;
-        }
+        worksheet.setCellFormula({ row: (i) + 1, col: (0) + 1 }, `=A${i}+1`);
       }
     });
 
@@ -542,7 +534,7 @@ describe('Performance Envelope — System-Level Stress', () => {
     expect(elapsed).toBeLessThan(5000);
     
     // Verify final value
-    expect(engine.getCellValue({ row: 999, col: 0 })).toBe(1000);
+    expect(engine.getCellValue({ row: 1000, col: 1 })).toBe(1000);
   }, 10000);
 
   test('perf: 100 mutations complete in < 1 second', async () => {

@@ -5,6 +5,7 @@ import type {
   ExcelIconSet,
   Range,
   Worksheet,
+  WorkbookSheetView,
 } from '@cyber-sheet/core';
 import { CF_COLOR_SCALES, SetConditionalFormattingRulesCommand } from '@cyber-sheet/core';
 
@@ -68,7 +69,7 @@ export const ICON_SET_MAP: Record<string, ExcelIconSet> = {
 export const COLOR_SCALE_MAP: Record<string, keyof typeof CF_COLOR_SCALES> = {
   greenYellowRed: 'green-yellow-red',
   redYellowGreen: 'red-yellow-green',
-  greenWhiteRed: 'green-white-red',
+  greenWhiteRed: 'red-white-green',
   redWhiteGreen: 'red-white-green',
   blueWhiteRed: 'blue-white-red',
   redWhiteBlue: 'blue-white-red',
@@ -104,7 +105,7 @@ export function formatRangeA1(range: Range): string {
   return start === end ? start : `${start}:${end}`;
 }
 
-export function resolveTableDataRange(worksheet: Worksheet, selection: Range | null): Range | null {
+export function resolveTableDataRange(worksheet: Worksheet | WorkbookSheetView, selection: Range | null): Range | null {
   if (selection) {
     const normalized = normalizeRange(selection);
     const multiCell =
@@ -120,7 +121,7 @@ export function resolveTableDataRange(worksheet: Worksheet, selection: Range | n
   return contiguous ? normalizeRange(contiguous) : normalizeRange(used);
 }
 
-export function inferHasHeaders(worksheet: Worksheet, range: Range): boolean {
+export function inferHasHeaders(worksheet: Worksheet | WorkbookSheetView, range: Range): boolean {
   let textCount = 0;
   let total = 0;
   for (let col = range.start.col; col <= range.end.col; col++) {

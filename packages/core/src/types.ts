@@ -582,8 +582,16 @@ export type SheetEvents =
       address: Address;
       cell: Cell;
       previousValue?: Cell["value"];
+      previousFormula?: string;
+      /** Present when the cached formula result changed during recalculation. */
+      origin?: "formula-result";
     } // Phase 30b: previousValue for no-op detection
-  | { type: "style-changed"; address: Address; style: CellStyle | undefined }
+  | {
+      type: "style-changed";
+      address: Address;
+      style: CellStyle | undefined;
+      previousStyle?: CellStyle;
+    }
   | {
       type: "spill-source-changed";
       address: Address;

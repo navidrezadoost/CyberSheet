@@ -1,4 +1,4 @@
-import { Worksheet } from './worksheet';
+import { Worksheet, adoptWorksheetByWorkbook } from './worksheet';
 import { IFormulaEngine } from './types';
 import { StyleCache } from './StyleCache';
 import { EventBus } from './EventBus';
@@ -11,97 +11,179 @@ import { PivotInvalidationEngineImpl } from './PivotInvalidationEngine';
 import { PivotRecomputeEngineImpl } from './PivotRecomputeEngine'; // Phase 31a
 import { PivotAnchorIndexImpl } from './PivotAnchorIndex'; // Phase 32
 import type { SlicerId, SlicerValue, SlicerStateStorable } from './PivotEngine'; // Phase 35
-import { groupStateStore } from './PivotGroupStateStore'; // Phase 36a
 import type { Range, Address } from './types';
 import type { PivotConfig } from './PivotEngine';
 import { PivotEngine } from './PivotEngine';
 import { toDisplayValue } from './utils/cell-value-normalizer'; // Storage→Display boundary
 import { transformToPivotSnapshot } from './PivotSnapshotTransformer';
+import { MAX_WORKSHEET_COLUMN, MAX_WORKSHEET_ROW } from './dag/DependencyGraph';
+import { OwnerBackedWorkbookSheetView } from './WorkbookSheetView';
+import type { WorkbookId, WorkbookMutationPort, WorkbookSheetView, WorksheetId } from './workbook-access-types';
+import type { EventAPI } from './EventBus';
+import { GetPivotData, type PivotDataFilter, type GetPivotDataResult } from './GetPivotData';
+
+let nextWorkbookIdentity = 1;
+
+function detachReadonly<T>(value: T): T {
+  if (typeof value === 'function') return undefined as T;
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return new Date(value.getTime()) as T;
+  if (Array.isArray(value)) return Object.freeze(value.map(detachReadonly)) as T;
+  if (value instanceof Map) return Object.freeze(Array.from(value, ([k, v]) => [detachReadonly(k), detachReadonly(v)])) as T;
+  if (value instanceof Set) return Object.freeze(Array.from(value, detachReadonly)) as T;
+  const copy: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) copy[key] = detachReadonly(entry);
+  return Object.freeze(copy) as T;
+}
 
 export class Workbook {
-  private sheets = new Map<string, Worksheet>();
-  private _active?: string;
-  private formulaEngine?: IFormulaEngine;
-  private styleCache = new StyleCache();
-  private pivotRegistry: PivotRegistry = new PivotRegistryImpl();
-  private pivotSnapshotStore = new PivotSnapshotStore(); // Phase 29
-  private pivotDependencyIndex = new PivotDependencyIndexImpl(); // Phase 30b
-  private pivotInvalidationEngine = new PivotInvalidationEngineImpl( // Phase 30b
-    this.pivotDependencyIndex,
-    this.pivotRegistry as import('./PivotRegistry').PivotRegistryImpl
+  #workbookId = `wb-${nextWorkbookIdentity++}` as WorkbookId;
+  get workbookId(): WorkbookId { return this.#workbookId; }
+  #sheets = new Map<string, Worksheet>();
+  #sheetsById = new Map<WorksheetId, Worksheet>();
+  #viewsById = new Map<WorksheetId, WorkbookSheetView>();
+  #active?: string;
+  #formulaEngine?: IFormulaEngine;
+  #styleCache = new StyleCache();
+  #pivotRegistry: PivotRegistry = new PivotRegistryImpl();
+  #pivotSnapshotStore = new PivotSnapshotStore(); // Phase 29
+  #pivotDependencyIndex = new PivotDependencyIndexImpl(); // Phase 30b
+  #pivotInvalidationEngine = new PivotInvalidationEngineImpl( // Phase 30b
+    this.#pivotDependencyIndex,
+    this.#pivotRegistry as import('./PivotRegistry').PivotRegistryImpl
   );
-  private pivotRecomputeEngine = new PivotRecomputeEngineImpl( // Phase 31a + 36a
-    this.pivotRegistry,
-    this.pivotSnapshotStore,
-    this.buildPivot.bind(this),
+  #pivotRecomputeEngine = new PivotRecomputeEngineImpl( // Phase 31a + 36a
+    this.#pivotRegistry,
+    this.#pivotSnapshotStore,
+    this.#buildPivot.bind(this),
     // Phase 36a: Inject source data extractor for partial recompute
     (worksheetId: string, range: Range) => {
-      const worksheet = this.getSheet(worksheetId);
+      const worksheet = this.#getWorksheetInternal(worksheetId);
       if (!worksheet) return null;
-      return this.extractSourceData(worksheet, range);
+      return this.#extractSourceData(worksheet, range);
     }
   );
-  private pivotAnchorIndex = new PivotAnchorIndexImpl(); // Phase 32
-  readonly eventBus = new EventBus();
-  private eventBridgeManager?: WorkbookEventBridgeManager;
+  #pivotAnchorIndex = new PivotAnchorIndexImpl(); // Phase 32
+  #internalEventBus = new EventBus();
+  readonly eventBus: EventAPI = Object.freeze({
+    on: this.#internalEventBus.on.bind(this.#internalEventBus),
+    once: this.#internalEventBus.once.bind(this.#internalEventBus),
+    off: this.#internalEventBus.off.bind(this.#internalEventBus),
+  });
+  /** R1 migration boundary. No operation is writable before R2. */
+  readonly mutationPort: WorkbookMutationPort = Object.freeze({
+    setCellValue: () => this.#rejectUnavailable('cell value mutation'),
+    setCellFormula: () => this.#rejectUnavailable('cell formula mutation'),
+    clearCellContent: () => this.#rejectUnavailable('cell content clear'),
+    clearCellFormula: () => this.#rejectUnavailable('cell formula clear'),
+    setCellStyle: () => this.#rejectUnavailable('cell style mutation'),
+  });
+  #eventBridgeManager?: WorkbookEventBridgeManager;
 
-  private ensureLazyEventBridgeRegistration(): void {
-    if (this.eventBridgeManager) return;
-    this.eventBridgeManager = setupWorkbookLazyBridges(this);
+  #ensureLazyEventBridgeRegistration(): void {
+    if (this.#eventBridgeManager) return;
+    this.#eventBridgeManager = setupWorkbookLazyBridges(() => Array.from(this.#sheets.values()), this.#internalEventBus);
   }
 
-  getStyleCache(): StyleCache {
-    return this.styleCache;
+  /** Atomically create a published workbook and its initial, empty directory. */
+  static create(options: { sheets: Array<{ name: string; rows?: number; cols?: number }> }): Workbook {
+    if (!options || !Array.isArray(options.sheets) || options.sheets.length === 0) {
+      throw new Error('Workbook.create requires at least one initial sheet');
+    }
+    const names = new Set<string>();
+    for (const spec of options.sheets) {
+      const trimmed = spec.name.trim();
+      if (!trimmed || trimmed.length > 31 || /[\\/?*\[\]:]/.test(trimmed)) throw new Error(`Invalid sheet name '${spec.name}'`);
+      if (names.has(trimmed)) throw new Error(`Sheet '${trimmed}' already exists`);
+      if ((spec.rows !== undefined && (!Number.isInteger(spec.rows) || spec.rows <= 0 || spec.rows > MAX_WORKSHEET_ROW)) ||
+          (spec.cols !== undefined && (!Number.isInteger(spec.cols) || spec.cols <= 0 || spec.cols > MAX_WORKSHEET_COLUMN))) {
+        throw new Error('Initial sheet dimensions must be positive integers within worksheet limits');
+      }
+      names.add(trimmed);
+    }
+    const workbook = new Workbook();
+    const ownerAccess = Object.freeze({
+      internStyle: (style: import('./types').CellStyle) => workbook.#styleCache.intern(style),
+      queryPivotDataAt: (address: Address, sheetName: string, valueField: string, filters: PivotDataFilter[]) =>
+        workbook.queryPivotDataAt(address, sheetName, valueField, filters),
+    });
+    const candidates = options.sheets.map((spec) => new Worksheet(spec.name.trim(), spec.rows, spec.cols, workbook.#formulaEngine, ownerAccess));
+    for (const sheet of candidates) adoptWorksheetByWorkbook(sheet, workbook.workbookId);
+    for (const sheet of candidates) {
+      workbook.#sheets.set(sheet.name, sheet);
+      workbook.#sheetsById.set(sheet.getWorksheetId() as WorksheetId, sheet);
+      workbook.#pivotInvalidationEngine.observeWorksheet(
+        sheet.name,
+        (listener) => { const d = sheet.on(listener); return () => d.dispose(); },
+      );
+    }
+    workbook.#active = candidates[0].name;
+    workbook.#ensureLazyEventBridgeRegistration();
+    for (const sheet of candidates) workbook.#eventBridgeManager?.wireSheet(sheet);
+    return workbook;
+  }
+
+  #resolveView(workbookId: WorkbookId, worksheetId: WorksheetId): Worksheet | undefined {
+    return workbookId === this.workbookId ? this.#sheetsById.get(worksheetId) : undefined;
+  }
+
+  #viewFor(sheet: Worksheet): WorkbookSheetView {
+    const id = sheet.getWorksheetId() as WorksheetId;
+    let view = this.#viewsById.get(id);
+    if (!view) {
+      view = new OwnerBackedWorkbookSheetView(this.workbookId, id, (wb, ws) => this.#resolveView(wb, ws));
+      this.#viewsById.set(id, view);
+    }
+    return view;
+  }
+
+  #getWorksheetInternal(name: string): Worksheet | undefined { return this.#sheets.get(name); }
+
+  #rejectUnavailable(operation: string): never {
+    throw new Error(`Workbook-owned ${operation} is unavailable until its journal slice is authorized`);
   }
 
   /**
    * Phase 28: Get pivot registry for addressable pivots
    */
-  getPivotRegistry(): PivotRegistry {
-    return this.pivotRegistry;
-  }
-
   /**
    * Phase 29: Get pivot snapshot store for computed results
    */
-  getPivotSnapshotStore(): PivotSnapshotStore {
-    return this.pivotSnapshotStore;
-  }
-
   /**
    * Phase 30b: Register a pivot's source range for automatic invalidation.
    * Call this after registry.register() to enable auto-dirty tracking.
    */
   registerPivotDependency(pivotId: PivotId, sourceRange: Range): void {
-    this.pivotDependencyIndex.register(pivotId, sourceRange);
+    void pivotId; void sourceRange;
+    this.#rejectUnavailable('pivot dependency mutation');
   }
 
   /**
    * Phase 30b: Unregister pivot dependency (call on pivot deletion).
    */
   unregisterPivotDependency(pivotId: PivotId): void {
-    this.pivotDependencyIndex.unregister(pivotId);
+    void pivotId;
+    this.#rejectUnavailable('pivot dependency mutation');
   }
 
   /**
    * Phase 30b: Get the dependency index (for testing and inspection).
    */
-  getPivotDependencyIndex(): PivotDependencyIndexImpl {
-    return this.pivotDependencyIndex;
-  }
-
   /**
    * Phase 30b: Get the invalidation engine (for testing and inspection).
    */
-  getPivotInvalidationEngine(): PivotInvalidationEngineImpl {
-    return this.pivotInvalidationEngine;
-  }
-
   /**
    * Phase 31a: Get the recompute engine (for testing and inspection).
    */
-  getPivotRecomputeEngine(): PivotRecomputeEngineImpl {
-    return this.pivotRecomputeEngine;
+  /** Read-only formula query; pivot services and mutation authority stay owner-private. */
+  queryPivotData(pivotId: PivotId, valueField: string, filters: PivotDataFilter[] = []): GetPivotDataResult {
+    return new GetPivotData(this.#pivotRegistry, this.#pivotSnapshotStore, this.#pivotRecomputeEngine)
+      .query(pivotId, valueField, filters);
+  }
+
+  queryPivotDataAt(address: Address, sheetName: string, valueField: string, filters: PivotDataFilter[] = []): GetPivotDataResult {
+    const pivotId = this.#pivotAnchorIndex.get(address, sheetName);
+    return pivotId ? this.queryPivotData(pivotId, valueField, filters) : '#REF!';
   }
 
   /**
@@ -113,8 +195,8 @@ export class Workbook {
    * @param worksheetId - Worksheet containing source data
    * @returns PivotSnapshot
    */
-  private buildPivot(pivotId: PivotId, config: PivotConfig, worksheetId: string): import('./PivotSnapshotStore').PivotSnapshot {
-    const worksheet = this.getSheet(worksheetId);
+  #buildPivot(pivotId: PivotId, config: PivotConfig, worksheetId: string): import('./PivotSnapshotStore').PivotSnapshot {
+    const worksheet = this.#getWorksheetInternal(worksheetId);
     if (!worksheet) {
       throw new Error(`Worksheet '${worksheetId}' not found`);
     }
@@ -125,7 +207,7 @@ export class Workbook {
 
     // Phase 36a: Populate group state for partial recompute
     // This must happen after full rebuild to capture correct state
-    engine.populateGroupState(pivotId, config, this.extractSourceData(worksheet, config.sourceRange));
+    engine.populateGroupState(pivotId, config, this.#extractSourceData(worksheet, config.sourceRange));
 
     // Transform to snapshot format
     const snapshot = transformToPivotSnapshot(
@@ -141,7 +223,7 @@ export class Workbook {
    * Phase 36a: Extract source data from worksheet
    * Helper for group state population
    */
-  private extractSourceData(worksheet: Worksheet, range: { start: import('./types').Address; end: import('./types').Address }): import('./types').ExtendedCellValue[][] {
+  #extractSourceData(worksheet: Worksheet, range: { start: import('./types').Address; end: import('./types').Address }): import('./types').ExtendedCellValue[][] {
     const data: import('./types').ExtendedCellValue[][] = [];
     
     for (let row = range.start.row; row <= range.end.row; row++) {
@@ -166,7 +248,7 @@ export class Workbook {
    * @returns PivotId if pivot exists at address, null otherwise
    */
   resolvePivotAt(address: Address, sheetId: string): PivotId | null {
-    return this.pivotAnchorIndex.get(address, sheetId);
+    return this.#pivotAnchorIndex.get(address, sheetId);
   }
 
   /**
@@ -179,7 +261,8 @@ export class Workbook {
    * @param sheetId - Worksheet identifier
    */
   setPivotAnchor(pivotId: PivotId, anchor: Address, sheetId: string): void {
-    this.pivotAnchorIndex.set(anchor, pivotId, sheetId);
+    void pivotId; void anchor; void sheetId;
+    this.#rejectUnavailable('pivot anchor mutation');
   }
 
   /**
@@ -189,7 +272,7 @@ export class Workbook {
    * @returns Anchor address or null if not anchored
    */
   getPivotAnchor(pivotId: PivotId): Address | null {
-    return this.pivotAnchorIndex.getAnchor(pivotId);
+    return detachReadonly(this.#pivotAnchorIndex.getAnchor(pivotId));
   }
 
   /**
@@ -206,41 +289,10 @@ export class Workbook {
    * @throws Error if pivot not found or field invalid
    */
   setSlicer(
-    pivotId: PivotId,
-    slicerId: SlicerId,
-    field: string,
-    selectedValues: SlicerValue[],
-    mode: 'include' | 'exclude' = 'include'
+    pivotId: PivotId, slicerId: SlicerId, field: string, selectedValues: SlicerValue[], mode: 'include' | 'exclude' = 'include'
   ): void {
-    const pivot = this.pivotRegistry.get(pivotId);
-    if (!pivot) {
-      throw new Error(`Pivot '${pivotId}' not found`);
-    }
-
-    // Validate field exists in pivot config (EAGER validation)
-    const validFields = [
-      ...pivot.config.rows.map(r => r.label),
-      ...pivot.config.columns.map(c => c.label)
-    ];
-
-    if (!validFields.includes(field)) {
-      throw new Error(`Field '${field}' not found in pivot. Valid fields: ${validFields.join(', ')}`);
-    }
-
-    // Initialize slicers object if not exists
-    if (!pivot.config.slicers) {
-      pivot.config.slicers = {};
-    }
-
-    // Store slicer state
-    pivot.config.slicers[slicerId] = {
-      field,
-      selectedValues,
-      mode
-    };
-
-    // Trigger invalidation (Phase 30b integration)
-    this.pivotRegistry.markDirty(pivotId);
+    void pivotId; void slicerId; void field; void selectedValues; void mode;
+    this.#rejectUnavailable('pivot metadata mutation');
   }
 
   /**
@@ -251,16 +303,8 @@ export class Workbook {
    * @throws Error if pivot not found
    */
   clearSlicer(pivotId: PivotId, slicerId: SlicerId): void {
-    const pivot = this.pivotRegistry.get(pivotId);
-    if (!pivot) {
-      throw new Error(`Pivot '${pivotId}' not found`);
-    }
-
-    if (pivot.config.slicers && slicerId in pivot.config.slicers) {
-      delete pivot.config.slicers[slicerId];
-      // Trigger rebuild
-      this.pivotRegistry.markDirty(pivotId);
-    }
+    void pivotId; void slicerId;
+    this.#rejectUnavailable('pivot metadata mutation');
   }
 
   /**
@@ -271,10 +315,10 @@ export class Workbook {
    * @returns Slicer state or undefined if not found
    */
   getSlicer(pivotId: PivotId, slicerId: SlicerId): SlicerStateStorable | undefined {
-    const pivot = this.pivotRegistry.get(pivotId);
+    const pivot = this.#pivotRegistry.get(pivotId);
     if (!pivot) return undefined;
 
-    return pivot.config.slicers?.[slicerId];
+    return detachReadonly(pivot.config.slicers?.[slicerId]);
   }
 
   /**
@@ -284,10 +328,10 @@ export class Workbook {
    * @returns Record of all slicers (empty if none)
    */
   getSlicers(pivotId: PivotId): Record<SlicerId, SlicerStateStorable> {
-    const pivot = this.pivotRegistry.get(pivotId);
+    const pivot = this.#pivotRegistry.get(pivotId);
     if (!pivot) return {};
 
-    return pivot.config.slicers || {};
+    return detachReadonly(pivot.config.slicers || {});
   }
 
   /**
@@ -302,7 +346,7 @@ export class Workbook {
    * @throws Error if pivot not found or field invalid
    */
   getSlicerDistinctValues(pivotId: PivotId, field: string): SlicerValue[] {
-    const pivot = this.pivotRegistry.get(pivotId);
+    const pivot = this.#pivotRegistry.get(pivotId);
     if (!pivot) {
       throw new Error(`Pivot '${pivotId}' not found`);
     }
@@ -316,7 +360,7 @@ export class Workbook {
     }
 
     // Get source worksheet
-    const worksheet = this.getSheet(pivot.worksheetId);
+    const worksheet = this.#getWorksheetInternal(pivot.worksheetId);
     if (!worksheet) {
       throw new Error(`Worksheet '${pivot.worksheetId}' not found`);
     }
@@ -347,24 +391,8 @@ export class Workbook {
    * @returns Pivot identifier
    */
   createPivot(name: string, worksheetId: string, config: PivotConfig): PivotId {
-    // Register pivot
-    const pivotId = this.pivotRegistry.register({
-      name,
-      config,
-      sourceRange: 'A1:Z100', // TODO: derive from config.sourceRange
-      worksheetId,
-      dirty: false,
-      lastBuiltAt: undefined,
-    });
-
-    // Build initial snapshot
-    const snapshot = this.buildPivot(pivotId, config, worksheetId);
-    
-    // Store snapshot
-    this.pivotSnapshotStore.set(pivotId, snapshot);
-    this.pivotRegistry.markClean(pivotId, snapshot.computedAt);
-
-    return pivotId;
+    void name; void worksheetId; void config;
+    return this.#rejectUnavailable('pivot creation');
   }
 
   /**
@@ -374,15 +402,15 @@ export class Workbook {
    * @returns Pivot snapshot or undefined if not found
    */
   getPivotSnapshot(pivotId: PivotId): import('./PivotSnapshotStore').PivotSnapshot | undefined {
-    const pivot = this.pivotRegistry.get(pivotId);
+    const pivot = this.#pivotRegistry.get(pivotId);
     if (!pivot) return undefined;
 
     // Trigger rebuild if dirty (Phase 31a lazy evaluation)
     if (pivot.dirty) {
-      this.pivotRecomputeEngine.ensureFresh(pivotId);
+      this.#pivotRecomputeEngine.ensureFresh(pivotId);
     }
 
-    return this.pivotSnapshotStore.get(pivotId);
+    return detachReadonly(this.#pivotSnapshotStore.get(pivotId));
   }
 
   /**
@@ -395,36 +423,13 @@ export class Workbook {
    * @returns true if pivot was deleted, false if not found
    */
   deletePivot(pivotId: PivotId): boolean {
-    // Unregister from registry (identity)
-    const deleted = this.pivotRegistry.unregister(pivotId);
-    
-    if (!deleted) return false; // Pivot doesn't exist
-
-    // Clean up all subsystems
-    this.pivotAnchorIndex.delete(pivotId);       // Phase 32: Remove anchor
-    this.pivotDependencyIndex.unregister(pivotId);  // Phase 30b: Remove dependency tracking
-    this.pivotSnapshotStore.delete(pivotId);    // Phase 29a: Remove cached snapshot
-    groupStateStore.delete(pivotId);            // Phase 36a: Remove group state
-
-    return true;
+    void pivotId;
+    return this.#rejectUnavailable('pivot deletion');
   }
 
-  addSheet(name: string, rows?: number, cols?: number): Worksheet {
-    if (this.sheets.has(name)) throw new Error(`Sheet '${name}' already exists`);
-    const ws = new Worksheet(name, rows, cols, this.formulaEngine, this);
-    this.sheets.set(name, ws);
-    if (!this._active) this._active = name;
-
-    // Phase 30b: Subscribe invalidation engine to this worksheet's events
-    this.pivotInvalidationEngine.observeWorksheet(
-      ws.name,
-      (listener) => { const d = ws.on(listener); return () => d.dispose(); }
-    );
-
-    this.ensureLazyEventBridgeRegistration();
-    this.eventBridgeManager?.wireSheet(ws);
-
-    return ws;
+  addSheet(name: string, rows?: number, cols?: number): WorkbookSheetView {
+    void name; void rows; void cols;
+    throw new Error('Post-publication sheet creation is unavailable until the sheet-lifecycle journal slice is authorized');
   }
 
   /**
@@ -432,71 +437,30 @@ export class Workbook {
    * Excel parity: at least one sheet must remain.
    */
   deleteSheet(name: string): boolean {
-    if (!this.sheets.has(name)) return false;
-    if (this.sheets.size <= 1) {
-      throw new Error('Cannot delete the last sheet in the workbook');
-    }
-
-    const names = this.getSheetNames();
-    const deleteIndex = names.indexOf(name);
-    this.sheets.delete(name);
-
-    if (this._active === name) {
-      const fallbackIndex = deleteIndex > 0 ? deleteIndex - 1 : 0;
-      const remaining = this.getSheetNames();
-      this._active = remaining[fallbackIndex] ?? remaining[0];
-    }
-
-    return true;
+    void name;
+    throw new Error('Sheet deletion is unavailable until the sheet-lifecycle journal slice is authorized');
   }
 
   /**
    * Rename a worksheet (Excel rules: max 31 chars, no \\ / ? * [ ] :).
    */
   renameSheet(oldName: string, newName: string): boolean {
-    const trimmed = newName.trim();
-    if (!trimmed) {
-      throw new Error('Sheet name cannot be empty');
-    }
-    if (trimmed.length > 31) {
-      throw new Error('Sheet name cannot exceed 31 characters');
-    }
-    if (/[\\/?*[\]:]/.test(trimmed)) {
-      throw new Error('Sheet name cannot contain \\ / ? * [ ] :');
-    }
-    if (!this.sheets.has(oldName)) return false;
-    if (trimmed !== oldName && this.sheets.has(trimmed)) {
-      throw new Error(`Sheet '${trimmed}' already exists`);
-    }
-    if (trimmed === oldName) return true;
-
-    const ws = this.sheets.get(oldName)!;
-    (ws as { name: string }).name = trimmed;
-
-    const ordered = this.getSheetNames().map((n) =>
-      n === oldName ? [trimmed, ws] as const : [n, this.sheets.get(n)!] as const
-    );
-    this.sheets.clear();
-    for (const [n, sheet] of ordered) {
-      this.sheets.set(n, sheet);
-    }
-
-    if (this._active === oldName) {
-      this._active = trimmed;
-    }
-
-    return true;
+    void oldName; void newName;
+    throw new Error('Sheet rename is unavailable until the sheet-lifecycle journal slice is authorized');
   }
 
-  getSheet(name: string): Worksheet | undefined { return this.sheets.get(name); }
-  getSheetNames(): string[] { return Array.from(this.sheets.keys()); }
+  getSheet(name: string): WorkbookSheetView | undefined {
+    const sheet = this.#sheets.get(name);
+    return sheet ? this.#viewFor(sheet) : undefined;
+  }
+  getSheetNames(): string[] { return Array.from(this.#sheets.keys()); }
 
-  get activeSheet(): Worksheet | undefined { return this._active ? this.sheets.get(this._active) : undefined; }
-  set activeSheetName(name: string) { if (!this.sheets.has(name)) throw new Error('No such sheet'); this._active = name; }
+  get activeSheet(): WorkbookSheetView | undefined { return this.#active ? this.getSheet(this.#active) : undefined; }
+  set activeSheetName(name: string) { void name; throw new Error('Active sheet changes are unavailable until the sheet-lifecycle journal slice is authorized'); }
 
   setFormulaEngine(engine?: IFormulaEngine) {
-    this.formulaEngine = engine;
-    for (const ws of this.sheets.values()) ws.setFormulaEngine(engine);
+    void engine;
+    throw new Error('Formula engine replacement is unavailable for a published workbook');
   }
 
   /**
@@ -505,10 +469,10 @@ export class Workbook {
    * Clear registry, snapshots, dependency index, anchor index, and event subscriptions
    */
   dispose(): void {
-    this.pivotInvalidationEngine.dispose(); // Phase 30b: Clean up event subscriptions
-    this.pivotDependencyIndex.clear();      // Phase 30b: Clear dependency index
-    this.pivotAnchorIndex.clear();          // Phase 32: Clear anchor index
-    this.pivotRegistry.clear();             // Phase 28: Clear registry
-    this.pivotSnapshotStore.clearAll();     // Phase 29: Clear snapshots
+    this.#pivotInvalidationEngine.dispose(); // Phase 30b: Clean up event subscriptions
+    this.#pivotDependencyIndex.clear();      // Phase 30b: Clear dependency index
+    this.#pivotAnchorIndex.clear();          // Phase 32: Clear anchor index
+    this.#pivotRegistry.clear();             // Phase 28: Clear registry
+    this.#pivotSnapshotStore.clearAll();     // Phase 29: Clear snapshots
   }
 }

@@ -1,4 +1,4 @@
-import type { Worksheet } from '@cyber-sheet/core';
+import type { Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 
 /** Default 1 inch at 96 DPI (Excel default single-click insert size). */
 export const DEFAULT_INSERT_OBJECT_SIZE_PX = 96;
@@ -8,7 +8,7 @@ const MIN_DRAG_SIZE_PX = 5;
 export function snapSheetAxis(
   value: number,
   axis: 'x' | 'y',
-  sheet: Worksheet | undefined,
+  sheet: Worksheet | WorkbookSheetView | undefined,
   snap: boolean,
 ): number {
   if (!snap || !sheet) return value;
@@ -39,7 +39,7 @@ export function snapSheetAxis(
 export function snapSheetPoint(
   x: number,
   y: number,
-  sheet: Worksheet | undefined,
+  sheet: Worksheet | WorkbookSheetView | undefined,
   snap: boolean,
 ): { x: number; y: number } {
   return {

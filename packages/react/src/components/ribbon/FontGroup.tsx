@@ -36,10 +36,10 @@ export const FontGroup: React.FC<FontGroupProps> = ({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFillPicker, setShowFillPicker] = useState(false);
   
-  const fontPickerRef = useRef(null);
-  const sizePickerRef = useRef(null);
-  const colorPickerRef = useRef(null);
-  const fillPickerRef = useRef(null);
+  const fontPickerRef = useRef<HTMLDivElement>(null);
+  const sizePickerRef = useRef<HTMLDivElement>(null);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const fillPickerRef = useRef<HTMLDivElement>(null);
 
   // Common font families
   const fontFamilies = [

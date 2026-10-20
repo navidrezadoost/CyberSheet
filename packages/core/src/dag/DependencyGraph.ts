@@ -120,7 +120,7 @@
  */
 
 import { packKey, unpackKey, COL_MULT } from '../storage/CellStoreV1';
-import type { Address, CellValue } from '../types';
+import type { Address, AddressRange, CellValue } from '../types';
 export { packKey, unpackKey, COL_MULT };
 
 // ---------------------------------------------------------------------------
@@ -204,15 +204,33 @@ export type IterativeRecalcResult = RecalcResult & {
 /** A packed integer identifying a cell: row × 20_000 + col */
 export type NodeKey = number;
 
+/** Excel worksheet coordinates use one-based rows and columns. */
+export const MAX_WORKSHEET_ROW = 1_048_576;
+export const MAX_WORKSHEET_COLUMN = 16_384;
+
+export function assertWorksheetAddress(row: number, col: number): void {
+  if (!Number.isInteger(row) || row < 1 || row > MAX_WORKSHEET_ROW
+    || !Number.isInteger(col) || col < 1 || col > MAX_WORKSHEET_COLUMN) {
+    throw new RangeError(`Worksheet address out of bounds: row=${row}, col=${col}; expected rows 1–${MAX_WORKSHEET_ROW} and columns 1–${MAX_WORKSHEET_COLUMN}.`);
+  }
+}
+
+function contains(range: AddressRange, row: number, col: number): boolean {
+  return row >= range.startRow && row <= range.endRow
+    && col >= range.startCol && col <= range.endCol;
+}
+
 /** Sentinel value for "no node" / "not found" */
 export const NO_NODE: NodeKey = -1;
 
 // ---------------------------------------------------------------------------
-// 1b. EdgeList — compact Uint32Array-backed adjacency list
+// 1b. EdgeList — lossless numeric adjacency list
 // ---------------------------------------------------------------------------
 
 /**
- * Compact, resizable Uint32Array-backed adjacency list for DAG edges.
+ * Numeric adjacency list for DAG edges. Float64Array preserves safe-integer
+ * NodeKeys across the full sheet dimensions; Uint32Array silently truncated
+ * keys above row 214,748.
  *
  * Replaces `Set<NodeKey>` in the predecessor/successor maps, reducing memory
  * per edge from ~32 bytes (JS Set hash-table overhead + pointer boxing) to
@@ -226,17 +244,15 @@ export const NO_NODE: NodeKey = -1;
  *   - Initial capacity 4 → amortised O(1) append via doubling.
  *   - Dedup on add (linear scan, O(n)) — adjacency lists are small (1–20 deps).
  *   - Swap-remove on delete (O(n) find + O(1) remove) — order not significant.
- *   - Iterator snapshots `_size` at creation time; safe against concurrent
- *     reads but not concurrent mutations (no concurrent mutation in engine).
+ *   - Iterator snapshots `_size` at creation time.
  */
 export class EdgeList implements Iterable<NodeKey> {
-  /** Backing typed buffer. May be grown on demand. */
-  private buf: Uint32Array;
-  /** Number of valid elements at [0.._size). */
+  // Float64 stores all safe integer NodeKeys exactly (including > uint32).
+  private buf: Float64Array;
   private _size = 0;
 
   constructor(initialCapacity = 4) {
-    this.buf = new Uint32Array(Math.max(4, initialCapacity));
+    this.buf = new Float64Array(Math.max(4, initialCapacity));
   }
 
   /** Create an EdgeList populated from an existing key array. O(n). */
@@ -255,8 +271,7 @@ export class EdgeList implements Iterable<NodeKey> {
    * compared to the cost of evaluating the cell.
    */
   has(key: NodeKey): boolean {
-    const { buf, _size } = this;
-    for (let i = 0; i < _size; i++) if (buf[i] === key) return true;
+    for (let i = 0; i < this._size; i++) if (this.buf[i] === key) return true;
     return false;
   }
 
@@ -276,10 +291,9 @@ export class EdgeList implements Iterable<NodeKey> {
    * @returns true if the key was present and removed.
    */
   delete(key: NodeKey): boolean {
-    const { buf } = this;
     for (let i = 0; i < this._size; i++) {
-      if (buf[i] === key) {
-        buf[i] = buf[--this._size]; // swap last element into the gap
+      if (this.buf[i] === key) {
+        this.buf[i] = this.buf[--this._size];
         return true;
       }
     }
@@ -300,7 +314,7 @@ export class EdgeList implements Iterable<NodeKey> {
   }
 
   private _grow(): void {
-    const next = new Uint32Array(this.buf.length * 2);
+    const next = new Float64Array(this.buf.length * 2);
     next.set(this.buf);
     this.buf = next;
   }
@@ -325,6 +339,11 @@ export class DependencyGraph {
    */
   private readonly successors = new Map<NodeKey, EdgeList>();
 
+  /** Compact formula range watchers; edits inside a rectangle invalidate it. */
+  private readonly rangeDependencies = new Map<NodeKey, AddressRange[]>();
+  /** Formula coordinates known to the graph, used to preserve range topo edges. */
+  private readonly formulaNodes = new Set<NodeKey>();
+
   /**
    * Volatile cells: always marked dirty at start of each recalc.
    * Contains cells using: NOW(), TODAY(), RAND(), RANDBETWEEN(),
@@ -341,6 +360,55 @@ export class DependencyGraph {
    */
   readonly dirtySet = new Set<NodeKey>();
 
+  /** Return all graph nodes downstream of seeds, including range watchers. */
+  getDependentClosure(seeds: Iterable<NodeKey>): Set<NodeKey> {
+    const found = new Set<NodeKey>();
+    const queue = [...seeds];
+    for (const key of queue) found.add(key);
+    for (let i = 0; i < queue.length; i++) {
+      const node = queue[i];
+      const { row, col } = unpackKey(node);
+      for (const [dependent, ranges] of this.rangeDependencies) {
+        if (!found.has(dependent) && ranges.some((range) => contains(range, row, col))) {
+          found.add(dependent);
+          queue.push(dependent);
+        }
+      }
+      for (const dependent of this.successors.get(node) ?? []) {
+        if (!found.has(dependent)) {
+          found.add(dependent);
+          queue.push(dependent);
+        }
+      }
+    }
+    return found;
+  }
+
+  /** Record a formula coordinate so range watchers can order formula inputs. */
+  registerFormulaNode(key: NodeKey): void {
+    this.formulaNodes.add(key);
+    const { row, col } = unpackKey(key);
+    for (const [dependent, ranges] of this.rangeDependencies) {
+      if (ranges.some((range) => contains(range, row, col))) this.addEdge(key, dependent);
+    }
+  }
+
+  private addEdge(precedent: NodeKey, dependent: NodeKey): void {
+    let preds = this.predecessors.get(dependent);
+    if (!preds) {
+      preds = new EdgeList();
+      this.predecessors.set(dependent, preds);
+    }
+    if (preds.has(precedent)) return;
+    preds.add(precedent);
+    let successors = this.successors.get(precedent);
+    if (!successors) {
+      successors = new EdgeList();
+      this.successors.set(precedent, successors);
+    }
+    successors.add(dependent);
+  }
+
   // ── Edge management ───────────────────────────────────────────────────────
 
   /**
@@ -355,7 +423,11 @@ export class DependencyGraph {
    *
    * @complexity O(k) where k = |previousDeps| + |dependsOn|
    */
-  setDependencies(dependent: NodeKey, dependsOn: readonly NodeKey[]): void {
+  setDependencies(
+    dependent: NodeKey,
+    dependsOn: readonly NodeKey[],
+    ranges: readonly AddressRange[] = [],
+  ): void {
     // Remove stale predecessors
     const oldPreds = this.predecessors.get(dependent);
     if (oldPreds) {
@@ -364,9 +436,19 @@ export class DependencyGraph {
       }
     }
 
-    // Register new predecessors (EdgeList — 4 bytes/edge, typed buffer)
-    const newPreds = EdgeList.from(dependsOn);
+    this.rangeDependencies.delete(dependent);
+
+    const allPreds = new Set(dependsOn);
+    for (const range of ranges) {
+      for (const key of this.formulaNodes) {
+        const { row, col } = unpackKey(key);
+        if (contains(range, row, col)) allPreds.add(key);
+      }
+    }
+    // Register direct and currently known formula-in-range predecessors.
+    const newPreds = EdgeList.from([...allPreds]);
     this.predecessors.set(dependent, newPreds);
+    if (ranges.length > 0) this.rangeDependencies.set(dependent, ranges.map((range) => ({ ...range })));
 
     // Register inverse edges (successor links)
     for (const pred of newPreds) {
@@ -391,6 +473,7 @@ export class DependencyGraph {
       }
       this.predecessors.delete(node);
     }
+    this.rangeDependencies.delete(node);
   }
 
   // ── Volatile registration ─────────────────────────────────────────────────
@@ -451,6 +534,13 @@ export class DependencyGraph {
     let head = 0;
     while (head < queue.length) {
       const node = queue[head++];
+      const { row, col } = unpackKey(node);
+      for (const [dependent, ranges] of this.rangeDependencies) {
+        if (ranges.some((range) => contains(range, row, col)) && !this.dirtySet.has(dependent)) {
+          this.dirtySet.add(dependent);
+          queue.push(dependent);
+        }
+      }
       const sucSet = this.successors.get(node);
       if (!sucSet) continue;
       for (const suc of sucSet) {
@@ -832,6 +922,8 @@ export class DependencyGraph {
     this.successors.clear();
     this.volatiles.clear();
     this.dirtySet.clear();
+    this.rangeDependencies.clear();
+    this.formulaNodes.clear();
   }
 }
 
@@ -881,10 +973,20 @@ export class RecalcCoordinator {
    *
    * Call this from Worksheet.registerDependencies().
    */
-  registerFormula(row: number, col: number, deps: Address[]): void {
+  registerFormula(row: number, col: number, deps: Address[], ranges: AddressRange[] = []): void {
+    assertWorksheetAddress(row, col);
+    for (const d of deps) assertWorksheetAddress(d.row, d.col);
+    for (const range of ranges) {
+      assertWorksheetAddress(range.startRow, range.startCol);
+      assertWorksheetAddress(range.endRow, range.endCol);
+      if (range.startRow > range.endRow || range.startCol > range.endCol) {
+        throw new RangeError('Worksheet dependency ranges must be ordered and inclusive.');
+      }
+    }
     const key     = packKey(row, col);
     const depKeys = deps.map(d => packKey(d.row, d.col));
-    this.graph.setDependencies(key, depKeys);
+    this.graph.registerFormulaNode(key);
+    this.graph.setDependencies(key, depKeys, ranges);
     this.graph.markDirty([key]);
   }
 
@@ -893,6 +995,7 @@ export class RecalcCoordinator {
    * (called when a formula is deleted, or before re-registration on edit).
    */
   clearFormula(row: number, col: number): void {
+    assertWorksheetAddress(row, col);
     this.graph.clearDependencies(packKey(row, col));
   }
 
@@ -903,6 +1006,7 @@ export class RecalcCoordinator {
    * @complexity O(V_reachable + E_reachable) — BFS inside graph.markDirty
    */
   notifyChanged(row: number, col: number): void {
+    assertWorksheetAddress(row, col);
     this.graph.markDirty([packKey(row, col)]);
   }
 
@@ -942,9 +1046,10 @@ export class RecalcCoordinator {
     if (cycleNodes.size > 0) {
       const sccs = this.graph.findCycles();
       for (const scc of sccs) {
-        const cells = scc.map(k => unpackKey(k));
+        const cycle = [...scc].sort((a, b) => a - b);
+        const cells = cycle.map(k => unpackKey(k));
         cycleDiags.push({
-          cycle: scc,
+          cycle,
           cells,
           message: `Circular reference: ${cells.map(a => `R${a.row}C${a.col}`).join(' → ')}`,
         });
@@ -974,9 +1079,10 @@ export class RecalcCoordinator {
       for (const scc of sccs) {
         const selectedCycle = scc.some(key => cycleNodes.has(key));
         if (!selectedCycle) continue;
-        const cells = scc.map(k => unpackKey(k));
+        const cycle = [...scc].sort((a, b) => a - b);
+        const cells = cycle.map(k => unpackKey(k));
         cycleDiags.push({
-          cycle: scc,
+          cycle,
           cells,
           message: `Circular reference: ${cells.map(a => `R${a.row}C${a.col}`).join(' → ')}`,
         });
@@ -1008,10 +1114,13 @@ export class RecalcCoordinator {
    *
    * Internally: calls setDependencies + setVolatile(true) + markDirty.
    */
-  registerVolatile(row: number, col: number, deps: Address[]): void {
+  registerVolatile(row: number, col: number, deps: Address[], ranges: AddressRange[] = []): void {
+    assertWorksheetAddress(row, col);
+    for (const d of deps) assertWorksheetAddress(d.row, d.col);
     const key     = packKey(row, col);
     const depKeys = deps.map(d => packKey(d.row, d.col));
-    this.graph.setDependencies(key, depKeys);
+    this.graph.registerFormulaNode(key);
+    this.graph.setDependencies(key, depKeys, ranges);
     this.graph.setVolatile(key, true);
     this.graph.markDirty([key]);
   }
@@ -1249,21 +1358,21 @@ export function estimateGraphMemoryMB(formulaCells: number, avgDeps: number): nu
 }
 
 /**
- * Estimate memory for the Phase 6 EdgeList-backed dependency graph.
+ * Estimate memory for the Float64 EdgeList-backed dependency graph.
  *
- * Memory model (EdgeList, Phase 6):
+ * Memory model (Float64 EdgeList):
  *   Map<NodeKey, EdgeList> predecessor entry: ~56 bytes (Map slot + EdgeList object:
- *     buf ref 8 + _size 4 + Uint32Array header 40 + initial 4×4 payload = ~56 bytes
+ *     buf ref 8 + _size 4 + Float64Array header 40 + initial 4×8 payload = ~84 bytes
  *     amortised over typical use)
- *   Each dep in EdgeList: 4 bytes (Uint32 element)
+ *   Each dep in EdgeList: 8 bytes (Float64 element; lossless safe integer)
  *   Successor entries: same × 2 (bidirectional)
- *   Total: V × (56 + k × 4) × 2 bytes — ~4–6× less than Set-based model
+ *   Total: V × (84 + k × 8) × 2 bytes — still below Set-based model
  *
  * @param formulaCells  Number of formula cells in the sheet.
  * @param avgDeps       Average number of cell references per formula.
  * @returns Estimated memory usage in megabytes.
  */
 export function estimateTypedMemoryMB(formulaCells: number, avgDeps: number): number {
-  const bytesPerNode = (56 + avgDeps * 4) * 2;
+  const bytesPerNode = (84 + avgDeps * 8) * 2;
   return (formulaCells * bytesPerNode) / (1024 * 1024);
 }

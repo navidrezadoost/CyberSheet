@@ -1,3 +1,4 @@
+import { toDisplayValue } from '@cyber-sheet/core';
 import type { Worksheet, ConditionalFormattingRule } from '@cyber-sheet/core';
 import { ConditionalFormattingBatchEngine } from '@cyber-sheet/core';
 import type { RuleInspectionDetail } from './types';
@@ -53,7 +54,7 @@ export const useConditionalFormattingInspector = ({
 	if (!rules.length) return null;
 
 	const engine = new ConditionalFormattingBatchEngine();
-	const getValue = (address: { row: number; col: number }) => worksheet.getCellValue(address);
+	const getValue = (address: { row: number; col: number }) => toDisplayValue(worksheet.getCellValue(address));
 
 	rules.forEach((rule, index) => {
 		if (!rule.id) {

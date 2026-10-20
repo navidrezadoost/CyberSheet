@@ -15,6 +15,7 @@ import { describe, test, expect, beforeEach } from '@jest/globals';
 import { PivotRegistryImpl } from '../src/PivotRegistry';
 import { PivotSnapshotStore } from '../src/PivotSnapshotStore';
 import { GetPivotData } from '../src/GetPivotData';
+import { PivotRecomputeEngineImpl } from '../src/PivotRecomputeEngine';
 import type { PivotId } from '../src/PivotRegistry';
 import type { PivotSnapshot } from '../src/PivotSnapshotStore';
 
@@ -26,7 +27,7 @@ describe('Phase 30a: Staleness Tracking', () => {
   beforeEach(() => {
     registry = new PivotRegistryImpl();
     snapshotStore = new PivotSnapshotStore();
-    engine = new GetPivotData(registry, snapshotStore);
+    engine = new GetPivotData(registry, snapshotStore, new PivotRecomputeEngineImpl(registry, snapshotStore, () => { throw new Error('Test builder unavailable'); }, () => null));
   });
 
   // =========================================================================

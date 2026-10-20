@@ -17,7 +17,7 @@ import { ColorGrid } from "./ColorGrid";
 import { THEME_COLORS } from "./colors";
 import type { BorderStyle, BorderPayload, BorderValue } from "./borderTypes";
 
-interface BorderDropdownProps {
+export interface BorderDropdownProps {
   /** Whether dropdown is currently open */
   isOpen: boolean;
 
@@ -40,7 +40,7 @@ interface BorderDropdownProps {
   onPresetApply: (payloads: BorderPayload[]) => void;
 
   /** Position dropdown relative to button */
-  buttonRef: React.RefObject<HTMLDivElement>;
+  buttonRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function BorderDropdown({

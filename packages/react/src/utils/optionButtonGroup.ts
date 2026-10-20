@@ -98,6 +98,10 @@ export function selectOptionButtonInGroup(
   drawingLayer: DrawingLayer,
   worksheet?: Worksheet,
 ): void {
+  if (worksheet?.isWorkbookOwned()) {
+    throw new Error('Workbook-owned drawing mutations are unavailable until their journal slice is authorized');
+  }
+
   const group = getOptionButtonGroup(control, drawingLayer);
 
   group.forEach((btn, idx) => {

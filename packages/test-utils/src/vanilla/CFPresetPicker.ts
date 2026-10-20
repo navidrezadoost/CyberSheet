@@ -48,7 +48,7 @@ export class CFPresetPicker {
       // Announce category change
       const state = this.controller.getState();
       const categories = this.controller.getCategories();
-      const category = categories.find((c: { value: PresetCategory; label: string; count: number }) => c.value === state.selectedCategory);
+      const category = categories.find((c) => c.id === state.selectedCategory);
       if (category) {
         this.announce(`${category.label} category selected. ${state.filteredPresets.length} presets available.`);
       }
@@ -94,7 +94,7 @@ export class CFPresetPicker {
   /**
    * Handle keyboard navigation for category filters
    */
-  private handleCategoryKeyDown(event: KeyboardEvent, currentIndex: number, categories: Array<{ value: PresetCategory; label: string; count: number }>): void {
+  private handleCategoryKeyDown(event: KeyboardEvent, currentIndex: number, categories: Array<{ id: PresetCategory | 'all'; label: string; count: number }>): void {
     if (!this.options.enableA11y || !this.wrapperEl) return;
 
     let newIndex = currentIndex;
@@ -119,7 +119,7 @@ export class CFPresetPicker {
       case 'Enter':
       case ' ':
         event.preventDefault();
-        this.controller.selectCategory(categories[currentIndex].value);
+        this.controller.selectCategory(categories[currentIndex].id);
         return;
       default:
         return;
@@ -345,7 +345,7 @@ export class CFPresetPicker {
     return searchContainer;
   }
 
-  private createCategories(categories: Array<{ value: PresetCategory; label: string; count: number }>, selected: PresetCategory): HTMLElement {
+  private createCategories(categories: Array<{ id: PresetCategory | 'all'; label: string; count: number }>, selected: PresetCategory | 'all'): HTMLElement {
     const container = document.createElement('div');
     container.className = 'cf-preset-picker__categories';
 
@@ -358,15 +358,15 @@ export class CFPresetPicker {
     categories.forEach((cat, index) => {
       const btn = document.createElement('button');
       btn.className = 'cf-preset-picker__category-btn';
-      if (selected === cat.value) {
+      if (selected === cat.id) {
         btn.classList.add('cf-preset-picker__category-btn--active');
       }
 
       // Accessibility: Add ARIA attributes and keyboard navigation
       if (this.options.enableA11y) {
         btn.setAttribute('role', 'radio');
-        btn.setAttribute('aria-checked', String(selected === cat.value));
-        btn.setAttribute('tabindex', selected === cat.value ? '0' : '-1');
+        btn.setAttribute('aria-checked', String(selected === cat.id));
+        btn.setAttribute('tabindex', selected === cat.id ? '0' : '-1');
         btn.addEventListener('keydown', (e) => this.handleCategoryKeyDown(e, index, categories));
       }
 
@@ -382,7 +382,7 @@ export class CFPresetPicker {
       btn.appendChild(badge);
 
       btn.addEventListener('click', () => {
-        this.controller.selectCategory(cat.value);
+        this.controller.selectCategory(cat.id);
       });
       container.appendChild(btn);
     });
@@ -563,7 +563,7 @@ export class CFPresetPicker {
   }
 
   private getPresetIcon(preset: CFPreset): string {
-    const icons: Record<PresetCategory, string> = {
+    const icons: Record<PresetCategory | 'all', string> = {
       'data-bars': '📊',
       'color-scales': '🌈',
       'icon-sets': '🎯',

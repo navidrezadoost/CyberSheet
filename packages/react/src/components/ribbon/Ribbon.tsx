@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ClipboardService, DrawingLayer, Address, Worksheet } from '@cyber-sheet/core';
+import type { ClipboardService, DrawingLayer, Address, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
 import type { PictureInsertTemplate } from '../DrawingCanvas';
 import type { IconInsertTemplate } from '../../utils/createDrawingObject';
 import type { FormControlInsertTemplate } from '../../utils/formControlFactory';
@@ -40,7 +40,7 @@ export interface RibbonProps {
   onInsertTable?: () => void;
   formattingController?: import('@cyber-sheet/core').FormattingController | null;
   onReviewCommand?: (command: any) => void;
-  worksheet?: Worksheet;
+  worksheet?: Worksheet | WorkbookSheetView;
   onDrawingChange?: () => void;
   onBeginShapeInsert?: (shapeType: string) => void;
   onBeginPictureInsert?: (template: PictureInsertTemplate) => void;
@@ -155,14 +155,12 @@ export const Ribbon: React.FC<RibbonProps> = ({
       {activeTab === 'Page Layout' && (
         <PageLayoutTab 
           onThemeChange={(theme) => console.log('Theme changed:', theme)}
-          onColorThemeChange={(colors) => console.log('Color theme changed:', colors)}
-          onFontThemeChange={(fonts) => console.log('Font theme changed:', fonts)}
-          onMarginChange={(margins) => console.log('Margins changed:', margins)}
+          onColorsChange={(colors) => console.log('Color theme changed:', colors)}
+          onFontsChange={() => console.log('Font theme changed')}
+          onMarginsChange={(margins) => console.log('Margins changed:', margins)}
           onOrientationChange={(orientation) => console.log('Orientation changed:', orientation)}
           onSizeChange={(size) => console.log('Paper size changed:', size)}
-          onPageBreak={(action) => console.log('Page break action:', action)}
-          onFitToPage={(options) => console.log('Fit to page:', options)}
-          onPageSetupDialog={() => console.log('Open page setup dialog')}
+          onBreaksInsert={(action) => console.log('Page break action:', action)}
         />
       )}
       
