@@ -30,15 +30,34 @@ body {
 }
 
 .excel-app {
+  --cs-ribbon-layer-z: 80000;
+  --cs-ribbon-dropdown-z: 80001;
+  --cs-ribbon-floating-z: 100000;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  min-width: 960px;
-  width: 100vw;
+  width: 100%;
+  max-width: 100vw;
+  min-width: 0;
   background: #ffffff;
+  overflow-x: hidden;
+  overflow-y: hidden;
 }
 
-/* ===== Title Bar ===== */
+/* Ribbon row must not widen the whole app — scroll lives inside ribbon content */
+.excel-app > .ribbon-tabs,
+.excel-app > .ribbon,
+.excel-app > .formula-bar,
+.excel-app > .title-bar,
+.excel-app > .cybersheet-sheet-tabs,
+.excel-app > .excel-sheet-tabs-bar,
+.excel-app > .status-bar {
+  flex-shrink: 0;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* ===== Title Bar (default / non excel-app) ===== */
 .title-bar {
   display: flex;
   align-items: center;
@@ -246,9 +265,37 @@ body {
 /* ===== Spreadsheet Area ===== */
 .spreadsheet-area {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   background: #ffffff;
   display: flex;
   overflow: hidden;
+}
+
+/* Keep grid/footer under ribbon popovers */
+.excel-app > .spreadsheet-area {
+  position: relative;
+  z-index: 0;
+}
+
+.excel-app > .cybersheet-sheet-tabs,
+.excel-app > .excel-sheet-tabs-bar,
+.excel-app > .status-bar {
+  position: relative;
+  z-index: 20;
+}
+
+.excel-app > .ribbon {
+  position: relative;
+  z-index: 50;
+  border-top: 1px solid #e1dfdd;
+  box-sizing: border-box;
+}
+
+/* Ribbon panel: same surface as active tab strip (all tabs) */
+.excel-app > .ribbon {
+  background: #f3f2f1 !important;
+  border-bottom: 1px solid #e1dfdd !important;
 }
 
 .excel-app canvas {
@@ -415,4 +462,521 @@ body {
   font-size: 11px;
   min-width: 35px;
   text-align: right;
+}
+
+
+/* =========================================================
+   Excel header + footer chrome (green title + sheet/status bars)
+   ========================================================= */
+
+/* —— Title bar (green) —— */
+.excel-app .title-bar {
+  height: 32px !important;
+  min-height: 32px;
+  padding: 0 0 0 8px !important;
+  background: #217346 !important;
+  color: #ffffff !important;
+  border-bottom: none !important;
+  font: 12px/32px "Segoe UI", Calibri, Arial, sans-serif;
+}
+
+.excel-app .title-bar-center {
+  font-size: 12px !important;
+  font-weight: 400;
+}
+
+.excel-app .title-bar .file-name {
+  color: #ffffff !important;
+}
+
+.excel-app .title-bar .title-btn,
+.excel-app .title-bar .qat-btn,
+.excel-app .title-bar .window-btn,
+.excel-app .title-bar .search-btn,
+.excel-app .title-bar .share-btn {
+  color: #ffffff !important;
+}
+
+.excel-app .title-bar .title-btn,
+.excel-app .title-bar .qat-btn {
+  height: 24px;
+  border-radius: 2px;
+}
+
+.excel-app .title-bar .title-btn:hover,
+.excel-app .title-bar .qat-btn:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+
+.excel-app .title-bar .qat-label {
+  color: #ffffff;
+  font-size: 11px;
+}
+
+.excel-app .title-bar svg {
+  filter: brightness(0) invert(1);
+}
+
+.excel-app .title-bar .toggle-switch {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.excel-app .title-bar .toggle-switch.active {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.excel-app .title-bar .user-avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.excel-app .title-bar .user-avatar:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.excel-app .title-bar .window-btn {
+  width: 40px !important;
+  height: 32px !important;
+  font-size: 12px;
+}
+
+.excel-app .title-bar .window-btn:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+
+.excel-app .title-bar .window-btn.close:hover {
+  background: #e81123 !important;
+  color: #fff !important;
+}
+
+/* —— Ribbon tab strip (same green band) —— */
+.excel-app .ribbon-tabs {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: flex-end !important;
+  flex: 0 0 32px;
+  box-sizing: border-box;
+  gap: 0 !important;
+  height: 32px !important;
+  min-height: 32px;
+  padding: 0 8px 0 0 !important;
+  background: #217346 !important;
+  border-bottom: none !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.excel-app .ribbon-tabs .ribbon-tab {
+  position: relative;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 48px;
+  height: 26px;
+  margin: 0 1px 0 0;
+  padding: 0 12px !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #ffffff !important;
+  font: 11px/26px "Segoe UI", Calibri, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: background-color 80ms ease;
+}
+
+.excel-app .ribbon-tabs .ribbon-tab:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.excel-app .ribbon-tabs .ribbon-tab.active {
+  z-index: 2;
+  height: 27px;
+  margin-bottom: 0;
+  background: #f3f2f1 !important;
+  color: #217346 !important;
+  font-weight: 600;
+}
+
+.excel-app .ribbon-tabs .ribbon-tab.file-tab {
+  min-width: 44px;
+  margin-right: 4px;
+  padding: 0 12px !important;
+  background: transparent !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.excel-app .ribbon-tabs .ribbon-tab.file-tab:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.excel-app .ribbon-tabs .ribbon-tab.file-tab.active {
+  background: #f3f2f1 !important;
+  color: #217346 !important;
+}
+
+/* —— Sheet tabs bar (footer top) —— */
+.excel-app .cybersheet-sheet-tabs,
+.excel-app .excel-sheet-tabs-bar {
+  display: flex !important;
+  align-items: stretch !important;
+  height: 28px !important;
+  min-height: 28px;
+  max-height: 28px;
+  background: #f3f3f3 !important;
+  background-image: none !important;
+  border-top: 1px solid #d4d4d4 !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+  font: 11px/28px "Segoe UI", Calibri, Arial, sans-serif;
+  color: #333;
+}
+
+.excel-app .excel-sheet-tab-nav {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 1px;
+  padding: 0 4px;
+  border-right: 1px solid #d4d4d4;
+}
+
+.excel-app .excel-sheet-scroll-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid #c6c6c6;
+  border-radius: 0;
+  background: #fafafa;
+  color: #555;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.excel-app .excel-sheet-scroll-btn:hover {
+  background: #ececec;
+}
+
+.excel-app .excel-sheet-tab-strip {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.excel-app .excel-sheet-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0 12px;
+  height: 24px;
+  margin-top: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: #333;
+  font-size: 11px;
+  font-weight: 400;
+  background: #ececec;
+  border: 1px solid #c6c6c6;
+  border-bottom: none;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+  transition: background-color 80ms ease;
+}
+
+.excel-app .excel-sheet-tab:hover {
+  background: #e4e4e4;
+}
+
+.excel-app .excel-sheet-tab.active {
+  height: 25px;
+  margin-top: 2px;
+  background: #ffffff !important;
+  color: #217346 !important;
+  font-weight: 600;
+  border-color: #c6c6c6;
+  border-top: 2px solid #217346;
+  border-bottom: 1px solid #ffffff;
+}
+
+.excel-app .excel-sheet-tab-add {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  margin: 0 0 2px 4px;
+  padding: 0;
+  border: 1px solid #c6c6c6;
+  border-radius: 50%;
+  background: #fafafa;
+  color: #217346;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.excel-app .excel-sheet-tab-add:hover {
+  background: #ececec;
+}
+
+.excel-app .excel-sheet-tab-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: #a94442;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.excel-app .excel-sheet-tab-delete:hover {
+  background: rgba(192, 57, 43, 0.15);
+}
+
+/* —— Status bar (footer bottom) —— */
+.excel-app .status-bar {
+  height: 24px !important;
+  min-height: 24px;
+  padding: 0 8px !important;
+  background: #e2e2e2 !important;
+  color: #444 !important;
+  border-top: 1px solid #c6c6c6 !important;
+  font: 11px/24px "Segoe UI", Calibri, Arial, sans-serif;
+}
+
+.excel-app .status-bar .status-text,
+.excel-app .status-bar .status-item,
+.excel-app .status-bar .zoom-level {
+  font-size: 11px !important;
+  color: #444 !important;
+}
+
+.excel-app .status-bar .view-btn {
+  width: 22px;
+  height: 20px;
+  color: #555;
+  border-radius: 0;
+}
+
+.excel-app .status-bar .view-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #222;
+}
+
+.excel-app .status-bar .zoom-btn {
+  width: 16px;
+  height: 16px;
+  font-size: 13px;
+  color: #555;
+}
+
+.excel-app .status-bar .zoom-slider {
+  width: 88px;
+  height: 3px;
+  background: #bdbdbd;
+}
+
+.excel-app .status-bar .zoom-slider::-webkit-slider-thumb {
+  width: 8px;
+  height: 14px;
+  border-radius: 1px;
+  background: #6b6b6b;
+}
+
+.excel-app .status-bar .zoom-slider::-moz-range-thumb {
+  width: 8px;
+  height: 14px;
+  border-radius: 1px;
+  background: #6b6b6b;
+  border: none;
+}
+
+/* Excel 2013 — formula bar (overrides inline styles from FormulaBar.tsx) */
+.excel-app .formula-bar {
+  position: relative;
+  z-index: 40;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  flex: 0 0 32px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  gap: 4px !important;
+  padding: 4px 6px !important;
+  border-bottom: 1px solid #d4d4d4 !important;
+  background: #f3f3f3 !important;
+  color: #333;
+  font: 11px/1 "Segoe UI", Calibri, Arial, sans-serif !important;
+  overflow: hidden;
+}
+.excel-app .formula-bar > div {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-height: 24px;
+}
+.excel-app .formula-bar > div:first-child {
+  position: relative !important;
+  display: flex !important;
+  flex: 0 0 96px !important;
+  flex-shrink: 0 !important;
+  align-items: stretch !important;
+  width: 96px !important;
+  min-width: 72px !important;
+  max-width: 120px !important;
+  height: 24px !important;
+  box-sizing: border-box;
+  border: 1px solid #ababab !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+}
+.excel-app .formula-bar > div:first-child input {
+  flex: 1 1 auto !important;
+  width: 1px !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 22px !important;
+  box-sizing: border-box;
+  padding: 0 18px 0 5px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: none;
+  background: #fff !important;
+  color: #333 !important;
+  font: 11px/22px "Segoe UI", Calibri, Arial, sans-serif !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+}
+.excel-app .formula-bar > div:first-child button {
+  position: absolute !important;
+  right: 0 !important;
+  top: 0 !important;
+  transform: none !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-left: 1px solid #d0d0d0 !important;
+  border-radius: 0 !important;
+  background: #f5f5f5 !important;
+  color: #555 !important;
+  font-size: 8px !important;
+  line-height: 22px !important;
+}
+.excel-app .formula-bar > button {
+  display: inline-flex !important;
+  flex: 0 0 24px !important;
+  flex-shrink: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #555 !important;
+  font: 14px/1 "Segoe UI", Arial, sans-serif !important;
+  cursor: pointer;
+}
+.excel-app .formula-bar > button:hover {
+  border-color: #c5d5e8 !important;
+  background: #e5edf7 !important;
+}
+.excel-app .formula-bar > div:last-of-type {
+  flex: 1 1 auto !important;
+  min-width: 48px !important;
+  width: auto !important;
+  max-height: none;
+  position: relative;
+}
+.excel-app .formula-bar input.formula-bar-input {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 24px !important;
+  box-sizing: border-box;
+  padding: 0 6px !important;
+  margin: 0 !important;
+  border: 1px solid #ababab !important;
+  border-radius: 0 !important;
+  outline: none;
+  background: #fff !important;
+  color: #222 !important;
+  font: 11px/24px Consolas, "Courier New", monospace !important;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.05);
+}
+.excel-app .formula-bar input.formula-bar-input:focus {
+  border-color: #217346 !important;
+  box-shadow: inset 0 0 0 1px #217346 !important;
+}
+.excel-app .formula-bar input::placeholder {
+  color: #888 !important;
+  font-size: 11px !important;
+  opacity: 1;
+}
+.excel-app .formula-bar > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px !important;
+  margin: 0 !important;
+}
+@media (max-width: 600px) {
+  .excel-app .ribbon-tabs .ribbon-tab {
+    padding-inline: 10px !important;
+    min-width: 44px;
+  }
+  .excel-app .formula-bar {
+    gap: 3px !important;
+    padding-inline: 4px !important;
+  }
+  .excel-app .formula-bar > div:first-child {
+    flex: 0 0 72px !important;
+    width: 72px !important;
+  }
+  .excel-app .formula-bar > span {
+    display: none;
+  }
 }

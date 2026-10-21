@@ -1,18 +1,17 @@
 /**
- * PageSetupGroup.tsx
- *
- * Page Layout Tab - Page Setup Group
- * Contains: Margins, Orientation, Size, Print Area, Breaks, Background, Print Titles
+ * PageSetupGroup.tsx — Page Layout: Page Setup group (layout only)
  */
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
+import { RibbonDropdownHost } from "../RibbonDropdownHost";
+import { ribbonDropdownChrome } from "../ribbonDropdownChrome";
 
 export interface PageSetupGroupProps {
   onMarginsChange?: (margins: string) => void;
-  onOrientationChange?: (orientation: 'portrait' | 'landscape') => void;
+  onOrientationChange?: (orientation: "portrait" | "landscape") => void;
   onSizeChange?: (size: string) => void;
   onPrintAreaSet?: () => void;
-  onBreaksInsert?: (breakType: 'page' | 'remove') => void;
+  onBreaksInsert?: (breakType: "page" | "remove") => void;
   onBackgroundSet?: () => void;
   onPrintTitlesSet?: () => void;
 }
@@ -27,258 +26,247 @@ export const PageSetupGroup: React.FC<PageSetupGroupProps> = ({
   onPrintTitlesSet,
 }) => {
   const [showMarginsDropdown, setShowMarginsDropdown] = useState(false);
+  const [showOrientationDropdown, setShowOrientationDropdown] = useState(false);
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
+  const [showPrintAreaDropdown, setShowPrintAreaDropdown] = useState(false);
   const [showBreaksDropdown, setShowBreaksDropdown] = useState(false);
 
-  const groupStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    padding: '4px 8px',
-    position: 'relative',
-  };
-
-  const buttonContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 4,
-    flexWrap: 'wrap',
-    maxWidth: 260,
-  };
-
-  const buttonStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 2,
-    padding: '4px 8px',
-    border: '1px solid transparent',
-    background: 'transparent',
-    cursor: 'pointer',
-    borderRadius: 3,
-    fontSize: 10,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-    color: '#333',
-    minWidth: 45,
-  };
-
-  const iconStyle: React.CSSProperties = {
-    fontSize: 20,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11,
-    color: '#888',
-    textAlign: 'center',
-    marginTop: 2,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-  };
-
-  const dropdownStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    background: '#FFFFFF',
-    border: '1px solid #D1D1D1',
-    borderRadius: 3,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    zIndex: 1000,
+  const menuStyle = ribbonDropdownChrome({
     minWidth: 180,
-    marginTop: 2,
-  };
+    maxHeight: 400,
+    overflowY: "auto",
+  });
 
   const dropdownItemStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    cursor: 'pointer',
+    padding: "8px 12px",
+    cursor: "pointer",
     fontSize: 11,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-    borderBottom: '1px solid #F0F0F0',
+    fontFamily: "Segoe UI, Arial, sans-serif",
+    borderBottom: "1px solid #F0F0F0",
   };
 
-  const marginPresets = ['Normal', 'Wide', 'Narrow', 'Custom Margins...'];
-  const pageSizes = ['Letter (8.5" x 11")', 'Legal (8.5" x 14")', 'Executive (7.25" x 10.5")', 'A4', 'A3', 'B5', 'Custom...'];
-  const breakOptions = ['Insert Page Break', 'Remove Page Break'];
+  const marginPresets = ["Normal", "Wide", "Narrow", "Custom Margins..."];
+  const pageSizes = [
+    'Letter (8.5" x 11")',
+    'Legal (8.5" x 14")',
+    'Executive (7.25" x 10.5")',
+    "A4",
+    "A3",
+    "B5",
+    "Custom...",
+  ];
+  const breakOptions = ["Insert Page Break", "Remove Page Break"];
+  const printAreaOptions = ["Set Print Area", "Clear Print Area"];
 
-  const handleButtonHover = (e: React.MouseEvent<HTMLButtonElement>, isEnter: boolean): void => {
-    const btn = e.currentTarget as HTMLButtonElement;
-    if (isEnter) {
-      btn.style.background = '#E8E8E8';
-      btn.style.borderColor = '#D1D1D1';
-    } else {
-      btn.style.background = 'transparent';
-      btn.style.borderColor = 'transparent';
-    }
-  };
+  const menuItems = (
+    items: string[],
+    onPick: (item: string, index: number) => void,
+  ) =>
+    items.map((item, index) => (
+      <div
+        key={item}
+        style={{
+          ...dropdownItemStyle,
+          borderBottom:
+            index === items.length - 1 ? "none" : "1px solid #F0F0F0",
+        }}
+        onClick={() => onPick(item, index)}
+        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+          (e.currentTarget as HTMLDivElement).style.background = "#E8F4FD";
+        }}
+        onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+          (e.currentTarget as HTMLDivElement).style.background = "transparent";
+        }}
+      >
+        {item}
+      </div>
+    ));
 
   return (
-    <div style={groupStyle}>
-      <div style={buttonContainerStyle}>
-        {/* Margins */}
-        <div style={{ position: 'relative' }}>
+    <div className="formulas-group pagelayout-pagesetup">
+      <div className="formulas-group-body pagelayout-pagesetup-row">
+        <RibbonDropdownHost
+          open={showMarginsDropdown}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuItems(marginPresets, (margin) => {
+                setShowMarginsDropdown(false);
+                onMarginsChange?.(margin);
+              })}
+            </>
+          }
+        >
           <button
-            style={buttonStyle}
+            type="button"
+            className="formulas-btn-large pagelayout-setup-btn"
             onClick={() => setShowMarginsDropdown(!showMarginsDropdown)}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
+            title="Margins"
           >
-            <span style={iconStyle}>📐</span>
+            <span className="formulas-icon-lg" aria-hidden>
+              📐
+            </span>
             <span>Margins</span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
           </button>
+        </RibbonDropdownHost>
 
-          {showMarginsDropdown && (
-            <div style={dropdownStyle}>
-              {marginPresets.map((margin, index) => (
-                <div
-                  key={margin}
-                  style={{
-                    ...dropdownItemStyle,
-                    borderBottom: index === marginPresets.length - 1 ? 'none' : '1px solid #F0F0F0',
-                  }}
-                  onClick={() => {
-                    setShowMarginsDropdown(false);
-                    onMarginsChange?.(margin);
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = '#E8F4FD';
-                  }}
-                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                  }}
-                >
-                  {margin}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Orientation */}
-        <button
-          style={buttonStyle}
-          onClick={() => onOrientationChange?.('portrait')}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
-          title="Switch between Portrait and Landscape"
+        <RibbonDropdownHost
+          open={showOrientationDropdown}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuItems(["Portrait", "Landscape"], (_, index) => {
+                setShowOrientationDropdown(false);
+                onOrientationChange?.(index === 0 ? "portrait" : "landscape");
+              })}
+            </>
+          }
         >
-          <span style={iconStyle}>📄</span>
-          <span>Orientation</span>
-        </button>
-
-        {/* Size */}
-        <div style={{ position: 'relative' }}>
           <button
-            style={buttonStyle}
+            type="button"
+            className="formulas-btn-large pagelayout-setup-btn"
+            onClick={() => setShowOrientationDropdown(!showOrientationDropdown)}
+            title="Orientation"
+          >
+            <span className="formulas-icon-lg" aria-hidden>
+              📄
+            </span>
+            <span>Orientation</span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </RibbonDropdownHost>
+
+        <RibbonDropdownHost
+          open={showSizeDropdown}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuItems(pageSizes, (size) => {
+                setShowSizeDropdown(false);
+                onSizeChange?.(size);
+              })}
+            </>
+          }
+        >
+          <button
+            type="button"
+            className="formulas-btn-large pagelayout-setup-btn"
             onClick={() => setShowSizeDropdown(!showSizeDropdown)}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
+            title="Size"
           >
-            <span style={iconStyle}>📏</span>
+            <span className="formulas-icon-lg" aria-hidden>
+              📏
+            </span>
             <span>Size</span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
           </button>
+        </RibbonDropdownHost>
 
-          {showSizeDropdown && (
-            <div style={dropdownStyle}>
-              {pageSizes.map((size, index) => (
-                <div
-                  key={size}
-                  style={{
-                    ...dropdownItemStyle,
-                    borderBottom: index === pageSizes.length - 1 ? 'none' : '1px solid #F0F0F0',
-                  }}
-                  onClick={() => {
-                    setShowSizeDropdown(false);
-                    onSizeChange?.(size);
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = '#E8F4FD';
-                  }}
-                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                  }}
-                >
-                  {size}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Print Area */}
-        <button
-          style={buttonStyle}
-          onClick={() => onPrintAreaSet?.()}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
-          title="Set Print Area"
+        <RibbonDropdownHost
+          open={showPrintAreaDropdown}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuItems(printAreaOptions, (_, index) => {
+                setShowPrintAreaDropdown(false);
+                if (index === 0) onPrintAreaSet?.();
+              })}
+            </>
+          }
         >
-          <span style={iconStyle}>🖨️</span>
-          <span>Print<br/>Area</span>
-        </button>
-
-        {/* Breaks */}
-        <div style={{ position: 'relative' }}>
           <button
-            style={buttonStyle}
-            onClick={() => setShowBreaksDropdown(!showBreaksDropdown)}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
+            type="button"
+            className="formulas-btn-large pagelayout-setup-btn"
+            onClick={() => setShowPrintAreaDropdown(!showPrintAreaDropdown)}
+            title="Print Area"
           >
-            <span style={iconStyle}>✂️</span>
-            <span>Breaks</span>
+            <span className="formulas-icon-lg" aria-hidden>
+              🖨️
+            </span>
+            <span>
+              Print
+              <br />
+              Area
+            </span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
           </button>
+        </RibbonDropdownHost>
 
-          {showBreaksDropdown && (
-            <div style={dropdownStyle}>
-              {breakOptions.map((breakOption, index) => (
-                <div
-                  key={breakOption}
-                  style={{
-                    ...dropdownItemStyle,
-                    borderBottom: index === breakOptions.length - 1 ? 'none' : '1px solid #F0F0F0',
-                  }}
-                  onClick={() => {
-                    setShowBreaksDropdown(false);
-                    onBreaksInsert?.(index === 0 ? 'page' : 'remove');
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = '#E8F4FD';
-                  }}
-                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                  }}
-                >
-                  {breakOption}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Background */}
-        <button
-          style={buttonStyle}
-          onClick={() => onBackgroundSet?.()}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
-          title="Set Background"
+        <RibbonDropdownHost
+          open={showBreaksDropdown}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuItems(breakOptions, (_, index) => {
+                setShowBreaksDropdown(false);
+                onBreaksInsert?.(index === 0 ? "page" : "remove");
+              })}
+            </>
+          }
         >
-          <span style={iconStyle}>🖼️</span>
+          <button
+            type="button"
+            className="formulas-btn-large pagelayout-setup-btn"
+            onClick={() => setShowBreaksDropdown(!showBreaksDropdown)}
+            title="Breaks"
+          >
+            <span className="formulas-icon-lg" aria-hidden>
+              ✂️
+            </span>
+            <span>Breaks</span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </RibbonDropdownHost>
+
+        <button
+          type="button"
+          className="formulas-btn-large pagelayout-setup-btn"
+          onClick={() => onBackgroundSet?.()}
+          title="Background"
+        >
+          <span className="formulas-icon-lg" aria-hidden>
+            🖼️
+          </span>
           <span>Background</span>
         </button>
 
-        {/* Print Titles */}
         <button
-          style={buttonStyle}
+          type="button"
+          className="formulas-btn-large pagelayout-setup-btn"
           onClick={() => onPrintTitlesSet?.()}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
-          title="Set Print Titles"
+          title="Print Titles"
         >
-          <span style={iconStyle}>📌</span>
-          <span>Print<br/>Titles</span>
+          <span className="formulas-icon-lg" aria-hidden>
+            📌
+          </span>
+          <span>
+            Print
+            <br />
+            Titles
+          </span>
         </button>
       </div>
 
-      <div style={labelStyle}>Page Setup</div>
+      <div className="pagelayout-group-footer">
+        <div className="formulas-group-caption">Page Setup</div>
+        <button
+          type="button"
+          className="pagelayout-dialog-launcher"
+          title="Page Setup dialog"
+          aria-label="Page Setup dialog"
+        />
+      </div>
     </div>
   );
 };

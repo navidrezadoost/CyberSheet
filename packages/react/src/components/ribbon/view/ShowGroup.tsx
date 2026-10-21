@@ -70,11 +70,8 @@ export const ShowGroup: React.FC<ShowGroupProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 8px' }}>
-      <div style={{ fontSize: 10, color: '#666', marginBottom: 2, fontFamily: 'Segoe UI, sans-serif' }}>
-        Show
-      </div>
-
+    <div className="formulas-group view-ribbon-group">
+      <div className="formulas-group-body view-ribbon-group-body view-ribbon-group-body--column">
       {/* Ruler */}
       <label
         style={checkboxRowStyle}
@@ -150,6 +147,8 @@ export const ShowGroup: React.FC<ShowGroupProps> = ({
         />
         <span>Headings</span>
       </label>
+      </div>
+      <div className="formulas-group-caption">Show</div>
     </div>
   );
 };

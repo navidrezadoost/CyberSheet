@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useRibbonAnchorPosition } from './ribbon/useRibbonAnchorPosition';
 
 type NativeSelectChangeHandler = (event: any) => void;
 
@@ -72,16 +74,20 @@ export const SmilodonSelectCore: React.FC<SmilodonSelectCoreProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const selectedValue = value ?? defaultValue ?? items[0]?.value ?? '';
   const selectedItem = items.find((item) => String(item.value) === String(selectedValue));
+  const floatingMenuStyle = useRibbonAnchorPosition(isOpen, hostRef, [items.length, selectedValue]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const closeOnOutsideClick = (event: MouseEvent) => {
-      if (hostRef.current && !hostRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+      const target = event.target as Node;
+      if (hostRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
       }
+      setIsOpen(false);
     };
 
     document.addEventListener('mousedown', closeOnOutsideClick);
@@ -151,16 +157,15 @@ export const SmilodonSelectCore: React.FC<SmilodonSelectCoreProps> = ({
           ▾
         </span>
       </button>
-      {isOpen && (
+      {isOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
         <div
-          className="cs-smilodon-select-menu"
+          ref={menuRef}
+          className="cs-smilodon-select-menu cs-ribbon-floating-menu cs-ribbon-popover excel-app-ribbon-portal"
           role="listbox"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 2px)',
-            left: 0,
-            zIndex: 20000,
-            minWidth: '100%',
+            ...floatingMenuStyle,
             maxHeight: '260px',
             overflowY: 'auto',
             padding: '2px 0',
@@ -169,6 +174,7 @@ export const SmilodonSelectCore: React.FC<SmilodonSelectCoreProps> = ({
             background: '#ffffff',
             boxShadow: '0 6px 16px rgba(0, 0, 0, 0.15)',
             boxSizing: 'border-box',
+            zIndex: 100000,
           }}
         >
           {items.map((item) => {
@@ -216,7 +222,8 @@ export const SmilodonSelectCore: React.FC<SmilodonSelectCoreProps> = ({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </span>
   );

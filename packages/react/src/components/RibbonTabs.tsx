@@ -1,12 +1,12 @@
 /**
  * RibbonTabs.tsx
- * 
+ *
  * Excel-style ribbon tab navigation
  */
 
-import React from 'react';
-import { getVisibleRibbonTabLabels, isTabEnabled } from '../config/appConfig';
-import { useCyberSheetAppConfig } from '../config/CyberSheetConfigContext';
+import React from "react";
+import { getVisibleRibbonTabLabels, isTabEnabled } from "../config/appConfig";
+import { useCyberSheetAppConfig } from "../config/CyberSheetConfigContext";
 
 export interface RibbonTabsProps {
   activeTab: string;
@@ -23,17 +23,14 @@ export const RibbonTabs: React.FC<RibbonTabsProps> = ({
   const tabs = getVisibleRibbonTabLabels(appConfig);
 
   return (
-    <nav className="ribbon-tabs" style={{ display: 'flex', alignItems: 'stretch' }}>
+    <nav
+      className="ribbon-tabs"
+      style={{ display: "flex", alignItems: "stretch" }}
+    >
       {appConfig.allowOpen && onFileClick && (
         <button
           className="ribbon-tab file-tab"
           onClick={onFileClick}
-          style={{
-            backgroundColor: '#217346',
-            color: '#FFFFFF',
-            fontWeight: 600,
-            borderBottom: 'none',
-          }}
         >
           File
         </button>
@@ -41,7 +38,7 @@ export const RibbonTabs: React.FC<RibbonTabsProps> = ({
       {tabs.map((tab) => (
         <button
           key={tab}
-          className={`ribbon-tab ${activeTab === tab ? 'active' : ''}`}
+          className={`ribbon-tab ${activeTab === tab ? "active" : ""}`}
           onClick={() => onTabChange(tab)}
         >
           {tab}

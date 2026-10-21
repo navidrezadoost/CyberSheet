@@ -8,6 +8,8 @@
 
 import { ChangesGroupIcon3, ChangesGroupIcon2, ChangesGroupIcon1 } from '@cyber-sheet/icons/react';
 import React, { useState, useRef, useEffect } from 'react';
+import { RibbonDropdownHost } from '../RibbonDropdownHost';
+import { ribbonDropdownChrome } from '../ribbonDropdownChrome';
 import type { Workbook, Address } from '@cyber-sheet/core';
 
 interface ChangesGroupProps {

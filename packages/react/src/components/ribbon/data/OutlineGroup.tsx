@@ -1,6 +1,13 @@
-import { OutlineGroupIcon4, OutlineGroupIcon3, OutlineGroupIcon2, OutlineGroupIcon1 } from '@cyber-sheet/icons/react';
-import React, { useState, useCallback } from 'react';
-import type { Workbook, Address, Range } from '@cyber-sheet/core';
+import {
+  OutlineGroupIcon4,
+  OutlineGroupIcon3,
+  OutlineGroupIcon2,
+  OutlineGroupIcon1,
+} from "@cyber-sheet/icons/react";
+import React, { useState, useCallback } from "react";
+import { RibbonDropdownHost } from "../RibbonDropdownHost";
+import { ribbonDropdownChrome } from "../ribbonDropdownChrome";
+import type { Workbook, Address, Range } from "@cyber-sheet/core";
 
 interface OutlineGroupProps {
   workbook: Workbook;
@@ -8,14 +15,18 @@ interface OutlineGroupProps {
   onCommand?: (command: any) => void;
 }
 
-export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCells, onCommand }) => {
+export const OutlineGroup: React.FC<OutlineGroupProps> = ({
+  workbook,
+  selectedCells,
+  onCommand,
+}) => {
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
   const [showUngroupDropdown, setShowUngroupDropdown] = useState(false);
 
   const handleGroup = useCallback(() => {
     const sheet = workbook.activeSheet;
     if (!sheet || selectedCells.length === 0) {
-      console.warn('No range selected for grouping');
+      console.warn("No range selected for grouping");
       return;
     }
 
@@ -29,29 +40,29 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
     const isColumns = selection.end.col > selection.start.col;
 
     const command = {
-      type: 'groupOutline',
+      type: "groupOutline",
       range: selection,
-      axis: isRows ? 'rows' : 'columns',
+      axis: isRows ? "rows" : "columns",
     };
 
     onCommand?.(command);
     setShowGroupDropdown(false);
-    console.log('Group:', isRows ? 'rows' : 'columns');
+    console.log("Group:", isRows ? "rows" : "columns");
   }, [workbook, selectedCells, onCommand]);
 
   const handleAutoOutline = useCallback(() => {
     const command = {
-      type: 'autoOutline',
+      type: "autoOutline",
     };
     onCommand?.(command);
     setShowGroupDropdown(false);
-    console.log('Auto Outline');
+    console.log("Auto Outline");
   }, [onCommand]);
 
   const handleUngroup = useCallback(() => {
     const sheet = workbook.activeSheet;
     if (!sheet || selectedCells.length === 0) {
-      console.warn('No range selected for ungrouping');
+      console.warn("No range selected for ungrouping");
       return;
     }
 
@@ -63,55 +74,67 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
     const isRows = selection.end.row > selection.start.row;
 
     const command = {
-      type: 'ungroupOutline',
+      type: "ungroupOutline",
       range: selection,
-      axis: isRows ? 'rows' : 'columns',
+      axis: isRows ? "rows" : "columns",
     };
 
     onCommand?.(command);
     setShowUngroupDropdown(false);
-    console.log('Ungroup:', isRows ? 'rows' : 'columns');
+    console.log("Ungroup:", isRows ? "rows" : "columns");
   }, [workbook, selectedCells, onCommand]);
 
   const handleClearOutline = useCallback(() => {
     const command = {
-      type: 'clearOutline',
+      type: "clearOutline",
     };
     onCommand?.(command);
     setShowUngroupDropdown(false);
-    console.log('Clear Outline');
+    console.log("Clear Outline");
   }, [workbook, onCommand]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 8px', position: 'relative' }}>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 2 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        padding: "4px 8px",
+        position: "relative",
+      }}
+    >
+      <div style={{ display: "flex", gap: 4, marginBottom: 2 }}>
         {/* Group Dropdown Button */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: "relative" }}>
           <button
             onClick={() => setShowGroupDropdown(!showGroupDropdown)}
             title="Group"
             style={{
               width: 48,
               height: 32,
-              border: 'none',
-              background: '#F0F0F0',
-              cursor: 'pointer',
+              border: "none",
+              background: "#F0F0F0",
+              cursor: "pointer",
               borderRadius: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
               fontSize: 8,
-              fontFamily: 'Segoe UI, sans-serif',
-              color: '#333',
-              position: 'relative',
+              fontFamily: "Segoe UI, sans-serif",
+              color: "#333",
+              position: "relative",
             }}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+              (e.currentTarget.style.background = "#E0E0E0")
+            }
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+              (e.currentTarget.style.background = "#F0F0F0")
+            }
           >
             <OutlineGroupIcon1 />
             <span style={{ fontSize: 9, marginTop: 2 }}>Group</span>
-            <div style={{ position: 'absolute', bottom: 2, right: 2 }}>
+            <div style={{ position: "absolute", bottom: 2, right: 2 }}>
               <OutlineGroupIcon2 />
             </div>
           </button>
@@ -120,14 +143,14 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
           {showGroupDropdown && (
             <div
               style={{
-                position: 'absolute',
-                top: '100%',
+                position: "absolute",
+                top: "100%",
                 left: 0,
                 marginTop: 2,
-                background: '#FFFFFF',
-                border: '1px solid #D9D9D9',
+                background: "#FFFFFF",
+                border: "1px solid #D9D9D9",
                 borderRadius: 4,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                 zIndex: 1000,
                 minWidth: 140,
               }}
@@ -135,34 +158,42 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
               <button
                 onClick={handleGroup}
                 style={{
-                  width: '100%',
-                  padding: '6px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
+                  width: "100%",
+                  padding: "6px 12px",
+                  border: "none",
+                  background: "transparent",
+                  textAlign: "left",
+                  cursor: "pointer",
                   fontSize: 11,
-                  fontFamily: 'Segoe UI, sans-serif',
+                  fontFamily: "Segoe UI, sans-serif",
                 }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "#F0F0F0")
+                }
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
               >
                 Group...
               </button>
               <button
                 onClick={handleAutoOutline}
                 style={{
-                  width: '100%',
-                  padding: '6px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
+                  width: "100%",
+                  padding: "6px 12px",
+                  border: "none",
+                  background: "transparent",
+                  textAlign: "left",
+                  cursor: "pointer",
                   fontSize: 11,
-                  fontFamily: 'Segoe UI, sans-serif',
+                  fontFamily: "Segoe UI, sans-serif",
                 }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "#F0F0F0")
+                }
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
               >
                 Auto Outline
               </button>
@@ -171,32 +202,36 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
         </div>
 
         {/* Ungroup Dropdown Button */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: "relative" }}>
           <button
             onClick={() => setShowUngroupDropdown(!showUngroupDropdown)}
             title="Ungroup"
             style={{
               width: 48,
               height: 32,
-              border: 'none',
-              background: '#F0F0F0',
-              cursor: 'pointer',
+              border: "none",
+              background: "#F0F0F0",
+              cursor: "pointer",
               borderRadius: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
               fontSize: 8,
-              fontFamily: 'Segoe UI, sans-serif',
-              color: '#333',
-              position: 'relative',
+              fontFamily: "Segoe UI, sans-serif",
+              color: "#333",
+              position: "relative",
             }}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+              (e.currentTarget.style.background = "#E0E0E0")
+            }
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+              (e.currentTarget.style.background = "#F0F0F0")
+            }
           >
             <OutlineGroupIcon3 />
             <span style={{ fontSize: 9, marginTop: 2 }}>Ungroup</span>
-            <div style={{ position: 'absolute', bottom: 2, right: 2 }}>
+            <div style={{ position: "absolute", bottom: 2, right: 2 }}>
               <OutlineGroupIcon4 />
             </div>
           </button>
@@ -205,14 +240,14 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
           {showUngroupDropdown && (
             <div
               style={{
-                position: 'absolute',
-                top: '100%',
+                position: "absolute",
+                top: "100%",
                 left: 0,
                 marginTop: 2,
-                background: '#FFFFFF',
-                border: '1px solid #D9D9D9',
+                background: "#FFFFFF",
+                border: "1px solid #D9D9D9",
                 borderRadius: 4,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                 zIndex: 1000,
                 minWidth: 140,
               }}
@@ -220,34 +255,42 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
               <button
                 onClick={handleUngroup}
                 style={{
-                  width: '100%',
-                  padding: '6px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
+                  width: "100%",
+                  padding: "6px 12px",
+                  border: "none",
+                  background: "transparent",
+                  textAlign: "left",
+                  cursor: "pointer",
                   fontSize: 11,
-                  fontFamily: 'Segoe UI, sans-serif',
+                  fontFamily: "Segoe UI, sans-serif",
                 }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "#F0F0F0")
+                }
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
               >
                 Ungroup...
               </button>
               <button
                 onClick={handleClearOutline}
                 style={{
-                  width: '100%',
-                  padding: '6px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
+                  width: "100%",
+                  padding: "6px 12px",
+                  border: "none",
+                  background: "transparent",
+                  textAlign: "left",
+                  cursor: "pointer",
                   fontSize: 11,
-                  fontFamily: 'Segoe UI, sans-serif',
+                  fontFamily: "Segoe UI, sans-serif",
                 }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "#F0F0F0")
+                }
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
               >
                 Clear Outline
               </button>
@@ -257,7 +300,14 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({ workbook, selectedCe
       </div>
 
       {/* Group Label */}
-      <div style={{ fontSize: 10, color: '#666', marginTop: 2, fontFamily: 'Segoe UI, sans-serif' }}>
+      <div
+        style={{
+          fontSize: 10,
+          color: "#666",
+          marginTop: 2,
+          fontFamily: "Segoe UI, sans-serif",
+        }}
+      >
         Outline
       </div>
     </div>

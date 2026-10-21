@@ -132,15 +132,14 @@ export const CellEditOverlay: React.FC<CellEditOverlayProps> = ({
         backgroundColor: '#ffffff',
         fontFamily: 'Segoe UI, Arial, sans-serif',
         fontSize: `${fontSize}px`,
-        padding: '2px 4px',
+        padding: '0 4px',
         margin: 0,
         outline: 'none',
         boxSizing: 'border-box',
         zIndex: 1001,
         boxShadow: 'none',
         pointerEvents: 'auto',
-        lineHeight: `${Math.max(bounds.height - 4, fontSize)}px`,
-        verticalAlign: 'middle',
+        lineHeight: `${bounds.height}px`,
       }}
       spellCheck={false}
       autoComplete="off"

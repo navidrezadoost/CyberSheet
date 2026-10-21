@@ -7,6 +7,8 @@
 
 import { WindowGroupIcon10, WindowGroupIcon9, WindowGroupIcon8, WindowGroupIcon7, WindowGroupIcon6, WindowGroupIcon5, WindowGroupIcon4, WindowGroupIcon3, WindowGroupIcon2, WindowGroupIcon1 } from '@cyber-sheet/icons/react';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { RibbonDropdownHost } from '../RibbonDropdownHost';
+import { ribbonDropdownChrome } from '../ribbonDropdownChrome';
 import type { Workbook, Address } from '@cyber-sheet/core';
 
 interface WindowGroupProps {
@@ -134,12 +136,8 @@ export const WindowGroup: React.FC<WindowGroupProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 8px' }}>
-      <div style={{ fontSize: 10, color: '#666', marginBottom: 2, fontFamily: 'Segoe UI, sans-serif' }}>
-        Window
-      </div>
-
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+    <div className="formulas-group view-ribbon-group">
+      <div className="formulas-group-body view-ribbon-group-body">
         {/* Freeze Panes Dropdown */}
         <div ref={freezePanesRef} style={{ position: 'relative' }}>
           <button
@@ -363,6 +361,7 @@ export const WindowGroup: React.FC<WindowGroupProps> = ({
           )}
         </div>
       </div>
+      <div className="formulas-group-caption">Window</div>
     </div>
   );
 };

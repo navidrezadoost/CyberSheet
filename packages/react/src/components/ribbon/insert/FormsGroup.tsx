@@ -6,6 +6,8 @@
  */
 
 import React, { useState } from 'react';
+import { RibbonDropdownHost } from '../RibbonDropdownHost';
+import { ribbonDropdownChrome } from '../ribbonDropdownChrome';
 import type { FormControlType } from '@cyber-sheet/core';
 import {
   createFormControlTemplate,
@@ -70,18 +72,7 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
     fontFamily: 'Segoe UI, Arial, sans-serif',
   };
 
-  const dropdownStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    background: '#FFFFFF',
-    border: '1px solid #D1D1D1',
-    borderRadius: 3,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    zIndex: 1000,
-    minWidth: 180,
-    marginTop: 2,
-  };
+  const menuStyle = ribbonDropdownChrome({ minWidth: 180 });
 
   const dropdownItemStyle: React.CSSProperties = {
     padding: '8px 12px',
@@ -125,7 +116,25 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
           <span>Checkbox</span>
         </button>
 
-        <div style={{ position: 'relative' }}>
+        <RibbonDropdownHost
+          open={showDropdown}
+          menuStyle={menuStyle}
+          menu={controls.map((control, index) => (
+            <div
+              key={control.type}
+              className="cs-ribbon-popover-item"
+              role="menuitem"
+              style={{
+                ...dropdownItemStyle,
+                borderBottom: index === controls.length - 1 ? 'none' : '1px solid #F0F0F0',
+              }}
+              onClick={() => beginInsert(control.type)}
+            >
+              <span style={{ fontSize: 16 }}>{control.icon}</span>
+              <span>{control.label}</span>
+            </div>
+          ))}
+        >
           <button
             style={{
               ...buttonStyle,
@@ -133,6 +142,7 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
               padding: '6px 6px',
             }}
             onClick={() => setShowDropdown(!showDropdown)}
+            aria-expanded={showDropdown}
             onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
               (e.currentTarget as HTMLButtonElement).style.background = '#E8E8E8';
               (e.currentTarget as HTMLButtonElement).style.borderColor = '#D1D1D1';
@@ -144,31 +154,7 @@ export const FormsGroup: React.FC<FormsGroupProps> = ({
           >
             <span style={{ fontSize: 16 }}>▼</span>
           </button>
-
-          {showDropdown && (
-            <div style={dropdownStyle}>
-              {controls.map((control, index) => (
-                <div
-                  key={control.type}
-                  style={{
-                    ...dropdownItemStyle,
-                    borderBottom: index === controls.length - 1 ? 'none' : '1px solid #F0F0F0',
-                  }}
-                  onClick={() => beginInsert(control.type)}
-                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = '#E8F4FD';
-                  }}
-                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                  }}
-                >
-                  <span style={{ fontSize: 16 }}>{control.icon}</span>
-                  <span>{control.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        </RibbonDropdownHost>
       </div>
 
       <div style={labelStyle}>Forms</div>

@@ -11,6 +11,7 @@
  */
 
 import React, { useRef, useEffect, useState } from "react";
+import { RibbonAnchoredOverlay } from "./RibbonAnchoredOverlay";
 import { BorderPresetGrid } from "./BorderPresetGrid";
 import { LineStyleGrid } from "./LineStyleGrid";
 import { ColorGrid } from "./ColorGrid";
@@ -106,10 +107,16 @@ export function BorderDropdown({
   if (!isOpen) return null;
 
   return (
+    <RibbonAnchoredOverlay
+      open={isOpen}
+      anchorRef={buttonRef}
+      className="cs-border-dropdown"
+      style={{ minWidth: 280, maxWidth: 420, maxHeight: 'min(500px, 70vh)', overflowY: 'auto', padding: 8 }}
+      role="dialog"
+    >
     <div
       ref={dropdownRef}
-      className="cs-border-dropdown"
-      role="dialog"
+      className="cs-border-dropdown-inner"
       aria-label="Border options"
     >
       {/* Section 1: Border Presets (most common operations) */}
@@ -184,6 +191,7 @@ export function BorderDropdown({
         {/* TODO: Recent Colors (add later with useRecentColors hook) */}
       </div>
     </div>
+    </RibbonAnchoredOverlay>
   );
 }
 

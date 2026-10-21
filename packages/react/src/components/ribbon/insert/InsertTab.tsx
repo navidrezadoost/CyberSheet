@@ -5,24 +5,29 @@
  * Groups: Tables | Illustrations | Forms | Text | Charts | Sparklines | Links | Symbols
  */
 
-import React, { useState } from 'react';
-import type { DrawingLayer, Worksheet, WorkbookSheetView, PictureObject } from '@cyber-sheet/core';
-import type { PictureInsertTemplate } from '../../DrawingCanvas';
-import type { IconInsertTemplate } from '../../../utils/createDrawingObject';
-import type { FormControlInsertTemplate } from '../../../utils/formControlFactory';
-import type { TextBoxInsertTemplate } from '../../../utils/textBoxFactory';
-import { ChartDialog } from '../../ChartDialog';
-import type { ChartType, ChartCreateParams } from '@cyber-sheet/core';
+import React, { useState } from "react";
+import type {
+  DrawingLayer,
+  Worksheet,
+  WorkbookSheetView,
+  PictureObject,
+} from "@cyber-sheet/core";
+import type { PictureInsertTemplate } from "../../DrawingCanvas";
+import type { IconInsertTemplate } from "../../../utils/createDrawingObject";
+import type { FormControlInsertTemplate } from "../../../utils/formControlFactory";
+import type { TextBoxInsertTemplate } from "../../../utils/textBoxFactory";
+import { ChartDialog } from "../../ChartDialog";
+import type { ChartType, ChartCreateParams } from "@cyber-sheet/core";
 
-import { TablesGroup } from './TablesGroup';
-import { IllustrationsGroup } from './IllustrationsGroup';
-import { FormsGroup } from './FormsGroup';
-import { TextGroup } from './TextGroup';
-import { LinksGroup } from './LinksGroup';
-import { ChartsGroup } from './ChartsGroup';
-import { SparklinesGroup } from './SparklinesGroup';
-import { SymbolsGroup } from './SymbolsGroup';
-import '../ribbon.css';
+import { TablesGroup } from "./TablesGroup";
+import { IllustrationsGroup } from "./IllustrationsGroup";
+import { FormsGroup } from "./FormsGroup";
+import { TextGroup } from "./TextGroup";
+import { LinksGroup } from "./LinksGroup";
+import { ChartsGroup } from "./ChartsGroup";
+import { SparklinesGroup } from "./SparklinesGroup";
+import { SymbolsGroup } from "./SymbolsGroup";
+import "../ribbon.css";
 
 export interface InsertTabProps {
   worksheet?: Worksheet | WorkbookSheetView;
@@ -37,7 +42,7 @@ export interface InsertTabProps {
   onInsertHeaderFooter?: () => void;
   onInsertWordArt?: () => void;
   onInsertChart?: (chartType: string) => void;
-  onInsertSparkline?: (sparklineType: 'line' | 'column' | 'winLoss') => void;
+  onInsertSparkline?: (sparklineType: "line" | "column" | "winLoss") => void;
   onInsertHyperlink?: () => void;
   onInsertEquation?: () => void;
   onInsertSymbol?: () => void;
@@ -72,13 +77,14 @@ export const InsertTab: React.FC<InsertTabProps> = ({
   onBeginIconInsert,
   onBeginFormControlInsert,
   onBeginTextBoxInsert,
-}) => {  // Chart dialog state
+}) => {
+  // Chart dialog state
   const [showChartDialog, setShowChartDialog] = useState(false);
-  const [selectedChartType, setSelectedChartType] = useState<ChartType>('bar');
+  const [selectedChartType, setSelectedChartType] = useState<ChartType>("bar");
   // Wrap handlers to trigger redraw
   const handleInsertTable = () => {
     onInsertTable?.();
-    console.log('Insert Table');
+    console.log("Insert Table");
   };
 
   const handleInsertPivotTable = () => {
@@ -87,30 +93,30 @@ export const InsertTab: React.FC<InsertTabProps> = ({
 
   const handleInsertPicture = () => {
     onInsertPicture?.();
-    console.log('Insert Picture');
+    console.log("Insert Picture");
   };
 
   const handleInsertShape = (shapeType: string) => {
     onInsertShape?.(shapeType);
     onDrawingChange?.();
-    console.log('Insert Shape:', shapeType);
+    console.log("Insert Shape:", shapeType);
   };
 
   const handleInsertIcon = () => {
     onInsertIcon?.();
-    console.log('Insert Icon');
+    console.log("Insert Icon");
   };
 
   const handleInsertControl = (controlType: string) => {
     onInsertControl?.(controlType);
     onDrawingChange?.();
-    console.log('Insert Control:', controlType);
+    console.log("Insert Control:", controlType);
   };
 
   const handleInsertTextBox = () => {
     onInsertTextBox?.();
     onDrawingChange?.();
-    console.log('Insert Text Box');
+    console.log("Insert Text Box");
   };
 
   const handleInsertChart = (chartType: string) => {
@@ -121,16 +127,16 @@ export const InsertTab: React.FC<InsertTabProps> = ({
 
   const handleCreateChart = (params: ChartCreateParams) => {
     if (!drawingLayer) {
-      console.warn('Cannot create chart: DrawingLayer not available');
+      console.warn("Cannot create chart: DrawingLayer not available");
       return;
     }
 
     // Convert ChartCreateParams to DrawingLayer ChartObject
     const chartObject: any = {
       id: `chart-${Date.now()}`,
-      type: 'chart' as const,
+      type: "chart" as const,
       name: params.title || `Chart ${Date.now()}`,
-      chartType: params.type === 'bar' ? 'column' : params.type,
+      chartType: params.type === "bar" ? "column" : params.type,
       dataRange: `${params.dataRange.startRow}:${params.dataRange.startCol}-${params.dataRange.endRow}:${params.dataRange.endCol}`,
       position: params.position,
       size: params.size,
@@ -138,7 +144,7 @@ export const InsertTab: React.FC<InsertTabProps> = ({
       zIndex: params.zIndex,
       locked: false,
       visible: true,
-      altText: params.title || '',
+      altText: params.title || "",
       chartData: {
         ...params,
         dataRange: params.dataRange,
@@ -151,27 +157,29 @@ export const InsertTab: React.FC<InsertTabProps> = ({
 
     drawingLayer.addObject(chartObject);
     onDrawingChange?.();
-    console.log('Chart created:', chartObject);
+    console.log("Chart created:", chartObject);
   };
 
-  const handleInsertSparkline = (sparklineType: 'line' | 'column' | 'winLoss') => {
+  const handleInsertSparkline = (
+    sparklineType: "line" | "column" | "winLoss",
+  ) => {
     onInsertSparkline?.(sparklineType);
-    console.log('Insert Sparkline:', sparklineType);
+    console.log("Insert Sparkline:", sparklineType);
   };
 
   const handleInsertHyperlink = () => {
     onInsertHyperlink?.();
-    console.log('Insert Hyperlink');
+    console.log("Insert Hyperlink");
   };
 
   const handleInsertEquation = () => {
     onInsertEquation?.();
-    console.log('Insert Equation');
+    console.log("Insert Equation");
   };
 
   const handleInsertSymbol = () => {
     onInsertSymbol?.();
-    console.log('Insert Symbol');
+    console.log("Insert Symbol");
   };
 
   return (
@@ -225,16 +233,12 @@ export const InsertTab: React.FC<InsertTabProps> = ({
       <div className="ribbon-tab-divider" />
 
       {/* 6. Sparklines */}
-      <SparklinesGroup
-        onInsertSparkline={handleInsertSparkline}
-      />
+      <SparklinesGroup onInsertSparkline={handleInsertSparkline} />
 
       <div className="ribbon-tab-divider" />
 
       {/* 7. Links */}
-      <LinksGroup
-        onInsertHyperlink={handleInsertHyperlink}
-      />
+      <LinksGroup onInsertHyperlink={handleInsertHyperlink} />
 
       <div className="ribbon-tab-divider" />
 

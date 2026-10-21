@@ -5,13 +5,13 @@
  * Assembles all Page Layout groups: Themes, Page Setup, Scale to Fit, Sheet Options
  */
 
-import React from 'react';
-import { ThemesGroup } from './ThemesGroup';
-import { PageSetupGroup } from './PageSetupGroup';
-import { ArrangeGroup } from './ArrangeGroup';
-import { ScaleToFitGroup } from './ScaleToFitGroup';
-import { SheetOptionsGroup } from './SheetOptionsGroup';
-import '../ribbon.css';
+import React from "react";
+import { ThemesGroup } from "./ThemesGroup";
+import { PageSetupGroup } from "./PageSetupGroup";
+import { ArrangeGroup } from "./ArrangeGroup";
+import { ScaleToFitGroup } from "./ScaleToFitGroup";
+import { SheetOptionsGroup } from "./SheetOptionsGroup";
+import "../ribbon.css";
 
 export interface PageLayoutTabProps {
   // Themes Group
@@ -22,24 +22,24 @@ export interface PageLayoutTabProps {
 
   // Page Setup Group
   onMarginsChange?: (margins: string) => void;
-  onOrientationChange?: (orientation: 'portrait' | 'landscape') => void;
+  onOrientationChange?: (orientation: "portrait" | "landscape") => void;
   onSizeChange?: (size: string) => void;
   onPrintAreaSet?: () => void;
-  onBreaksInsert?: (breakType: 'page' | 'remove') => void;
+  onBreaksInsert?: (breakType: "page" | "remove") => void;
   onBackgroundSet?: () => void;
   onPrintTitlesSet?: () => void;
 
   // Arrange Group
-  onBringForward?: (step: 'front' | 'forward') => void;
-  onSendBackward?: (step: 'back' | 'backward') => void;
+  onBringForward?: (step: "front" | "forward") => void;
+  onSendBackward?: (step: "back" | "backward") => void;
   onSelectionPane?: () => void;
   onAlign?: (alignment: string) => void;
-  onGroup?: (action: 'group' | 'ungroup' | 'regroup') => void;
+  onGroup?: (action: "group" | "ungroup" | "regroup") => void;
   onRotate?: (rotation: string) => void;
 
   // Scale to Fit Group
-  onWidthChange?: (width: number | 'auto') => void;
-  onHeightChange?: (height: number | 'auto') => void;
+  onWidthChange?: (width: number | "auto") => void;
+  onHeightChange?: (height: number | "auto") => void;
   onScaleChange?: (scale: number) => void;
 
   // Sheet Options Group
@@ -51,7 +51,7 @@ export interface PageLayoutTabProps {
 
 export const PageLayoutTab: React.FC<PageLayoutTabProps> = (props) => {
   return (
-    <div className="ribbon-content ribbon-tab-content">
+    <div className="ribbon-content ribbon-tab-content ribbon-pagelayout-2013">
       {/* Themes Group */}
       <ThemesGroup
         onThemeChange={props.onThemeChange}

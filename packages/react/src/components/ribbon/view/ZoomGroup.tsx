@@ -59,12 +59,8 @@ export const ZoomGroup: React.FC<ZoomGroupProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 8px' }}>
-      <div style={{ fontSize: 10, color: '#666', marginBottom: 2, fontFamily: 'Segoe UI, sans-serif' }}>
-        Zoom
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div className="formulas-group view-ribbon-group">
+      <div className="formulas-group-body view-ribbon-group-body">
         {/* Zoom Slider */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           <input
@@ -119,6 +115,7 @@ export const ZoomGroup: React.FC<ZoomGroupProps> = ({
           <span>100%</span>
         </button>
       </div>
+      <div className="formulas-group-caption">Zoom</div>
     </div>
   );
 };

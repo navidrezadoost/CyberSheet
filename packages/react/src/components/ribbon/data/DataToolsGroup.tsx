@@ -1,7 +1,13 @@
-import { DataToolsGroupIcon5, DataToolsGroupIcon4, DataToolsGroupIcon3, DataToolsGroupIcon2, DataToolsGroupIcon1 } from '@cyber-sheet/icons/react';
-import React, { useState, useCallback } from 'react';
-import type { Workbook, Address, Range } from '@cyber-sheet/core';
-import { DataValidationDialog } from '@cyber-sheet/react';
+import {
+  DataToolsGroupIcon5,
+  DataToolsGroupIcon4,
+  DataToolsGroupIcon3,
+  DataToolsGroupIcon2,
+  DataToolsGroupIcon1,
+} from "@cyber-sheet/icons/react";
+import React, { useState, useCallback } from "react";
+import type { Workbook, Address, Range } from "@cyber-sheet/core";
+import { DataValidationDialog } from "@cyber-sheet/react";
 
 interface DataToolsGroupProps {
   workbook: Workbook;
@@ -9,10 +15,17 @@ interface DataToolsGroupProps {
   onCommand?: (command: any) => void;
 }
 
-export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({ workbook, selectedCells, onCommand }) => {
-  const [showDataValidationDropdown, setShowDataValidationDropdown] = useState(false);
-  const [showDataValidationDialog, setShowDataValidationDialog] = useState(false);
-  const [showRemoveDuplicatesDialog, setShowRemoveDuplicatesDialog] = useState(false);
+export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({
+  workbook,
+  selectedCells,
+  onCommand,
+}) => {
+  const [showDataValidationDropdown, setShowDataValidationDropdown] =
+    useState(false);
+  const [showDataValidationDialog, setShowDataValidationDialog] =
+    useState(false);
+  const [showRemoveDuplicatesDialog, setShowRemoveDuplicatesDialog] =
+    useState(false);
   const [showTextToColumnsWizard, setShowTextToColumnsWizard] = useState(false);
 
   const handleDataValidation = useCallback(() => {
@@ -22,20 +35,20 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({ workbook, select
 
   const handleCircleInvalidData = useCallback(() => {
     const command = {
-      type: 'circleInvalidData',
+      type: "circleInvalidData",
     };
     onCommand?.(command);
     setShowDataValidationDropdown(false);
-    console.log('Circle Invalid Data');
+    console.log("Circle Invalid Data");
   }, [onCommand]);
 
   const handleClearValidationCircles = useCallback(() => {
     const command = {
-      type: 'clearValidationCircles',
+      type: "clearValidationCircles",
     };
     onCommand?.(command);
     setShowDataValidationDropdown(false);
-    console.log('Clear Validation Circles');
+    console.log("Clear Validation Circles");
   }, [onCommand]);
 
   const handleTextToColumns = useCallback(() => {
@@ -44,7 +57,7 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({ workbook, select
 
   const handleFlashFill = useCallback(() => {
     if (selectedCells.length === 0) {
-      console.warn('No column selected for Flash Fill');
+      console.warn("No column selected for Flash Fill");
       return;
     }
 
@@ -54,219 +67,171 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({ workbook, select
     };
 
     const command = {
-      type: 'flashFill',
+      type: "flashFill",
       columnIndex: selection.start.col,
       startRow: selection.start.row,
       endRow: selection.end.row,
     };
 
     onCommand?.(command);
-    console.log('Flash Fill:', selection.start.col);
+    console.log("Flash Fill:", selection.start.col);
   }, [selectedCells, onCommand]);
 
   const handleRemoveDuplicates = useCallback(() => {
     setShowRemoveDuplicatesDialog(true);
   }, []);
 
+  const validationMenuStyle = {
+    position: "absolute" as const,
+    top: "100%",
+    left: 0,
+    marginTop: 2,
+    background: "#FFFFFF",
+    border: "1px solid #D9D9D9",
+    borderRadius: 4,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+    zIndex: 1000,
+    minWidth: 180,
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 8px', position: 'relative' }}>
-      {/* Tools Row */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 2 }}>
-        {/* Data Validation Dropdown Button */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setShowDataValidationDropdown(!showDataValidationDropdown)}
-            title="Data Validation"
-            style={{
-              width: 48,
-              height: 32,
-              border: 'none',
-              background: '#F0F0F0',
-              cursor: 'pointer',
-              borderRadius: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 8,
-              fontFamily: 'Segoe UI, sans-serif',
-              color: '#333',
-              padding: '2px 4px',
-              position: 'relative',
-            }}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-          >
-            <DataToolsGroupIcon1 />
-            <span style={{ fontSize: 8, marginTop: 2 }}>Data</span>
-            <span style={{ fontSize: 8 }}>Validation</span>
-            {/* Dropdown arrow */}
-            <div style={{ position: 'absolute', bottom: 2, right: 2 }}>
-              <DataToolsGroupIcon2 />
-            </div>
-          </button>
-
-          {/* Data Validation Dropdown */}
-          {showDataValidationDropdown && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: 2,
-                background: '#FFFFFF',
-                border: '1px solid #D9D9D9',
-                borderRadius: 4,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                zIndex: 1000,
-                minWidth: 180,
-              }}
-            >
-              <button
-                onClick={handleDataValidation}
-                style={{
-                  width: '100%',
-                  padding: '6px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  fontSize: 11,
-                  fontFamily: 'Segoe UI, sans-serif',
-                }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-              >
-                Data Validation...
-              </button>
-              <div style={{ height: 1, background: '#E0E0E0', margin: '4px 0' }} />
-              <button
-                onClick={handleCircleInvalidData}
-                style={{
-                  width: '100%',
-                  padding: '6px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  fontSize: 11,
-                  fontFamily: 'Segoe UI, sans-serif',
-                }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-              >
-                Circle Invalid Data
-              </button>
-              <button
-                onClick={handleClearValidationCircles}
-                style={{
-                  width: '100%',
-                  padding: '6px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  fontSize: 11,
-                  fontFamily: 'Segoe UI, sans-serif',
-                }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-              >
-                Clear Validation Circles
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Text to Columns Button */}
+    <div className="formulas-group data-tools">
+      <div className="formulas-group-body data-tools-body">
         <button
+          type="button"
+          className="formulas-btn-large data-text-to-columns-btn"
           onClick={handleTextToColumns}
           title="Text to Columns"
-          style={{
-            width: 48,
-            height: 32,
-            border: 'none',
-            background: '#F0F0F0',
-            cursor: 'pointer',
-            borderRadius: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 8,
-            fontFamily: 'Segoe UI, sans-serif',
-            color: '#333',
-            padding: '2px 4px',
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
         >
           <DataToolsGroupIcon3 />
-          <span style={{ fontSize: 8, marginTop: 2 }}>Text to</span>
-          <span style={{ fontSize: 8 }}>Columns</span>
+          <span>
+            Text to
+            <br />
+            Columns
+          </span>
         </button>
 
-        {/* Flash Fill Button */}
-        <button
-          onClick={handleFlashFill}
-          title="Flash Fill (Ctrl+E)"
-          style={{
-            width: 48,
-            height: 32,
-            border: 'none',
-            background: '#F0F0F0',
-            cursor: 'pointer',
-            borderRadius: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 8,
-            fontFamily: 'Segoe UI, sans-serif',
-            color: '#333',
-            padding: '2px 4px',
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-        >
-          <DataToolsGroupIcon4 />
-          <span style={{ fontSize: 8, marginTop: 2 }}>Flash</span>
-          <span style={{ fontSize: 8 }}>Fill</span>
-        </button>
+        <div className="formulas-menu-stack">
+          <button
+            type="button"
+            className="formulas-row-btn data-ribbon-row-btn"
+            onClick={handleFlashFill}
+            title="Flash Fill (Ctrl+E)"
+          >
+            <span className="data-ribbon-row-icon" aria-hidden>
+              <DataToolsGroupIcon4 />
+            </span>
+            <span>Flash Fill</span>
+          </button>
 
-        {/* Remove Duplicates Button */}
-        <button
-          onClick={handleRemoveDuplicates}
-          title="Remove Duplicates"
-          style={{
-            width: 48,
-            height: 32,
-            border: 'none',
-            background: '#F0F0F0',
-            cursor: 'pointer',
-            borderRadius: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 8,
-            fontFamily: 'Segoe UI, sans-serif',
-            color: '#333',
-            padding: '2px 4px',
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-        >
-          <DataToolsGroupIcon5 />
-          <span style={{ fontSize: 8, marginTop: 2 }}>Remove</span>
-          <span style={{ fontSize: 8 }}>Duplicates</span>
-        </button>
+          <button
+            type="button"
+            className="formulas-row-btn data-ribbon-row-btn"
+            onClick={handleRemoveDuplicates}
+            title="Remove Duplicates"
+          >
+            <span className="data-ribbon-row-icon" aria-hidden>
+              <DataToolsGroupIcon5 />
+            </span>
+            <span>Remove Duplicates</span>
+          </button>
+
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              className="formulas-row-btn data-ribbon-row-btn"
+              onClick={() =>
+                setShowDataValidationDropdown(!showDataValidationDropdown)
+              }
+              title="Data Validation"
+            >
+              <span className="data-ribbon-row-icon" aria-hidden>
+                <DataToolsGroupIcon1 />
+              </span>
+              <span>Data Validation</span>
+              <span className="formulas-row-chevron" aria-hidden>
+                <DataToolsGroupIcon2 />
+              </span>
+            </button>
+
+            {showDataValidationDropdown && (
+              <div style={validationMenuStyle}>
+                <button
+                  type="button"
+                  onClick={handleDataValidation}
+                  style={{
+                    width: "100%",
+                    padding: "6px 12px",
+                    border: "none",
+                    background: "transparent",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    fontFamily: "Segoe UI, sans-serif",
+                  }}
+                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+                    (e.currentTarget.style.background = "#F0F0F0")
+                  }
+                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  Data Validation...
+                </button>
+                <div
+                  style={{ height: 1, background: "#E0E0E0", margin: "4px 0" }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCircleInvalidData}
+                  style={{
+                    width: "100%",
+                    padding: "6px 12px",
+                    border: "none",
+                    background: "transparent",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    fontFamily: "Segoe UI, sans-serif",
+                  }}
+                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+                    (e.currentTarget.style.background = "#F0F0F0")
+                  }
+                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  Circle Invalid Data
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearValidationCircles}
+                  style={{
+                    width: "100%",
+                    padding: "6px 12px",
+                    border: "none",
+                    background: "transparent",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    fontFamily: "Segoe UI, sans-serif",
+                  }}
+                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) =>
+                    (e.currentTarget.style.background = "#F0F0F0")
+                  }
+                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  Clear Validation Circles
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Group Label */}
-      <div style={{ fontSize: 10, color: '#666', marginTop: 2, fontFamily: 'Segoe UI, sans-serif' }}>
-        Data Tools
-      </div>
+      <div className="formulas-group-caption">Data Tools</div>
 
       {/* Data Validation Dialog */}
       {showDataValidationDialog && selectedCells.length > 0 && (
@@ -280,7 +245,7 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({ workbook, select
             };
 
             const command = {
-              type: 'setDataValidation',
+              type: "setDataValidation",
               range: selection,
               rule,
             };
@@ -310,7 +275,7 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({ workbook, select
             };
 
             const command = {
-              type: 'removeDuplicates',
+              type: "removeDuplicates",
               range: selection,
               columns,
             };
@@ -335,7 +300,7 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({ workbook, select
             };
 
             const command = {
-              type: 'textToColumns',
+              type: "textToColumns",
               range: selection,
               config,
             };
@@ -356,9 +321,14 @@ interface RemoveDuplicatesDialogProps {
   onRemove: (columns: number[]) => void;
 }
 
-const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workbook, selectedCells, onClose, onRemove }) => {
+const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({
+  workbook,
+  selectedCells,
+  onClose,
+  onRemove,
+}) => {
   const sheet = workbook.activeSheet;
-  
+
   // Calculate column count from selection
   let columnCount = 5; // default
   if (sheet && selectedCells.length > 0) {
@@ -368,8 +338,10 @@ const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workboo
     };
     columnCount = selection.end.col - selection.start.col + 1;
   }
-  
-  const [selectedColumns, setSelectedColumns] = useState<boolean[]>(Array(columnCount).fill(true));
+
+  const [selectedColumns, setSelectedColumns] = useState<boolean[]>(
+    Array(columnCount).fill(true),
+  );
 
   const toggleColumn = (index: number) => {
     const newSelected = [...selectedColumns];
@@ -381,22 +353,24 @@ const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workboo
   const deselectAll = () => setSelectedColumns(Array(columnCount).fill(false));
 
   const handleRemove = () => {
-    const columns = selectedColumns.map((selected, index) => (selected ? index : -1)).filter(i => i >= 0);
+    const columns = selectedColumns
+      .map((selected, index) => (selected ? index : -1))
+      .filter((i) => i >= 0);
     onRemove(columns);
   };
 
   return (
     <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.3)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        background: "rgba(0,0,0,0.3)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         zIndex: 10000,
       }}
       onClick={onClose}
@@ -404,34 +378,56 @@ const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workboo
       <div
         onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
         style={{
-          background: '#FFFFFF',
+          background: "#FFFFFF",
           borderRadius: 4,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
           width: 400,
-          fontFamily: 'Segoe UI, sans-serif',
+          fontFamily: "Segoe UI, sans-serif",
         }}
       >
         {/* Header */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #E0E0E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Remove Duplicates</h3>
-          <button onClick={onClose} style={{ border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: '#666' }}>×</button>
+        <div
+          style={{
+            padding: "12px 16px",
+            borderBottom: "1px solid #E0E0E0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
+            Remove Duplicates
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              border: "none",
+              background: "transparent",
+              fontSize: 18,
+              cursor: "pointer",
+              color: "#666",
+            }}
+          >
+            ×
+          </button>
         </div>
 
         {/* Body */}
         <div style={{ padding: 16 }}>
-          <div style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>
-            To delete duplicate values, select one or more columns that contain duplicates.
+          <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>
+            To delete duplicate values, select one or more columns that contain
+            duplicates.
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <button
               onClick={selectAll}
               style={{
-                padding: '4px 12px',
-                border: '1px solid #D9D9D9',
-                background: '#F0F0F0',
+                padding: "4px 12px",
+                border: "1px solid #D9D9D9",
+                background: "#F0F0F0",
                 borderRadius: 2,
-                cursor: 'pointer',
+                cursor: "pointer",
                 fontSize: 11,
               }}
             >
@@ -440,11 +436,11 @@ const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workboo
             <button
               onClick={deselectAll}
               style={{
-                padding: '4px 12px',
-                border: '1px solid #D9D9D9',
-                background: '#F0F0F0',
+                padding: "4px 12px",
+                border: "1px solid #D9D9D9",
+                background: "#F0F0F0",
                 borderRadius: 2,
-                cursor: 'pointer',
+                cursor: "pointer",
                 fontSize: 11,
               }}
             >
@@ -452,9 +448,26 @@ const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workboo
             </button>
           </div>
 
-          <div style={{ border: '1px solid #D9D9D9', borderRadius: 2, maxHeight: 200, overflow: 'auto', padding: 8 }}>
+          <div
+            style={{
+              border: "1px solid #D9D9D9",
+              borderRadius: 2,
+              maxHeight: 200,
+              overflow: "auto",
+              padding: 8,
+            }}
+          >
             {Array.from({ length: columnCount }, (_, i) => (
-              <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, padding: '4px 0' }}>
+              <label
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                  padding: "4px 0",
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={selectedColumns[i]}
@@ -465,22 +478,38 @@ const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workboo
             ))}
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, marginTop: 12 }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 11,
+              marginTop: 12,
+            }}
+          >
             <input type="checkbox" defaultChecked />
             My data has headers
           </label>
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid #E0E0E0', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <div
+          style={{
+            padding: "12px 16px",
+            borderTop: "1px solid #E0E0E0",
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+          }}
+        >
           <button
             onClick={onClose}
             style={{
-              padding: '6px 16px',
-              border: '1px solid #D9D9D9',
-              background: '#F0F0F0',
+              padding: "6px 16px",
+              border: "1px solid #D9D9D9",
+              background: "#F0F0F0",
               borderRadius: 2,
-              cursor: 'pointer',
+              cursor: "pointer",
               fontSize: 11,
             }}
           >
@@ -489,12 +518,12 @@ const RemoveDuplicatesDialog: React.FC<RemoveDuplicatesDialogProps> = ({ workboo
           <button
             onClick={handleRemove}
             style={{
-              padding: '6px 16px',
-              border: '1px solid #0078D4',
-              background: '#0078D4',
-              color: '#FFFFFF',
+              padding: "6px 16px",
+              border: "1px solid #0078D4",
+              background: "#0078D4",
+              color: "#FFFFFF",
               borderRadius: 2,
-              cursor: 'pointer',
+              cursor: "pointer",
               fontSize: 11,
               fontWeight: 600,
             }}
@@ -515,18 +544,31 @@ interface TextToColumnsWizardProps {
   onApply: (config: any) => void;
 }
 
-const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, selectedCells, onClose, onApply }) => {
+const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({
+  workbook,
+  selectedCells,
+  onClose,
+  onApply,
+}) => {
   const [step, setStep] = useState(1);
-  const [dataType, setDataType] = useState<'delimited' | 'fixedWidth'>('delimited');
-  const [delimiters, setDelimiters] = useState({ tab: true, semicolon: false, comma: false, space: false, other: false });
-  const [otherDelimiter, setOtherDelimiter] = useState('');
+  const [dataType, setDataType] = useState<"delimited" | "fixedWidth">(
+    "delimited",
+  );
+  const [delimiters, setDelimiters] = useState({
+    tab: true,
+    semicolon: false,
+    comma: false,
+    space: false,
+    other: false,
+  });
+  const [otherDelimiter, setOtherDelimiter] = useState("");
 
   const handleApply = () => {
     const config = {
       dataType,
       delimiters: Object.entries(delimiters)
         .filter(([key, value]) => value)
-        .map(([key]) => key === 'other' ? otherDelimiter : key),
+        .map(([key]) => (key === "other" ? otherDelimiter : key)),
     };
     onApply(config);
   };
@@ -534,15 +576,15 @@ const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, sel
   return (
     <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.3)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        background: "rgba(0,0,0,0.3)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         zIndex: 10000,
       }}
       onClick={onClose}
@@ -550,17 +592,38 @@ const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, sel
       <div
         onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
         style={{
-          background: '#FFFFFF',
+          background: "#FFFFFF",
           borderRadius: 4,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
           width: 500,
-          fontFamily: 'Segoe UI, sans-serif',
+          fontFamily: "Segoe UI, sans-serif",
         }}
       >
         {/* Header */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #E0E0E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Convert Text to Columns Wizard - Step {step} of 3</h3>
-          <button onClick={onClose} style={{ border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: '#666' }}>×</button>
+        <div
+          style={{
+            padding: "12px 16px",
+            borderBottom: "1px solid #E0E0E0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
+            Convert Text to Columns Wizard - Step {step} of 3
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              border: "none",
+              background: "transparent",
+              fontSize: 18,
+              cursor: "pointer",
+              color: "#666",
+            }}
+          >
+            ×
+          </button>
         </div>
 
         {/* Body */}
@@ -568,49 +631,88 @@ const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, sel
           {step === 1 && (
             <div>
               <div style={{ fontSize: 11, marginBottom: 12 }}>
-                The Text Wizard has determined that your data is {dataType === 'delimited' ? 'Delimited' : 'Fixed Width'}.
+                The Text Wizard has determined that your data is{" "}
+                {dataType === "delimited" ? "Delimited" : "Fixed Width"}.
               </div>
-              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>Original data type:</div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>
+                Original data type:
+              </div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                  marginBottom: 8,
+                }}
+              >
                 <input
                   type="radio"
-                  checked={dataType === 'delimited'}
-                  onChange={() => setDataType('delimited')}
+                  checked={dataType === "delimited"}
+                  onChange={() => setDataType("delimited")}
                 />
-                Delimited - Characters such as commas or tabs separate each field
+                Delimited - Characters such as commas or tabs separate each
+                field
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                }}
+              >
                 <input
                   type="radio"
-                  checked={dataType === 'fixedWidth'}
-                  onChange={() => setDataType('fixedWidth')}
+                  checked={dataType === "fixedWidth"}
+                  onChange={() => setDataType("fixedWidth")}
                 />
-                Fixed width - Fields are aligned in columns with spaces between each field
+                Fixed width - Fields are aligned in columns with spaces between
+                each field
               </label>
             </div>
           )}
 
-          {step === 2 && dataType === 'delimited' && (
+          {step === 2 && dataType === "delimited" && (
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>Delimiters:</div>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>
+                Delimiters:
+              </div>
               {Object.entries(delimiters).map(([key, value]) => (
-                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, marginBottom: 8 }}>
+                <label
+                  key={key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 11,
+                    marginBottom: 8,
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={value}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDelimiters({ ...delimiters, [key]: e.target.checked })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setDelimiters({ ...delimiters, [key]: e.target.checked })
+                    }
                   />
                   {key.charAt(0).toUpperCase() + key.slice(1)}
-                  {key === 'other' && (
+                  {key === "other" && (
                     <input
                       type="text"
                       value={otherDelimiter}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setOtherDelimiter(e.target.value)}
+                      onChange={(
+                        e: React.ChangeEvent<
+                          | HTMLInputElement
+                          | HTMLSelectElement
+                          | HTMLTextAreaElement
+                        >,
+                      ) => setOtherDelimiter(e.target.value)}
                       disabled={!delimiters.other}
                       style={{
                         width: 40,
-                        padding: '2px 4px',
-                        border: '1px solid #D9D9D9',
+                        padding: "2px 4px",
+                        border: "1px solid #D9D9D9",
                         borderRadius: 2,
                         fontSize: 11,
                         marginLeft: 8,
@@ -628,16 +730,41 @@ const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, sel
               <div style={{ fontSize: 11, marginBottom: 12 }}>
                 This screen lets you select each column and set the Data Format.
               </div>
-              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>Column data format:</div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>
+                Column data format:
+              </div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                  marginBottom: 8,
+                }}
+              >
                 <input type="radio" defaultChecked />
                 General
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, marginBottom: 8 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                  marginBottom: 8,
+                }}
+              >
                 <input type="radio" />
                 Text
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                }}
+              >
                 <input type="radio" />
                 Date: MDY
               </label>
@@ -646,30 +773,37 @@ const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, sel
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid #E0E0E0', display: 'flex', justifyContent: 'space-between' }}>
+        <div
+          style={{
+            padding: "12px 16px",
+            borderTop: "1px solid #E0E0E0",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
           <button
             onClick={onClose}
             style={{
-              padding: '6px 16px',
-              border: '1px solid #D9D9D9',
-              background: '#F0F0F0',
+              padding: "6px 16px",
+              border: "1px solid #D9D9D9",
+              background: "#F0F0F0",
               borderRadius: 2,
-              cursor: 'pointer',
+              cursor: "pointer",
               fontSize: 11,
             }}
           >
             Cancel
           </button>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
                 style={{
-                  padding: '6px 16px',
-                  border: '1px solid #D9D9D9',
-                  background: '#F0F0F0',
+                  padding: "6px 16px",
+                  border: "1px solid #D9D9D9",
+                  background: "#F0F0F0",
                   borderRadius: 2,
-                  cursor: 'pointer',
+                  cursor: "pointer",
                   fontSize: 11,
                 }}
               >
@@ -680,12 +814,12 @@ const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, sel
               <button
                 onClick={() => setStep(step + 1)}
                 style={{
-                  padding: '6px 16px',
-                  border: '1px solid #0078D4',
-                  background: '#0078D4',
-                  color: '#FFFFFF',
+                  padding: "6px 16px",
+                  border: "1px solid #0078D4",
+                  background: "#0078D4",
+                  color: "#FFFFFF",
                   borderRadius: 2,
-                  cursor: 'pointer',
+                  cursor: "pointer",
                   fontSize: 11,
                   fontWeight: 600,
                 }}
@@ -696,12 +830,12 @@ const TextToColumnsWizard: React.FC<TextToColumnsWizardProps> = ({ workbook, sel
               <button
                 onClick={handleApply}
                 style={{
-                  padding: '6px 16px',
-                  border: '1px solid #0078D4',
-                  background: '#0078D4',
-                  color: '#FFFFFF',
+                  padding: "6px 16px",
+                  border: "1px solid #0078D4",
+                  background: "#0078D4",
+                  color: "#FFFFFF",
                   borderRadius: 2,
-                  cursor: 'pointer',
+                  cursor: "pointer",
                   fontSize: 11,
                   fontWeight: 600,
                 }}

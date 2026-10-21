@@ -1,15 +1,12 @@
 /**
- * ScaleToFitGroup.tsx
- *
- * Page Layout Tab - Scale to Fit Group
- * Contains: Width, Height, Scale numeric inputs
+ * ScaleToFitGroup.tsx — Page Layout: Scale to Fit group (layout only)
  */
 
-import React from 'react';
+import React from "react";
 
 export interface ScaleToFitGroupProps {
-  onWidthChange?: (width: number | 'auto') => void;
-  onHeightChange?: (height: number | 'auto') => void;
+  onWidthChange?: (width: number | "auto") => void;
+  onHeightChange?: (height: number | "auto") => void;
   onScaleChange?: (scale: number) => void;
 }
 
@@ -18,110 +15,62 @@ export const ScaleToFitGroup: React.FC<ScaleToFitGroupProps> = ({
   onHeightChange,
   onScaleChange,
 }) => {
-  const groupStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    padding: '4px 8px',
-  };
-
-  const fieldContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-  };
-
-  const fieldRowStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  };
-
-  const fieldLabelStyle: React.CSSProperties = {
-    fontSize: 11,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-    color: '#333',
-    minWidth: 40,
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: 60,
-    padding: '2px 6px',
-    fontSize: 11,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-    border: '1px solid #CCC',
-    borderRadius: 2,
-    textAlign: 'right',
-  };
-
-  const unitStyle: React.CSSProperties = {
-    fontSize: 11,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-    color: '#888',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11,
-    color: '#888',
-    textAlign: 'center',
-    marginTop: 4,
-    fontFamily: 'Segoe UI, Arial, sans-serif',
-  };
-
   return (
-    <div style={groupStyle}>
-      <div style={fieldContainerStyle}>
-        {/* Width */}
-        <div style={fieldRowStyle}>
-          <span style={fieldLabelStyle}>Width:</span>
-          <input
-            type="text"
-            style={inputStyle}
-            defaultValue="Automatic"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              const val = e.target.value.toLowerCase();
-              if (val === 'automatic' || val === 'auto' || val === '') {
-                onWidthChange?.('auto');
-              } else {
-                const num = parseInt(val, 10);
-                if (!isNaN(num) && num >= 1 && num <= 999) {
-                  onWidthChange?.(num);
-                }
-              }
+    <div className="formulas-group pagelayout-scale">
+      <div className="formulas-group-body pagelayout-scale-body">
+        <div className="pagelayout-scale-row">
+          <span className="pagelayout-scale-icon" aria-hidden>
+            ↔
+          </span>
+          <span className="pagelayout-scale-label">Width:</span>
+          <select
+            className="pagelayout-scale-select"
+            defaultValue="auto"
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+              const val = e.target.value;
+              if (val === "auto") onWidthChange?.("auto");
+              else onWidthChange?.(parseInt(val, 10));
             }}
-          />
-          <span style={unitStyle}>page(s)</span>
+          >
+            <option value="auto">Automatic</option>
+            <option value="1">1 page</option>
+            <option value="2">2 pages</option>
+            <option value="3">3 pages</option>
+          </select>
         </div>
 
-        {/* Height */}
-        <div style={fieldRowStyle}>
-          <span style={fieldLabelStyle}>Height:</span>
-          <input
-            type="text"
-            style={inputStyle}
-            defaultValue="Automatic"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              const val = e.target.value.toLowerCase();
-              if (val === 'automatic' || val === 'auto' || val === '') {
-                onHeightChange?.('auto');
-              } else {
-                const num = parseInt(val, 10);
-                if (!isNaN(num) && num >= 1 && num <= 999) {
-                  onHeightChange?.(num);
-                }
-              }
+        <div className="pagelayout-scale-row">
+          <span className="pagelayout-scale-icon" aria-hidden>
+            ↕
+          </span>
+          <span className="pagelayout-scale-label">Height:</span>
+          <select
+            className="pagelayout-scale-select"
+            defaultValue="auto"
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+              const val = e.target.value;
+              if (val === "auto") onHeightChange?.("auto");
+              else onHeightChange?.(parseInt(val, 10));
             }}
-          />
-          <span style={unitStyle}>page(s)</span>
+          >
+            <option value="auto">Automatic</option>
+            <option value="1">1 page</option>
+            <option value="2">2 pages</option>
+            <option value="3">3 pages</option>
+          </select>
         </div>
 
-        {/* Scale */}
-        <div style={fieldRowStyle}>
-          <span style={fieldLabelStyle}>Scale:</span>
+        <div className="pagelayout-scale-row">
+          <span className="pagelayout-scale-icon" aria-hidden>
+            ⤢
+          </span>
+          <span className="pagelayout-scale-label">Scale:</span>
           <input
-            type="text"
-            style={inputStyle}
-            defaultValue="100"
+            type="number"
+            className="pagelayout-scale-spin"
+            defaultValue={100}
+            min={10}
+            max={400}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               const num = parseInt(e.target.value, 10);
               if (!isNaN(num) && num >= 10 && num <= 400) {
@@ -129,11 +78,19 @@ export const ScaleToFitGroup: React.FC<ScaleToFitGroupProps> = ({
               }
             }}
           />
-          <span style={unitStyle}>%</span>
+          <span className="pagelayout-scale-suffix">%</span>
         </div>
       </div>
 
-      <div style={labelStyle}>Scale to Fit</div>
+      <div className="pagelayout-group-footer">
+        <div className="formulas-group-caption">Scale to Fit</div>
+        <button
+          type="button"
+          className="pagelayout-dialog-launcher"
+          title="Scale to Fit dialog"
+          aria-label="Scale to Fit dialog"
+        />
+      </div>
     </div>
   );
 };

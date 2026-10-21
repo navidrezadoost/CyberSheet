@@ -1,4 +1,5 @@
 import { FillColorButtonIcon1 } from '@cyber-sheet/icons/react';
+import { RibbonAnchoredOverlay } from './RibbonAnchoredOverlay';
 import React, { useState, useRef, useEffect } from 'react';
 import { ColorGrid } from './ColorGrid';
 import { PatternGrid } from './PatternGrid';
@@ -74,7 +75,8 @@ export const FillColorButton: React.FC<FillColorButtonProps> = ({
 }) => {
   const { fills: recentFills, addFill } = useRecentFills();
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   
   // Last explicitly chosen fill (UI state only, NOT source of truth)
   // Used as fallback when selection is mixed or undefined
@@ -153,7 +155,9 @@ export const FillColorButton: React.FC<FillColorButtonProps> = ({
   useEffect(() => {
     const handleClickOutside = (event: PointerEvent) => {
       const path = event.composedPath();
-      if (dropdownRef.current && !path.includes(dropdownRef.current)) {
+      const inPanel = panelRef.current && path.includes(panelRef.current);
+      const inAnchor = anchorRef.current && path.includes(anchorRef.current);
+      if (!inPanel && !inAnchor) {
         setDropdownOpen(false);
       }
     };
@@ -222,7 +226,7 @@ export const FillColorButton: React.FC<FillColorButtonProps> = ({
   };
 
   return (
-    <div className="cs-fill-color-split-button" ref={dropdownRef}>
+    <div className="cs-fill-color-split-button" ref={anchorRef}>
       {/* Main button - apply current fill */}
       <button
         className="cs-fill-color-main-btn"
@@ -248,7 +252,13 @@ export const FillColorButton: React.FC<FillColorButtonProps> = ({
 
       {/* Fill picker dropdown */}
       {dropdownOpen && (
-        <div className="cs-fill-dropdown">
+        <RibbonAnchoredOverlay
+          open={dropdownOpen}
+          anchorRef={anchorRef}
+          className="cs-fill-dropdown"
+          style={{ minWidth: 220, padding: 8 }}
+        >
+        <div ref={panelRef} className="cs-fill-dropdown-inner">
           {/* Section tabs */}
           <div className="cs-section-tabs">
             <button
@@ -362,6 +372,7 @@ export const FillColorButton: React.FC<FillColorButtonProps> = ({
             More Fill Options...
           </button>
         </div>
+        </RibbonAnchoredOverlay>
       )}
     </div>
   );

@@ -15,6 +15,7 @@
 
 import { NumberFormatGroupIcon2, NumberFormatGroupIcon1 } from '@cyber-sheet/icons/react';
 import React, { useState, useRef, useEffect } from 'react';
+import { RibbonPopoverPanel } from './RibbonPopoverPanel';
 import type { Address } from '@cyber-sheet/core';
 import type { FormattingController } from '@cyber-sheet/core';
 import type { SelectionStyleSummary } from '@cyber-sheet/core';
@@ -183,21 +184,7 @@ export const NumberFormatGroup: React.FC<NumberFormatGroupProps> = ({
     paddingRight: '8px',
   };
 
-  const dropdownStyles: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    marginTop: '4px',
-    background: '#fff',
-    border: '1px solid #d0d0d0',
-    borderRadius: '4px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-    zIndex: 1000,
-    minWidth: '220px',
-    maxHeight: '400px',
-    overflowY: 'auto',
-    animation: 'slideDown 200ms ease-out',
-  };
+  const formatPopoverStyle: React.CSSProperties = { minWidth: 220, maxHeight: 400 };
 
   const menuItemStyles: React.CSSProperties = {
     padding: '10px 14px',
@@ -222,14 +209,7 @@ export const NumberFormatGroup: React.FC<NumberFormatGroupProps> = ({
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '6px',
-      padding: '8px',
-      borderRight: '1px solid #d0d0d0',
-      position: 'relative',
-    }}>
+    <div className="number-group-content home-number-group">
       {/* Group Launcher Button */}
       {onOpenFormatDialog && (
         <button
@@ -263,6 +243,7 @@ export const NumberFormatGroup: React.FC<NumberFormatGroupProps> = ({
           style={dropdownButtonStyles}
           onClick={() => setShowFormatMenu(!showFormatMenu)}
           title="Number Format"
+          aria-expanded={showFormatMenu}
         >
           <span style={{
             overflow: 'hidden',
@@ -276,28 +257,17 @@ export const NumberFormatGroup: React.FC<NumberFormatGroupProps> = ({
           <span style={{ fontSize: '10px', marginLeft: '4px' }}>▼</span>
         </button>
 
-        {showFormatMenu && (
-          <div style={dropdownStyles}>
-            {NUMBER_FORMAT_CATEGORIES.map((category, index) => (
+        <RibbonPopoverPanel open={showFormatMenu} anchorRef={formatMenuRef} style={formatPopoverStyle}>
+            {NUMBER_FORMAT_CATEGORIES.map((category) => (
               <div
                 key={category.name}
+                className="cs-ribbon-popover-item"
+                role="menuitem"
                 style={{
-                  ...menuItemStyles,
-                  background: category.format === currentFormat ? '#e3f2fd' : '#fff',
                   fontWeight: category.format === currentFormat ? 600 : 400,
-                  borderBottom: index === NUMBER_FORMAT_CATEGORIES.length - 1 ? 'none' : '1px solid #f0f0f0',
+                  background: category.format === currentFormat ? '#c7e0f4' : undefined,
                 }}
                 onClick={() => handleFormatSelect(category.format)}
-                onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                  if (category.format !== currentFormat) {
-                    (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
-                  }
-                }}
-                onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                  if (category.format !== currentFormat) {
-                    (e.target as HTMLElement).style.backgroundColor = '#fff';
-                  }
-                }}
               >
                 <span>{category.name}</span>
                 <span style={{ fontSize: '11px', color: '#666', fontFamily: 'monospace' }}>
@@ -305,8 +275,7 @@ export const NumberFormatGroup: React.FC<NumberFormatGroupProps> = ({
                 </span>
               </div>
             ))}
-          </div>
-        )}
+        </RibbonPopoverPanel>
       </div>
 
       {/* Row 2: Quick Format Buttons */}

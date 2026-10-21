@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ColorDropdown } from './ColorDropdown';
 import { useRecentColors } from './hooks/useRecentColors';
 import { AUTOMATIC_COLOR } from './colors';
@@ -55,6 +55,7 @@ export const FontColorButton: React.FC<FontColorButtonProps> = ({
 }) => {
   const { colors: recentColors, addColor } = useRecentColors('font');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
   
   // Last explicitly chosen color (UI state only, NOT source of truth)
   // Used as fallback when selection is mixed or undefined
@@ -105,7 +106,7 @@ export const FontColorButton: React.FC<FontColorButtonProps> = ({
   };
 
   return (
-    <div className="cs-font-color-split-button">
+    <div ref={anchorRef} className="cs-font-color-split-button">
       {/* Main button - apply current color */}
       <button
         className="cs-font-color-main-btn"
@@ -141,6 +142,7 @@ export const FontColorButton: React.FC<FontColorButtonProps> = ({
       {/* Color picker dropdown */}
       {dropdownOpen && (
         <ColorDropdown
+          anchorRef={anchorRef}
           onSelect={handleColorSelect}
           recentColors={recentColors}
           selectedColor={isMixed ? undefined : selectionColor}  // Mixed: don't highlight anything

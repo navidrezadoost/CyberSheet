@@ -9,7 +9,6 @@ import {
   ExcelColorSpec,
   Emitter,
   assertInternedStyle,
-  computeVerticalOffset,
   isHyperlinkVisited,
   HYPERLINK_COLOR,
   HYPERLINK_VISITED_COLOR,
@@ -1074,6 +1073,33 @@ export class CanvasRenderer {
     return valign === "top" || valign === "middle" || valign === "bottom"
       ? valign
       : undefined;
+  }
+
+  /** Ink box of the current font. Used to center glyphs, not the em square. */
+  private textInkMetrics(fontSize: number): { ascent: number; descent: number } {
+    const metrics = this.ctx.measureText("Hg");
+    return {
+      ascent: metrics.actualBoundingBoxAscent || fontSize * 0.74,
+      descent: metrics.actualBoundingBoxDescent || fontSize * 0.18,
+    };
+  }
+
+  /**
+   * Alphabetic baseline so the painted glyphs sit in the cell.
+   * Default is vertical center. `textBaseline` must be `"alphabetic"`.
+   */
+  private alphabeticBaselineY(
+    cellTop: number,
+    cellHeight: number,
+    fontSize: number,
+    valign: "top" | "middle" | "bottom" | undefined,
+  ): number {
+    const { ascent, descent } = this.textInkMetrics(fontSize);
+    const pad = 2;
+    const align = valign ?? "middle";
+    if (align === "top") return cellTop + pad + ascent;
+    if (align === "bottom") return cellTop + cellHeight - pad - descent;
+    return cellTop + (cellHeight - ascent - descent) / 2 + ascent;
   }
 
   private applyConditionalFormatting(
@@ -2413,24 +2439,20 @@ export class CanvasRenderer {
               }
             }
             ctx.fillStyle = textColor;
+            ctx.textBaseline = "alphabetic";
             const drawW = merged ? spanW : cw;
             const drawH = merged ? spanH : rh;
             const maxWidth = Math.max(0, drawW - 8);
             let tx = x + 4;
             const verticalAlign = this.normalizeVerticalAlign(style?.valign);
-            // Compute vertical offset using layout function (pure layout concern)
-            let ty =
-              y +
-              computeVerticalOffset(
-                verticalAlign,
-                drawH,
-                fontSize,
-                fontSize,
-                2,
-                4,
-              ) -
-              fontSize / 2 +
-              2;
+            const { ascent: inkAscent, descent: inkDescent } =
+              this.textInkMetrics(fontSize);
+            let ty = this.alphabeticBaselineY(
+              y,
+              drawH,
+              fontSize,
+              verticalAlign,
+            );
             const align =
               style?.align ??
               this.formatCache.preferredAlign(v, style?.numberFormat);
@@ -2460,16 +2482,12 @@ export class CanvasRenderer {
               if (align === "right")
                 localTx = drawW / 2 - 4 - (textWidth as number);
               else if (align === "center") localTx = -(textWidth as number) / 2;
-              // Compute vertical offset using layout function (scaled context)
-              const valignOffset = computeVerticalOffset(
-                verticalAlign,
-                drawH,
-                fontSize,
-                fontSize,
-                2,
-                4,
-              );
-              let localTy = valignOffset - drawH / 2 - fontSize / 2 + 2;
+              const localTy =
+                verticalAlign === "top"
+                  ? -drawH / 2 + 2 + inkAscent
+                  : verticalAlign === "bottom"
+                    ? drawH / 2 - 2 - inkDescent
+                    : (inkAscent - inkDescent) / 2;
               ctx.beginPath();
               ctx.rect(-drawW / 2 + 1, -drawH / 2 + 1, drawW - 2, drawH - 2);
               ctx.clip();
@@ -2525,7 +2543,12 @@ export class CanvasRenderer {
                 ctx.restore();
               } else {
                 const rx = -(textWidth as number) / 2;
-                const ry = fontSize / 2;
+                const ry =
+                  verticalAlign === "top"
+                    ? -drawH / 2 + 2 + inkAscent
+                    : verticalAlign === "bottom"
+                      ? drawH / 2 - 2 - inkDescent
+                      : (inkAscent - inkDescent) / 2;
                 ctx.fillText(text, rx, ry);
               }
               ctx.restore();
@@ -2569,7 +2592,7 @@ export class CanvasRenderer {
                 const metrics = ctx.measureText(toDraw);
                 const strikeY =
                   ty -
-                  (metrics.actualBoundingBoxAscent || fontSize * 0.8) * 0.3;
+                  (metrics.actualBoundingBoxAscent || inkAscent) * 0.32;
                 const strikeWidth =
                   typeof metrics.width === "number"
                     ? metrics.width
@@ -2584,10 +2607,7 @@ export class CanvasRenderer {
 
               if (style?.underline || hyperlink?.target) {
                 const metrics = ctx.measureText(toDraw);
-                const underlineY =
-                  ty +
-                  (metrics.actualBoundingBoxDescent || fontSize * 0.15) +
-                  1;
+                const underlineY = ty + 1;
                 const underlineWidth =
                   typeof metrics.width === "number"
                     ? metrics.width
@@ -2628,19 +2648,19 @@ export class CanvasRenderer {
                 }
               }
               if (line) lines.push(line);
-              // Compute vertical offset using layout function (multi-line case)
-              const totalH = lines.length * (fontSize + 2);
+              const lineStep = fontSize + 2;
+              const blockInk =
+                (lines.length - 1) * lineStep + inkAscent + inkDescent;
               let lineY =
-                y +
-                computeVerticalOffset(
-                  verticalAlign,
-                  drawH,
-                  totalH,
-                  fontSize,
-                  2,
-                  4,
-                ) -
-                fontSize;
+                verticalAlign === "top"
+                  ? y + 2 + inkAscent
+                  : verticalAlign === "bottom"
+                    ? y +
+                      drawH -
+                      2 -
+                      inkDescent -
+                      (lines.length - 1) * lineStep
+                    : y + (drawH - blockInk) / 2 + inkAscent;
               const startX =
                 align === "center"
                   ? x + drawW / 2
@@ -2826,10 +2846,11 @@ export class CanvasRenderer {
         rowIndex++;
       }
 
+      ctx.textBaseline = "middle";
       this.drawLayers("cells", ctx, width, height);
       this.drawConfiguredImages(ctx, "cell");
 
-      // Draw selections with light gray fill (Excel-style)
+      // Selection overlay: border only (Excel — interior stays transparent).
       const sels = this.selections.length
         ? this.selections
         : this.selection
@@ -2844,10 +2865,6 @@ export class CanvasRenderer {
           c2 = Math.max(a.col, b.col);
         const rect = this.rectForRange(r1, c1, r2, c2);
         if (rect) {
-          // Match the supplied example: light blue fill with a green border.
-          const isSingleCell = r1 === r2 && c1 === c2;
-          ctx.fillStyle = "#D8E8F5";
-          ctx.fillRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
           ctx.strokeStyle = selectionColor;
           ctx.lineWidth = 2;
           ctx.setLineDash([]);
