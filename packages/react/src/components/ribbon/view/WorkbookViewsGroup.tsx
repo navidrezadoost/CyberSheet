@@ -52,12 +52,8 @@ export const WorkbookViewsGroup: React.FC<WorkbookViewsGroupProps> = ({
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 8px' }}>
-      <div style={{ fontSize: 10, color: '#666', marginBottom: 2, fontFamily: 'Segoe UI, sans-serif' }}>
-        Workbook Views
-      </div>
-      
-      <div style={{ display: 'flex', gap: 4 }}>
+    <div className="formulas-group view-ribbon-group">
+      <div className="formulas-group-body view-ribbon-group-body">
         {/* Normal View */}
         <button
           style={buttonStyle(activeView === 'normal')}
@@ -137,6 +133,7 @@ export const WorkbookViewsGroup: React.FC<WorkbookViewsGroupProps> = ({
           <span style={{ fontSize: 9, textAlign: 'center', lineHeight: 1.2 }}>Custom<br/>Views</span>
         </button>
       </div>
+      <div className="formulas-group-caption">Workbook Views</div>
     </div>
   );
 };

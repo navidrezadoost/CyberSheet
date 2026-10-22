@@ -5,17 +5,19 @@
  * Assembles all Formulas groups: Function Library, Defined Names, Formula Auditing, Calculation
  */
 
-import React from 'react';
-import { FunctionLibraryGroup } from './FunctionLibraryGroup';
-import { DefinedNamesGroup } from './DefinedNamesGroup';
-import { FormulaAuditingGroup } from './FormulaAuditingGroup';
-import { CalculationGroup } from './CalculationGroup';
-import '../ribbon.css';
+import React from "react";
+import { FunctionLibraryGroup } from "./FunctionLibraryGroup";
+import { DefinedNamesGroup } from "./DefinedNamesGroup";
+import { FormulaAuditingGroup } from "./FormulaAuditingGroup";
+import { CalculationGroup } from "./CalculationGroup";
+import "../ribbon.css";
 
 export interface FormulasTabProps {
   // Function Library
   onInsertFunction?: () => void;
-  onAutoSum?: (type: 'sum' | 'average' | 'count' | 'max' | 'min' | 'more') => void;
+  onAutoSum?: (
+    type: "sum" | "average" | "count" | "max" | "min" | "more",
+  ) => void;
   onSelectFunction?: (category: string, functionName: string) => void;
 
   // Defined Names
@@ -29,7 +31,7 @@ export interface FormulasTabProps {
   // Formula Auditing
   onTracePrecedents?: () => void;
   onTraceDependents?: () => void;
-  onRemoveArrows?: (type: 'precedents' | 'dependents' | 'all') => void;
+  onRemoveArrows?: (type: "precedents" | "dependents" | "all") => void;
   onShowFormulas?: (show: boolean) => void;
   onErrorChecking?: () => void;
   onTraceError?: () => void;
@@ -39,15 +41,17 @@ export interface FormulasTabProps {
   showFormulas?: boolean;
 
   // Calculation
-  onCalculationModeChange?: (mode: 'automatic' | 'automaticExceptTables' | 'manual') => void;
+  onCalculationModeChange?: (
+    mode: "automatic" | "automaticExceptTables" | "manual",
+  ) => void;
   onCalculateNow?: () => void;
   onCalculateSheet?: () => void;
-  calculationMode?: 'automatic' | 'automaticExceptTables' | 'manual';
+  calculationMode?: "automatic" | "automaticExceptTables" | "manual";
 }
 
 export const FormulasTab: React.FC<FormulasTabProps> = (props) => {
   return (
-    <div className="ribbon-content ribbon-tab-content">
+    <div className="ribbon-content ribbon-tab-content ribbon-formulas-2013">
       {/* Function Library Group */}
       <FunctionLibraryGroup
         onInsertFunction={props.onInsertFunction}

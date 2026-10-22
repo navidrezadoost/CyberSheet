@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, type RefObject } from 'react';
+import { RibbonAnchoredOverlay } from './RibbonAnchoredOverlay';
 import { ColorGrid } from './ColorGrid';
 import { THEME_COLORS, STANDARD_COLORS, AUTOMATIC_COLOR } from './colors';
 import './ribbon.css';
@@ -23,6 +24,9 @@ export interface ColorDropdownProps {
    * Called when dropdown should close
    */
   onClose: () => void;
+
+  /** Anchor for fixed/portaled placement (split-button host) */
+  anchorRef: RefObject<HTMLElement | null>;
   
   /**
    * Show "Automatic" option (for font color)
@@ -66,6 +70,7 @@ export const ColorDropdown: React.FC<ColorDropdownProps> = ({
   recentColors,
   selectedColor,
   onClose,
+  anchorRef,
   showAutomatic = true,
   showNoFill = false,
 }) => {
@@ -76,7 +81,9 @@ export const ColorDropdown: React.FC<ColorDropdownProps> = ({
     const handleClickOutside = (event: PointerEvent) => {
       // Use composedPath() for safer detection (handles shadow DOM, portals)
       const path = event.composedPath();
-      if (dropdownRef.current && !path.includes(dropdownRef.current)) {
+      const inPanel = dropdownRef.current && path.includes(dropdownRef.current);
+      const inAnchor = anchorRef.current && path.includes(anchorRef.current);
+      if (!inPanel && !inAnchor) {
         onClose();
       }
     };
@@ -96,7 +103,7 @@ export const ColorDropdown: React.FC<ColorDropdownProps> = ({
       document.removeEventListener('pointerdown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [onClose]);
+  }, [onClose, anchorRef]);
 
   const handleSelect = (color: string) => {
     onSelect(color);
@@ -104,10 +111,16 @@ export const ColorDropdown: React.FC<ColorDropdownProps> = ({
   };
 
   return (
+    <RibbonAnchoredOverlay
+      open
+      anchorRef={anchorRef}
+      className="cs-color-dropdown"
+      style={{ minWidth: 200, padding: 8 }}
+      role="dialog"
+    >
     <div
       ref={dropdownRef}
-      className="cs-color-dropdown"
-      role="dialog"
+      className="cs-color-dropdown-inner"
       aria-label="Color picker"
     >
       {/* Automatic / No Fill */}
@@ -194,5 +207,6 @@ export const ColorDropdown: React.FC<ColorDropdownProps> = ({
         More Colors...
       </button>
     </div>
+    </RibbonAnchoredOverlay>
   );
 };

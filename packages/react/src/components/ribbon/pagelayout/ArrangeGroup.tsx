@@ -1,19 +1,17 @@
 /**
- * ArrangeGroup.tsx
- *
- * Arrange Group for Page Layout Tab
- * Provides tools for arranging shapes, pictures, and other objects
- * Groups: Bring Forward/Send Backward, Selection Pane, Align, Group, Rotate
+ * ArrangeGroup.tsx — Page Layout: Arrange group (layout only)
  */
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
+import { RibbonDropdownHost } from "../RibbonDropdownHost";
+import { ribbonDropdownChrome } from "../ribbonDropdownChrome";
 
 export interface ArrangeGroupProps {
-  onBringForward?: (step: 'front' | 'forward') => void;
-  onSendBackward?: (step: 'back' | 'backward') => void;
+  onBringForward?: (step: "front" | "forward") => void;
+  onSendBackward?: (step: "back" | "backward") => void;
   onSelectionPane?: () => void;
   onAlign?: (alignment: string) => void;
-  onGroup?: (action: 'group' | 'ungroup' | 'regroup') => void;
+  onGroup?: (action: "group" | "ungroup" | "regroup") => void;
   onRotate?: (rotation: string) => void;
 }
 
@@ -31,410 +29,243 @@ export const ArrangeGroup: React.FC<ArrangeGroupProps> = ({
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const [showRotateMenu, setShowRotateMenu] = useState(false);
 
+  const menuStyle = ribbonDropdownChrome({ minWidth: 160, maxHeight: 320 });
+
+  const menuBtn = (
+    label: string,
+    onClick: () => void,
+  ): React.ReactNode => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        padding: "6px 12px",
+        border: "none",
+        background: "transparent",
+        textAlign: "left",
+        cursor: "pointer",
+        fontSize: 11,
+        fontFamily: "Segoe UI, sans-serif",
+      }}
+      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.background = "#F0F0F0";
+      }}
+      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className="ribbon-tab-shell">
-      <div style={{ display: 'flex', gap: 4 }}>
-        {/* Bring Forward/Send Backward */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowBringForwardMenu(!showBringForwardMenu)}
-              title="Bring Forward"
-              style={{
-                width: 80,
-                height: 20,
-                border: 'none',
-                background: '#F0F0F0',
-                cursor: 'pointer',
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                paddingLeft: 6,
-                gap: 4,
-                fontSize: 10,
-                fontFamily: 'Segoe UI, sans-serif',
-                color: '#333',
-              }}
-              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M2 10h12v4H2v-4zM4 2h8v6H4V2z" opacity="0.6" />
-                <path d="M4 2h8v6H4V2z" />
-              </svg>
-              <span>Bring Forward</span>
-            </button>
+    <div className="formulas-group pagelayout-arrange">
+      <div className="formulas-group-body pagelayout-arrange-row">
+        <RibbonDropdownHost
+          open={showBringForwardMenu}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuBtn("Bring to Front", () => {
+                onBringForward?.("front");
+                setShowBringForwardMenu(false);
+              })}
+              {menuBtn("Bring Forward", () => {
+                onBringForward?.("forward");
+                setShowBringForwardMenu(false);
+              })}
+            </>
+          }
+        >
+          <button
+            type="button"
+            className="formulas-btn-large pagelayout-arrange-btn"
+            onClick={() => setShowBringForwardMenu(!showBringForwardMenu)}
+            title="Bring Forward"
+          >
+            <span className="formulas-icon-lg" aria-hidden>
+              ⬆️
+            </span>
+            <span>
+              Bring
+              <br />
+              Forward
+            </span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </RibbonDropdownHost>
 
-            {showBringForwardMenu && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: 2,
-                background: '#FFFFFF',
-                border: '1px solid #D9D9D9',
-                borderRadius: 4,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                zIndex: 1000,
-                minWidth: 150,
-              }}>
-                <button
-                  onClick={() => {
-                    onBringForward?.('front');
-                    setShowBringForwardMenu(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '6px 12px',
-                    border: 'none',
-                    background: 'transparent',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontFamily: 'Segoe UI, sans-serif',
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-                >
-                  Bring to Front
-                </button>
-                <button
-                  onClick={() => {
-                    onBringForward?.('forward');
-                    setShowBringForwardMenu(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '6px 12px',
-                    border: 'none',
-                    background: 'transparent',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontFamily: 'Segoe UI, sans-serif',
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-                >
-                  Bring Forward
-                </button>
-              </div>
-            )}
-          </div>
+        <RibbonDropdownHost
+          open={showSendBackwardMenu}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuBtn("Send to Back", () => {
+                onSendBackward?.("back");
+                setShowSendBackwardMenu(false);
+              })}
+              {menuBtn("Send Backward", () => {
+                onSendBackward?.("backward");
+                setShowSendBackwardMenu(false);
+              })}
+            </>
+          }
+        >
+          <button
+            type="button"
+            className="formulas-btn-large pagelayout-arrange-btn"
+            onClick={() => setShowSendBackwardMenu(!showSendBackwardMenu)}
+            title="Send Backward"
+          >
+            <span className="formulas-icon-lg" aria-hidden>
+              ⬇️
+            </span>
+            <span>
+              Send
+              <br />
+              Backward
+            </span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </RibbonDropdownHost>
 
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowSendBackwardMenu(!showSendBackwardMenu)}
-              title="Send Backward"
-              style={{
-                width: 80,
-                height: 20,
-                border: 'none',
-                background: '#F0F0F0',
-                cursor: 'pointer',
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                paddingLeft: 6,
-                gap: 4,
-                fontSize: 10,
-                fontFamily: 'Segoe UI, sans-serif',
-                color: '#333',
-              }}
-              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M4 2h8v6H4V2z" opacity="0.6" />
-                <path d="M2 10h12v4H2v-4z" />
-              </svg>
-              <span>Send Backward</span>
-            </button>
+        <button
+          type="button"
+          className="formulas-btn-large pagelayout-arrange-btn"
+          onClick={() => onSelectionPane?.()}
+          title="Selection Pane"
+        >
+          <span className="formulas-icon-lg" aria-hidden>
+            🖱️
+          </span>
+          <span>
+            Selection
+            <br />
+            Pane
+          </span>
+        </button>
 
-            {showSendBackwardMenu && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: 2,
-                background: '#FFFFFF',
-                border: '1px solid #D9D9D9',
-                borderRadius: 4,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                zIndex: 1000,
-                minWidth: 150,
-              }}>
-                <button
-                  onClick={() => {
-                    onSendBackward?.('back');
-                    setShowSendBackwardMenu(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '6px 12px',
-                    border: 'none',
-                    background: 'transparent',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontFamily: 'Segoe UI, sans-serif',
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-                >
-                  Send to Back
-                </button>
-                <button
-                  onClick={() => {
-                    onSendBackward?.('backward');
-                    setShowSendBackwardMenu(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '6px 12px',
-                    border: 'none',
-                    background: 'transparent',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontFamily: 'Segoe UI, sans-serif',
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-                >
-                  Send Backward
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <RibbonDropdownHost
+          open={showAlignMenu}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {[
+                "Align Left",
+                "Align Center",
+                "Align Right",
+                "Align Top",
+                "Align Middle",
+                "Align Bottom",
+                "Distribute Horizontally",
+                "Distribute Vertically",
+              ].map((align) => (
+                <React.Fragment key={align}>
+                  {menuBtn(align, () => {
+                    onAlign?.(align);
+                    setShowAlignMenu(false);
+                  })}
+                </React.Fragment>
+              ))}
+            </>
+          }
+        >
+          <button
+            type="button"
+            className="formulas-btn-large pagelayout-arrange-btn"
+            onClick={() => setShowAlignMenu(!showAlignMenu)}
+            title="Align"
+          >
+            <span className="formulas-icon-lg" aria-hidden>
+              ≡
+            </span>
+            <span>Align</span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </RibbonDropdownHost>
 
-        {/* Selection Pane, Align, Group, Rotate */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* Row 1: Selection Pane, Align */}
-          <div style={{ display: 'flex', gap: 2 }}>
-            <button
-              onClick={() => onSelectionPane?.()}
-              title="Selection Pane"
-              style={{
-                width: 52,
-                height: 20,
-                border: 'none',
-                background: '#F0F0F0',
-                cursor: 'pointer',
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 9,
-                fontFamily: 'Segoe UI, sans-serif',
-                color: '#333',
-              }}
-              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-            >
-              Selection
-            </button>
+        <RibbonDropdownHost
+          open={showGroupMenu}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {menuBtn("Group", () => {
+                onGroup?.("group");
+                setShowGroupMenu(false);
+              })}
+              {menuBtn("Ungroup", () => {
+                onGroup?.("ungroup");
+                setShowGroupMenu(false);
+              })}
+              {menuBtn("Regroup", () => {
+                onGroup?.("regroup");
+                setShowGroupMenu(false);
+              })}
+            </>
+          }
+        >
+          <button
+            type="button"
+            className="formulas-btn-large pagelayout-arrange-btn"
+            onClick={() => setShowGroupMenu(!showGroupMenu)}
+            title="Group"
+          >
+            <span className="formulas-icon-lg" aria-hidden>
+              ▢
+            </span>
+            <span>Group</span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </RibbonDropdownHost>
 
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowAlignMenu(!showAlignMenu)}
-                title="Align"
-                style={{
-                  width: 40,
-                  height: 20,
-                  border: 'none',
-                  background: '#F0F0F0',
-                  cursor: 'pointer',
-                  borderRadius: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  fontFamily: 'Segoe UI, sans-serif',
-                  color: '#333',
-                }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-              >
-                Align
-              </button>
-
-              {showAlignMenu && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  marginTop: 2,
-                  background: '#FFFFFF',
-                  border: '1px solid #D9D9D9',
-                  borderRadius: 4,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  zIndex: 1000,
-                  minWidth: 160,
-                }}>
-                  {['Align Left', 'Align Center', 'Align Right', 'Align Top', 'Align Middle', 'Align Bottom', 'Distribute Horizontally', 'Distribute Vertically'].map((align) => (
-                    <button
-                      key={align}
-                      onClick={() => {
-                        onAlign?.(align);
-                        setShowAlignMenu(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '6px 12px',
-                        border: 'none',
-                        background: 'transparent',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        fontSize: 11,
-                        fontFamily: 'Segoe UI, sans-serif',
-                      }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-                    >
-                      {align}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Row 2: Group, Rotate */}
-          <div style={{ display: 'flex', gap: 2 }}>
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowGroupMenu(!showGroupMenu)}
-                title="Group"
-                style={{
-                  width: 52,
-                  height: 20,
-                  border: 'none',
-                  background: '#F0F0F0',
-                  cursor: 'pointer',
-                  borderRadius: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  fontFamily: 'Segoe UI, sans-serif',
-                  color: '#333',
-                }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-              >
-                Group
-              </button>
-
-              {showGroupMenu && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  marginTop: 2,
-                  background: '#FFFFFF',
-                  border: '1px solid #D9D9D9',
-                  borderRadius: 4,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  zIndex: 1000,
-                  minWidth: 120,
-                }}>
-                  {['Group', 'Ungroup', 'Regroup'].map((action) => (
-                    <button
-                      key={action}
-                      onClick={() => {
-                        onGroup?.(action.toLowerCase() as 'group' | 'ungroup' | 'regroup');
-                        setShowGroupMenu(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '6px 12px',
-                        border: 'none',
-                        background: 'transparent',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        fontSize: 11,
-                        fontFamily: 'Segoe UI, sans-serif',
-                      }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-                    >
-                      {action}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowRotateMenu(!showRotateMenu)}
-                title="Rotate"
-                style={{
-                  width: 40,
-                  height: 20,
-                  border: 'none',
-                  background: '#F0F0F0',
-                  cursor: 'pointer',
-                  borderRadius: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  fontFamily: 'Segoe UI, sans-serif',
-                  color: '#333',
-                }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#E0E0E0'}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-              >
-                Rotate
-              </button>
-
-              {showRotateMenu && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 2,
-                  background: '#FFFFFF',
-                  border: '1px solid #D9D9D9',
-                  borderRadius: 4,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  zIndex: 1000,
-                  minWidth: 140,
-                }}>
-                  {['Rotate Right 90°', 'Rotate Left 90°', 'Flip Vertical', 'Flip Horizontal'].map((rotation) => (
-                    <button
-                      key={rotation}
-                      onClick={() => {
-                        onRotate?.(rotation);
-                        setShowRotateMenu(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '6px 12px',
-                        border: 'none',
-                        background: 'transparent',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        fontSize: 11,
-                        fontFamily: 'Segoe UI, sans-serif',
-                      }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = '#F0F0F0'}
-                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.background = 'transparent'}
-                    >
-                      {rotation}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <RibbonDropdownHost
+          open={showRotateMenu}
+          menuStyle={menuStyle}
+          menu={
+            <>
+              {[
+                "Rotate Right 90°",
+                "Rotate Left 90°",
+                "Flip Vertical",
+                "Flip Horizontal",
+              ].map((rotation) => (
+                <React.Fragment key={rotation}>
+                  {menuBtn(rotation, () => {
+                    onRotate?.(rotation);
+                    setShowRotateMenu(false);
+                  })}
+                </React.Fragment>
+              ))}
+            </>
+          }
+        >
+          <button
+            type="button"
+            className="formulas-btn-large pagelayout-arrange-btn"
+            onClick={() => setShowRotateMenu(!showRotateMenu)}
+            title="Rotate"
+          >
+            <span className="formulas-icon-lg" aria-hidden>
+              ↻
+            </span>
+            <span>Rotate</span>
+            <span className="formulas-large-chevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </RibbonDropdownHost>
       </div>
 
-      <div className="ribbon-tab-shell-title">Arrange</div>
+      <div className="formulas-group-caption">Arrange</div>
     </div>
   );
 };

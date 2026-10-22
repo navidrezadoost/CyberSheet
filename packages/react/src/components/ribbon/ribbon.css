@@ -1,6 +1,6 @@
 /**
  * Excel 365 Ribbon UI Styles - Enhanced Version
- * 
+ *
  * Matches Microsoft Excel's modern Fluent Design with:
  * - Precise color palette (#f3f2f1 background, #edebe9 borders)
  * - Smooth hover/active states
@@ -439,7 +439,7 @@
   .ribbon-btn-label {
     display: none;
   }
-  
+
   /* Keep icon-only buttons visible on mobile */
   .ribbon-btn-small,
   .ribbon-btn-medium {
@@ -457,7 +457,7 @@
   .ribbon-content {
     flex-direction: column;
   }
-  
+
   .ribbon-group {
     width: 100%;
     border-right: none;
@@ -2185,4 +2185,2394 @@
   .ribbon {
     display: none;
   }
+}
+
+
+/* =========================================================
+   Excel 2013 ribbon layout and surface refinement — CSS only
+   ========================================================= */
+
+.excel-app .ribbon,
+.excel-app .ribbon > .ribbon-content,
+.excel-app .ribbon-tab-content {
+  --ribbon-2013-separator: #bcbcbc;
+  --ribbon-2013-group-caption: #595959;
+  --ribbon-2013-text: #262626;
+  --ribbon-2013-surface: #f3f2f1;
+  --ribbon-2013-caption-size: 11px;
+  --ribbon-2013-control-text: 11px;
+  --ribbon-band-height: 148px;
+  --ribbon-content-height: 146px;
+  --ribbon-group-height: 144px;
+}
+
+.excel-app .ribbon {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  height: var(--ribbon-band-height) !important;
+  min-height: var(--ribbon-band-height) !important;
+  max-height: var(--ribbon-band-height) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  background: #f3f2f1 !important;
+  border-bottom: 1px solid #e1dfdd !important;
+  overflow: visible !important;
+}
+
+.excel-app .ribbon > .ribbon-content,
+.excel-app .ribbon > .ribbon-tab-content,
+.excel-app .ribbon .ribbon-content.ribbon-tab-content {
+  box-sizing: border-box;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  align-content: stretch !important;
+  gap: 0 !important;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 100% !important;
+  min-height: var(--ribbon-content-height) !important;
+  max-height: var(--ribbon-content-height) !important;
+  padding: 4px 2px 0 !important;
+  background: var(--ribbon-2013-surface) !important;
+  color: var(--ribbon-2013-text);
+  font-size: var(--ribbon-2013-control-text);
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.excel-app .ribbon > .ribbon-content.ribbon-home-2013,
+.excel-app .ribbon .ribbon-content.ribbon-tab-content.ribbon-home-2013 {
+  /* Home: horizontal scroll; groups align from top of ribbon band */
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  align-items: flex-start !important;
+  align-content: flex-start !important;
+  padding: 6px 2px 0 !important;
+  background: #f3f2f1 !important;
+}
+
+.excel-app .ribbon > .ribbon-content > *,
+.excel-app .ribbon > .ribbon-tab-content > *,
+.excel-app .ribbon .ribbon-group,
+.excel-app .ribbon .home-ribbon-surface,
+.excel-app .ribbon .ribbon-tab-shell,
+.excel-app .ribbon .ribbon-tab-divider {
+  flex-shrink: 0 !important;
+}
+
+.excel-app .ribbon-tab-content-spacious {
+  padding-inline: 4px !important;
+}
+
+.excel-app .ribbon-group,
+.excel-app .ribbon-tab-shell {
+  position: relative;
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  box-sizing: border-box;
+  min-height: var(--ribbon-group-height) !important;
+  max-height: var(--ribbon-group-height) !important;
+  padding: 4px 10px 0 !important;
+  border-right: none !important;
+  background: transparent;
+  overflow: visible !important;
+}
+
+/* Inset vertical separators (Excel 2013 — not full height) */
+.excel-app .ribbon-group:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 22px;
+  width: 1px;
+  background: var(--ribbon-2013-separator);
+  pointer-events: none;
+}
+
+.excel-app .ribbon-group-content {
+  display: grid !important;
+  grid-template-rows: repeat(2, minmax(34px, auto));
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 2px 4px !important;
+  padding-bottom: 22px !important;
+  align-items: center;
+  align-content: center;
+  overflow: visible !important;
+}
+
+/* Composite group layouts span both tool rows */
+.excel-app .ribbon-group-content > .font-group-content,
+.excel-app .ribbon-group-content > .align-group-content,
+.excel-app .ribbon-group-content > .number-group-content,
+.excel-app .ribbon-group-content > .cells-group-content,
+.excel-app .ribbon-group-content > .editing-group-content {
+  grid-row: 1 / span 2;
+  grid-column: 1 / -1;
+  align-self: stretch;
+  min-height: 0;
+  max-height: 100%;
+  overflow: visible !important;
+}
+
+/* Large controls fill both rows in the 2-row grid */
+.excel-app .ribbon-group-content > .ribbon-btn-large,
+.excel-app .ribbon-group-content > .ribbon-btn.large,
+.excel-app .ribbon-group-content > .ribbon-btn-large-wrap {
+  grid-row: 1 / span 2;
+  align-self: stretch;
+}
+
+/* Clipboard group (custom markup) — same 2-row band + taller shell */
+.excel-app .ribbon-content > div:has(.cs-custom-group-button-large) {
+  flex: 0 0 auto;
+  min-height: var(--ribbon-group-height) !important;
+  max-height: var(--ribbon-group-height) !important;
+  padding: 4px 10px 0 !important;
+  border-right: none !important;
+  box-sizing: border-box;
+  overflow: visible !important;
+}
+
+.excel-app .ribbon-content > div:has(.cs-custom-group-button-large):not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 22px;
+  width: 1px;
+  background: var(--ribbon-2013-separator);
+  pointer-events: none;
+}
+
+.excel-app .ribbon-content > div:has(.cs-custom-group-button-large) > div:first-child {
+  display: grid !important;
+  grid-template-rows: repeat(2, minmax(34px, auto));
+  gap: 4px !important;
+  align-items: center;
+  padding-bottom: 20px !important;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-content > div:has(.cs-custom-group-button-large) .cs-custom-group-button-large {
+  grid-row: 1 / span 2;
+  align-self: stretch;
+  max-height: 76px;
+}
+
+.excel-app .ribbon-row {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 2px !important;
+  min-width: 0;
+  max-width: 100%;
+  height: 100%;
+  max-height: 34px;
+  overflow: visible !important;
+}
+
+.excel-app .ribbon-group-title,
+.excel-app .ribbon-tab-shell-title {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px;
+  height: 18px;
+  padding: 0 6px !important;
+  color: var(--ribbon-2013-group-caption) !important;
+  font: var(--ribbon-2013-caption-size)/14px "Segoe UI", Calibri, Arial, sans-serif !important;
+  font-weight: 400 !important;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excel-app .ribbon-group-title .group-label {
+  display: inline-block !important;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap !important;
+  writing-mode: horizontal-tb !important;
+  line-height: 16px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excel-app .ribbon-group-title .group-dialog-launcher {
+  position: relative !important;
+  bottom: auto !important;
+  right: auto !important;
+  flex: 0 0 14px;
+  margin-left: 1px;
+}
+
+.excel-app .ribbon-tab-shell-title {
+  position: static;
+  margin-top: auto;
+  padding-top: 2px !important;
+}
+
+.excel-app .ribbon-tab-divider {
+  flex: 0 0 1px !important;
+  align-self: center !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  height: calc(100% - 30px) !important;
+  max-height: 128px;
+  margin: 8px 0 22px !important;
+  padding: 0 !important;
+  background: var(--ribbon-2013-separator) !important;
+  border: none !important;
+}
+
+.excel-app .ribbon-btn,
+.excel-app .ribbon-feature-button {
+  box-sizing: border-box;
+  max-width: 100%;
+  font-family: "Segoe UI", Calibri, Arial, sans-serif;
+  border-radius: 0 !important;
+}
+
+.excel-app .ribbon-btn-label {
+  font-size: var(--ribbon-2013-control-text) !important;
+  line-height: 1.15 !important;
+  color: var(--ribbon-2013-text) !important;
+  max-width: 56px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.excel-app .ribbon-btn-large .ribbon-btn-label,
+.excel-app .ribbon-btn.large .ribbon-btn-label {
+  max-width: 72px !important;
+  white-space: normal !important;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.excel-app .ribbon-btn-small .ribbon-btn-label,
+.excel-app .ribbon-btn.medium .ribbon-btn-label,
+.excel-app .ribbon-btn-medium .ribbon-btn-label {
+  font-size: var(--ribbon-2013-control-text) !important;
+  white-space: nowrap !important;
+  max-width: none;
+}
+
+.excel-app .ribbon-btn-large,
+.excel-app .ribbon-btn.large {
+  width: 52px !important;
+  min-width: 52px !important;
+  max-width: 52px !important;
+  height: 76px !important;
+  max-height: 76px !important;
+  padding: 3px 2px !important;
+}
+
+.excel-app .ribbon-feature-button {
+  min-width: 54px !important;
+  max-width: 80px !important;
+  min-height: 52px !important;
+  padding: 3px 6px !important;
+  font-size: var(--ribbon-2013-control-text) !important;
+  line-height: 1.15 !important;
+  color: var(--ribbon-2013-text) !important;
+  white-space: normal !important;
+  text-align: center;
+}
+
+.excel-app .ribbon-feature-icon {
+  width: 22px !important;
+  height: 22px !important;
+  margin-bottom: 3px !important;
+}
+
+.excel-app .ribbon-two-rows {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  align-items: flex-start !important;
+}
+
+.excel-app .ribbon-divider {
+  align-self: center;
+  height: 56px !important;
+  margin: 0 2px;
+  background: var(--ribbon-2013-separator) !important;
+}
+
+.excel-app .cs-custom-group-button {
+  font-size: var(--ribbon-2013-control-text) !important;
+  color: var(--ribbon-2013-text) !important;
+  border-color: #c6c6c6 !important;
+  min-width: 0;
+}
+
+.excel-app .cs-custom-group-button-large {
+  font-size: var(--ribbon-2013-control-text) !important;
+  line-height: 1.15 !important;
+  min-width: 58px !important;
+  max-width: 72px;
+  text-align: center;
+}
+
+/* Font / alignment composites: explicit 2-row tool bands */
+.excel-app .font-group-content {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  align-items: center;
+  min-height: 0;
+}
+
+.excel-app .font-dropdowns-column {
+  grid-row: 1 / span 2;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center;
+  gap: 4px !important;
+}
+
+.excel-app .small-btns-column {
+  grid-row: 1 / span 2;
+  display: grid !important;
+  grid-template-rows: repeat(2, minmax(32px, auto));
+  gap: 4px !important;
+  align-content: center;
+}
+
+.excel-app .font-row {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  min-height: 32px;
+  max-height: 34px;
+}
+
+.excel-app .align-group-content {
+  display: grid !important;
+  grid-template-rows: repeat(2, minmax(32px, auto));
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 4px 6px !important;
+  align-items: center;
+}
+
+.excel-app .align-column {
+  display: grid !important;
+  grid-template-rows: repeat(2, minmax(32px, auto));
+  gap: 4px !important;
+  align-content: center;
+}
+
+.excel-app .ribbon-tab-shell {
+  display: grid !important;
+  grid-template-rows: repeat(2, minmax(34px, auto)) 18px;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 2px 4px;
+  align-content: start;
+  padding-inline: 10px !important;
+  border-right: none !important;
+}
+
+.excel-app .ribbon-tab-shell > .ribbon-tab-shell-title {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin-top: 0 !important;
+}
+
+.excel-app .ribbon-btn:hover,
+.excel-app .ribbon-feature-button:hover {
+  background-color: #ebebeb !important;
+  border-color: transparent !important;
+}
+
+.excel-app .ribbon-btn:active,
+.excel-app .ribbon-feature-button:active {
+  background-color: #d6d6d6 !important;
+}
+
+.excel-app .ribbon-btn:focus-visible,
+.excel-app .ribbon-feature-button:focus-visible {
+  outline: 1px solid #217346 !important;
+  outline-offset: 0;
+}
+
+.excel-app .ribbon-select,
+.excel-app .cs-smilodon-select-trigger {
+  max-width: 100%;
+  min-width: 0;
+  height: 22px !important;
+  font-size: var(--ribbon-2013-control-text) !important;
+  border-color: #ababab !important;
+  border-radius: 0 !important;
+  color: var(--ribbon-2013-text) !important;
+}
+
+.excel-app .cs-smilodon-select-option {
+  font-size: var(--ribbon-2013-control-text) !important;
+}
+
+.excel-app .group-label {
+  font-size: var(--ribbon-2013-caption-size) !important;
+  color: var(--ribbon-2013-group-caption) !important;
+  font-weight: 400 !important;
+  white-space: nowrap !important;
+}
+
+/* ---- Open dropdowns: paint above ribbon, formula bar, and grid ---- */
+.excel-app > .ribbon:has([aria-expanded="true"]),
+.excel-app > .ribbon:has(.cs-smilodon-select-host[aria-expanded="true"]),
+.excel-app > .ribbon:has(.cs-color-dropdown),
+.excel-app > .ribbon:has(.cs-border-dropdown),
+.excel-app > .ribbon:has(.cs-number-format-dropdown),
+.excel-app > .ribbon:has(.cs-dropdown-list),
+.excel-app > .ribbon:has(.cs-ribbon-floating-menu),
+.excel-app > .ribbon:has(.cs-ribbon-popover),
+.excel-app > .ribbon:has(.cs-merge-menu) {
+  z-index: var(--cs-ribbon-layer-z, 80000) !important;
+}
+
+.excel-app .ribbon > .ribbon-content:has([aria-expanded="true"]),
+.excel-app .ribbon > .ribbon-tab-content:has([aria-expanded="true"]),
+.excel-app .ribbon > .ribbon-content:has(.cs-smilodon-select-host[aria-expanded="true"]),
+.excel-app .ribbon > .ribbon-tab-content:has(.cs-smilodon-select-host[aria-expanded="true"]),
+.excel-app .ribbon > .ribbon-content:has(.cs-color-dropdown),
+.excel-app .ribbon > .ribbon-tab-content:has(.cs-color-dropdown),
+.excel-app .ribbon > .ribbon-content:has(.cs-border-dropdown),
+.excel-app .ribbon > .ribbon-tab-content:has(.cs-border-dropdown),
+.excel-app .ribbon > .ribbon-content:has(.cs-number-format-dropdown),
+.excel-app .ribbon > .ribbon-tab-content:has(.cs-number-format-dropdown),
+.excel-app .ribbon > .ribbon-content:has(.cs-dropdown-list),
+.excel-app .ribbon > .ribbon-tab-content:has(.cs-dropdown-list),
+.excel-app .ribbon > .ribbon-content:has(.cs-ribbon-floating-menu),
+.excel-app .ribbon > .ribbon-tab-content:has(.cs-ribbon-floating-menu),
+.excel-app .ribbon > .ribbon-content:has(.cs-ribbon-popover),
+.excel-app .ribbon > .ribbon-tab-content:has(.cs-ribbon-popover),
+.excel-app .ribbon-home-2013:has(.cs-ribbon-popover) {
+  overflow: visible !important;
+}
+
+.excel-app .cs-smilodon-select-host,
+.excel-app .smilodon-excel-select-host,
+.excel-app .cs-number-format-button-container,
+.excel-app .cs-font-color-split-button,
+.excel-app .cs-fill-color-split-button,
+.excel-app .cs-border-split-button,
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) > div:first-child > div[style*="relative"] {
+  position: relative;
+  z-index: 1;
+}
+
+.excel-app .cs-smilodon-select-host[aria-expanded="true"],
+.excel-app .cs-smilodon-select-host:focus-within,
+.excel-app .cs-number-format-button-container:focus-within,
+.excel-app .cs-font-color-split-button:focus-within,
+.excel-app .cs-fill-color-split-button:focus-within,
+.excel-app .cs-border-split-button:focus-within,
+.excel-app .ribbon-group:has([aria-expanded="true"]),
+.excel-app .ribbon-group:has(:focus-within),
+.excel-app .ribbon-group:has(.cs-color-dropdown),
+.excel-app .ribbon-group:has(.cs-border-dropdown),
+.excel-app .ribbon-group:has(.cs-number-format-dropdown),
+.excel-app .ribbon-group:has(.cs-dropdown-list),
+.excel-app .ribbon-group:has(.cs-ribbon-floating-menu),
+.excel-app .ribbon-group:has(.cs-ribbon-popover),
+.excel-app .home-ribbon-surface:has(.cs-ribbon-popover),
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider):has([aria-expanded="true"]),
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider):focus-within,
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider):has(.cs-color-dropdown),
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider):has(.cs-border-dropdown),
+.excel-app .home-ribbon-surface:has([aria-expanded="true"]),
+.excel-app .home-ribbon-surface:has(.cs-color-dropdown),
+.excel-app .home-ribbon-surface:has(.cs-border-dropdown) {
+  z-index: var(--cs-ribbon-layer-z, 80000) !important;
+  overflow: visible !important;
+}
+
+.excel-app-ribbon-portal,
+body > .cs-ribbon-popover.excel-app-ribbon-portal,
+body > .cs-ribbon-floating-menu.excel-app-ribbon-portal {
+  z-index: var(--cs-ribbon-floating-z, 100000) !important;
+}
+
+.excel-app .cs-ribbon-popover {
+  z-index: var(--cs-ribbon-floating-z, 100000) !important;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 0;
+  background: #ffffff;
+  border: 1px solid #ababab;
+  border-radius: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  min-width: 160px;
+  max-height: min(420px, 70vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  animation: slideDown 160ms ease-out;
+  font: 11px/1.35 "Segoe UI", Calibri, Arial, sans-serif;
+  color: #262626;
+}
+
+.excel-app .cs-ribbon-popover-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid #ebebeb;
+  transition: background-color 80ms ease;
+}
+
+.excel-app .cs-ribbon-popover-item:last-child {
+  border-bottom: none;
+}
+
+.excel-app .cs-ribbon-popover-item:hover {
+  background: #deecf9;
+}
+
+.excel-app .cs-ribbon-popover-item kbd,
+.excel-app .cs-ribbon-popover-item .cs-ribbon-popover-shortcut {
+  font-size: 10px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.excel-app .cs-merge-menu {
+  z-index: var(--cs-ribbon-floating-z, 100000) !important;
+}
+
+.excel-app .cs-smilodon-select-menu,
+.excel-app .cs-ribbon-floating-menu,
+.excel-app .cs-color-dropdown,
+.excel-app .cs-border-dropdown,
+.excel-app .cs-number-format-dropdown,
+.excel-app .cs-dropdown-list,
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) [style*="position: absolute"]:not(.group-dialog-launcher),
+.excel-app .ribbon-content > div [style*="position: absolute"]:not(.group-dialog-launcher),
+.excel-app .ribbon-group [style*="position: absolute"]:not(.group-dialog-launcher) {
+  z-index: var(--cs-ribbon-floating-z, 100000) !important;
+}
+
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider):has([style*="position: absolute"]),
+.excel-app .ribbon-content > div:has([style*="position: absolute"]) {
+  z-index: var(--cs-ribbon-dropdown-z, 80001) !important;
+  overflow: visible !important;
+}
+
+.excel-app .ribbon [style*="position: fixed"],
+.excel-app .ribbon [style*="position:fixed"] {
+  z-index: var(--cs-ribbon-floating-z, 100000) !important;
+}
+
+/* Page Layout / custom groups: bottom caption on one line (like group-label) */
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) {
+  position: relative;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-height: var(--ribbon-group-height) !important;
+  max-height: var(--ribbon-group-height) !important;
+  padding: 4px 10px 0 !important;
+  border-right: none !important;
+  overflow: visible !important;
+}
+
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) > div:last-child {
+  margin-top: auto !important;
+  flex-shrink: 0;
+  width: 100%;
+  font-size: var(--ribbon-2013-caption-size) !important;
+  line-height: 14px !important;
+  color: var(--ribbon-2013-group-caption) !important;
+  font-weight: 400 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  writing-mode: horizontal-tb !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-bottom: 1px;
+}
+
+/* Sheet Options: View / Print headers and rows stay horizontal */
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) > div:first-child[style*="display"] {
+  overflow: visible !important;
+}
+
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) > div:first-child[style*="grid"],
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) > div:first-child > div[style*="grid"] {
+  display: grid !important;
+  grid-template-columns: auto minmax(48px, 60px) minmax(48px, 60px) !important;
+  grid-auto-flow: row !important;
+  column-gap: 10px !important;
+  row-gap: 6px !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) > div:first-child[style*="grid"] > div,
+.excel-app .ribbon-tab-content > div:not(.ribbon-tab-divider) > div:first-child > div[style*="grid"] > div {
+  white-space: nowrap !important;
+  writing-mode: horizontal-tb !important;
+}
+
+.excel-app .font-dropdowns-column,
+.excel-app .small-btns-column,
+.excel-app .font-row,
+.excel-app .align-row,
+.excel-app .align-column {
+  overflow: visible !important;
+}
+
+@media (max-width: 768px) {
+  .excel-app .ribbon {
+    height: var(--ribbon-band-height) !important;
+    min-height: var(--ribbon-band-height) !important;
+    max-height: var(--ribbon-band-height) !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .excel-app .ribbon > .ribbon-content,
+  .excel-app .ribbon-tab-content {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    min-height: var(--ribbon-content-height) !important;
+  }
+
+  .excel-app .ribbon-group,
+  .excel-app .ribbon-tab-shell {
+    width: auto !important;
+    min-height: var(--ribbon-group-height) !important;
+    max-height: var(--ribbon-group-height) !important;
+    border-right: none !important;
+    border-bottom: 0 !important;
+  }
+
+  .excel-app .ribbon-btn-label {
+    display: block;
+    max-width: 48px;
+  }
+}
+
+@media (max-width: 480px) {
+  .excel-app .ribbon-content,
+  .excel-app .ribbon > .ribbon-content {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+
+  .excel-app .ribbon-group {
+    width: auto !important;
+    border-right: none !important;
+    border-bottom: 0 !important;
+  }
+
+  .excel-app .ribbon-tab-divider {
+    display: block !important;
+  }
+
+  .excel-app .ribbon-tab-shell {
+    width: auto !important;
+  }
+}
+
+/* =========================================================
+   Excel 2013 — Home tab layout (ribbon-home-2013)
+   ========================================================= */
+
+.excel-app .ribbon-home-2013 {
+  background: #f3f2f1 !important;
+}
+
+/* Bounded tool regions (Excel 2013 Home) */
+.excel-app .ribbon-home-2013 .home-group-tool-panel,
+.excel-app .ribbon-home-2013 .home-number-group.home-group-tool-panel {
+  box-sizing: border-box;
+  border: 1px solid #c6c6c6;
+  padding: 4px 5px;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-group {
+  position: relative;
+  justify-content: flex-start !important;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-group-content .home-group-tool-panel {
+  flex: 1;
+  align-self: stretch;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-btn {
+  border: 1px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  transition: background-color 80ms ease, border-color 80ms ease;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-btn:hover:not(:disabled) {
+  border-color: #c7e0f4 !important;
+  background: #deecf9 !important;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-btn.active {
+  border-color: #92c5e8 !important;
+  background: #c7e0f4 !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-row-top {
+  padding: 0;
+}
+
+.excel-app .ribbon-home-2013 .cs-ribbon-toggle-group,
+.excel-app .ribbon-home-2013 .align-row .cs-ribbon-toggle-group {
+  display: inline-flex !important;
+  gap: 1px !important;
+  padding: 2px !important;
+  border: 1px solid #d4d4d4;
+  background: #fff;
+}
+
+.excel-app .ribbon-home-2013 .cs-merge-split-button {
+  border: 1px solid #c6c6c6 !important;
+  background: #fafafa !important;
+}
+
+.excel-app .ribbon-home-2013 .cs-merge-split-button:hover {
+  border-color: #8db4d9 !important;
+  background: #deecf9 !important;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-group-content {
+  display: flex !important;
+  flex-direction: column !important;
+  grid-template-rows: none !important;
+  grid-auto-flow: unset !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 2px !important;
+  padding-top: 4px !important;
+  padding-bottom: 22px !important;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-group-content > .font-group-content,
+.excel-app .ribbon-home-2013 .ribbon-group-content > .align-group-content,
+.excel-app .ribbon-home-2013 .ribbon-group-content > .number-group-content {
+  grid-row: auto !important;
+  grid-column: auto !important;
+  max-height: none !important;
+}
+
+/* Shared custom group shell (Clipboard, Styles, Cells, Editing) */
+.excel-app .ribbon-home-2013 .home-ribbon-surface {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  border-right: none !important;
+  min-height: var(--ribbon-group-height) !important;
+  max-height: var(--ribbon-group-height) !important;
+  padding: 4px 10px 0 !important;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-ribbon-surface:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 22px;
+  width: 1px;
+  background: var(--ribbon-2013-separator, #bcbcbc);
+  pointer-events: none;
+}
+
+.excel-app .ribbon-home-2013 .home-group-caption {
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 18px !important;
+  line-height: 14px !important;
+  font-size: var(--ribbon-2013-caption-size, 11px) !important;
+  color: var(--ribbon-2013-group-caption, #595959) !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+
+/* —— Clipboard (Excel Home — layout only) —— */
+.excel-app .ribbon-home-2013 .home-clipboard-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 118px;
+  min-height: var(--ribbon-group-height) !important;
+  max-height: var(--ribbon-group-height) !important;
+  padding: 4px 6px 0 !important;
+  background: #f3f2f1;
+  border-right: 1px solid #e1dfdd;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-group::after {
+  display: none;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-body {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 0;
+  justify-content: flex-start;
+  align-items: stretch;
+  padding-top: 2px;
+  padding-bottom: 18px;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-main {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  min-height: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-paste-zone {
+  flex: 0 0 40%;
+  max-width: 40%;
+  min-width: 52px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-paste-split {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-height: 52px;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-paste-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px 4px 0;
+  min-height: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-icon--paste {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-label {
+  font: 11px/1.1 "Segoe UI", Calibri, Arial, sans-serif;
+  color: #262626;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-paste-chevron {
+  flex: 0 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-top: 1px solid transparent;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-icon-btn {
+  width: 28px;
+  min-width: 28px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-icon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-copy-split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 22px;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-copy-main {
+  width: 20px;
+  min-width: 20px;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-copy-chevron {
+  width: 10px;
+  min-width: 10px;
+  padding: 0;
+  border-left: 1px solid transparent;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-chevron {
+  font-size: 7px;
+  line-height: 1;
+  color: #444;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-hit {
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-hit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-hit:hover:not(:disabled),
+.excel-app .ribbon-home-2013 .home-clipboard-hit.active {
+  background: #c7e0f4;
+  border-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-paste-split:hover
+  .home-clipboard-hit:not(:disabled) {
+  background: #c7e0f4;
+  border-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-paste-split:hover
+  .home-clipboard-paste-chevron:not(:disabled) {
+  border-top-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-copy-split:hover
+  .home-clipboard-hit:not(:disabled) {
+  background: #c7e0f4;
+  border-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-copy-split:hover
+  .home-clipboard-copy-chevron:not(:disabled) {
+  border-left-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-caption {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  text-align: center !important;
+  color: #605e5c !important;
+  padding: 0 18px 0 4px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-caption-text {
+  flex: 1;
+  text-align: center;
+}
+
+.excel-app .ribbon-home-2013 .home-clipboard-launcher {
+  position: absolute !important;
+  right: 2px;
+  bottom: 1px;
+  margin: 0 !important;
+}
+
+/* —— Font (Excel Home — layout) —— */
+.excel-app .ribbon-home-2013 .ribbon-group.home-font-ribbon-group {
+  background: #f3f2f1;
+  border-right: 1px solid #e1dfdd;
+  padding: 4px 6px !important;
+  box-sizing: border-box;
+  min-width: 300px;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .ribbon-group-content {
+  padding-bottom: 18px !important;
+  align-items: stretch !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .ribbon-group-title {
+  color: #605e5c !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-group {
+  width: 100%;
+  min-width: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-font-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 56px;
+  max-height: 56px;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-font-row-top {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+  min-height: 22px;
+}
+
+.excel-app .ribbon-home-2013 .home-font-row-bottom {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 2px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  min-height: 24px;
+}
+
+.excel-app .ribbon-home-2013 .home-font-vsep {
+  flex: 0 0 auto;
+  width: 0;
+  height: 16px;
+  margin: 0 4px;
+  border-left: 1px solid #d1d1d1;
+  align-self: center;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-smilodon-select-host.home-font-select {
+  flex-shrink: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-smilodon-select-host.font-family-select {
+  width: 132px !important;
+  max-width: 132px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-smilodon-select-host.font-size-select {
+  width: 46px !important;
+  max-width: 46px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-smilodon-select-trigger {
+  height: 22px !important;
+  min-height: 22px !important;
+  line-height: 20px !important;
+  font-size: 11px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-size-steps {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 1px !important;
+  margin-left: 0;
+  flex-shrink: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-font-grow .home-font-step-glyph::before {
+  content: "A";
+  font-size: 11px;
+  font-weight: 600;
+  position: relative;
+  top: -1px;
+}
+
+.excel-app .ribbon-home-2013 .home-font-grow .home-font-step-glyph::after {
+  content: "▲";
+  font-size: 7px;
+  color: #0078d4;
+  position: absolute;
+  margin-left: 9px;
+  margin-top: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-font-shrink .home-font-step-glyph::before {
+  content: "A";
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.excel-app .ribbon-home-2013 .home-font-shrink .home-font-step-glyph::after {
+  content: "▼";
+  font-size: 7px;
+  color: #0078d4;
+  position: absolute;
+  margin-left: 9px;
+  margin-top: 7px;
+}
+
+.excel-app .ribbon-home-2013 .home-font-grow,
+.excel-app .ribbon-home-2013 .home-font-shrink {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  position: relative;
+}
+
+.excel-app .ribbon-home-2013 .home-font-underline-split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 22px;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-font-underline-main {
+  width: 22px;
+  min-width: 22px;
+}
+
+.excel-app .ribbon-home-2013 .home-font-style-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  min-width: 10px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-left-color: transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.excel-app .ribbon-home-2013 .home-font-chevron {
+  font-size: 7px;
+  line-height: 1;
+  color: #444;
+}
+
+.excel-app .ribbon-home-2013 .home-font-hit {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-hit:hover:not(:disabled),
+.excel-app .ribbon-home-2013 .home-font-hit.active,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .ribbon-btn.active {
+  background: #c7e0f4 !important;
+  border-color: #0078d4 !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-underline-split:hover .home-font-hit:not(:disabled) {
+  background: #c7e0f4 !important;
+  border-color: #0078d4 !important;
+}
+
+.excel-app .ribbon-home-2013 .home-font-underline-split:hover .home-font-style-chevron {
+  border-left-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-border-split-button,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-font-color-split-button,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-fill-color-split-button {
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-border-split-button:hover,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-font-color-split-button:hover,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-fill-color-split-button:hover,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-border-split-button:focus-within,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-font-color-split-button:focus-within,
+.excel-app .ribbon-home-2013 .home-font-ribbon-group .cs-fill-color-split-button:focus-within {
+  background: #c7e0f4;
+  border-color: #0078d4;
+}
+
+/* —— Alignment (Excel Home — layout) —— */
+.excel-app .ribbon-home-2013 .ribbon-group.home-align-ribbon-group {
+  background: #f3f2f1;
+  border-right: 1px solid #e1dfdd;
+  padding: 4px 6px !important;
+  box-sizing: border-box;
+  min-width: 280px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-ribbon-group .ribbon-group-content {
+  padding-bottom: 18px !important;
+  align-items: stretch !important;
+}
+
+.excel-app .ribbon-home-2013 .home-alignment-group {
+  width: 100%;
+  min-width: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-alignment-body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  min-height: 56px;
+  max-height: 56px;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-alignment-left {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.excel-app .ribbon-home-2013 .home-align-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-grid > .cs-ribbon-toggle-group {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 2px !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.excel-app .ribbon-home-2013 .home-align-side-tools {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 2px;
+  padding-left: 2px;
+  border-left: 1px solid #e1dfdd;
+  margin-left: 4px;
+  padding-left: 6px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-orient-split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 22px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-icon-btn {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.excel-app .ribbon-home-2013 .home-align-mini-chevron {
+  width: 10px;
+  min-width: 10px;
+  padding: 0;
+  border-left: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.excel-app .ribbon-home-2013 .home-align-indent-row {
+  display: flex;
+  flex-direction: row;
+  gap: 1px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-indent-row .ribbon-btn {
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-align-indent-glyph {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-indent-dec::before {
+  content: "←";
+  font-size: 10px;
+  color: #0078d4;
+  position: absolute;
+  left: 0;
+  top: 2px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-indent-inc::before {
+  content: "→";
+  font-size: 10px;
+  color: #0078d4;
+  position: absolute;
+  right: 0;
+  top: 2px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-vsep {
+  flex: 0 0 auto;
+  width: 0;
+  align-self: stretch;
+  margin: 0 6px;
+  border-left: 1px solid #d1d1d1;
+}
+
+.excel-app .ribbon-home-2013 .home-align-text-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+  flex: 1;
+  min-width: 108px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  font: 11px/1 "Segoe UI", Calibri, Arial, sans-serif;
+  color: #262626;
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 132px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-merge-split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  max-width: 132px;
+  min-height: 24px;
+  box-sizing: border-box;
+}
+
+.excel-app .ribbon-home-2013 .home-align-merge-main {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.excel-app .ribbon-home-2013 .home-align-merge-chevron {
+  width: 18px;
+  min-width: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid transparent;
+  cursor: pointer;
+}
+
+.excel-app .ribbon-home-2013 .home-align-chevron {
+  font-size: 7px;
+  line-height: 1;
+  color: #444;
+}
+
+.excel-app .ribbon-home-2013 .home-align-hit {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  border-radius: 2px;
+}
+
+.excel-app .ribbon-home-2013 .home-align-hit:hover:not(:disabled),
+.excel-app .ribbon-home-2013 .home-align-hit.active,
+.excel-app .ribbon-home-2013 .home-align-ribbon-group .ribbon-btn.active {
+  background: #c7e0f4 !important;
+  border-color: #0078d4 !important;
+}
+
+.excel-app .ribbon-home-2013 .home-align-orient-split:hover .home-align-hit:not(:disabled),
+.excel-app .ribbon-home-2013 .home-align-merge-split:hover .home-align-hit:not(:disabled) {
+  background: #c7e0f4 !important;
+  border-color: #0078d4 !important;
+}
+
+.excel-app .ribbon-home-2013 .home-align-orient-split:hover .home-align-mini-chevron:not(:disabled) {
+  border-left-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-align-merge-split:hover .home-align-merge-chevron:not(:disabled) {
+  border-left-color: #0078d4;
+}
+
+.excel-app .ribbon-home-2013 .home-align-grid .ribbon-btn {
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+}
+
+.excel-app .ribbon-home-2013 .home-number-group {
+  border: 1px solid #c6c6c6;
+  background: linear-gradient(180deg, #fdfdfd 0%, #f3f3f3 100%);
+  padding: 4px 5px;
+}
+
+/* —— Number —— */
+.excel-app .ribbon-home-2013 .home-number-group {
+  display: grid !important;
+  grid-template-rows: 24px 24px 24px;
+  row-gap: 2px !important;
+  min-width: 148px;
+}
+
+.excel-app .ribbon-home-2013 .home-number-group > div:nth-child(2) {
+  grid-row: 1;
+}
+
+.excel-app .ribbon-home-2013 .home-number-group > div:nth-child(3) {
+  grid-row: 2;
+}
+
+.excel-app .ribbon-home-2013 .home-number-group > div:nth-child(4) {
+  grid-row: 3;
+}
+
+.excel-app .ribbon-home-2013 .home-number-group button[style*="minWidth: '140px'"],
+.excel-app .ribbon-home-2013 .home-number-group button {
+  font-size: 11px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  border-radius: 0 !important;
+}
+
+/* —— Styles —— */
+.excel-app .ribbon-home-2013 .home-styles-body {
+  display: grid !important;
+  grid-template-columns: auto auto 1fr;
+  grid-template-rows: 72px;
+  column-gap: 4px !important;
+  padding-bottom: 22px !important;
+  align-items: stretch;
+}
+
+.excel-app .ribbon-home-2013 .home-styles-body > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.excel-app .ribbon-home-2013 .home-styles-body {
+  border: 1px solid #c6c6c6;
+  background: linear-gradient(180deg, #fdfdfd 0%, #f3f3f3 100%);
+  padding: 4px 5px;
+}
+
+.excel-app .ribbon-home-2013 .home-styles-body .cs-custom-group-button {
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  min-height: 64px !important;
+  height: 64px !important;
+  min-width: 58px !important;
+  max-width: 72px !important;
+  padding: 4px 4px !important;
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+  text-align: center;
+  border-color: #c6c6c6 !important;
+  background: #fafafa !important;
+}
+
+.excel-app .ribbon-home-2013 .home-styles-body > div:nth-child(3) {
+  grid-column: 3;
+  min-width: 120px;
+}
+
+/* —— Cells —— */
+.excel-app .ribbon-home-2013 .home-cells-group > div:first-child {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 2px !important;
+  padding-bottom: 22px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-cells-group > div:first-child {
+  border: 1px solid #c6c6c6;
+  background: linear-gradient(180deg, #fdfdfd 0%, #f3f3f3 100%);
+  padding: 4px 5px;
+}
+
+.excel-app .ribbon-home-2013 .home-cells-group .cs-custom-group-button {
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  min-width: 54px !important;
+  width: 54px !important;
+  min-height: 66px !important;
+  height: 66px !important;
+  padding: 4px 2px !important;
+  font-size: 11px !important;
+  border-color: #c6c6c6 !important;
+  background: #fafafa !important;
+}
+
+/* —— Editing —— */
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child {
+  display: grid !important;
+  grid-template-columns: auto auto auto minmax(108px, 1fr);
+  grid-template-rows: 26px 26px;
+  gap: 2px 4px !important;
+  padding-bottom: 22px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:first-child {
+  display: contents;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:first-child > div:nth-child(1) {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:first-child > div:nth-child(2) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:first-child > div:nth-child(3) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:first-child > div:nth-child(4) {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:nth-child(2) {
+  grid-column: 4;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: stretch;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child {
+  border: 1px solid #c6c6c6;
+  background: linear-gradient(180deg, #fdfdfd 0%, #f3f3f3 100%);
+  padding: 4px 5px;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group .cs-custom-group-button {
+  font-size: 11px !important;
+  border-color: #c6c6c6 !important;
+  background: #fafafa !important;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:first-child > div:nth-child(1) .cs-custom-group-button {
+  flex-direction: column !important;
+  min-height: 54px !important;
+  height: 54px !important;
+  min-width: 56px !important;
+}
+
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child > div:first-child > div:nth-child(4) .cs-custom-group-button {
+  flex-direction: column !important;
+  min-height: 54px !important;
+  height: 54px !important;
+  min-width: 72px !important;
+}
+
+.excel-app .ribbon-home-2013 .ribbon-group.home-font-ribbon-group,
+.excel-app .ribbon-home-2013 .ribbon-group.home-align-ribbon-group {
+  justify-content: flex-start;
+}
+
+.excel-app .ribbon-home-2013 .home-group-tool-panel {
+  justify-content: flex-start;
+}
+
+.excel-app .ribbon-home-2013 .home-cells-group > div:first-child,
+.excel-app .ribbon-home-2013 .home-editing-group > div:first-child {
+  justify-content: flex-start;
+  align-content: flex-start;
+}
+
+/* =========================================================
+   Formulas tab — Excel 2013 group layout (structure only)
+   ========================================================= */
+
+.excel-app .ribbon-formulas-2013 {
+  align-items: flex-end !important;
+  padding: 4px 2px 0 !important;
+}
+
+.excel-app .ribbon-formulas-2013 .ribbon-tab-divider {
+  margin-bottom: 18px;
+}
+
+.excel-app .formulas-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 106px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+.excel-app .formulas-group-body {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+  flex: 0 0 auto;
+  gap: 1px;
+  padding: 4px 2px 2px;
+  min-height: 0;
+  max-height: none;
+}
+
+.excel-app .formulas-group-caption {
+  flex-shrink: 0;
+  margin-top: auto;
+  text-align: center;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--ribbon-2013-group-caption, #595959);
+  font-family: "Segoe UI", Arial, sans-serif;
+  padding: 2px 4px 4px;
+  user-select: none;
+}
+
+.excel-app .formulas-fnlib-row {
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 2px;
+  overflow: visible;
+}
+
+.excel-app .formulas-fnlib .formulas-fnlib-row .formulas-btn-large,
+.excel-app .formulas-fnlib .formulas-fnlib-row .formulas-btn-category {
+  min-height: 58px;
+  max-height: 58px;
+  height: 58px;
+  justify-content: flex-start;
+  align-items: center;
+  padding-top: 3px;
+  padding-bottom: 2px;
+  box-sizing: border-box;
+}
+
+.excel-app .formulas-fnlib .formulas-fnlib-row .formulas-btn-large {
+  min-width: 56px;
+  max-width: 64px;
+}
+
+.excel-app .formulas-fnlib .formulas-fnlib-row .formulas-btn-category {
+  min-width: 44px;
+  max-width: 52px;
+}
+
+.excel-app .formulas-fnlib .formulas-icon-lg {
+  font-size: 30px;
+  line-height: 1;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.excel-app .formulas-fnlib .formulas-icon-md {
+  font-size: 22px;
+  line-height: 1;
+  width: 26px;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.excel-app .formulas-fnlib .formulas-fnlib-row .formulas-btn-category span:not(.formulas-icon-md) {
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.excel-app .formulas-btn-large,
+.excel-app .formulas-btn-category,
+.excel-app .formulas-row-btn {
+  box-sizing: border-box;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #262626;
+}
+
+.excel-app .formulas-btn-large {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px 6px;
+  min-width: 54px;
+  max-width: 76px;
+  min-height: 66px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.15;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.excel-app .formulas-btn-category {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 4px 3px 6px;
+  min-width: 40px;
+  max-width: 56px;
+  min-height: 66px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.12;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.excel-app .formulas-btn-large:hover,
+.excel-app .formulas-btn-category:hover,
+.excel-app .formulas-row-btn:hover:not(:disabled) {
+  background: #ecebea;
+  border-color: #c8c6c4;
+}
+
+.excel-app .formulas-icon-lg {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.excel-app .formulas-icon-md {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.excel-app .formulas-inline-chevron {
+  font-size: 9px;
+}
+
+.excel-app .formulas-large-chevron {
+  font-size: 9px;
+  line-height: 1;
+  margin-top: -2px;
+}
+
+.excel-app .formulas-menu-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  align-self: stretch;
+  padding: 0 2px 4px;
+}
+
+.excel-app .formulas-row-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px 1px 2px;
+  min-height: 22px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.excel-app .formulas-row-chevron {
+  margin-left: auto;
+  padding-left: 4px;
+  font-size: 9px;
+  color: #605e5c;
+}
+
+.excel-app .formulas-row-btn-active {
+  background: #dceefb !important;
+  border-color: #0078d4 !important;
+}
+
+.excel-app .formulas-defined-body {
+  align-items: flex-start;
+  gap: 5px;
+  padding-right: 4px;
+}
+
+.excel-app .formulas-defined-body .formulas-btn-large {
+  min-width: 58px;
+}
+
+.excel-app .formulas-auditing-body {
+  align-items: stretch;
+  gap: 0;
+  padding-right: 2px;
+}
+
+.excel-app .formulas-auditing-cols {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.excel-app .formulas-auditing-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 8px 14px;
+  background: var(--ribbon-2013-separator, #bcbcbc);
+  flex-shrink: 0;
+}
+
+.excel-app .formulas-watch-window-btn {
+  min-width: 62px;
+  align-self: stretch;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.excel-app .formulas-calc-body {
+  align-items: stretch;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.excel-app .formulas-calc-options-btn {
+  position: relative;
+  min-width: 64px;
+}
+
+.excel-app .formulas-calc-stack {
+  min-width: 0;
+}
+
+/* =========================================================
+   Page Layout tab — Excel 2013 group layout (structure only)
+   ========================================================= */
+
+.excel-app .ribbon-pagelayout-2013 {
+  align-items: flex-end !important;
+  padding: 4px 2px 0 !important;
+}
+
+.excel-app .ribbon-pagelayout-2013 .ribbon-tab-divider {
+  margin-bottom: 18px;
+}
+
+.excel-app .pagelayout-group-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  margin-top: auto;
+  padding-right: 18px;
+}
+
+.excel-app .pagelayout-group-footer .formulas-group-caption {
+  flex: 1;
+  padding-bottom: 4px;
+}
+
+.excel-app .pagelayout-dialog-launcher {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23605e5c' d='M1 9V6h1v2h2v1H1zm6-6V1H6V0h4v4H7z'/%3E%3C/svg%3E")
+    center / 10px 10px no-repeat;
+  cursor: pointer;
+}
+
+.excel-app .pagelayout-dialog-launcher:hover {
+  background-color: #ecebea;
+  border-color: #c8c6c4;
+}
+
+.excel-app .pagelayout-pagesetup-row,
+.excel-app .pagelayout-arrange-row {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 1px;
+  overflow: visible;
+}
+
+.excel-app .pagelayout-setup-btn,
+.excel-app .pagelayout-arrange-btn {
+  min-width: 48px;
+  max-width: 58px;
+  padding-inline: 3px;
+}
+
+.excel-app .pagelayout-scale-body {
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 168px;
+  padding: 2px 4px 4px;
+}
+
+.excel-app .pagelayout-scale-row {
+  display: grid;
+  grid-template-columns: 22px 44px 1fr auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.excel-app .pagelayout-scale-icon {
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+  color: #0078d4;
+}
+
+.excel-app .pagelayout-scale-label {
+  font-size: 11px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #262626;
+  white-space: nowrap;
+}
+
+.excel-app .pagelayout-scale-select,
+.excel-app .pagelayout-scale-spin {
+  box-sizing: border-box;
+  height: 22px;
+  font-size: 11px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  background: #fff;
+  color: #262626;
+}
+
+.excel-app .pagelayout-scale-select {
+  width: 100%;
+  min-width: 0;
+  padding: 0 4px;
+}
+
+.excel-app .pagelayout-scale-spin {
+  width: 100%;
+  min-width: 0;
+  padding: 0 4px;
+  text-align: right;
+}
+
+.excel-app .pagelayout-scale-suffix {
+  font-size: 11px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #605e5c;
+  padding-left: 2px;
+}
+
+.excel-app .pagelayout-sheet-options-body {
+  align-items: stretch;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.excel-app .pagelayout-sheet-rtl-btn {
+  min-width: 62px;
+  max-width: 72px;
+  align-self: stretch;
+  justify-content: center;
+}
+
+.excel-app .pagelayout-sheet-check-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 4px 4px;
+  min-width: 72px;
+}
+
+.excel-app .pagelayout-sheet-check-title {
+  font-size: 11px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-weight: 600;
+  color: #262626;
+  margin-bottom: 2px;
+}
+
+.excel-app .pagelayout-sheet-check-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #262626;
+  cursor: pointer;
+  user-select: none;
+  min-height: 20px;
+}
+
+.excel-app .pagelayout-sheet-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #107c10;
+}
+
+.excel-app .pagelayout-sheet-check-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 4px 14px;
+  background: var(--ribbon-2013-separator, #bcbcbc);
+  flex-shrink: 0;
+}
+
+.excel-app .pagelayout-themes-body,
+.excel-app .pagelayout-themes .formulas-defined-body {
+  align-items: flex-start;
+  padding-right: 6px;
+}
+
+.excel-app .pagelayout-themes-body .formulas-menu-stack {
+  align-self: flex-start;
+  justify-content: flex-start;
+}
+
+/* =========================================================
+   Data tab — Excel 2013 group layout (structure only)
+   ========================================================= */
+
+.excel-app .ribbon-data-2013 {
+  align-items: flex-end !important;
+  padding: 4px 2px 0 !important;
+}
+
+.excel-app .ribbon-data-2013 .ribbon-tab-divider-tall {
+  margin-bottom: 18px;
+}
+
+.excel-app .data-ribbon-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.excel-app .data-ribbon-row-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.excel-app .data-ribbon-row-btn {
+  min-width: 128px;
+  max-width: 168px;
+}
+
+.excel-app .data-get-transform-body,
+.excel-app .data-tools-body {
+  align-items: stretch;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.excel-app .data-get-transform-cols {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.excel-app .data-get-data-btn svg,
+.excel-app .data-sort-main-btn svg,
+.excel-app .data-filter-main-btn svg,
+.excel-app .data-text-to-columns-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+.excel-app .data-get-data-btn {
+  min-width: 56px;
+  max-width: 64px;
+}
+
+.excel-app .data-ribbon-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 6px 14px;
+  background: var(--ribbon-2013-separator, #bcbcbc);
+  flex-shrink: 0;
+}
+
+.excel-app .data-sort-filter-body {
+  align-items: stretch;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.excel-app .data-sort-quick-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 2px 4px;
+}
+
+.excel-app .data-sort-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.excel-app .data-sort-quick-btn:hover {
+  background: #ecebea;
+  border-color: #c8c6c4;
+}
+
+.excel-app .data-sort-quick-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.excel-app .data-sort-main-btn,
+.excel-app .data-filter-main-btn {
+  min-width: 52px;
+  max-width: 58px;
+  align-self: stretch;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.excel-app .data-filter-cluster {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.excel-app .data-filter-actions {
+  justify-content: center;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.excel-app .data-filter-actions .data-ribbon-row-btn {
+  min-width: 108px;
+  max-width: 120px;
+}
+
+.excel-app .data-text-to-columns-btn {
+  min-width: 58px;
+  max-width: 68px;
+  align-self: stretch;
+  justify-content: center;
+}
+
+.excel-app .data-refresh-split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.excel-app .data-refresh-split-main {
+  display: inline-flex;
+  flex: 1 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #262626;
+  text-align: left;
+}
+
+.excel-app .data-refresh-split:hover {
+  background: #ecebea;
+  border-color: #c8c6c4;
+}
+
+.excel-app .data-refresh-split-main:hover,
+.excel-app .data-refresh-split-chevron:hover {
+  background: #ecebea;
+}
+
+.excel-app .data-refresh-split-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.excel-app .data-refresh-split-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Review — Proofing group */
+.excel-app .review-proofing-row {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 0 2px;
+}
+
+/* View tab — same group band layout as formulas/pagelayout */
+.excel-app .ribbon-view-2013 {
+  align-items: flex-end !important;
+  padding: 4px 2px 0 !important;
+}
+
+.excel-app .view-ribbon-group-body {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 5px;
+  padding: 6px 2px 4px;
+}
+
+.excel-app .view-ribbon-group-body--column {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 3px;
+}
+
+.excel-app .review-proofing-btn {
+  min-width: 56px;
+  max-width: 72px;
+  min-height: 66px;
+}
+
+.excel-app .review-proofing-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* Insert — Illustrations */
+.excel-app .insert-illustrations-row {
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.excel-app .insert-illustrations-btn {
+  min-width: 56px;
+  max-width: 64px;
+  min-height: 58px;
+  max-height: 58px;
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+
+.excel-app .insert-illustrations .formulas-icon-lg {
+  font-size: 28px;
 }

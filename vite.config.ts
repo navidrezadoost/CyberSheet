@@ -2,10 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   define: {
-    'process.env': {}
+    'process.env': {},
+    __CYBER_SHEET_DEV__: mode === 'development',
   },
   server: {
     port: 5173,
@@ -43,4 +44,4 @@ export default defineConfig({
       '@cyber-sheet/icons': path.resolve(__dirname, './packages/icons'),
     },
   },
-});
+}));

@@ -6,6 +6,8 @@
  */
 
 import React, { useState } from 'react';
+import { RibbonDropdownHost } from '../RibbonDropdownHost';
+import { ribbonDropdownChrome } from '../ribbonDropdownChrome';
 import type { DrawingLayer } from '@cyber-sheet/core';
 
 export interface ChartsGroupProps {
@@ -62,18 +64,7 @@ export const ChartsGroup: React.FC<ChartsGroupProps> = ({
     fontFamily: 'Segoe UI, Arial, sans-serif',
   };
 
-  const dropdownStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    background: '#FFFFFF',
-    border: '1px solid #D1D1D1',
-    borderRadius: 3,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    zIndex: 1000,
-    minWidth: 200,
-    marginTop: 2,
-  };
+  const menuStyle = ribbonDropdownChrome({ minWidth: 180, maxHeight: 400, overflowY: 'auto' });
 
   const dropdownItemStyle: React.CSSProperties = {
     padding: '8px 12px',
@@ -125,25 +116,7 @@ export const ChartsGroup: React.FC<ChartsGroupProps> = ({
         ))}
 
         {/* More charts dropdown */}
-        <div style={{ position: 'relative' }}>
-          <button
-            style={{
-              ...smallButtonStyle,
-              minWidth: 35,
-              padding: '4px 4px',
-            }}
-            onClick={() => setShowDropdown(!showDropdown)}
-            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
-            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
-            title="More Charts"
-          >
-            <span style={{ fontSize: 16 }}>▼</span>
-            <span>More</span>
-          </button>
-
-          {showDropdown && (
-            <div style={dropdownStyle}>
-              {chartTypes.map((chart, index) => (
+        <RibbonDropdownHost open={showDropdown} menuStyle={menuStyle} menu={<>{chartTypes.map((chart, index) => (
                 <div
                   key={chart.type}
                   style={{
@@ -164,10 +137,23 @@ export const ChartsGroup: React.FC<ChartsGroupProps> = ({
                   <span style={{ fontSize: 16 }}>{chart.icon}</span>
                   <span>{chart.label}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              ))}</>}>
+<button
+            style={{
+              ...smallButtonStyle,
+              minWidth: 35,
+              padding: '4px 4px',
+            }}
+            onClick={() => setShowDropdown(!showDropdown)}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, true)}
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => handleButtonHover(e, false)}
+            title="More Charts"
+          >
+            <span style={{ fontSize: 16 }}>▼</span>
+            <span>More</span>
+          </button>
+
+</RibbonDropdownHost>
       </div>
 
       <div style={labelStyle}>Charts</div>

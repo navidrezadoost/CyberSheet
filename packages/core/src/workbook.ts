@@ -189,7 +189,7 @@ export class Workbook {
   /**
    * Phase 31a: Pivot builder function (deterministic, side-effect-free).
    * Used by PivotRecomputeEngine to rebuild dirty pivots.
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @param config - Pivot configuration
    * @param worksheetId - Worksheet containing source data
@@ -225,7 +225,7 @@ export class Workbook {
    */
   #extractSourceData(worksheet: Worksheet, range: { start: import('./types').Address; end: import('./types').Address }): import('./types').ExtendedCellValue[][] {
     const data: import('./types').ExtendedCellValue[][] = [];
-    
+
     for (let row = range.start.row; row <= range.end.row; row++) {
       const rowData: import('./types').ExtendedCellValue[] = [];
       for (let col = range.start.col; col <= range.end.col; col++) {
@@ -234,7 +234,7 @@ export class Workbook {
       }
       data.push(rowData);
     }
-    
+
     return data;
   }
 
@@ -242,7 +242,7 @@ export class Workbook {
    * Phase 32: Resolve pivot ID from anchor cell address on specific sheet.
    * Phase 32 patch: Sheet-aware to prevent cross-sheet collisions.
    * Used by GETPIVOTDATA formula function to find pivot at given cell.
-   * 
+   *
    * @param address - Cell address (1-based)
    * @param sheetId - Worksheet identifier
    * @returns PivotId if pivot exists at address, null otherwise
@@ -255,7 +255,7 @@ export class Workbook {
    * Phase 32: Register pivot anchor for formula resolution.
    * Phase 32 patch: Sheet-aware to prevent cross-sheet collisions.
    * Called after pivot registration to enable GETPIVOTDATA lookups.
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @param anchor - Top-left cell of pivot (1-based)
    * @param sheetId - Worksheet identifier
@@ -267,7 +267,7 @@ export class Workbook {
 
   /**
    * Phase 32: Get anchor address for a pivot.
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @returns Anchor address or null if not anchored
    */
@@ -277,10 +277,10 @@ export class Workbook {
 
   /**
    * Phase 35: Set slicer state for a pivot.
-   * 
+   *
    * Validates field exists in pivot configuration, then updates slicer state
    * and marks pivot dirty to trigger rebuild.
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @param slicerId - Unique slicer identifier
    * @param field - Field label to filter on (e.g., "Region")
@@ -297,7 +297,7 @@ export class Workbook {
 
   /**
    * Phase 35: Clear/remove a slicer from a pivot.
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @param slicerId - Slicer to remove
    * @throws Error if pivot not found
@@ -309,7 +309,7 @@ export class Workbook {
 
   /**
    * Phase 35: Get slicer state.
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @param slicerId - Slicer identifier
    * @returns Slicer state or undefined if not found
@@ -323,7 +323,7 @@ export class Workbook {
 
   /**
    * Phase 35: Get all slicers for a pivot.
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @returns Record of all slicers (empty if none)
    */
@@ -336,10 +336,10 @@ export class Workbook {
 
   /**
    * Phase 35: Get distinct values for a field (for slicer UI).
-   * 
+   *
    * Returns all distinct values from the source range for the specified field.
    * Does NOT respect other slicers (independent slicer model).
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @param field - Field label
    * @returns Array of distinct values
@@ -384,7 +384,7 @@ export class Workbook {
   /**
    * Phase 36a: Create and register a pivot.
    * Convenience method for tests and API consumers.
-   * 
+   *
    * @param name - Pivot name
    * @param worksheetId - Worksheet identifier
    * @param config - Pivot configuration
@@ -397,7 +397,7 @@ export class Workbook {
 
   /**
    * Phase 36a: Get pivot snapshot (triggers lazy rebuild if dirty).
-   * 
+   *
    * @param pivotId - Pivot identifier
    * @returns Pivot snapshot or undefined if not found
    */
@@ -416,9 +416,9 @@ export class Workbook {
   /**
    * Phase 32 patch: Authoritative pivot deletion.
    * Cleans up ALL subsystems to prevent stale state.
-   * 
+   *
    * Invariant: "A pivot cannot exist in any subsystem after deletion"
-   * 
+   *
    * @param pivotId - Pivot to delete
    * @returns true if pivot was deleted, false if not found
    */
@@ -430,6 +430,41 @@ export class Workbook {
   addSheet(name: string, rows?: number, cols?: number): WorkbookSheetView {
     void name; void rows; void cols;
     throw new Error('Post-publication sheet creation is unavailable until the sheet-lifecycle journal slice is authorized');
+  }
+
+  /**
+   * @internal Mutable worksheet wired to this workbook's StyleCache (dev XLSX import).
+   * Not workbook-adopted so import can write cells before R6 journal restore.
+   */
+  createDevImportWorksheet(name: string, rows?: number, cols?: number): Worksheet {
+    const ownerAccess = Object.freeze({
+      internStyle: (style: import('./types').CellStyle) => this.#styleCache.intern(style),
+      queryPivotDataAt: (address: Address, sheetName: string, valueField: string, filters: PivotDataFilter[]) =>
+        this.queryPivotDataAt(address, sheetName, valueField, filters),
+    });
+    return new Worksheet(name, rows, cols, this.#formulaEngine, ownerAccess);
+  }
+
+  /**
+   * @internal Attaches a pre-populated worksheet for dev-time XLSX import.
+   * Sheets are not workbook-adopted so cell data can be written before R6 restore.
+   */
+  attachDevImportSheet(sheet: Worksheet): void {
+    if (this.#sheets.has(sheet.name)) {
+      throw new Error(`Sheet '${sheet.name}' already exists`);
+    }
+    this.#sheets.set(sheet.name, sheet);
+    this.#sheetsById.set(sheet.getWorksheetId() as WorksheetId, sheet);
+    this.#pivotInvalidationEngine.observeWorksheet(
+      sheet.name,
+      (listener) => {
+        const d = sheet.on(listener);
+        return () => d.dispose();
+      },
+    );
+    if (!this.#active) this.#active = sheet.name;
+    this.#ensureLazyEventBridgeRegistration();
+    this.#eventBridgeManager?.wireSheet(sheet);
   }
 
   /**

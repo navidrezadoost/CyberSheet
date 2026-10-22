@@ -13,16 +13,158 @@ export * from './progressive';
 
 type FetchLike = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 
+const XLSX_IMPORT_UNAVAILABLE = 'XLSX import is unavailable until R6 staged restore is authorized';
+
+declare const __CYBER_SHEET_DEV__: boolean | undefined;
+
+function isXlsxImportEnabled(): boolean {
+  const env = (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } })
+    .process?.env;
+  if (env?.CYBER_SHEET_ENABLE_XLSX_IMPORT === '1') {
+    return true;
+  }
+  return typeof __CYBER_SHEET_DEV__ !== 'undefined' && __CYBER_SHEET_DEV__;
+}
+
 function displayDimension(value: number, defaultValue: number): number {
   return Math.max(defaultValue, value);
 }
 
-export async function loadXlsxFromUrl(_url: string, _fetchFn?: FetchLike): Promise<Workbook> {
-  throw new Error('XLSX import is unavailable until R6 staged restore is authorized');
+export async function loadXlsxFromUrl(url: string, fetchFn?: FetchLike): Promise<Workbook> {
+  if (!isXlsxImportEnabled()) {
+    throw new Error(XLSX_IMPORT_UNAVAILABLE);
+  }
+  const f = fetchFn ?? fetch;
+  const res = await f(url);
+  if (!res.ok) throw new Error(`Failed to fetch XLSX: ${res.status}`);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  return loadXlsxFromArrayBuffer(buf);
 }
 
-export function loadXlsxFromArrayBuffer(_data: Uint8Array): Workbook {
-  throw new Error('XLSX import is unavailable until R6 staged restore is authorized');
+export function loadXlsxFromArrayBuffer(data: Uint8Array): Workbook {
+  if (!isXlsxImportEnabled()) {
+    throw new Error(XLSX_IMPORT_UNAVAILABLE);
+  }
+  const files = unzipSync(data);
+  const getText = (name: string) => (files[name] ? strFromU8(files[name]) : undefined);
+  const wb = new Workbook();
+
+  const themeXml = getText('xl/theme/theme1.xml') || '';
+  const themePalette = parseTheme(themeXml);
+
+  const wbXml = getText('xl/workbook.xml');
+  if (!wbXml) throw new Error('Invalid XLSX: missing workbook.xml');
+
+  const sheetEntries = Array.from(wbXml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*sheetId="(\d+)"[^>]*r:id="([^"]+)"/g)).map((m) => {
+    const mm = m as unknown as RegExpMatchArray;
+    return { name: mm[1], id: mm[2], rid: mm[3] };
+  });
+  const relsXml = getText('xl/_rels/workbook.xml.rels') || '';
+
+  const rels = new Map(
+    Array.from(relsXml.matchAll(/<Relationship[^>]*?\/>/g))
+      .map((m) => {
+        const rel = m[0];
+        const idMatch = rel.match(/Id="([^"]+)"/);
+        const targetMatch = rel.match(/Target="([^"]+)"/);
+        if (idMatch && targetMatch) {
+          return [idMatch[1], targetMatch[1]] as const;
+        }
+        return null;
+      })
+      .filter(Boolean) as Array<readonly [string, string]>,
+  );
+
+  const sstXml = getText('xl/sharedStrings.xml') || '';
+  const sharedStrings = Array.from(sstXml.matchAll(/<si>\s*<t[^>]*>([\s\S]*?)<\/t>\s*<\/si>/g)).map((m) => {
+    const mm = m as unknown as RegExpMatchArray;
+    return decodeXml(mm[1]);
+  });
+
+  const stylesXml = getText('xl/styles.xml') || '';
+  const styles = parseStyles(stylesXml, themePalette);
+
+  for (const s of sheetEntries) {
+    const target = rels.get(s.rid);
+    if (!target) continue;
+    const path = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+    const sheetXml = getText(path);
+    if (!sheetXml) continue;
+
+    const dimMatch = sheetXml.match(/<dimension[^>]*ref="([A-Z]+\d+:)?([A-Z]+\d+)"/);
+    let maxRow = 1;
+    let maxCol = 1;
+
+    if (dimMatch) {
+      const endAddr = a1ToAddress(dimMatch[2]);
+      maxRow = endAddr.row;
+      maxCol = endAddr.col;
+    }
+
+    const rowMatches = Array.from(sheetXml.matchAll(/<row[^>]*r="(\d+)"[\s\S]*?<\/row>/g)) as unknown as RegExpMatchArray[];
+    for (const rowMatch of rowMatches) {
+      const rowR = parseInt((rowMatch as RegExpMatchArray)[1], 10);
+      maxRow = Math.max(maxRow, rowR);
+      const rowXml = (rowMatch as RegExpMatchArray)[0] as string;
+      const cellRefs = Array.from(rowXml.matchAll(/<c\s+[^>]*\br="([A-Z]+\d+)"/g)) as unknown as RegExpMatchArray[];
+      for (const refMatch of cellRefs) {
+        const addr = a1ToAddress((refMatch as RegExpMatchArray)[1] as string);
+        maxRow = Math.max(maxRow, addr.row);
+        maxCol = Math.max(maxCol, addr.col);
+      }
+    }
+
+    const ws = wb.createDevImportWorksheet(
+      s.name,
+      displayDimension(maxRow, DEFAULT_WORKSHEET_ROWS),
+      displayDimension(maxCol, DEFAULT_WORKSHEET_COLS),
+    );
+
+    for (const rowMatch of rowMatches) {
+      const rowR = parseInt((rowMatch as RegExpMatchArray)[1], 10);
+      const rowXml = (rowMatch as RegExpMatchArray)[0] as string;
+      const cellMatches = Array.from(rowXml.matchAll(/<c\s+([^>]+?)(?:\/>|>(.*?)<\/c>)/g)) as unknown as RegExpMatchArray[];
+
+      for (const cm of cellMatches) {
+        const fullAttrs = (cm as RegExpMatchArray)[1] as string;
+        const inner = ((cm as RegExpMatchArray)[2] as string) || '';
+
+        const rMatch = fullAttrs.match(/r="([A-Z]+\d+)"/);
+        const addr = rMatch ? rMatch[1] : undefined;
+        if (!addr) continue;
+
+        const tMatch = fullAttrs.match(/\bt="(\w+)"/);
+        const t = tMatch ? tMatch[1] : '';
+        const vMatch = inner.match(/<v>([\s\S]*?)<\/v>/);
+        const val = vMatch ? vMatch[1] : '';
+        const sMatch = fullAttrs.match(/\bs="(\d+)"/);
+        const sIdx = sMatch ? parseInt(sMatch[1], 10) : undefined;
+        const mappedStyle = sIdx != null ? styles.xfStyles[sIdx] : undefined;
+        const { col } = a1ToAddress(addr);
+
+        if (vMatch || inner.length > 0) {
+          if (t === 's') {
+            const idx = parseInt(val, 10);
+            ws.setCellValue({ row: rowR, col }, sharedStrings[idx] ?? '');
+          } else if (t === 'b') {
+            ws.setCellValue({ row: rowR, col }, val === '1');
+          } else if (t === 'str' || t === 'inlineStr') {
+            ws.setCellValue({ row: rowR, col }, decodeXml(val));
+          } else {
+            const num = Number(val);
+            ws.setCellValue({ row: rowR, col }, Number.isFinite(num) ? num : val);
+          }
+        }
+        if (mappedStyle) {
+          ws.setCellStyle({ row: rowR, col }, mappedStyle);
+        }
+      }
+    }
+
+    wb.attachDevImportSheet(ws);
+  }
+
+  return wb;
 }
 
 function a1ToAddress(a1: string): { row: number; col: number } {

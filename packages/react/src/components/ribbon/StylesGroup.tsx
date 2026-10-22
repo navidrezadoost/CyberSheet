@@ -15,6 +15,7 @@
 
 import { StylesGroupIcon1 } from "@cyber-sheet/icons/react";
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { RibbonPopoverPanel } from "./RibbonPopoverPanel";
 import type {
   AddressRange,
   Range,
@@ -726,15 +727,10 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
   };
 
   const dropdownStyles: React.CSSProperties = {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    marginTop: "4px",
     background: "#fff",
     border: "1px solid #d0d0d0",
-    borderRadius: "4px",
+    borderRadius: 0,
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-    zIndex: 1000,
     minWidth: "250px",
     maxHeight: "500px",
     overflowY: "auto",
@@ -746,23 +742,19 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
     overflow: "visible",
     overflowY: "visible",
     maxHeight: "none",
-    zIndex: 10050,
   };
 
   const submenuFlyoutStyles: React.CSSProperties = {
-    position: "absolute",
-    left: "100%",
-    top: 0,
-    marginLeft: "-2px",
+    position: "fixed",
     background: "#fff",
     border: "1px solid #d0d0d0",
-    borderRadius: "4px",
+    borderRadius: 0,
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-    zIndex: 10051,
     minWidth: "250px",
     maxHeight: "500px",
     overflowY: "auto",
     animation: "slideDown 200ms ease-out",
+    zIndex: 100001,
   };
 
   const menuItemStyles: React.CSSProperties = {
@@ -804,7 +796,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
         <span>▶</span>
       </div>
       {showCFSubmenu === category && (
-        <div data-submenu={category} style={submenuFlyoutStyles}>
+        <div data-submenu={category} className="cs-ribbon-popover cs-ribbon-floating-menu" style={submenuFlyoutStyles}>
           {renderCFSubmenu(category)}
         </div>
       )}
@@ -941,6 +933,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
 
   return (
     <div
+      className="home-ribbon-surface home-styles-group"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -955,6 +948,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
       }}
     >
       <div
+        className="home-styles-body"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -974,9 +968,12 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
             <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
-          {showCFMenu && (
+          <RibbonPopoverPanel
+            open={showCFMenu}
+            anchorRef={cfMenuRef}
+            style={cfMainDropdownStyles}
+          >
             <div
-              style={cfMainDropdownStyles}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => event.stopPropagation()}
             >
@@ -1103,7 +1100,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
                 <span>Manage Rules...</span>
               </div>
             </div>
-          )}
+          </RibbonPopoverPanel>
         </div>
 
         {/* Row 2: Format as Table */}
@@ -1119,14 +1116,16 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
             <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
-          {showTableStylesMenu && (
-            <div
-              style={{
-                ...dropdownStyles,
-                minWidth: "400px",
-                maxHeight: "450px",
-              }}
-            >
+          <RibbonPopoverPanel
+            open={showTableStylesMenu}
+            anchorRef={tableStylesMenuRef}
+            style={{
+              ...dropdownStyles,
+              minWidth: "400px",
+              maxHeight: "450px",
+            }}
+          >
+            <div>
               {/* Table Styles Gallery */}
               {["Light", "Medium", "Dark"].map((category) => (
                 <div key={category}>
@@ -1220,7 +1219,7 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
                 </div>
               ))}
             </div>
-          )}
+          </RibbonPopoverPanel>
         </div>
 
         {/* Row 3: Cell Styles */}
@@ -1234,8 +1233,11 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
             <span className="cs-custom-button-dropdown-arrow">▼</span>
           </button>
 
-          {showCellStylesMenu && (
-            <div style={{ ...dropdownStyles }}>
+          <RibbonPopoverPanel
+            open={showCellStylesMenu}
+            anchorRef={cellStylesMenuRef}
+            style={{ ...dropdownStyles }}
+          >
               <CellStylesGallery
                 onStyleSelect={handleCellStyle}
                 onClose={() => setShowCellStylesMenu(false)}
@@ -1243,12 +1245,12 @@ export const StylesGroup: React.FC<StylesGroupProps> = ({
                 width="420px"
                 maxHeight="500px"
               />
-            </div>
-          )}
+          </RibbonPopoverPanel>
         </div>
       </div>
 
       <div
+        className="home-group-caption"
         style={{
           fontSize: "11px",
           color: "#605e5c",

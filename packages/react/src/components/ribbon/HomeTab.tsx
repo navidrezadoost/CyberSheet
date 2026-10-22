@@ -13,8 +13,6 @@ import type {
   CommandManager,
 } from "@cyber-sheet/core";
 import {
-  ArrowUndoRegular,
-  ArrowRedoRegular,
   TextBoldRegular,
   TextItalicRegular,
   TextUnderlineRegular,
@@ -51,11 +49,10 @@ import {
 import { RibbonGroup } from "./RibbonGroup";
 import { RibbonButton } from "./RibbonButton";
 import { RibbonSelect } from "./RibbonSelect";
-import { RibbonRow } from "./RibbonRow";
 import { FontColorButton } from "./FontColorButton";
 import { FillColorButton } from "./FillColorButton";
 import { BorderButton } from "./BorderButton";
-import { NumberFormatButton } from "./NumberFormatButton";
+import { NumberFormatGroup } from "./NumberFormatGroup";
 import { AlignmentGroup } from "./AlignmentGroup";
 import { ClipboardGroup } from "./ClipboardGroup";
 import { StylesGroup } from "./StylesGroup";
@@ -70,15 +67,10 @@ import {
   getFormattableSelection,
 } from "../../utils/selectionAddressing";
 import { isHomeGroupEnabled } from "../../config/appConfig";
-import type {
-  SelectionState,
-  StyleState,
-  ColorValue,
-} from "./types";
+import type { SelectionState, StyleState, ColorValue } from "./types";
 import type { Fill } from "./fillTypes";
 import { NO_FILL, solidFill } from "./fillTypes";
 import type { BorderPayload } from "./borderTypes";
-import type { NumberFormatValue } from "./numberFormatTypes";
 import type { SheetAccess } from "../../utils/workbookSheetAccess";
 import { requireStandaloneWorksheet } from "../../utils/workbookSheetAccess";
 import "./ribbon.css";
@@ -189,7 +181,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const formattingController = useMemo(() => {
     if (formattingControllerProp) return formattingControllerProp;
     if (!worksheet) return null;
-    if ('workbookId' in worksheet) return null;
+    if ("workbookId" in worksheet) return null;
     return new FormattingController(worksheet, commandManager as any);
   }, [formattingControllerProp, worksheet, commandManager]);
 
@@ -298,21 +290,6 @@ export const HomeTab: React.FC<HomeTabProps> = ({
     [formattingController, selectedRanges.length, onAfterCommand],
   );
 
-  // Undo handler
-  const handleUndo = useCallback(() => {
-    if (commandManager.undo()) {
-      setStyleVersion((version) => version + 1);
-      onAfterCommand?.();
-    }
-  }, [commandManager, onAfterCommand]);
-
-  const handleRedo = useCallback(() => {
-    if (commandManager.redo()) {
-      setStyleVersion((version) => version + 1);
-      onAfterCommand?.();
-    }
-  }, [commandManager, onAfterCommand]);
-
   // Font family change handler
   const handleFontFamilyChange = useCallback(
     (fontFamily: string) => {
@@ -333,6 +310,29 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       );
     },
     [formattingController, runFormatting, selectedRanges],
+  );
+
+  const handleFontSizeStep = useCallback(
+    (direction: 1 | -1) => {
+      const current = Number(selectionStyle?.fontSize ?? 11);
+      const numericSizes = fontSizes
+        .map((s) => Number(s))
+        .filter((s) => Number.isFinite(s))
+        .sort((a, b) => a - b);
+      if (numericSizes.length === 0) return;
+      let index = numericSizes.indexOf(current);
+      if (index < 0) {
+        index = numericSizes.findIndex((s) => s > current);
+        if (index < 0) index = numericSizes.length - 1;
+        else index = Math.max(0, index - 1);
+      }
+      const nextIndex = Math.max(
+        0,
+        Math.min(numericSizes.length - 1, index + direction),
+      );
+      handleFontSizeChange(String(numericSizes[nextIndex]));
+    },
+    [fontSizes, handleFontSizeChange, selectionStyle?.fontSize],
   );
 
   // Bold toggle handler
@@ -449,19 +449,6 @@ export const HomeTab: React.FC<HomeTabProps> = ({
     [formattingController, runFormatting, selectedRanges],
   );
 
-  // Number format command handler (semantic state, NOT visual)
-  const handleNumberFormatApply = useCallback(
-    (format: NumberFormatValue) => {
-      runFormatting(() =>
-        formattingController?.setNumberFormatInRanges(
-          selectedRanges,
-          format.formatString,
-        ),
-      );
-    },
-    [formattingController, runFormatting, selectedRanges],
-  );
-
   // Alignment handlers (compound state: horizontal × vertical × wrap)
   const handleHorizontalAlignChange = useCallback(
     (align: "left" | "center" | "right" | "justify") => {
@@ -512,6 +499,16 @@ export const HomeTab: React.FC<HomeTabProps> = ({
     onAfterCommand?.();
   }, [formattingController, range, onAfterCommand]);
 
+  const handleIncreaseIndent = useCallback(() => {
+    if (!formattingController || selectedAddresses.length === 0) return;
+    runFormatting(() => formattingController.increaseIndent(selectedAddresses));
+  }, [formattingController, runFormatting, selectedAddresses]);
+
+  const handleDecreaseIndent = useCallback(() => {
+    if (!formattingController || selectedAddresses.length === 0) return;
+    runFormatting(() => formattingController.decreaseIndent(selectedAddresses));
+  }, [formattingController, runFormatting, selectedAddresses]);
+
   const canMerge = useMemo(() => {
     if (!range) return false;
     return !(
@@ -529,7 +526,9 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         return;
       }
       if (type === "contents" || type === "all") {
-        commandManager.execute(new ClearCellsCommand(requireStandaloneWorksheet(worksheet), range));
+        commandManager.execute(
+          new ClearCellsCommand(requireStandaloneWorksheet(worksheet), range),
+        );
         if (type === "all") {
           formattingController?.clearFormatInRanges(selectedRanges);
         }
@@ -580,7 +579,12 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         case "columnWidth": {
           const px = Math.max(12, Number(value) * 8);
           if (!Number.isFinite(px) || px <= 0) return;
-          setColumnWidthsInRange(commandManager, standaloneWorksheet, range, px);
+          setColumnWidthsInRange(
+            commandManager,
+            standaloneWorksheet,
+            range,
+            px,
+          );
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
@@ -616,7 +620,12 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           onAfterCommand?.();
           break;
         case "lockCell":
-          setCellsLocked(commandManager, standaloneWorksheet, selectedAddresses, true);
+          setCellsLocked(
+            commandManager,
+            standaloneWorksheet,
+            selectedAddresses,
+            true,
+          );
           setStyleVersion((version) => version + 1);
           onAfterCommand?.();
           break;
@@ -639,7 +648,12 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const handleInsertCells = useCallback(
     (mode: InsertCellsMode) => {
       if (!worksheet || !range) return;
-      executeInsertCells(requireStandaloneWorksheet(worksheet), commandManager, range, mode);
+      executeInsertCells(
+        requireStandaloneWorksheet(worksheet),
+        commandManager,
+        range,
+        mode,
+      );
       onAfterCommand?.();
     },
     [worksheet, range, commandManager, onAfterCommand],
@@ -648,7 +662,12 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const handleDeleteCells = useCallback(
     (mode: DeleteCellsMode) => {
       if (!worksheet || !range) return;
-      executeDeleteCells(requireStandaloneWorksheet(worksheet), commandManager, range, mode);
+      executeDeleteCells(
+        requireStandaloneWorksheet(worksheet),
+        commandManager,
+        range,
+        mode,
+      );
       onAfterCommand?.();
     },
     [worksheet, range, commandManager, onAfterCommand],
@@ -661,7 +680,12 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         setShowCustomSortDialog(true);
         return;
       }
-      executeSortSelection(commandManager, requireStandaloneWorksheet(worksheet), range, direction);
+      executeSortSelection(
+        commandManager,
+        requireStandaloneWorksheet(worksheet),
+        range,
+        direction,
+      );
       setStyleVersion((version) => version + 1);
       onAfterCommand?.();
     },
@@ -695,16 +719,28 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       : normalizeRange(range);
   }, [worksheet, range]);
 
+  const numberSelectionStyle = useMemo(
+    () =>
+      ({
+        numberFormat: {
+          value:
+            typeof activeStyle.numberFormat === "string"
+              ? activeStyle.numberFormat
+              : "General",
+          isMixed: false,
+        },
+      }) as Parameters<typeof NumberFormatGroup>[0]["selectionStyle"],
+    [activeStyle.numberFormat],
+  );
+
   return (
-    <div className="ribbon-content">
-      {isHomeGroupEnabled(appConfig, "clipboard") && (
-        <>
-          {/* ==================== Clipboard Group ==================== */}
-          {worksheet && clipboardService && <ClipboardGroup
+    <div className="ribbon-content ribbon-tab-content ribbon-home-2013">
+      {isHomeGroupEnabled(appConfig, "clipboard") &&
+        worksheet &&
+        clipboardService && (
+          <ClipboardGroup
             worksheet={worksheet}
-            clipboardService={
-              clipboardService
-            }
+            clipboardService={clipboardService}
             formattingController={formattingController}
             commandManager={commandManager}
             selectedCells={selectedAddresses}
@@ -712,121 +748,124 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             onAfterClipboard={onAfterCommand}
             formatPainterActive={formatPainterActive}
             onFormatPainterActivate={handleFormatPainterActivate}
-          />}
+          />
+        )}
 
-          {/* ==================== Undo/Redo Group ==================== */}
-          <RibbonGroup title="Undo" className="compact">
-            <RibbonRow gap={2}>
-              <RibbonButton
-                icon={<ArrowUndoRegular />}
-                tooltip="Undo (Ctrl+Z)"
-                onClick={handleUndo}
-                disabled={!commandManager.canUndo()}
-                size="medium"
-              />
-              <RibbonButton
-                icon={<ArrowRedoRegular />}
-                tooltip="Redo (Ctrl+Y)"
-                onClick={handleRedo}
-                disabled={!commandManager.canRedo()}
-                size="medium"
-              />
-            </RibbonRow>
-          </RibbonGroup>
-        </>
-      )}
-
-      {(isHomeGroupEnabled(appConfig, "font") ||
-        isHomeGroupEnabled(appConfig, "number")) && (
+      {isHomeGroupEnabled(appConfig, "font") && (
         <RibbonGroup
           title="Font"
-          showDialogLauncher
-          onDialogLauncherClick={() => console.log("Font dialog")}
+          className="home-font-ribbon-group"
         >
-          <div className="font-group-content">
-            {isHomeGroupEnabled(appConfig, "font") && (
-              <>
-                {/* Column 1: Font dropdowns */}
-                <div className="font-dropdowns-column">
-                  <RibbonSelect
-                    value={selectionStyle?.fontFamily || "Calibri"}
-                    options={fontFamilies}
-                    onChange={handleFontFamilyChange}
-                    width={120}
-                    className="font-family-select"
-                    ariaLabel="Font family"
+          <div className="font-group-content home-font-group">
+            <div className="home-font-body">
+              <div className="home-font-row-top">
+                <RibbonSelect
+                  value={selectionStyle?.fontFamily || "Calibri"}
+                  options={fontFamilies}
+                  onChange={handleFontFamilyChange}
+                  width={132}
+                  className="font-family-select home-font-select"
+                  ariaLabel="Font family"
+                />
+                <RibbonSelect
+                  value={selectionStyle?.fontSize || 11}
+                  options={fontSizes}
+                  onChange={handleFontSizeChange}
+                  width={46}
+                  className="font-size-select home-font-select"
+                  ariaLabel="Font size"
+                />
+                <div className="home-font-size-steps">
+                  <RibbonButton
+                    className="home-font-grow home-font-hit"
+                    icon={<span className="home-font-step-glyph" aria-hidden />}
+                    tooltip="Increase Font Size"
+                    onClick={() => handleFontSizeStep(1)}
+                    size="small"
                   />
-                  <RibbonSelect
-                    value={selectionStyle?.fontSize || 11}
-                    options={fontSizes}
-                    onChange={handleFontSizeChange}
-                    width={60}
-                    className="font-size-select"
-                    ariaLabel="Font size"
+                  <RibbonButton
+                    className="home-font-shrink home-font-hit"
+                    icon={<span className="home-font-step-glyph" aria-hidden />}
+                    tooltip="Decrease Font Size"
+                    onClick={() => handleFontSizeStep(-1)}
+                    size="small"
                   />
                 </div>
-
-                {/* Column 2: Font style buttons */}
-                <div className="small-btns-column">
-                  <div className="font-row">
-                    <RibbonButton
-                      icon={<TextBoldRegular />}
-                      tooltip="Bold (Ctrl+B)"
-                      active={selectionStyle?.bold || false}
-                      onClick={handleBoldToggle}
-                      size="small"
-                    />
-                    <RibbonButton
-                      icon={<TextItalicRegular />}
-                      tooltip="Italic (Ctrl+I)"
-                      active={selectionStyle?.italic || false}
-                      onClick={handleItalicToggle}
-                      size="small"
-                    />
-                    <RibbonButton
-                      icon={<TextUnderlineRegular />}
-                      tooltip="Underline (Ctrl+U)"
-                      active={selectionStyle?.underline || false}
-                      onClick={handleUnderlineToggle}
-                      size="small"
-                    />
-                  </div>
-                  <div className="font-row">
-                    {/* Font Color Picker */}
-                    <FontColorButton
-                      command={fontColorCommand}
-                      selectionColor={selectionStyle?.fontColor}
-                    />
-
-                    {/* Fill Color Picker */}
-                    <FillColorButton
-                      command={fillColorCommand}
-                      selectionFill={selectionStyle?.fillColor}
-                    />
-
-                    {/* Border Picker */}
-                    <BorderButton
-                      selectionBorder={selectionStyle?.border}
-                      onApply={handleBorderApply}
-                    />
-                  </div>
+              </div>
+              <div className="home-font-row-bottom font-row">
+                <RibbonButton
+                  className="home-font-hit"
+                  icon={<TextBoldRegular />}
+                  tooltip="Bold (Ctrl+B)"
+                  active={selectionStyle?.bold || false}
+                  onClick={handleBoldToggle}
+                  size="small"
+                />
+                <RibbonButton
+                  className="home-font-hit"
+                  icon={<TextItalicRegular />}
+                  tooltip="Italic (Ctrl+I)"
+                  active={selectionStyle?.italic || false}
+                  onClick={handleItalicToggle}
+                  size="small"
+                />
+                <div className="home-font-underline-split">
+                  <RibbonButton
+                    className="home-font-hit home-font-underline-main"
+                    icon={<TextUnderlineRegular />}
+                    tooltip="Underline (Ctrl+U)"
+                    active={selectionStyle?.underline || false}
+                    onClick={handleUnderlineToggle}
+                    size="small"
+                  />
+                  <button
+                    type="button"
+                    className="home-font-hit home-font-style-chevron"
+                    aria-label="Underline options"
+                    title="Underline options"
+                  >
+                    <span className="home-font-chevron" aria-hidden>
+                      ▼
+                    </span>
+                  </button>
                 </div>
-              </>
-            )}
-
-            {/* Column 3: Number format */}
-            {isHomeGroupEnabled(appConfig, "number") && (
-              <NumberFormatButton
-                numberFormat={selectionStyle?.numberFormat}
-                onApply={handleNumberFormatApply}
-              />
-            )}
+                <span className="home-font-vsep" aria-hidden />
+                <BorderButton
+                  selectionBorder={selectionStyle?.border}
+                  onApply={handleBorderApply}
+                />
+                <span className="home-font-vsep" aria-hidden />
+                <FillColorButton
+                  command={fillColorCommand}
+                  selectionFill={selectionStyle?.fillColor}
+                />
+                <span className="home-font-vsep" aria-hidden />
+                <FontColorButton
+                  command={fontColorCommand}
+                  selectionColor={selectionStyle?.fontColor}
+                />
+              </div>
+            </div>
           </div>
         </RibbonGroup>
       )}
 
+      {isHomeGroupEnabled(appConfig, "number") && formattingController && (
+        <RibbonGroup title="Number">
+          <NumberFormatGroup
+            formattingController={formattingController}
+            selectedCells={selectedAddresses}
+            selectionStyle={numberSelectionStyle}
+            onStyleChange={onAfterCommand}
+          />
+        </RibbonGroup>
+      )}
+
       {isHomeGroupEnabled(appConfig, "alignment") && (
-        <RibbonGroup title="Alignment">
+        <RibbonGroup
+          title="Alignment"
+          className="home-align-ribbon-group"
+        >
           <AlignmentGroup
             horizontalAlign={selectionStyle?.horizontalAlign}
             verticalAlign={selectionStyle?.verticalAlign}
@@ -837,21 +876,26 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             onMergeClick={handleMergeClick}
             onMergeCellsClick={handleMergeCellsClick}
             onUnmergeClick={handleUnmergeClick}
+            onIncreaseIndent={handleIncreaseIndent}
+            onDecreaseIndent={handleDecreaseIndent}
             canMerge={canMerge}
           />
         </RibbonGroup>
       )}
 
-      {isHomeGroupEnabled(appConfig, "styles") && formattingController && worksheet && !('workbookId' in worksheet) && (
-        <StylesGroup
-          formattingController={formattingController}
-          worksheet={worksheet}
-          commandManager={commandManager}
-          selectedRanges={selectedRanges}
-          currentRange={range ?? undefined}
-          onStyleChange={onAfterCommand}
-        />
-      )}
+      {isHomeGroupEnabled(appConfig, "styles") &&
+        formattingController &&
+        worksheet &&
+        !("workbookId" in worksheet) && (
+          <StylesGroup
+            formattingController={formattingController}
+            worksheet={worksheet}
+            commandManager={commandManager}
+            selectedRanges={selectedRanges}
+            currentRange={range ?? undefined}
+            onStyleChange={onAfterCommand}
+          />
+        )}
 
       {isHomeGroupEnabled(appConfig, "cells") && formattingController && (
         <CellsGroup

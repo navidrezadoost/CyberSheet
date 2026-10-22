@@ -14,7 +14,7 @@ type WorkbookLike = any;
 type WorksheetLike = any;
 
 // Use Vite proxy path to avoid CORS issues
-const DEFAULT_URL = '/uploads/011-02-1404_3e5401bdea354b0784b4968da3caed23.xlsx';
+const DEFAULT_URL = '/proforma-report.xlsx';
 
 function colToLetter(col: number): string {
   let letter = '';

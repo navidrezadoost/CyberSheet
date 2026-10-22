@@ -1,25 +1,27 @@
 /**
- * ClipboardGroup.tsx
- * 
- * Clipboard group for Home ribbon tab
- * Provides Cut, Copy, Paste, and Format Painter functionality
- * 
- * Microinteractions:
- * - Pulse effect on copy/cut
- * - Marching ants border visual
- * - Format painter cursor change
- * - Paste dropdown with smooth animation
+ * Clipboard group — Excel Home tab (layout matches Office Clipboard group).
+ * Icon markup is unchanged; structure and spacing live in ribbon.css.
  */
 
-import React, { useRef, useState } from 'react';
-import type { Address, Range, Worksheet, WorkbookSheetView } from '@cyber-sheet/core';
-import { FormattingController, CommandManager, ClipboardService } from '@cyber-sheet/core';
+import React, { useRef, useState } from "react";
+import { RibbonPopoverPanel } from "./RibbonPopoverPanel";
+import type {
+  Address,
+  Range,
+  Worksheet,
+  WorkbookSheetView,
+} from "@cyber-sheet/core";
+import {
+  FormattingController,
+  CommandManager,
+  ClipboardService,
+} from "@cyber-sheet/core";
 import {
   performCopy,
   performCut,
   performPasteAsync,
   normalizeSelectionRange,
-} from '../../utils/clipboardOperations';
+} from "../../utils/clipboardOperations";
 
 export interface ClipboardGroupProps {
   worksheet: Worksheet | WorkbookSheetView;
@@ -37,6 +39,31 @@ export interface ClipboardGroupProps {
   onPaste?: () => void;
 }
 
+/** Icon slots — swap SVG/img here without changing layout classes. */
+const PasteIcon = () => (
+  <span className="home-clipboard-icon home-clipboard-icon--paste" aria-hidden>
+    📋
+  </span>
+);
+const CutIcon = () => (
+  <span className="home-clipboard-icon home-clipboard-icon--cut" aria-hidden>
+    ✂️
+  </span>
+);
+const CopyIcon = () => (
+  <span className="home-clipboard-icon home-clipboard-icon--copy" aria-hidden>
+    📄
+  </span>
+);
+const FormatPainterIcon = () => (
+  <span
+    className="home-clipboard-icon home-clipboard-icon--painter"
+    aria-hidden
+  >
+    🖌️
+  </span>
+);
+
 export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
   worksheet,
   clipboardService,
@@ -53,9 +80,16 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
   onPaste,
 }) => {
   const [showPasteMenu, setShowPasteMenu] = useState(false);
-  const [formatPainterActiveInternal, setFormatPainterActiveInternal] = useState(false);
-  const formatPainterClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const formatPainterActive = formatPainterActiveProp ?? formatPainterActiveInternal;
+  const [showCopyMenu, setShowCopyMenu] = useState(false);
+  const [formatPainterActiveInternal, setFormatPainterActiveInternal] =
+    useState(false);
+  const formatPainterClickTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const pasteMenuRef = useRef<HTMLDivElement>(null);
+  const copyMenuRef = useRef<HTMLDivElement>(null);
+  const formatPainterActive =
+    formatPainterActiveProp ?? formatPainterActiveInternal;
 
   const setFormatPainterActive = (active: boolean) => {
     if (formatPainterActiveProp === undefined) {
@@ -74,8 +108,6 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     });
   };
 
-  // === Clipboard Handlers ===
-
   const handleCut = () => {
     const range = getRange();
     if (!range) return;
@@ -86,8 +118,11 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     onCut?.();
     onAfterClipboard?.();
 
-    document.body.classList.add('clipboard-action-pulse');
-    setTimeout(() => document.body.classList.remove('clipboard-action-pulse'), 300);
+    document.body.classList.add("clipboard-action-pulse");
+    setTimeout(
+      () => document.body.classList.remove("clipboard-action-pulse"),
+      300,
+    );
   };
 
   const handleCopy = () => {
@@ -98,32 +133,43 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     setClipboardHasContent(true);
     onCopy?.();
     onAfterClipboard?.();
+    setShowCopyMenu(false);
 
-    document.body.classList.add('clipboard-action-pulse');
-    setTimeout(() => document.body.classList.remove('clipboard-action-pulse'), 300);
+    document.body.classList.add("clipboard-action-pulse");
+    setTimeout(
+      () => document.body.classList.remove("clipboard-action-pulse"),
+      300,
+    );
   };
 
   const handlePaste = () => {
     const range = getRange();
     if (!range) return;
 
-    void performPasteAsync(worksheet, commandManager, clipboardService, range.start).then(() => {
+    void performPasteAsync(
+      worksheet,
+      commandManager,
+      clipboardService,
+      range.start,
+    ).then(() => {
       onPaste?.();
       onAfterClipboard?.();
     });
   };
 
-  const handlePasteSpecial = (option: 'values' | 'formulas' | 'formats' | 'all') => {
-    // Paste special implementation
+  const handlePasteSpecial = (
+    option: "values" | "formulas" | "formats" | "all",
+  ) => {
     setShowPasteMenu(false);
     onPaste?.();
+    void option;
   };
 
   const deactivateFormatPainter = () => {
     if (!formattingController) return;
     formattingController.clearFormatPainter();
     setFormatPainterActive(false);
-    document.body.classList.remove('format-painter-active');
+    document.body.classList.remove("format-painter-active");
   };
 
   const handleFormatPainter = (persistent: boolean = false) => {
@@ -133,7 +179,7 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
       if (!formattingController) return;
       formattingController.copyFormat(selectedCells, persistent);
       setFormatPainterActive(true);
-      document.body.classList.add('format-painter-active');
+      document.body.classList.add("format-painter-active");
     }
   };
 
@@ -147,7 +193,9 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     }, 250);
   };
 
-  const handleFormatPainterDoubleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleFormatPainterDoubleClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
     if (!formattingController) return;
     if (formatPainterClickTimerRef.current) {
@@ -156,210 +204,133 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     }
     formattingController.copyFormat(selectedCells, true);
     setFormatPainterActive(true);
-    document.body.classList.add('format-painter-active');
-  };
-
-  // === Styles ===
-
-  const groupStyles: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '3px',
-    padding: '3px 6px 0 6px',
-    borderRight: '1px solid #d0d0d0',
-    minHeight: '108px',
-    maxHeight: '108px',
-    boxSizing: 'border-box',
-    position: 'relative',
-  };
-
-  const labelStyles: React.CSSProperties = {
-    fontSize: '11px',
-    color: '#605e5c',
-    textAlign: 'center',
-    padding: '2px 4px 0 4px',
-    whiteSpace: 'nowrap',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '16px',
-    lineHeight: '16px',
-  };
-
-  const buttonRowStyles: React.CSSProperties = {
-    display: 'flex',
-    gap: '4px',
-    alignItems: 'center',
-  };
-
-  const buttonStyles: React.CSSProperties = {
-    padding: '6px 12px',
-    border: '1px solid #ccc',
-    borderRadius: '3px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: 500,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    transition: 'all 0.15s ease',
-  };
-
-  const largeButtonStyles: React.CSSProperties = {
-    ...buttonStyles,
-    flexDirection: 'column',
-    padding: '8px 12px',
-    fontSize: '11px',
-    minWidth: '70px',
-  };
-
-  const iconStyles: React.CSSProperties = {
-    fontSize: '18px',
-  };
-
-  const dropdownArrowStyles: React.CSSProperties = {
-    fontSize: '8px',
-    marginLeft: '4px',
-  };
-
-  const pasteMenuStyles: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    marginTop: '2px',
-    backgroundColor: '#fff',
-    border: '1px solid #ccc',
-    borderRadius: '4px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    zIndex: 1000,
-    minWidth: '180px',
-    animation: 'fadeIn 0.2s ease',
-  };
-
-  const menuItemStyles: React.CSSProperties = {
-    padding: '8px 12px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    borderBottom: '1px solid #f0f0f0',
+    document.body.classList.add("format-painter-active");
   };
 
   return (
-    <div style={groupStyles}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingBottom: '16px' }}>
-        {/* Row 1: Large Paste Button */}
-        <div style={{ position: 'relative' }}>
-          <button
-            className="cs-custom-group-button cs-custom-group-button-large"
-            onClick={handlePaste}
-            onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => {
-              e.preventDefault();
-              setShowPasteMenu(!showPasteMenu);
-            }}
-            disabled={!clipboardHasContent}
-            title="Paste (Ctrl+V)"
-          >
-            <span style={iconStyles}>📋</span>
-            <span>Paste</span>
-            <span className="cs-custom-button-dropdown-arrow">▼</span>
-          </button>
+    <div className="home-ribbon-surface home-clipboard-group ribbon-group ">
+      <div className="home-clipboard-body">
+        <div className="home-clipboard-main">
+          <div className="home-clipboard-paste-zone" ref={pasteMenuRef}>
+            <div className="home-clipboard-paste-split">
+              <button
+                type="button"
+                className="home-clipboard-hit home-clipboard-paste-main"
+                onClick={handlePaste}
+                disabled={!clipboardHasContent}
+                title="Paste (Ctrl+V)"
+              >
+                <PasteIcon />
+                <span className="home-clipboard-label">Paste</span>
+              </button>
+              <button
+                type="button"
+                className="home-clipboard-hit home-clipboard-paste-chevron"
+                onClick={() => setShowPasteMenu((open) => !open)}
+                disabled={!clipboardHasContent}
+                aria-expanded={showPasteMenu}
+                aria-label="Paste options"
+                title="Paste options"
+              >
+                <span className="home-clipboard-chevron" aria-hidden>
+                  ▼
+                </span>
+              </button>
+            </div>
 
-        {/* Paste Special Menu */}
-        {showPasteMenu && (
-          <div style={pasteMenuStyles}>
-            <div
-              style={menuItemStyles}
-              onClick={() => handlePasteSpecial('all')}
-              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = 'transparent';
-              }}
+            <RibbonPopoverPanel
+              open={showPasteMenu}
+              anchorRef={pasteMenuRef}
+              style={{ minWidth: 180 }}
             >
-              Paste All
-            </div>
-            <div
-              style={menuItemStyles}
-              onClick={() => handlePasteSpecial('values')}
-              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = 'transparent';
-              }}
-            >
-              Paste Values Only
-            </div>
-            <div
-              style={menuItemStyles}
-              onClick={() => handlePasteSpecial('formulas')}
-              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = 'transparent';
-              }}
-            >
-              Paste Formulas
-            </div>
-            <div
-              style={menuItemStyles}
-              onClick={() => handlePasteSpecial('formats')}
-              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                (e.target as HTMLElement).style.backgroundColor = 'transparent';
-              }}
-            >
-              Paste Formats Only
-            </div>
+              {(["all", "values", "formulas", "formats"] as const).map(
+                (option) => (
+                  <div
+                    key={option}
+                    className="cs-ribbon-popover-item"
+                    role="menuitem"
+                    onClick={() => handlePasteSpecial(option)}
+                  >
+                    {option === "all" && "Paste All"}
+                    {option === "values" && "Paste Values Only"}
+                    {option === "formulas" && "Paste Formulas"}
+                    {option === "formats" && "Paste Formats Only"}
+                  </div>
+                ),
+              )}
+            </RibbonPopoverPanel>
           </div>
-        )}
+
+          <div className="home-clipboard-stack">
+            <button
+              type="button"
+              className="home-clipboard-hit home-clipboard-icon-btn"
+              onClick={handleCut}
+              disabled={selectedCells.length === 0}
+              title="Cut (Ctrl+X)"
+              aria-label="Cut"
+            >
+              <CutIcon />
+            </button>
+
+            <div className="home-clipboard-copy-split" ref={copyMenuRef}>
+              <button
+                type="button"
+                className="home-clipboard-hit home-clipboard-icon-btn home-clipboard-copy-main"
+                onClick={handleCopy}
+                disabled={selectedCells.length === 0}
+                title="Copy (Ctrl+C)"
+                aria-label="Copy"
+              >
+                <CopyIcon />
+              </button>
+              <button
+                type="button"
+                className="home-clipboard-hit home-clipboard-copy-chevron"
+                onClick={() => setShowCopyMenu((open) => !open)}
+                disabled={selectedCells.length === 0}
+                aria-expanded={showCopyMenu}
+                aria-label="Copy options"
+                title="Copy options"
+              >
+                <span className="home-clipboard-chevron" aria-hidden>
+                  ▼
+                </span>
+              </button>
+
+              <RibbonPopoverPanel
+                open={showCopyMenu}
+                anchorRef={copyMenuRef}
+                style={{ minWidth: 160 }}
+              >
+                <div
+                  className="cs-ribbon-popover-item"
+                  role="menuitem"
+                  onClick={handleCopy}
+                >
+                  Copy
+                </div>
+              </RibbonPopoverPanel>
+            </div>
+
+            <button
+              type="button"
+              className={`home-clipboard-hit home-clipboard-icon-btn${formatPainterActive ? " active" : ""}`}
+              onClick={handleFormatPainterClick}
+              onDoubleClick={handleFormatPainterDoubleClick}
+              disabled={selectedCells.length === 0}
+              title="Format Painter"
+              aria-label="Format Painter"
+            >
+              <FormatPainterIcon />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Row 2: Cut, Copy, Format Painter */}
-      <div style={buttonRowStyles}>
-        <button
-          className="cs-custom-group-button"
-          onClick={handleCut}
-          disabled={selectedCells.length === 0}
-          title="Cut (Ctrl+X)"
-        >
-          <span style={iconStyles}>✂️</span>
-          Cut
-        </button>
-        
-        <button
-          className="cs-custom-group-button"
-          onClick={handleCopy}
-          disabled={selectedCells.length === 0}
-          title="Copy (Ctrl+C)"
-        >
-          <span style={iconStyles}>📄</span>
-          Copy
-        </button>
-        
-        <button
-          className="cs-custom-group-button"
-          style={{
-            backgroundColor: formatPainterActive ? '#e3f2fd' : undefined,
-            borderColor: formatPainterActive ? '#2196f3' : undefined,
-          }}
-          onClick={handleFormatPainterClick}
-          onDoubleClick={handleFormatPainterDoubleClick}
-          disabled={selectedCells.length === 0}
-          title="Format Painter - Click once for single use, double-click to stay active"
-        >
-          <span style={iconStyles}>🖌️</span>
-          Painter
-        </button>
+      <div className="home-group-caption home-clipboard-caption">
+        <span className="home-clipboard-caption-text">Clipboard</span>
       </div>
-      </div>
-
-      <div style={labelStyles}>Clipboard</div>
     </div>
   );
 };

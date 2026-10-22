@@ -5,12 +5,12 @@
  * Groups: Macros | Add-ins | XML
  */
 
-import React from 'react';
-import type { Workbook, Address } from '@cyber-sheet/core';
-import { MacrosGroup } from './MacrosGroup';
-import { AddinsGroup } from './AddinsGroup';
-import { XMLGroup } from './XMLGroup';
-import '../ribbon.css';
+import React from "react";
+import type { Workbook, Address } from "@cyber-sheet/core";
+import { MacrosGroup } from "./MacrosGroup";
+import { AddinsGroup } from "./AddinsGroup";
+import { XMLGroup } from "./XMLGroup";
+import "../ribbon.css";
 
 interface AutomateTabProps {
   workbook: Workbook;
