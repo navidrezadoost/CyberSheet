@@ -63,6 +63,6 @@
     "jest-environment-jsdom": "^30.5.2",
     "ts-jest": "^29.4.9",
     "typescript": "^6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   }
 }
