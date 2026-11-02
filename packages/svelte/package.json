@@ -30,7 +30,7 @@
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/svelte": "^5.4.2",
     "jest-axe": "^11.0.0",
-    "svelte": "^5.57.2",
+    "svelte": "^5.57.3",
     "vitest": "^5.0.5"
   },
   "dependencies": {
