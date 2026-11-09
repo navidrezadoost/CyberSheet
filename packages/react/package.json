@@ -48,7 +48,7 @@
     "react-dom": ">=17"
   },
   "dependencies": {
-    "@fluentui/react-icons": "^2.0.337",
+    "@fluentui/react-icons": "^2.0.345",
     "@cyber-sheet/icons": "*",
     "@cyber-sheet/cf-ui-core": "*",
     "@cyber-sheet/io-xlsx": "*"
