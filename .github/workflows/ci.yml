@@ -48,6 +48,11 @@ jobs:
           packages/core/__tests__/dependency-propagation-benchmark.test.ts
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Build packages required by browser fixtures
+        run: |
+          npm run build --workspace @cyber-sheet/core
+          npm run build --workspace @cyber-sheet/renderer-canvas
       
       - name: Run E2E tests
         run: npx playwright test --project=chromium
@@ -57,7 +62,9 @@ jobs:
         if: always()
         with:
           name: playwright-report-node-${{ matrix.node-version }}
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
 
   renderer-tests:
@@ -198,20 +205,28 @@ jobs:
       
       - name: Build all packages
         run: npm run build
+
+      - name: Build declared Core and Renderer entrypoints
+        run: |
+          npm run build --workspace @cyber-sheet/core
+          npm run build --workspace @cyber-sheet/renderer-canvas
       
       - name: Verify build outputs
         run: |
           echo "Checking build artifacts..."
-          test -f packages/core/dist/index.js || (echo "Core build failed" && exit 1)
-          test -f packages/renderer-canvas/dist/CanvasRenderer.js || (echo "Renderer build failed" && exit 1)
+          test -f packages/core/dist/esm/index.js || (echo "Core ESM entrypoint missing" && exit 1)
+          test -f packages/core/dist/index.d.ts || (echo "Core type entrypoint missing" && exit 1)
+          test -f packages/renderer-canvas/dist/src/index.js || (echo "Renderer browser entrypoint missing" && exit 1)
+          test -f packages/renderer-canvas/dist/src/index.d.ts || (echo "Renderer type entrypoint missing" && exit 1)
+          test -f packages/renderer-canvas/dist/node/index.js || (echo "Renderer Node entrypoint missing" && exit 1)
           test -f packages/react/dist/index.js || (echo "React wrapper build failed" && exit 1)
           echo "✓ All packages built successfully"
       
       - name: Check bundle sizes
         run: |
           echo "=== Bundle Sizes ==="
-          du -h packages/core/dist/index.js || echo "Core bundle not found"
-          du -h packages/renderer-canvas/dist/CanvasRenderer.js || echo "Renderer bundle not found"
+          du -h packages/core/dist/esm/index.js || echo "Core bundle not found"
+          du -h packages/renderer-canvas/dist/node/index.js || echo "Renderer Node bundle not found"
           echo "Note: Implement size limits in future PR"
 
   status-check:

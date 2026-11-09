@@ -1,8 +1,7 @@
-import { Worksheet } from "../../packages/core/src/worksheet";
-import { StyleCache } from "../../packages/core/src/StyleCache";
-import { adoptWorksheetByWorkbook } from "../../packages/core/src/worksheet";
+import { StyleCache, Workbook, Worksheet } from "@cyber-sheet/core";
 import { CanvasRenderer } from "../../packages/renderer-canvas/src/CanvasRenderer";
 
+const workbook = Workbook.create({ sheets: [{ name: "Base", rows: 1, cols: 1 }] });
 const worksheet = new Worksheet("BrowserHeatmapRetry", 1, 4);
 worksheet.setCellFormula({ row: 1, col: 1 }, "=700+77", 777);
 worksheet.setCellValue({ row: 1, col: 2 }, 12);
@@ -120,7 +119,7 @@ const snapshot = () => ({
       get() {
         colCountReads++;
         if (colCountReads === 2) {
-          adoptWorksheetByWorkbook(worksheet, "browser-heatmap-retry");
+          workbook.attachDevImportSheet(worksheet);
         }
         if (colCountReads === 3) throw failure;
         return originalColCount;
@@ -154,6 +153,7 @@ const snapshot = () => ({
   dispose: () => {
     renderer.dispose();
     eventSubscription.dispose();
+    workbook.dispose();
   },
 };
 

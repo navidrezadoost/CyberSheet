@@ -108,8 +108,12 @@ npx playwright test
 
 # Build verification
 npm run build
-test -f packages/core/dist/index.js && echo "✓ Core built"
-test -f packages/renderer-canvas/dist/CanvasRenderer.js && echo "✓ Renderer built"
+npm run build --workspace @cyber-sheet/core
+npm run build --workspace @cyber-sheet/renderer-canvas
+test -f packages/core/dist/esm/index.js && echo "✓ Core ESM entrypoint built"
+test -f packages/renderer-canvas/dist/src/index.js && echo "✓ Renderer browser entrypoint built"
+test -f packages/renderer-canvas/dist/src/index.d.ts && echo "✓ Renderer type entrypoint built"
+test -f packages/renderer-canvas/dist/node/index.js && echo "✓ Renderer Node entrypoint built"
 ```
 
 ## GitHub Actions Configuration
