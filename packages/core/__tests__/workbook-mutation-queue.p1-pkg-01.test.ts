@@ -1,6 +1,5 @@
 import {
   Workbook,
-  WorkbookMutationRollbackError,
   WorkbookOperationCancelledError,
   WorkbookRecoveryRequiredError,
   isInternedStyle,
@@ -289,7 +288,7 @@ describe('PKG-01 Workbook mutation queue and atomic cell-write transactions', ()
   });
 
   test('journal rollback uncertainty transitions to recovery-required', async () => {
-    const { workbook, raw, view } = fixture();
+    const { workbook, view } = fixture();
     const operationFailure = new Error('journal operation failure');
     const rollbackFailure = new Error('journal rollback failure');
     const hook = setWorkbookMutationTestHooks(workbook, {

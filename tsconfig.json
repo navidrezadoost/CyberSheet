@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/renderer-canvas" },
+    { "path": "packages/cf-ui-core" },
     { "path": "packages/react" },
     { "path": "packages/io-xlsx" }
   ]
