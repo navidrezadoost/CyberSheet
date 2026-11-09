@@ -1,0 +1,680 @@
+status	state	sha256	path
+ M	present	aaff32535dff0a1cd71d54249a13e2304854b19a61e33e5540cd48f4cc1354a5	README.md
+ M	present	9eeedfffa3c0c986a9c9b6282e707994aeb7eee56b37288e2eacc8ca8f768058	docs/engineering/CS-002D4-R1-implementation-dispositions.tsv
+ M	present	617df0ee9e6f4e326099a2b4d14ee9addff557d14bb029b774bae2c3531441eb	docs/engineering/CS-002D4-R1-implementation-reconciliation.md
+ M	present	eff3219b1a1806ee8b76d035329028e4a5424ed62d57d1fa53f4c1fb42ebe4f4	docs/engineering/CS-002D4-R1-open-flow-triage.md
+ M	present	d41d84f80288c945d14eb870c833c1800c95da1be59dc709e6e0e22d25099420	examples/conditional-formatting-demo.tsx
+ M	present	043d010018d86ca11a369494ab8e728e4aa3d97fa6d51cba013fd2c7664a2df9	examples/find-replace-demo.tsx
+ M	present	14d5bd7d6d3536c07be5ef2aa2c6aaa1479f550adbc29af7eccd08fbe9df2ff1	package-lock.json
+ M	present	3e72fce8e170f84846eae0ec48d780f807229063dae17b7f5b1bcc5019bdf0ff	package.json
+ M	present	939e6a4693403679c4650ac23bf6b336db43a589959e4b500573c8f929b46914	packages/core/__tests__/AlphaVantageDriver.test.ts
+ M	present	829508929a24c5ee894d69431414aad770ea621f3c9f4a7453d16181ed696f5b	packages/core/__tests__/CellComponentCommands.test.ts
+ M	present	c09e59c375cfd876849a78bcc387ba1c7f4d2e53d6d942fdc195da1ddeb02221	packages/core/__tests__/ClipboardService.test.ts
+ M	present	5ed60b907974a6b6a8b84b8c5b502e3046a09e735625079282743f5b1d313339	packages/core/__tests__/EventBus.test.ts
+ M	present	1402850b778e53458bba934daaae78bb8634aadea3b4b9645f029e3beb4f9ada	packages/core/__tests__/PasteCommand.test.ts
+ M	present	75aa84ae80ab309b22fa43cb8211659aaf03b393be8c365b73b556d643dd28f8	packages/core/__tests__/clear-cells-undo-redo.test.ts
+ M	present	f9ca48c856a50c656b833e409c0a93c4d3cc1c4d7cd1930aad02ba5274b2fbc4	packages/core/__tests__/dag-debug.test.ts
+ M	present	d27ec26d84664be4f1386bc6babc48ab644e362e3674dc1393e32f2afa52c67b	packages/core/__tests__/find-service-owner-boundary.test.ts
+ M	present	8787482083a6baff4f98729ce0755c926069b6ca2a00dde0dbc416b44c1d08d2	packages/core/__tests__/formatting-performance.test.ts
+ M	present	8566bf4589d7c8bd2d98145e6e0073a57212c309c77c9163e5cfe248bfec8c3a	packages/core/__tests__/functions/datetime-arithmetic.test.ts
+ M	present	1842fe45a2c5a7921dcfaa47f7d22fb980b7bbadfd4f3b586f374627ceb8eed2	packages/core/__tests__/merge-api.test.ts
+ M	present	2cc9806111beae5cf5a211785bbedb8169c7aa5317cb717e9b76cc83673a6a90	packages/core/__tests__/pivot-calculated-fields.test.ts
+ M	present	7a9359196813b4f2fda19c753391dfbd2c613d35c52d01ada51f00caf7eec653	packages/core/__tests__/pivot-formula-integration.test.ts
+ M	present	9743b82e90a0e04e680f6f25a4ddd8f1bd749808e7bafa840a81646e04a3bec0	packages/core/__tests__/pivot-invalidation.test.ts
+ M	present	c90b421d2eb564c2a515f4ac140e01f6345decd597df3e778c8c79735b180478	packages/core/__tests__/pivot-registry.test.ts
+ M	present	14ef0d7a0a66361018fc92bcfc67184f6219de39cc9e79b344c9e481ef87969b	packages/core/__tests__/pivot-snapshot-store.test.ts
+ M	present	0f24e9e34dffba78ee11106514fe21ca581cbbd012a80169c738e1e2c579ecdf	packages/core/__tests__/scheduler-composition.test.ts
+ M	present	a8fd72aa3e122a03679fe160301103fb99572308e8b1b0c3e2a21b1fc4cf3454	packages/core/__tests__/spill.test.ts
+ M	present	7b9c415976e5f025441b25644d09eac2a6f324b6d59dee3e95cd5174d583629f	packages/core/__tests__/workbook-owned-escape.test.ts
+ M	present	8403628fc2e7b09ac51acfdbb1516207b43b8b4d9e318565ce1b6988661e2067	packages/core/__tests__/worksheet-structure.test.ts
+ M	present	2200942b6f28030b915d5d7ccfc1f09e75bbc675ea54b9be77aa3a722c52696f	packages/core/src/ClipboardService.ts
+ M	present	384c52455fb13956fc7ea29ffd861409fa9c5b677d41b03ee697b61778301543	packages/core/src/ConditionalFormattingFormulaCompiler.ts
+ M	present	84cabcdae0bedc61cdbda9f6c5aa0514ae24d7bbacb7193d2100b1ef4ada83b7	packages/core/src/DeleteCellsCommand.ts
+ M	present	8f29061b9910d8496b746099320a8f6797bd07cf5c9a27035c612691c76d44fe	packages/core/src/EventBus.ts
+ M	present	35bc56dc5de6f09b43d7eb12804f14b78fbdc43e2927c8b42ee62d64c539aa42	packages/core/src/FormulaController.ts
+ M	present	4e21ff3859584751154de9d9ff028f51ff14faab858c9fa42a3d29a20b924e9e	packages/core/src/FormulaEngine.ts
+ M	present	9f2cd7ad0092fefecaca6a4d847e7235c40d43220edd0a13f398471712619b76	packages/core/src/GetPivotData.ts
+ M	present	51f572e1175afc1bad9b2dd5efa3b888bd41532caae473020ab22d2b7107cc32	packages/core/src/PasteCommand.ts
+ M	present	9313517428946aab839fa59a13a08659f796e7e021a4d9b006cb762a3c93dfd5	packages/core/src/PivotAnchorIndex.ts
+ M	present	f98c5a4234d300fe27b23a8c1ecca52d79279400d13fc029cdb5ae7ce71348e4	packages/core/src/PivotCalculatedFields.ts
+ M	present	fcd7791138d8ec10a29fc08173a4be35d79e56127425426e52256af3cd265c30	packages/core/src/PivotEngine.ts
+ M	present	62e9a338ce75643818c035e8db6d42b80edc9fbf138bf5fca67cbf52509e7bd6	packages/core/src/PivotGroupStateStore.ts
+ M	present	fd14f9fdcbc6e2a40e7095a8544779ee0d10b928dbef7e9dd36f957023774ae1	packages/core/src/PivotRecomputeEngine.ts
+ M	present	84dc678b3b1bb3f5b46fa4285f0455a15fce4686a27b3bb23ecd9cd9c1fbafa1	packages/core/src/PivotSnapshotStore.ts
+ M	present	dfa84c8278cbbbdad845ab5476123c1013b539a470402d81dc436c2a993f58a7	packages/core/src/PivotSnapshotTransformer.ts
+ M	present	5a66ee3ff5167baba9acd3151a763ba68279273c7d0af6de9c446d27bf11c3ef	packages/core/src/WorkbookSheetView.ts
+ M	present	4d149c2c2c0f2df772eae57af7687c2b5c39ac84f64dca8af3de81ea408325a0	packages/core/src/__tests__/phase36a-forced-proof.test.ts
+ M	present	381c0fd848bf1933e918e039a58d0885f86e2fb444442d90a1ab29d906ba5b94	packages/core/src/commands/DataCommands.ts
+ M	present	a5918a4bd224071c7c7d2388e096e2af02fa1a0996570453067ea41d5b612c21	packages/core/src/dag/DependencyGraph.ts
+ M	present	2ad94e5ca0e598ac441ab34549867653edd45fc039836575c0f4d2ae8ff9ccd5	packages/core/src/events.ts
+ M	present	726807407b7d69e6ee30aa2b3d3bd9b9e66c87d55e941ff6601c9625e89f8087	packages/core/src/experimental/WorkbookCalculationPrototype.ts
+ M	present	e7c672b033f647e6c5d81fb0eb3e8f8874327be1c841dd4a5842ccca67b53f62	packages/core/src/index.ts
+ M	present	546afcfb2138f2ee744158f43a756889ff11136b3c36274e149184b652d5939d	packages/core/src/sdk/SpreadsheetSDK.ts
+ M	present	d400e908ea6e03cfd9ec462a2675a2ae73bcdf2ed3572daa252e44cb539a682c	packages/core/src/search/FindService.ts
+ M	present	ca8e48b9ca9fccfd4a3c69098fc9a73b8334656ef1edf93430eb4c0f1321f12d	packages/core/src/workbook-access-types.ts
+ M	present	d324f20bf03704bbde9fa3b4fb75f187fa70de032c99b6c4bd3e4814b54e0bda	packages/core/src/workbook.ts
+ M	present	a3afbfecc0a5ab287d6f5abbc3b74351853b19bd036b204c449aefe9cd0f8d3b	packages/core/src/worksheet.ts
+ M	present	f9495b15c141e6d41aac84c60517785b352836b32f6ac6613929993506cd0b3f	packages/core/test/DifferentialCorrectness.test.ts
+ M	present	248ad61e9143759f4d30aea9f0243dba0a0e06d591e30ef09686e79c522e40dc	packages/core/test/FuzzingWithShrinking.test.ts
+ M	present	84102a4aaa9cc02747ee0848f974eb9f9e0a430ac1e27d9d1ea5980c1c4dee61	packages/core/test/InsertColumn.debug.test.ts
+ M	present	877bcbc771c41568d99e0dbdb463d128880ffb80b52be1b057d6b2e4d3de697d	packages/core/test/InsertDeleteColumn.test.ts
+ M	present	2369bb4945f653e6ad6f9c427fba18f82a8e49b6b6b7703921eb55ed372679bc	packages/core/test/MetamorphicProperties.test.ts
+ M	present	41915c68efadc7910a1dd272897a6a76af4200e0c5ff1c2cbe5c15cb0563fa8c	packages/core/test/UndoCoordinateDrift.test.ts
+ M	present	b10a5d997e6ea9bd03435864bec20a927971782eb0bd7ff3cf11b5bf3b2090a1	packages/core/test/temporal-identity-stability.test.ts
+ M	present	b88e770a74507ca5b67e68e8f7d0ebf1f09b11e6ffa5db1af887026c8d97ff89	packages/io-xlsx/src/export.ts
+ M	present	11e1e67d6f08048f7232702355352a8e3a5ff5baa877e16736b942f2799f259e	packages/io-xlsx/src/index.ts
+ M	present	2253baa95d4dbc661e98769c757456263ce1636d48c51def63e2e3af1a1c054e	packages/io-xlsx/test/round-trip-symmetry.test.ts
+ M	present	25065eb800e89b4dabb1fd4d1e0b84db9a7396a2cf8ac24cb2b3826a7e2a66b5	packages/react/jest.config.cjs
+ M	present	3b9ce22d91be38de4cbda69547f68a7c2d445cd76cd6fb1b87beeb2e2c1ef27d	packages/react/package.json
+ M	present	b12c188c6a080d5beb733a5c024bcbfd5b14064c56c6b2cdd210dc20c8e0ea6e	packages/react/src/CyberSheet.tsx
+ M	present	60e54c7c2938a3bf21dbad934c85ad8125aff3ee8cb882ea558725e2f2641ed0	packages/react/src/__tests__/clipboard-copy-owner-flow.r1.test.ts
+ M	present	e6a4d8f05f8de376483f1a830a52952f0ff6569ba90c3a054170cb1fca1cc62d	packages/react/src/components/DrawingCanvas.tsx
+ M	present	55335c403faa107ba14178190f99225417b18fea555788fd915de7ebf22a0f2c	packages/react/src/components/ExcelApp.tsx
+ M	present	c93924ab12cc5c751f7317276aa912412a6afa232515397974125e89e59c06fc	packages/react/src/components/backstage/BackstageContainer.tsx
+ M	present	730b2aae243fc3c2c9d57680181a5b9297c79df4fb83ebddbd1ee349ffda9307	packages/react/src/components/backstage/panels/CreateCopyPanel.tsx
+ M	present	6faa56429a09ad2728a1aa7da03422cd05edf41c29a3c2641c8abc3b756e3fc7	packages/react/src/components/backstage/panels/ExportPanel.tsx
+ M	present	340fa0ea571d3f61b3ee17611f2c2dd36477d82f0b41298e31e1c0d0c25a0afb	packages/react/src/components/ribbon/ClipboardGroup.tsx
+ M	present	f30667daf2119916976250cabce87ff39a8d8a1fc61a8ff82d614095608756f6	packages/react/src/components/ribbon/ExcelRibbon.tsx
+ M	present	f5e3bd7a437fb07ebd83f00df94da45624401a56f0b3a3a31c85c474af79c681	packages/react/src/components/ribbon/data/DataToolsGroup.tsx
+ M	present	1a3351820718ae51d8ca24d9255236475f7083d1f7e947fb4acbba6a91cfa58d	packages/react/src/components/ribbon/data/GetTransformDataGroup.tsx
+ M	present	d42a04e5ba88b34b80097f92662c90975aafb910441ef4ce4832e3159fae2bfa	packages/react/src/components/ribbon/data/OutlineGroup.tsx
+ M	present	83ed98b96fb1cd40d6840f6c0b86d9432b6e5ad9417631bda2616183cedbc0bb	packages/react/src/components/ribbon/data/SortFilterGroup.tsx
+ M	present	df62484b08e501dc25cc679a3b1252a0a9d5dabeb5690ec06adc4e712abdb796	packages/react/src/customComponents/CustomCellOverlay.tsx
+ M	present	09e98639707e2b51c5d5343b1d3e87042ff14ca7746b0b7ce1497505f2f22d61	packages/react/src/utils/clipboardOperations.ts
+ M	present	bee4dd69219a8927661c949ce138766c88f082198f1d1caff7c051d8506878af	packages/react/src/utils/insertPivotTable.ts
+ M	present	846b94e8a36e7bdfe0e047da58b260d617a8dd75b890305ffdb9a2139bdf2420	packages/react/src/utils/workbookSheetAccess.ts
+ M	present	6040148da21a807619359c7ebcb5240498834b7d0e078938b163728ff4560eea	packages/react/tsconfig.json
+ M	present	bb9cc0a14d081e1c4b17f8bcb5e33c64b54d1e2a6ea5f5e20df7a3a0369299af	packages/renderer-canvas/__tests__/data-manager-row-zero.test.ts
+ M	present	a70df9329528e5b90174e8f88fad264523c353c080edd1a019e5c2c0ae3fc38a	packages/renderer-canvas/__tests__/editing-manager-clipboard-owner-boundary.test.ts
+ M	present	e44a872371ec2b01874fbe48f61944fd49f2da5d1543faf57c5ab86d87449fff	packages/renderer-canvas/__tests__/editing-manager-cut-undo-owner-boundary.test.ts
+ M	present	f5adfb04d52a3d1bc0f459a2903f560cfe7eeb5da16ed49b6b60d7836a8828a3	packages/renderer-canvas/__tests__/editing-manager-fill-branches-owner-boundary.test.ts
+ M	present	5a59faede3478ff3dd52edc1b87749a18ce24cb55265a6e366f11d8fd6bf0f70	packages/renderer-canvas/__tests__/editing-manager-paste-owner-boundary.test.ts
+ M	present	a72297ee4d9ff4f273afc60a28ab98a1d170dfae488be803b3b781f9ea265d5a	packages/renderer-canvas/__tests__/editing-manager-paste-undo-owner-boundary.test.ts
+ M	present	f69c116c83561027005a999fc3d213477336e2f232b30dfa62650727802b068b	packages/renderer-canvas/__tests__/export-plugin-owner-boundary.test.ts
+ M	present	57d2668219837bae26d2f71ffb219e06fd1adb22ee9594676c272d4483e5d13f	packages/renderer-canvas/__tests__/renderer.test.ts
+ M	present	4941f5b36332030f9a7a8de852bff13c7bb341320e7a93c5076ea799ebdfe68c	packages/renderer-canvas/package.json
+ M	present	699c1ca779eeb8d11969194b3af3baa7594b51ac5aab5eeb0495e8e4cac08688	packages/renderer-canvas/src/AdvancedExportEngine.ts
+ M	present	0ef737707bd12aa3e8c70d5b2026a0d9d1c9ded3801494ac22588b72d5f7e059	packages/renderer-canvas/src/CanvasRenderer.ts
+ M	present	80f2ba1c89ddf05404c7e6864c81b25f1d23752456bdabe9618e5f8532bbd8a4	packages/renderer-canvas/src/DataManager.ts
+ M	present	2e7f2722ffea50f07e11727db6b0f9f96aaf0746db9aaef055849e8a849c6704	packages/renderer-canvas/src/EditingManager.ts
+ M	present	5a9d6b219ca7739250eaa8d3afaae228ddf4a1be213600dabfd9f45f75a4688b	packages/renderer-canvas/src/ExportPlugin.ts
+ D	deleted-or-unavailable		packages/test-utils/jest.config.js
+ M	present	69be08357bb9be9344d66593ba136000d4eb7322677ff11b2d9308396527eb2a	packages/test-utils/package.json
+ M	present	d0b1f32c5c168956ba8fc396dfd0df4df5f7fbe24f6565cd4dc28f7fed4fa338	packages/test-utils/src/vanilla/CFPresetPicker.ts
+ M	present	1af5e8cc6bf197d79e5516a541f3ec893ca1a167151e4d3c9409aa32fe973c92	packages/test-utils/src/vanilla/__tests__/CFPresetPicker.a11y.test.ts
+ M	present	570dc2e12fe631be04e348ff55f185278a194dc48807638ade48fb3ee3f00b56	playwright-report/index.html
+ M	present	fc0ea246b30e1bc9e058ab880f2a45869a7b6bf3dc6cd45428f9c64e663a74ac	playwright.config.ts
+ D	deleted-or-unavailable		test-results/.last-run.json
+ M	present	6d1d7c0cf3c4890a68654463bd4f55f16f5c282a5e75366154608090845c7824	vite.config.ts
+??	present	a5289ea71ae049fbac88a6bea5d6865ffc80c646d58c1f564197561f8ede4463	docs/engineering/CS-002D4-R1-PKG-01B-benchmark-raw.json
+??	present	2b55e167ba30c06c257d9bc25021de37b778df157144bf6fc3d299866ff70d2f	docs/engineering/CS-002D4-R1-PKG-01B-correctness-audit.md
+??	present	9842aeee5c6f2d180f78680d81dfeb3b26af327b4701850371001742550eca8e	docs/engineering/CS-002D4-R1-PKG-01B-next-step-recommendation.md
+??	present	e48f670759300dd681d112a68620e2f31592f7c3fd60c12351de94044ffca6b8	docs/engineering/CS-002D4-R1-PKG-01B-performance-report.md
+??	present	0f2ea3df02f8a958a6a145968f119bc1c15e614ff6611a42fdf35a76d9db9ea3	docs/engineering/CS-002D4-R1-PKG-01C-benchmark-raw.json
+??	present	8a50edd7dd3dfebe3be61618d64e6690e26918800a538cdd7f85ce8de135e6aa	docs/engineering/CS-002D4-R1-PKG-01C-equivalence-report.md
+??	present	e819586410bd1da5d7b7bb160a4beb71ec620712b48db010198953c0ec7fd210	docs/engineering/CS-002D4-R1-PKG-01C-journal-design.md
+??	present	57725acb76397950c448640697b5d8c836572c994665bae5d070c933a44fa0fc	docs/engineering/CS-002D4-R1-PKG-01C-next-step-recommendation.md
+??	present	87064aa87ac30223f01c4a5c20563120c743a73139df42250931b593d045e3ef	docs/engineering/CS-002D4-R1-PKG-01C-performance-report.md
+??	present	b1f89f4bd8d4fe06721778d61589605cf6c54567588dc02fd825350003bf96cb	docs/engineering/CS-002D4-R1-PKG-01D-adversarial-performance.md
+??	present	3b5b354d33b35b1ae2d7ffde868af5e8e758237529064edb9dbb34a6641f0334	docs/engineering/CS-002D4-R1-PKG-01D-benchmark-raw.json
+??	present	be0259ddbcf4a52424bd2ec3706d8c65259469dcdeeabf43f306a4adeb245e85	docs/engineering/CS-002D4-R1-PKG-01D-cutover-readiness.md
+??	present	6ea014277a0edbea0809ec733bc8082f6ee89c0365c8b5666e8f8341bc720545	docs/engineering/CS-002D4-R1-PKG-01D-exact-state-equivalence.md
+??	present	faad198b2b140d841733b7a9209d58bd1b462b6a54d98222550e9fd2ab365493	docs/engineering/CS-002D4-R1-PKG-01D-resource-ownership.md
+??	present	5d00836b07a51ff705094eef57ebd09ab20c03122158342b383727bbcb9ffaca	docs/engineering/CS-002D4-R1-PKG-01E-compatibility-review.md
+??	present	24a062e70d8c983df3739e4e0e318db11b44cef1d86b45b96f8857db8e76e46b	docs/engineering/CS-002D4-R1-PKG-01E-formula-atomicity.md
+??	present	52e041c30502a78dac5002655284c827a3cd4a427d57464f5a13072497702e2d	docs/engineering/CS-002D4-R1-PKG-01E-verification-report.md
+??	present	36b9e7428e8321c277e1575e5ed5ecab503137213c5ce84adf5aca52185cc5c6	docs/engineering/CS-002D4-R1-PKG-01F-commit-boundary.md
+??	present	db1e3df17291d0fe21a5b16d53aba5fbdc5aec4b42120fa41e4feb8771385b51	docs/engineering/CS-002D4-R1-PKG-01F-compatibility-review.md
+??	present	e5e65bbae1e23d50cf7b4dd8e4f9e066c3f64becd854a9a4fe4b472530abfa5f	docs/engineering/CS-002D4-R1-PKG-01F-cutover-decision.md
+??	present	03051825c8e2802931dbcf64842ccbbade99c491fad8e6d0e90749f225ef9e1f	docs/engineering/CS-002D4-R1-PKG-01F-verification.md
+??	present	2ebc927bf20f59a5284a07e03e575c684d30b3acf9c61f87db5fdb947f8543bd	docs/engineering/CS-002D4-R1-PKG-01G-cutover-recommendation.md
+??	present	00c7a342da09dd24c88a4a158fdc48e4622f2ee44d5f0f453f0443c9927602dc	docs/engineering/CS-002D4-R1-PKG-01G-deadlock-verification.md
+??	present	b2661213310b1572d592a271c146e5e5849767208a23ef52491615e6971ccc7c	docs/engineering/CS-002D4-R1-PKG-01G-formula-performance-raw.json
+??	present	bd5426522a99d3960713a63233596c024289fe3f0f7ec5f152c8372f9d282495	docs/engineering/CS-002D4-R1-PKG-01G-formula-performance.md
+??	present	907ac9ceb12c34e4be6e260fd99e2dab1a7b23a6ed409869d98263e5bb8ba00b	docs/engineering/CS-002D4-R1-PKG-01G-reentrancy-contract.md
+??	present	0fb4aca4d0b3bdbb1d105622054ef26635b3febc622ffe835e9bab5fcea4bbeb	docs/engineering/CS-002D4-R1-PKG-01H-benchmark-raw.json
+??	present	d7b7c220a5b236bda1d683e2a4fdbbd2c06169fa9d1595d2067126253bc58265	docs/engineering/CS-002D4-R1-PKG-01H-cutover-qualification.md
+??	present	f48255831ea1a2c4c75c4848f586fbf001d3b33160a1ff06adecfe048e934f8c	docs/engineering/CS-002D4-R1-PKG-01H-equivalence-and-integration.md
+??	present	ecf9f496abce8f9c43692dfd55a1f09628693313569f15b04e485f9a3d7d15a0	docs/engineering/CS-002D4-R1-PKG-01H-performance-verification.md
+??	present	a73577458d98d8302af31d3ffe58515ce0e735bc4a207b999340b8cf197375a9	docs/engineering/CS-002D4-R1-PKG-01H-risk-classification.md
+??	present	f3fca2441e123f3a30671a3aad4fb9b71a5e8496f861dc7570adb692bfd81e8a	docs/engineering/CS-002D4-R1-PKG-01I-benchmark-raw.json
+??	present	fb6a73d09682744df078f111d35fe7457ae6d78457140dfccfe45d4fb6c69d58	docs/engineering/CS-002D4-R1-PKG-01I-cutover-implementation.md
+??	present	9ad34f815978b293fc424dc974843d1cbc8ec13fd1adc0e7038dcd5ebe2a5226	docs/engineering/CS-002D4-R1-PKG-01I-final-disposition.md
+??	present	2476bb7f17538956b1125a02b838b7933295b4822fd1576705a5d7f9e30f5c86	docs/engineering/CS-002D4-R1-PKG-01I-production-verification.md
+??	present	1f286a2961cde97663989bf64dfe55c89b1af3d4c8bb43a92440e53fd5f5977e	docs/engineering/CS-002D4-R1-PKG-01I-revert-plan.md
+??	present	b22a96a8ab24cb9916b79276e084833a8e41729ca0d6f23f2a0b75631c2080ca	docs/engineering/CS-002D4-R1-PKG-01J-core-failure-matrix.md
+??	present	6521c24aa3fc2c7ae3f8655c13bc8a777c951272b7864f1a96f4cdfebabd1575	docs/engineering/CS-002D4-R1-PKG-01J-pkg-02-readiness.md
+??	present	e02ef0c7a14e87d158ead35887dfa07083d33f34fb15b0b0caacfd16b8fca494	docs/engineering/CS-002D4-R1-PKG-01J-strategy-attribution.md
+??	present	96c527c2be193cb102d49977dc0bcb23547fd74648b755a6d6202272717c85ef	docs/engineering/CS-002D4-R1-PKG-01J-verification.md
+??	present	a6b89cdc3ccd8bfc8c054e5fafcb4dc84ed9ba1347eb2597a3e7bef938969b6c	docs/engineering/CS-002D4-R1-PKG-01K-core-sidecar-sha256.txt
+??	present	843ca11f22303927acc0880836eb10d2d0f0fbc1e7857e8a97d81957660f80f1	docs/engineering/CS-002D4-R1-PKG-01K-focused-verification-output.txt
+??	present	c8c8bdb60e2698151dbfea3d794e02ceec65b3d0488a1d35865499a4c1b73855	docs/engineering/CS-002D4-R1-PKG-01K-implementation-and-verification.md
+??	present	242694add8479bc886e027bdeb242fa23fde5486b06a1974e418bd1cc9bc10ca	docs/engineering/CS-002D4-R1-PKG-01K-pkg-02-gate.md
+??	present	9db564c8c2a3a4c0b7f8870e1c5005816f8d806899dd994c386e24790fd17e9c	docs/engineering/CS-002D4-R1-PKG-01K-prerequisite-matrix.md
+??	present	3e760c09d6329a8a63a6b43e3ae0428333d8bed318ba3ef85818099addc6700e	docs/engineering/CS-002D4-R1-PKG-02A-D2-11-closure.md
+??	present	329628b8866d0d31e42d8ef525369865be5c4baeb0710a228728c79a8421437d	docs/engineering/CS-002D4-R1-PKG-02A-implementation.md
+??	present	1d8052cb4fa80223b317c14bcaabdfb414b1bf8e8ae053cc581d1c192bb2366c	docs/engineering/CS-002D4-R1-PKG-02A-verification.md
+??	present	465a1b9c3c22588b5b3e633f5b49bdb466091b3532b75c25550f68813b13c321	docs/engineering/CS-002D4-R1-PKG-02B-D2-11-closure.md
+??	present	9c7529d62c2a634b0c85662344346be2132cdb08f1075501405ce09a66969fa7	docs/engineering/CS-002D4-R1-PKG-02B-S-D2-11-side-effect-matrix.md
+??	present	c2f4c165c0207a2651f8e7a4771c33daee5f0df16eac9d58b07cb680956c8134	docs/engineering/CS-002D4-R1-PKG-02B-S-acceptance-test-plan.md
+??	present	f6df8b91bdb6c5b5ef7e667d9c501ee777dd30d0d719fef86ebc7ae38063bc1d	docs/engineering/CS-002D4-R1-PKG-02B-S-implementation-readiness.md
+??	present	5bf4f779b656661f5866d7bba3dec06b3c87a8b7d7d452e0705cac32065935a2	docs/engineering/CS-002D4-R1-PKG-02B-S-operation-scope.md
+??	present	f4d48fb800ed77a80145a411ad50da9e5c4b87291cf9acafb4c34842e6ba9478	docs/engineering/CS-002D4-R1-PKG-02B-implementation.md
+??	present	e3c356732ac38dcc06cfce583f60d31d03f47a4d06a7ab4bb7798333008faa6a	docs/engineering/CS-002D4-R1-PKG-02B-verification.md
+??	present	fc30fe704f19ebe399f589a94a3b31458a8061636e20114e9f5a9e7e84635bf6	docs/engineering/CS-002D4-R1-PKG-02C-benchmark-output.txt
+??	present	578d2511403a2e6a991dc3e3ee6ca811e19b9fac376af5c8eb885cebfdc1244b	docs/engineering/CS-002D4-R1-PKG-02C-benchmark-raw.json
+??	present	1645b516751ba01be8421eb3b8038afd7c9c3e3a97ec668cbf12e0587786d24f	docs/engineering/CS-002D4-R1-PKG-02C-differential-verification.md
+??	present	8054253aa5f661aee7d407d98975984d4270045e4e9725eab941b69f8c0fa59d	docs/engineering/CS-002D4-R1-PKG-02C-focused-verification-output.txt
+??	present	dce39ee836e8816b93dbc07be6a98f45cf3e68da591c2c8235b1e333eee9a55a	docs/engineering/CS-002D4-R1-PKG-02C-performance-and-resources.md
+??	present	600505c228727975116d7218eacdbf02b08f18903edf3c0fcbc6a512b41e6f86	docs/engineering/CS-002D4-R1-PKG-02C-pivot-adjacent-classification-output.txt
+??	present	0d7753588ca8ef22c29ab2b4dac031ceb2203ad0f81e7deb74df1256e9442c95	docs/engineering/CS-002D4-R1-PKG-02C-readiness.md
+??	present	a7ae21d286e2c077cf9954681ccfd8ae790a8d315679e043863adc82c777ca9c	docs/engineering/CS-002D4-R1-PKG-02C-state-ownership-audit.md
+??	present	a88e355e3501ad46f798a2041a7dcb5ae96ad9dd439d640dfeaeb74f92d3876d	docs/engineering/CS-002D4-R1-PKG-02D-bridge-compatibility.md
+??	present	241a36bae48cdb63894180a5dacfcef34bb596cbd04c8c7dcb95fc3b5642b6c6	docs/engineering/CS-002D4-R1-PKG-02D-event-contract-matrix.md
+??	present	da9a850f9cc7875d06518c988a051cb867c266aa662428dfe147fdb8e2402183	docs/engineering/CS-002D4-R1-PKG-02D-next-gate.md
+??	present	c1e25e0cd3c6e5fbeb79ebebec1223c394f1fe658430d562e6ba0d188992d88e	docs/engineering/CS-002D4-R1-PKG-02D-verification.md
+??	present	fc5c6999d05ca3e86f714db267ac26ce1f23c1447871c9f069c9c9a890193609	docs/engineering/CS-002D4-R1-PKG-02E-D5-disposition.md
+??	present	ba745a652d064c98f30f3e8bb3f41a4ea391cc15fe4d6ec007183fd0db370320	docs/engineering/CS-002D4-R1-PKG-02E-S-dimension-event-contract.md
+??	present	7a24a9448cd98d6711913333a3871ed0275efef9cf49a9805394a8d6732efd0f	docs/engineering/CS-002D4-R1-PKG-02E-S-disposal-lifecycle.md
+??	present	625a441b31e6348456234f66c7da30c166a3b06529856de85d0967d0d36358ac	docs/engineering/CS-002D4-R1-PKG-02E-S-event-provenance-and-bridge-design.md
+??	present	646daecfee98cb03b76ddba6a494145dcc6f2939f0516b7ad511db106d1bd01d	docs/engineering/CS-002D4-R1-PKG-02E-S-implementation-readiness.md
+??	present	b5ff004d2fe756c46384272f1ae0012b5bba846323e3f818f5620f3389d6ddb2	docs/engineering/CS-002D4-R1-PKG-02E-event-compatibility.md
+??	present	d834cffb38df5dcc3468bafdc43005506c2d646359ac99016297d7de814542b1	docs/engineering/CS-002D4-R1-PKG-02E-implementation.md
+??	present	dfda731a7679bad12effc889455460867fa75ec47213f371d2499908bd7ed8af	docs/engineering/CS-002D4-R1-PKG-02E-verification.md
+??	present	00b8393564e8b6e47bd3379e1c437b67ea384bf576f2935bcd1e3bca72661ede	docs/engineering/CS-002D4-R1-PKG-02F-compatibility.md
+??	present	9fe605492553534cef7833ecbf9172fd66b76c911e735c7608c3efd95953b069	docs/engineering/CS-002D4-R1-PKG-02F-eventbus-reentrancy.md
+??	present	1587068ac42065e7d974552e78a3484ccbf87856b809049d8b256e6b4014d808	docs/engineering/CS-002D4-R1-PKG-02F-final-disposition.md
+??	present	453cd5d46e46daf14ee4f7125d9d4caf3ab179fe872fca63abfbfb6bbab43364	docs/engineering/CS-002D4-R1-PKG-02F-lifecycle-verification.md
+??	present	6a20a913e4a47ebb9bce0b75721dcec568faaf56ac6be66a9d9b9874b6ac76de	docs/engineering/CS-002D4-R1-PKG-02G-C-D5-01-decision-record.md
+??	present	6a9a7f41a2a9117617fedc695c1aeff5fc8776c40edc794722c8400597b9ff69	docs/engineering/CS-002D4-R1-PKG-02G-C-compatibility-verification.md
+??	present	f172a4b177a135f20c66047d11050a9607efa114ea80711e2d8898c3ef9711a8	docs/engineering/CS-002D4-R1-PKG-02G-C-contract-disposition.md
+??	present	a6486fed0ea81d96261f670f172143dae3b4a0844ecfc3bf670bf374a9d9ec65	docs/engineering/CS-002D4-R1-PKG-02G-D-decision-record.md
+??	present	f39b2ee04adc6ccbc09cafcc4f046be8b195aca156e8fb9660e94db03c12d953	docs/engineering/CS-002D4-R1-PKG-02G-D-decision-submission.md
+??	present	6092477ae160b0841b6bc04a36a40e29854d0ef13dcbd41bb354592f6d27b366	docs/engineering/CS-002D4-R1-PKG-02G-D-final-disposition.md
+??	present	9a15b68e36bf6f0ae49b8e31d70c3d523bce0d118a9c3f5a252d04d0174aa41c	docs/engineering/CS-002D4-R1-PKG-02G-D-owner-authority.md
+??	present	00752dcefd60307c4d8b3b5a9d907845ed6cd90f3aaa9578969a253a21d90578	docs/engineering/CS-002D4-R1-PKG-02G-S-compatibility-test-plan.md
+??	present	ecfda73c95eed7fca71542be30bdf57ad2b8f697a5b9b91f938d512d11a3777e	docs/engineering/CS-002D4-R1-PKG-02G-S-contract-options.md
+??	present	47e3fbdb263b8957a529eb4948543590ce763ac6b3503ab21c0e9e326536ab4e	docs/engineering/CS-002D4-R1-PKG-02G-S-cross-level-order-matrix.md
+??	present	1ae80de1b597800165e3e315879edfbb2e9ed9330f92a5a2e18d34f504f87444	docs/engineering/CS-002D4-R1-PKG-02G-S-readiness.md
+??	present	c737444b275500c8d0e4eae37b7d5a7b8acaef55cc30ff8739cf8ce6bef29cb7	docs/engineering/CS-002D4-R1-PKG-02S-D2-11-side-effect-matrix.md
+??	present	a1088af2e5fb78e098b0de3090cab03466b9e3a06f3e38bb5031befd89294737	docs/engineering/CS-002D4-R1-PKG-02S-acceptance-test-plan.md
+??	present	192959d5e35bfbed1c413fc83b424e8cb54efbbe53bd2452871eba7d491b22f6	docs/engineering/CS-002D4-R1-PKG-02S-implementation-readiness.md
+??	present	078744d82a24e82c6c8456d51c5de3be7f77721a1d656f5f5b2e5317a54f51a2	docs/engineering/CS-002D4-R1-PKG-02S-operation-scope.md
+??	present	edcd8777bac0102cc4de3620da1c88a4912122f98c904f2e3b217efc09e5f914	docs/engineering/CS-002D4-R1-PKG-03A-D5-decision-bundle.md
+??	present	a19a4d9a12a810ea4414ea0419eb3c76e08794f811c9dc52a4df00f61c06e480	docs/engineering/CS-002D4-R1-PKG-03A-final-status.md
+??	present	c271b43c853a586f9d20476c513784beab7ceb00012f9202c73fcac329107747	docs/engineering/CS-002D4-R1-PKG-03A-governance-and-authority.md
+??	present	d2f531d6c1d415bbf9d58c0a71292ee31b31b1494ed25fe851a70539efe28147	docs/engineering/CS-002D4-R1-PKG-03B-D2-11-coverage-map.md
+??	present	f40f96f26a984d6567693e30816aa3f693d854f3d4f484f3190dba3137673099	docs/engineering/CS-002D4-R1-PKG-03B-next-operation-design.md
+??	present	28a2040247180dd279ae2e37a23c5e35c00bf0f5b449cf41b9138ab9739b0457	docs/engineering/CS-002D4-R1-PKG-03B-operation-priorities.md
+??	present	acb2215c1d0d1c0478c3ee3669b6c7555fde54d371b994fd7dd83520f0067a64	docs/engineering/CS-002D4-R1-PKG-03C-core-baseline-classification.md
+??	present	28e523a71288bae54705194032dc73b560c74bc300a7ab950bbf2e9cec1a1353	docs/engineering/CS-002D4-R1-PKG-03C-integration-verification.md
+??	present	492e8d201597f6a242db6d3d252aa0bffca140c16ab312053d4f2f9c82f08802	docs/engineering/CS-002D4-R1-PKG-03C-test-environment-reproducibility.md
+??	present	abcdd4c8aeb3839799c266f1ee97a06d2507a9754e0062249a5a3a4161c2b8d4	docs/engineering/CS-002D4-R1-PKG-03R-integrated-readiness.md
+??	present	f45b12942569b19b6e9a5b67e4c9feca209cc292b20299d108014ad735b0c3fd	docs/engineering/CS-002D4-R1-PKG-04A-comment-operation-contract.md
+??	present	8f855f191a6ef33d7e67319d63512eac9754d7500ddb9f8c2959f81c9b07ad6d	docs/engineering/CS-002D4-R1-PKG-04A-event-and-side-effect-matrix.md
+??	present	760f86af969b6e140762018eecf79b08b0ce77fcee7d6642beede7d49411d5ff	docs/engineering/CS-002D4-R1-PKG-04A-exact-state-and-rollback.md
+??	present	43fc04f2740225b27da7f4f71b78280acf5e6f10c361771cb681f39e44fd98b6	docs/engineering/CS-002D4-R1-PKG-04B-acceptance-test-matrix.md
+??	present	5bae3167496e4d830d0fdeaccaf414ed1ba7a3510050fe8aa1cc7f028886ee83	docs/engineering/CS-002D4-R1-PKG-04B-fixture-and-integration-evidence.md
+??	present	305e4bfe7091227c7940b18a1645a44d2695a3d9c82210733fda758c1f6e6ea7	docs/engineering/CS-002D4-R1-PKG-04B-verification.md
+??	present	5ae39e162d3a4c57ba33e4e3fea01f02ffeb7e7b6a350333826ca49e110f9d47	docs/engineering/CS-002D4-R1-PKG-04C-authorization-status.md
+??	present	c3f31a808ac6bbee4cf2e8b6bdea8a757d77d1bd5537c89165b3a3af05763057	docs/engineering/CS-002D4-R1-PKG-04C-consolidated-owner-decisions.md
+??	present	ec9cc532813529b92b47298a401600847e9ebd0d45f01234cc3bcecc890fb1d5	docs/engineering/CS-002D4-R1-PKG-04D-dependency-and-risk-register.md
+??	present	175f39bf7fc6cc19698d4674e08a1b4118050acafa2287f73f9728f2f6163d59	docs/engineering/CS-002D4-R1-PKG-04D-transaction-roadmap.md
+??	present	f8be027e3c01f3ec610a21c743b35cd2f36c110533eec8640a4b08156ed272ef	docs/engineering/CS-002D4-R1-PKG-04R-integrated-implementation-readiness.md
+??	present	3b9b37b5593a7c242069a4cc12ce2b873402cae685eaa018cbd780dbabc1c96e	docs/engineering/CS-002D4-R1-PKG-05A-comment-graph-domain.md
+??	present	925fdb199978b3efaa4c44bd420e3187a2bd8aff426cefe28ed7a22b44c9856d	docs/engineering/CS-002D4-R1-PKG-05A-exact-restoration-policy.md
+??	present	1bd1e8dd81fc53cc612350ccd948ebca1b6e82711708827631058711f1898a0f	docs/engineering/CS-002D4-R1-PKG-05B-comment-regression-evidence.md
+??	present	1fe5dfad554360490290aa2bca144100a37addcf8749ed1aa380c565bfc6c998	docs/engineering/CS-002D4-R1-PKG-05B-jest-attempts.txt
+??	present	76f8fff4abfcd51f0f64aa3c0162780c26d32e179085df490aa0c4192fea58db	docs/engineering/CS-002D4-R1-PKG-05B-jest-output.txt
+??	present	591ae9ccdee8644990ae863a69a8e64f78c98dc1df470f6beb0c7d055bf82edc	docs/engineering/CS-002D4-R1-PKG-05C-integration-and-authority.md
+??	present	2b3c4073287669602170dcfead30c39e17112699684631852f34d92ac3809900	docs/engineering/CS-002D4-R1-PKG-05R-integrated-readiness.md
+??	present	db2402521da0cb8adee0b5a2d8f4800cb58c8a16727dcb711980ff605d816ed3	docs/engineering/CS-002D4-R1-PKG-06A-comment-boundary-contract.md
+??	present	a5eb6076060874664e454e79b91b21208abec901339d9ccfcd8ff90de8ef5699	docs/engineering/CS-002D4-R1-PKG-06A-metadata-probe-evidence.md
+??	present	c35732df9b27213f4efcd19ed2b46d5ac1214ec9bfde4e227e21252c1eb13f91	docs/engineering/CS-002D4-R1-PKG-06B-executable-model-results.md
+??	present	e188a70d5b9175eaface5defc9cefa855bdc5af79b77d90d45a2c9ec381ba615	docs/engineering/CS-002D4-R1-PKG-06B-rollback-fault-matrix.md
+??	present	0757c68dfc3b1f6742255e4db0285e9ba40817946b35c7b41e3358dfe5f7d93b	docs/engineering/CS-002D4-R1-PKG-06C-governance-and-integration.md
+??	present	48a938272f17eaed302fc9bd9d4fed64e95e4a5b609253835e553f489a80e84d	docs/engineering/CS-002D4-R1-PKG-06C-jest-attempts.txt
+??	present	8e956bcac789b6aace93f72516ffb6bb73d9a0be322de126b157406748cdf88b	docs/engineering/CS-002D4-R1-PKG-06C-jest-output.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-06C-test-hygiene-output.txt
+??	present	dfae70c19a0fed21e271996ffdb8575414536784ac4ff63c3f9463073f2b2af1	docs/engineering/CS-002D4-R1-PKG-06C-typecheck-output.txt
+??	present	ae21227ea9009d7a8431d6b128e4718add64194703d14c21aa549083435fd7c8	docs/engineering/CS-002D4-R1-PKG-06R-final-readiness.md
+??	present	8450a45c776f5dc8db88eb4b22350b39d3021da6447761ffa1a42b6647613374	docs/engineering/CS-002D4-R1-PKG-07A-implementation-blueprint.md
+??	present	bc95ac2f6f5f645199fd4f31b63810551fb42f46ba9750b4cd4c06131b5d0c82	docs/engineering/CS-002D4-R1-PKG-07B-transaction-acceptance-harness.md
+??	present	d03cefa3b7bd86ad15e51aae9482c6ef8c65c7d5c28814902dc61944dacedc5b	docs/engineering/CS-002D4-R1-PKG-07C-authorization-decision.md
+??	present	970fd96cead2b85d7df746ebda1f965f6e57e29b1a1ba5fa93ae43e87796137a	docs/engineering/CS-002D4-R1-PKG-07R-authorization-and-readiness.md
+??	present	cd49017531d5d1889249c43bc412c0d1b679a63644a98e612feb273ec9c296a5	docs/engineering/CS-002D4-R1-PKG-07R-jest-output.txt
+??	present	341fa1ebb4af7baae5cd8a78628732fbba5c7152b87ebc8b8224ab60b3fb9cab	docs/engineering/CS-002D4-R1-PKG-07R-test-hygiene-output.txt
+??	present	14b0ab0bff316f75a1d93264fcffa01d5a169d9050b0f0717af3383494e1edf6	docs/engineering/CS-002D4-R1-PKG-07R-typecheck-output.txt
+??	present	1c4ef93538d3be3bb99e54277694c704acc755696ff0b81c61ba76135e63ebc5	docs/engineering/CS-002D4-R1-PKG-08A-sidecar-resolver.md
+??	present	007c1e475456df2d1f2c336787bddc1d9a279c17a462f4d9e66dbb3a5c38abde	docs/engineering/CS-002D4-R1-PKG-08B-seven-operation-regression-expansion.md
+??	present	19c0de0b531638b0a24fed8a06cfc07cfb923234be3904b52b31e1657e2185d2	docs/engineering/CS-002D4-R1-PKG-08C-core-pivot-integration-blocker-review.md
+??	present	9756c45ed596518967bdba8cfa0f5742fd31105bb3429c52c0acf13122e9b727	docs/engineering/CS-002D4-R1-PKG-08R-core-reliability-readiness.md
+??	present	b9e517be72c37addc88c680fb2dfb6bb09d4833d897f992ff7d3c39f249fe5ab	docs/engineering/CS-002D4-R1-PKG-08R-hygiene-output.txt
+??	present	9f7616227fc58e670f6a92cafe76743fd11e64ffcba83bb39bc24a5a4ddec991	docs/engineering/CS-002D4-R1-PKG-08R-jest-output.txt
+??	present	14b0ab0bff316f75a1d93264fcffa01d5a169d9050b0f0717af3383494e1edf6	docs/engineering/CS-002D4-R1-PKG-08R-typecheck-output.txt
+??	present	e20e428127b76d19bf214fad056d58f41a49ed1358f511bdf044a2ab5168676f	docs/engineering/CS-002D4-R1-PKG-09A-resolver-compatibility.md
+??	present	f46ceba7161406a0cec35a5babe0e5660b98e6f656c46240d845b9bd88667a55	docs/engineering/CS-002D4-R1-PKG-09B-expanded-core-inventory.md
+??	present	82971f6470b53c637afe61ca33fbd4e909b793d582aa21ab6a8114d322ba70cb	docs/engineering/CS-002D4-R1-PKG-09B-expanded-jest-output.txt
+??	present	9e4abacac62e023ef754841b414cef37a23db7443135f9397f9319213595e0fd	docs/engineering/CS-002D4-R1-PKG-09B-expanded-verification.md
+??	present	2fb2b276105db4695d96d7bf0ef65abbe6398c689fc6fc56143c954a7a152d5a	docs/engineering/CS-002D4-R1-PKG-09C-fixture-setup-failure-output.txt
+??	present	3dbc0575dadfd900f2cf50080d9a31ee5db4185f869c62815959733fa1853ce0	docs/engineering/CS-002D4-R1-PKG-09C-null-write-green-output.txt
+??	present	2afb4ddbc81c120fd150f89401828cdcc6583b7ca30e9ab5dad43564f172284b	docs/engineering/CS-002D4-R1-PKG-09C-null-write-red-output.txt
+??	present	9fcf5f635e980d5cdd5b863082161f5578e032d462b6420b14fa6c86a918c401	docs/engineering/CS-002D4-R1-PKG-09C-regression-disposition.md
+??	present	dfae70c19a0fed21e271996ffdb8575414536784ac4ff63c3f9463073f2b2af1	docs/engineering/CS-002D4-R1-PKG-09R-core-typecheck-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-09R-final-sidecar-check.txt
+??	present	94df2128389ee49a5a964e2000c7c3a19dc98743d682d9977f303a5f4451ad91	docs/engineering/CS-002D4-R1-PKG-09R-hygiene-output.txt
+??	present	9ec0f58475373c3be1a793c0d34ff5b0f342b450d389fbabfe8b9e26e317acca	docs/engineering/CS-002D4-R1-PKG-09R-integrated-readiness.md
+??	present	b9e57356eda976f2bf5934a1ad1b474f2688b6806d8776e93490383e5063b18d	docs/engineering/CS-002D4-R1-PKG-10A-post-correction-core-baseline.md
+??	present	f373de279f9530c71c53cbc6f1b6be02292a12f155c33781a5f7d508712d8fc2	docs/engineering/CS-002D4-R1-PKG-10A-post-correction-core-jest-output.txt
+??	present	7cfc8682ab757dd2e65506b45d524fb10769e326160d4583b7a2b11e3a493c02	docs/engineering/CS-002D4-R1-PKG-10B-merge-identity-disposition.md
+??	present	d9323410caf725b4fb6ea181830a666e562868c4fef237fce20171581232d55b	docs/engineering/CS-002D4-R1-PKG-10B-merge-jest-output.txt
+??	present	64c83e9ac7b4699c4b3839dd92bcd2a991c1834de8708b930de28a31620eac03	docs/engineering/CS-002D4-R1-PKG-10C-pivot-fixture-migration.md
+??	present	dfae70c19a0fed21e271996ffdb8575414536784ac4ff63c3f9463073f2b2af1	docs/engineering/CS-002D4-R1-PKG-10R-core-typecheck-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-10R-final-sidecar-check.txt
+??	present	90d5e5ffa739ef168570256208a5c5a51de7916e292bfeff7617da89cd8c1763	docs/engineering/CS-002D4-R1-PKG-10R-hygiene-output.txt
+??	present	8990e2f355e0d77014902833f87db1e44f154de0b25325d1ff428c0c21cef92a	docs/engineering/CS-002D4-R1-PKG-10R-integrated-readiness.md
+??	present	c1161f8aa65fb8a6a1da6298b6c234548d91c4fab60570830cdccb93ee7df643	docs/engineering/CS-002D4-R1-PKG-11A-merge-test-migration.md
+??	present	103d6b24fb598fa30939d011c79100607189f076d113cb331acdd07d3700799e	docs/engineering/CS-002D4-R1-PKG-11B-core-typecheck-output.txt
+??	present	5665e9b28dd929e208b22803193bc655951d36c3d78489f13b4e8a7834d3a4b8	docs/engineering/CS-002D4-R1-PKG-11B-diff-check-output.txt
+??	present	c6d2eb0ac6da5c68002ccecad329daf6857d958ba7deac30110ebaf4bac0caec	docs/engineering/CS-002D4-R1-PKG-11B-full-core-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-11B-full-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-11B-full-sidecars-before.txt
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-11B-full-sidecars-diff.txt
+??	present	906b3b1126ce87899f56ee2dd5e6ba775c016f72bca226ac6883a1cefba3fea4	docs/engineering/CS-002D4-R1-PKG-11B-merge-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-11B-merge-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-11B-merge-sidecars-before.txt
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-11B-merge-sidecars-diff.txt
+??	present	35c996ff92a29b36ce2e4f20d58371f3b6417d0b1a27a8ca55e2ca7368d5b69a	docs/engineering/CS-002D4-R1-PKG-11B-runtime-and-core-verification.md
+??	present	eac26091e3173668c3d07cad68de07e3f7495705d95e8f871aff732dbf66f8ef	docs/engineering/CS-002D4-R1-PKG-11B-seven-op-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-11B-seven-op-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-11B-seven-op-sidecars-before.txt
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-11B-seven-op-sidecars-diff.txt
+??	present	d643f8ac3d283fd4b18b36fd99baea9c1103a7442bfe6708669833ed400a614c	docs/engineering/CS-002D4-R1-PKG-11B-test-hygiene-output.txt
+??	present	5d17d7b1294ff58cf7d02631d938f76f5acf74ca9539f66b766ed15143e69a1a	docs/engineering/CS-002D4-R1-PKG-11C-pivot-lifecycle-contract.md
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-11R-final-sidecar-check.txt
+??	present	ed244b6d6fa23445332873dd0c55ee39b5d364bb8aafba2c7ba1d898e5d79b40	docs/engineering/CS-002D4-R1-PKG-11R-hygiene-output.txt
+??	present	13b8439b925c4a6e0f79904af0597196b8119b086679d6541cbb24bcdec31423	docs/engineering/CS-002D4-R1-PKG-11R-integrated-readiness.md
+??	present	5b08abd0f98209213bca852fbff8135527941a12f6011a918e0490dc975c970c	docs/engineering/CS-002D4-R1-PKG-12A-core-integrity-matrix.md
+??	present	04fefabb46db26a22c0e579043d5ad994cefb8218d7bf47f1f401b99381b76a2	docs/engineering/CS-002D4-R1-PKG-12A-regression-results.md
+??	present	c4d3199e0810a0420c4bbe29ab206d9afe56c717a8b7612cd55813f37f5e087c	docs/engineering/CS-002D4-R1-PKG-12B-failure-and-snapshot-evidence.md
+??	present	3c2b5c715310904de929ed9fcbe0c9e1b529f1c2883be26cd333572616724681	docs/engineering/CS-002D4-R1-PKG-12B-pivot-component-coverage.md
+??	present	088ce13ac2ca1cf00725637c299db9fcb1373eb9fc5fbc5beb7cf81c6dfd373f	docs/engineering/CS-002D4-R1-PKG-12C-consolidated-implementation-decisions.md
+??	present	7078ad7b7358ff9399f9ecfb7b2e35041c396a3a8bfe4d47bdbb0d1d16e5bc49	docs/engineering/CS-002D4-R1-PKG-12R-core-adjacent-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-core-adjacent-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-core-adjacent-sidecars-before.txt
+??	present	895bb83980a24c945af8797424380d501ab9a8555dde8333d737ca909ed6e1d3	docs/engineering/CS-002D4-R1-PKG-12R-core-focused-green-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-core-focused-green-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-core-focused-green-sidecars-before.txt
+??	present	aa1aacdbbefd067ff40872bc044255beeb142f0ae7c6d8f9e46bfe74aadb6d46	docs/engineering/CS-002D4-R1-PKG-12R-core-focused-output.txt
+??	present	1463aa735d756dbe3300b0c91e2dcb927b6f6d786f1f309de56357016432ff3f	docs/engineering/CS-002D4-R1-PKG-12R-core-focused-red-output.txt
+??	present	f93471cabb1a25f554c6250041ef7da2190cbba3b754ece36a721f8bbdd0f0fe	docs/engineering/CS-002D4-R1-PKG-12R-core-typecheck-output.txt
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-12R-diff-check-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-final-sidecar-check.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-focused-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-focused-sidecars-before.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-focused-sidecars-rerun-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-focused-sidecars-rerun-before.txt
+??	present	ef7f60adb086d76faedadfc5dcc693aa0e1c3fffc52721edfb363f3fbb314303	docs/engineering/CS-002D4-R1-PKG-12R-integrated-readiness.md
+??	present	7ba592c0abd20bbb0a393da827b96e0a95f61597f245972df03b67385e1c35a7	docs/engineering/CS-002D4-R1-PKG-12R-markdown-hygiene-output.txt
+??	present	77a2d5610007bd2d83bca76e696c7becfada41649bbd8d091ffb893e7bed9115	docs/engineering/CS-002D4-R1-PKG-12R-pivot-component-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-pivot-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-12R-pivot-sidecars-before.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-12R-test-hygiene-output.txt
+??	present	56b1f9506aa13ab94bc7434ab41a9cf2d2e9f96b601143c5121e52b2ffd08753	docs/engineering/CS-002D4-R1-PKG-13A-formula-merge-semantics.md
+??	present	74074c67e7957d16e21a394602607bac079982c1c97ed6360b3b63e61152dc5e	docs/engineering/CS-002D4-R1-PKG-13A-graph-regression-evidence.md
+??	present	e589ac3de97f24e8eb0bf6829ea504c00d34dc9f2bd908da28d7d46db8b489df	docs/engineering/CS-002D4-R1-PKG-13B-executable-results.md
+??	present	417a39304705132a45cd9adf8907644828824b533347d1f5019ddfa2e329bf09	docs/engineering/CS-002D4-R1-PKG-13B-rollback-coverage-and-fault-matrix.md
+??	present	4aebf9d6e527ed8473a9348323a96b0478f2b4441d7f4963e1fe13697c2d3224	docs/engineering/CS-002D4-R1-PKG-13B-seven-operation-side-effect-inventory.md
+??	present	76c6d4bd88fadb0b96fdda9f3cc1548257e8ced9605acf04b368508d6d2c08cf	docs/engineering/CS-002D4-R1-PKG-13C-component-regression-evidence.md
+??	present	be142ab18b6540ed36892a2715a283fd39a7b9302839f633d1250d88a9bb77da	docs/engineering/CS-002D4-R1-PKG-13C-pivot-publication-and-recovery.md
+??	present	10548118535294cc90b8ed642e92df77bb43e436b2473de684c29133675f5f67	docs/engineering/CS-002D4-R1-PKG-13D-adjacent-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-adjacent-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-adjacent-sidecars-before.txt
+??	present	4d025b08f1763e682aa50f5ed42cdb537a58c83c1a26f5c3a3a5ecf9db07e0cd	docs/engineering/CS-002D4-R1-PKG-13D-core-diagnostic-delta.md
+??	present	f93471cabb1a25f554c6250041ef7da2190cbba3b754ece36a721f8bbdd0f0fe	docs/engineering/CS-002D4-R1-PKG-13D-core-typecheck-output.txt
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-13D-diff-check-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-final-sidecar-check.txt
+??	present	04b947ca89d5a17a7094817c3a63c8968116b229ca6b8fda28bf64f05bf54e46	docs/engineering/CS-002D4-R1-PKG-13D-full-core-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-full-core-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-full-core-sidecars-before.txt
+??	present	7980360078a2e9dffa0879f4ae4d579cfd4df4d2dd15ce99bddabd781399ceca	docs/engineering/CS-002D4-R1-PKG-13D-integration-verification.md
+??	present	d9ac6044e24bf27b0f0b6a9154963130b024e2ab143136c0cdd48f28afec6bfa	docs/engineering/CS-002D4-R1-PKG-13D-lane-a-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-lane-a-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-lane-a-sidecars-before.txt
+??	present	0546d03efc129a64cd27c4b1ab89b3bf7b93f6d2fd988897f5c1dc66f504adc2	docs/engineering/CS-002D4-R1-PKG-13D-lane-b-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-lane-b-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-lane-b-sidecars-before.txt
+??	present	1ec7ea1efe3ada70f8b6199095d8e47c6b1a6137fb9a86eb074b33b86456502c	docs/engineering/CS-002D4-R1-PKG-13D-lane-c-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-lane-c-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13D-lane-c-sidecars-before.txt
+??	present	c298ce0a02e24262e388cf8b8ad4aab96fb2d6c8cdabe299c509666990642a71	docs/engineering/CS-002D4-R1-PKG-13D-markdown-hygiene-output.txt
+??	present	8d21cad8409cf80547fbaa13f2bc22f6b9bea19e94de8ed41be95b269a36db23	docs/engineering/CS-002D4-R1-PKG-13D-sidecar-manifest-sha256.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-13D-test-hygiene-output.txt
+??	present	422ed53f12b39d2aa3c76a40d919c21ff2853d6a7c40de47844cd3727706b258	docs/engineering/CS-002D4-R1-PKG-13E-implementation-decision-register.md
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-13R-diff-check-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-13R-final-sidecar-check.txt
+??	present	8f04b5df09d41923be716a4fc4907c5ddf49c30c64884327ec28a49f8618b185	docs/engineering/CS-002D4-R1-PKG-13R-integrated-convergence.md
+??	present	f05aca51cc7b9d17c1a53401cdb2e93e423c57967a92854e626bbef9e9d4c3cf	docs/engineering/CS-002D4-R1-PKG-13R-markdown-hygiene-output.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-13R-test-hygiene-output.txt
+??	present	93457c4c3c742a8a4a43c82692f54a055cea97cd52d91559878b686f7fa83fe8	docs/engineering/CS-002D4-R1-PKG-14A-formula-coordinate-contract.md
+??	present	7dc3097d8fed55b0501ef60fce08384be82aabe160b02ca4324df80c23a6ed7b	docs/engineering/CS-002D4-R1-PKG-14A-regression-matrix.md
+??	present	9ed26bf149851b086db5877353fbbf73e097e8c9bf38ad2c299b67e78244750f	docs/engineering/CS-002D4-R1-PKG-14B-D2-11-residual-register.md
+??	present	4fb19dfc86ef4981708e831b1dc3b47cbb1611577222c1ccee40831efb30c0f4	docs/engineering/CS-002D4-R1-PKG-14B-fault-cut-evidence.md
+??	present	486e8b7b98b0ec529f45bd01b8020f6655770700e7b3cfa76631d46ec8487365	docs/engineering/CS-002D4-R1-PKG-14B-operation-closure-matrix.md
+??	present	b8d11746e1707fe22376a5cdce05a2cf5ae4280536dc081accefc9efa13b09da	docs/engineering/CS-002D4-R1-PKG-14C-pivot-recovery-evidence.md
+??	present	57cb506c2dabb41c234841c816b7bb5d36df010da3fcbfcc83b5155216382929	docs/engineering/CS-002D4-R1-PKG-14C-snapshot-error-boundary.md
+??	present	169a82414209bba294139d25b48d21f5f6e56393c3b5c1b4c055fe4aa33f92dc	docs/engineering/CS-002D4-R1-PKG-14D-adjacent-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-adjacent-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-adjacent-sidecars-before.txt
+??	present	6ee3f1c522e970b6e6bfb118ee3f8ba772274a37f3a11bfd0b08db5f3714ca8b	docs/engineering/CS-002D4-R1-PKG-14D-adjacent-window-status.txt
+??	present	f93471cabb1a25f554c6250041ef7da2190cbba3b754ece36a721f8bbdd0f0fe	docs/engineering/CS-002D4-R1-PKG-14D-core-typecheck-output.txt
+??	present	1b5c3539c422ea00f34b413c4ccfcfec687eac16ce94379a6c50fdbe8de95259	docs/engineering/CS-002D4-R1-PKG-14D-core-verification.md
+??	present	68a2db5dbf4bca0ea92af54a0ee11eb53878bec3e2525192ca98ed2ed6a34813	docs/engineering/CS-002D4-R1-PKG-14D-diagnostic-delta.md
+??	present	787460f986aec1e5559b7e894d5e50f9a4c682c56afbdc75a666346ae14970ad	docs/engineering/CS-002D4-R1-PKG-14D-environment.txt
+??	present	7ccf8b1c8a7be5be71323ea5192b6072ca17f1b7651b7f5eef9e78c95f5b27f8	docs/engineering/CS-002D4-R1-PKG-14D-focused-final-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-final-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-final-sidecars-before.txt
+??	present	c4325749e80bed4438ae7c883ceab0cb8e73c9de15a7606b378600ea35ca095d	docs/engineering/CS-002D4-R1-PKG-14D-focused-final-window-status.txt
+??	present	f99709f8b9025f5688a18aa236bc4ab6bd76cb359b4c26a76cbcca484b2a5139	docs/engineering/CS-002D4-R1-PKG-14D-focused-final2-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-final2-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-final2-sidecars-before.txt
+??	present	c4325749e80bed4438ae7c883ceab0cb8e73c9de15a7606b378600ea35ca095d	docs/engineering/CS-002D4-R1-PKG-14D-focused-final2-window-status.txt
+??	present	68e6e0e5c68ad25e996bac703aa6fdcea1ecd3a351a6747847bce56184a8058d	docs/engineering/CS-002D4-R1-PKG-14D-focused-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-sidecars-before.txt
+??	present	e37f52aa59734018dae994a51c01a9aace6d08a184a54f4e339c464cc202cd43	docs/engineering/CS-002D4-R1-PKG-14D-focused-verified-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-verified-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-focused-verified-sidecars-before.txt
+??	present	6ee3f1c522e970b6e6bfb118ee3f8ba772274a37f3a11bfd0b08db5f3714ca8b	docs/engineering/CS-002D4-R1-PKG-14D-focused-verified-window-status.txt
+??	present	c4325749e80bed4438ae7c883ceab0cb8e73c9de15a7606b378600ea35ca095d	docs/engineering/CS-002D4-R1-PKG-14D-focused-window-status.txt
+??	present	b87d9bc5ab96a4d9da514e08adabbb6ab7e825170e519771dc8637b032f6e390	docs/engineering/CS-002D4-R1-PKG-14D-full-core-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-full-core-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-full-core-sidecars-before.txt
+??	present	c4325749e80bed4438ae7c883ceab0cb8e73c9de15a7606b378600ea35ca095d	docs/engineering/CS-002D4-R1-PKG-14D-full-core-window-status.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14D-initial-sidecar-check.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-14D-test-hygiene-output.txt
+??	present	3f92975db4c371e61d620866dd3fcb627fb1dcfd2b171e5d6a782f04b3a15b5a	docs/engineering/CS-002D4-R1-PKG-14E-release-readiness-register.md
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-14R-diff-check-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-14R-final-sidecar-check.txt
+??	present	71609bc9ffc781f12a5de903739458e402eac87cef5b812d2e067a23ff98c80b	docs/engineering/CS-002D4-R1-PKG-14R-integrated-readiness.md
+??	present	04cfed740df1aab6c121188f4d97c50d08c2cb04df3f8b3687a236079da9b37b	docs/engineering/CS-002D4-R1-PKG-14R-markdown-hygiene-output.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-14R-test-hygiene-output.txt
+??	present	a11c3ccb53ad347bcf93cbe6d35dbf43cf8d5c546ec3e3240c8e583412d633a4	docs/engineering/CS-002D4-R1-PKG-15A-compatibility-evidence.md
+??	present	b90425e653fc70e8fdbbb8236c81f6b7b349bbccac83532028d668a0cdbb781d	docs/engineering/CS-002D4-R1-PKG-15A-formula-parser-evaluator-analysis.md
+??	present	44f40f5ff97713aa860b287f724a354efdfb2d190d848b8dd8f0ee3a494517fc	docs/engineering/CS-002D4-R1-PKG-15B-fault-and-recovery-results.md
+??	present	14c172bf6644db1d4bdedd5a473dfef307b426871bbf894f7ecbef532c9faa66	docs/engineering/CS-002D4-R1-PKG-15B-transaction-residual-closure.md
+??	present	77e965b40ac462e28cd28c7e2bb9c25bcea4663b036f73bfde5153e7bc5e379f	docs/engineering/CS-002D4-R1-PKG-15C-pivot-component-hardening.md
+??	present	94ea85e6c351a0f39236ef0d34c5a673f50347707dcf3fdb335455c8f05bfe75	docs/engineering/CS-002D4-R1-PKG-15C-public-read-boundary.md
+??	present	1e3510c33921646e71cca0425caa81035a0c16667641128595f863e7cec99699	docs/engineering/CS-002D4-R1-PKG-15D-core-integration-verification.md
+??	present	8ef722092aa2937a699e2973b128a6b5d2afdebf0dc793ad9989a37b5b20950c	docs/engineering/CS-002D4-R1-PKG-15D-core-typecheck-output.txt
+??	present	19eaf43821a7660ec323a87c8457bf74823beb296c39f5e01aa8a683aa50f061	docs/engineering/CS-002D4-R1-PKG-15D-core-typecheck-status.txt
+??	present	d322a640101d01e5c4afa82a09e11636a55a67109cd01fff583ee156735a0b29	docs/engineering/CS-002D4-R1-PKG-15D-diagnostic-delta.md
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-15D-diff-check-output.txt
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-15D-final-diff-check.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-15D-final-focused-test-hygiene.txt
+??	present	50e8cd1d36032f973867aa41b9ae431946ba30e14f9682ec5ab2da9569030ea6	docs/engineering/CS-002D4-R1-PKG-15D-final-markdown-hygiene.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-final-sidecar-check.txt
+??	present	5eefc9de42c6354ab3c60130bc1e0363233fd461e283bc6dae620561131e2300	docs/engineering/CS-002D4-R1-PKG-15D-final-status.txt
+??	present	1c5e587c825365cf62ec725d7593fcc292bda8ccaf0dd829f3ff287f26a3018e	docs/engineering/CS-002D4-R1-PKG-15D-focused-jest-output.txt
+??	present	d47b1b3e49a91d30e4adf668b7073ed3c03ba691f6c16fb7739cece93f16ff5c	docs/engineering/CS-002D4-R1-PKG-15D-focused-rerun-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-focused-rerun-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-focused-rerun-sidecars-before.txt
+??	present	bc7c3e1aa1cb0ccfb814b0007a599838e5ed032c01c20e63a0a090411b2ac6aa	docs/engineering/CS-002D4-R1-PKG-15D-focused-rerun-status.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-focused-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-focused-sidecars-before.txt
+??	present	78106ef8e06ebf912416443fefccbaaa3a0e90a2544608d6280df986f2312af9	docs/engineering/CS-002D4-R1-PKG-15D-focused-status.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-15D-focused-test-hygiene-output.txt
+??	present	5eb3d438f6743c8f5b7b2d84dabe909aa35f9cbf5834645c3d229661a03816ee	docs/engineering/CS-002D4-R1-PKG-15D-full-core-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-full-core-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-full-core-sidecars-before.txt
+??	present	78106ef8e06ebf912416443fefccbaaa3a0e90a2544608d6280df986f2312af9	docs/engineering/CS-002D4-R1-PKG-15D-full-core-status.txt
+??	present	21dd2c41a755d01605f39f0f62e58169b21e156d75bd8d3b9ce449c409ea4833	docs/engineering/CS-002D4-R1-PKG-15D-hygiene-status.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-15D-initial-sidecar-check.txt
+??	present	14f87426533a5f4e6171e351fccaeb5ed238a53260c7057d48b5aee4edf707f7	docs/engineering/CS-002D4-R1-PKG-15D-markdown-hygiene-output.txt
+??	present	b6c44d3ff33e31695a419f01ec9e4ee35cad247a581e756043903506a9342951	docs/engineering/CS-002D4-R1-PKG-15D-runtime-inventory.txt
+??	present	4a58fcfcd26486adc11cbeedb0a3fcf2aee3b11f659877a14e2922936530f6cb	docs/engineering/CS-002D4-R1-PKG-15E-implementation-decision-gate.md
+??	present	3b75004a38f4e3a6ed4b56765b9c0064656a1d76029ab10b7bbcf4a7111d1569	docs/engineering/CS-002D4-R1-PKG-15R-integrated-readiness.md
+??	present	f250b42132c1993686634be38a6b759830f4588a300ebed2074e670299396402	docs/engineering/CS-002D4-R1-PKG-16A-change-inventory.tsv
+??	present	6d45d10b931e942842c9c57c50563ed9487b293f2f6f4f05f3a5b5f8f16d0c42	docs/engineering/CS-002D4-R1-PKG-16A-change-set-dependencies.md
+??	present	78dd7e1e8e6191b4e2c448d5b040669a4a08db39b7094ceceebbdcf93bda9c96	docs/engineering/CS-002D4-R1-PKG-16A-starting-status.txt
+??	present	ddf9f6710e23ce311ec5554362bb0f32332f432173503efa41621bec8075adb1	docs/engineering/CS-002D4-R1-PKG-16A-worktree-integrity.txt
+??	present	43dd9a70df3ad234922628953b4f3c56f7a57bae72790e5f2365e13973332015	docs/engineering/CS-002D4-R1-PKG-16A-worktree-provenance-inventory.md
+??	present	46feac2837c008506fda14d70f08d1641ed95bdba433c5b37440a9b4e9f333db	docs/engineering/CS-002D4-R1-PKG-16B-evidence-traceability.md
+??	present	6c7e9a983fe3231b63c5024900cf2e3bceb86370da40f86bb242cef907b3b9ae	docs/engineering/CS-002D4-R1-PKG-16B-seven-operation-acceptance.md
+??	present	4e9a87b7bc9779ef27f79ec942c9008e064c430468071bbf56ed437db7feb4df	docs/engineering/CS-002D4-R1-PKG-16C-formula-compatibility-decision.md
+??	present	ff0c12bac893202bc893c4c5449891bc4c0ddadc41853a422ba6c1dc4efea71c	docs/engineering/CS-002D4-R1-PKG-16D-pivot-integration-migration-gate.md
+??	present	d39bcc1fce6debfd8aa04158b04a872324ceba2a3c05abf5f47863120887a285	docs/engineering/CS-002D4-R1-PKG-16E-bounded-jest-output.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-16E-bounded-sidecars-after.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-16E-bounded-sidecars-before.txt
+??	present	bc7c3e1aa1cb0ccfb814b0007a599838e5ed032c01c20e63a0a090411b2ac6aa	docs/engineering/CS-002D4-R1-PKG-16E-bounded-status.txt
+??	present	9c28b785ab849f48bb9efb230a187a499a95186563169e43c01bd6be2b01d54c	docs/engineering/CS-002D4-R1-PKG-16E-candidate-test-matrix.md
+??	present	ac62d7a89ac399f4b1875443344d16eefb998b412d0be45a13b9bf76c95f1ec2	docs/engineering/CS-002D4-R1-PKG-16E-command.txt
+??	present	5b8f9e3a0a5839df005adfe69670956e63b29fa17f4c326af2abf3abb8da537d	docs/engineering/CS-002D4-R1-PKG-16E-core-dependencies.txt
+??	present	8ef722092aa2937a699e2973b128a6b5d2afdebf0dc793ad9989a37b5b20950c	docs/engineering/CS-002D4-R1-PKG-16E-core-typecheck-output.txt
+??	present	19eaf43821a7660ec323a87c8457bf74823beb296c39f5e01aa8a683aa50f061	docs/engineering/CS-002D4-R1-PKG-16E-core-typecheck-status.txt
+??	present	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	docs/engineering/CS-002D4-R1-PKG-16E-final-diff-check.txt
+??	present	955afb3c996eacb38fb130936be1cf2bbe12ed121468deae159ea18a12886116	docs/engineering/CS-002D4-R1-PKG-16E-final-focused-test-hygiene.txt
+??	present	50e8cd1d36032f973867aa41b9ae431946ba30e14f9682ec5ab2da9569030ea6	docs/engineering/CS-002D4-R1-PKG-16E-final-markdown-hygiene.txt
+??	present	a4374e59790f227bba349c82f605762c2d15eeae35e22f0e6b9c015052d34d73	docs/engineering/CS-002D4-R1-PKG-16E-final-sidecar-check.txt
+??	present	5eefc9de42c6354ab3c60130bc1e0363233fd461e283bc6dae620561131e2300	docs/engineering/CS-002D4-R1-PKG-16E-final-status.txt
+??	present	4d53522c887edfef67542270d771daca08ecd2c9a634d978761390b74fee5472	docs/engineering/CS-002D4-R1-PKG-16E-runtime-versions.txt
+??	present	fd6e104d1603897d860621586f0848e548d68a2c1d2b163c4d8494f691b3e65b	docs/engineering/CS-002D4-R1-PKG-16E-verification-readiness.md
+??	present	e02bbb588c4ac170ed2419a18edd1240015dbce82ce8fd3b2bc52dcf9fde40ec	docs/engineering/CS-002D4-R1-PKG-16F-leadership-decision-packet.md
+??	present	22e4a30271d0f9de1c7c6bd19aec8299c836cf4f2f36443ae188f62edbaa1728	docs/engineering/CS-002D4-R1-PKG-16R-integrated-acceptance-readiness.md
+??	present	ba64a40a09062472053df4755a0b10d09553676882747ed30461584278196413	docs/engineering/CS-002D4-R1-acceptance-test-plan.md
+??	present	bfed2235665fd44691b73e8948a8a6c11a298b61e9527b646cd4213a7944e2be	docs/engineering/CS-002D4-R1-authoritative-contracts.md
+??	present	1456ed2d47342ba3eb0bcf5244ff6975aeed603f20d4ec0c755a3753a8eae7db	docs/engineering/CS-002D4-R1-clipboard-contract-decision-memorandum.md
+??	present	0eb1b07b403c1caeeb5dc159e90564ba6059435f0cc694e01714a2eed0023a7d	docs/engineering/CS-002D4-R1-clipboard-helper-ownership-matrix.md
+??	present	44baca39b36a449a257831b8506e20c957dc0279e974acbad586e48f64b244cf	docs/engineering/CS-002D4-R1-contract-gap-matrix.md
+??	present	2f3a86e9989cf4c7c54cdba163ac9f7d1025bfc142012041229f7a91318354bd	docs/engineering/CS-002D4-R1-first-implementation-package.md
+??	present	40326929ecdda8ef82fdac067e976e7ef218e6303354f8a5b981e11c6a10060b	docs/engineering/CS-002D4-R1-verification-manifest.p1-08ak.json
+??	present	2b3cad8ced18bcf4bca1406af8bba945e6bb1d7988879175e09c5ec3a673ceba	docs/engineering/CS-002D4-R1-verification-manifest.p1-08al.json
+??	present	58cf068d202abd3c2100564d39a3453190773fab6b7a9a7d600338e74bbae167	docs/engineering/CS-002D4-R1-verification-manifest.p1-08am.json
+??	present	569d527b91aad9a18dfa6b67eac61a804135bba62ea95be4d7af29a79813c0b7	docs/engineering/CS-002D4-R1-verification-manifest.p1-08an.json
+??	present	05450d349a826fee23d01f16e9987f10af12645c57d243ea31732fb1324bd0b4	docs/engineering/CS-002D4-R1-verification-manifest.p1-08ao.json
+??	present	4ac06ba47b255c472a3d5b910eac3745ec9a2c84e7ca3cb69a14dd10b0e9efdd	docs/engineering/CS-002D4-R1-verification-manifest.p1-08ap.json
+??	present	2fda24dbaca3cd21c42494015c22d7802d2284e8f61867631a65517c88b5b58f	docs/engineering/CS-002D4-R1-verification-manifest.p1-08aq.json
+??	present	26ab6312138c5f5cd34c368f9deb07a3b0a67ca06933fd2e45a0570906fcac51	docs/engineering/CS-002D4-R1-verification-manifest.p1-08ar.json
+??	present	38f75879f59ad45b29663624ed376f8f0b64a9ed477a78ba7fdb39c568481101	docs/engineering/CS-002D4-R1-verification-manifest.p1-08as.json
+??	present	054542db41eb0c262fd7699833113a4ded0c2008b08d8d2d6e2c7a583e84307d	docs/engineering/CS-002D4-R1-verification-manifest.p1-08at.json
+??	present	b62238c5ef9bb961ce2f218df0cb1121a5771c20b797f8485bae72d68f54fa3e	docs/engineering/CS-002D4-R1-verification-manifest.p1-08au.json
+??	present	bc75ec1d1e33bbd67ef8d425bd780fd8a7534f91505a8638614c6e0553ceb3d6	docs/engineering/CS-002D4-R1-verification-manifest.p1-08av.json
+??	present	3db9a869e3885a7729ddb510add6c33414136badb63d06ee119e516e2eb77032	docs/engineering/CS-002D4-R1-verification-manifest.p1-08aw.json
+??	present	842104ba3ae1b4246199ba34398893f27c1474876ca87a381b477145d0b32d33	docs/engineering/CS-002D4-R1-verification-manifest.p1-08ax.json
+??	present	b7ac20597403535ca42522a1725f648bc9fbc2e1a984933cba653ce8a1158bec	docs/engineering/CS-002D4-R1-verification-manifest.p1-08ay.json
+??	present	e6eb1ca775995f09a8dad148e20bb0827e6aa6b242ac7a834bb89497c99b2238	docs/engineering/CS-002D4-R1-verification-manifest.p1-08az.json
+??	present	8f33a8d342601c2d9e4fc589ab48126ab7f6416bbbd527219bacf4dc9be23b5e	docs/engineering/CS-002D4-R1-verification-manifest.p1-08ba.json
+??	present	564dc6cf3fa8116811ec22a4f6ba465294c8c646f07c8a205bcc9f65b59583fa	docs/engineering/CS-002D4-R1-verification-manifest.p1-08bb.json
+??	present	8395ab6d5e033e5aaeb47f3255f716c5d93bef0cb9e07d40d5ad571036cc27e6	docs/engineering/P1-08AO-playwright-chromium-offline-handoff.md
+??	present	c2db1b490ca3396a9d9d3525750b33479139ce8dd756430672166a5c524777fe	docs/engineering/P1-08AO-workbook-contract-decision-package.md
+??	present	0da123e93ddf6362a3e64c1d6e6ac0a42842922377b32bd96c4fa45dce40fe5c	docs/engineering/P1-08AR-workbook-api-owner-approval-request.md
+??	present	61075cffd0f127eaf0a022df9d4e73898a46383de9a50a5e26d5f6810c974a80	docs/engineering/P1-08AW-lane-b-workbook-owner-decision-handoff.md
+??	present	336691572f04e140e830ca0353d47f8a0987f5c01fce128476d7f431b41c5a4f	docs/engineering/P1-08AW-lane-c-merge-read-identity-decision.md
+??	present	b127d6832563978842b7beb277f7555c47be98a98a4d55ceff3468a3ea51e6f2	docs/engineering/P1-08AX-lane-a-authority-routing.md
+??	present	c306a98eb4562724d98a530d155dd419c8d4ff29f5e858a2bd7fd60551b931af	docs/engineering/P1-08AX-lane-b-browser-provisioning.md
+??	present	af8cf9ce899a9d75caf713ca08bcac7bea04c59eb1436b7d3ec56ef4e4a46574	docs/engineering/P1-08AX-lane-c-evidence-gap-matrix-README.md
+??	present	74e55d4391e2d5bbf5bd84849ccc7c59e4c646790d6d8aa3913f1715d94fd5d9	docs/engineering/P1-08AX-lane-c-evidence-gap-matrix.tsv
+??	present	00f13da9771d67d3e2d9b81094952e9547ff980d2b9ff4013d8d3e96c5b9935a	docs/engineering/P1-08AY-exact-record-reconciliation.md
+??	present	df852fbf661921ca6beb6e8515af7e3c7c8b9b172b95c868f4615a10e768ca5e	docs/engineering/P1-08AY-lane-a-core-review.md
+??	present	fb07d3a1e220a4773ad8da33f6d0fb658fd12298c2063c619e43c4d832b4c379	docs/engineering/P1-08AY-lane-b-react-renderer-review.md
+??	present	3b96b95f99370a1c59de3b763e92e17098c52ebe0ad5344400c3fe36d6310a33	docs/engineering/P1-08AY-lane-c-examples-integrations-review.md
+??	present	c438173dc25e396e11e6cbf18a70c6f47cbf3c0fc34b958fc22456a12df5fd35	docs/engineering/P1-08AY-selection-inventory.tsv
+??	present	9c0820e8e1681d35af2a13236e8376ee77be9b484b0bafbe8b0e7d07f10b25ad	docs/engineering/P1-08AZ-lane-a-vue.md
+??	present	92cf0d878741f986d4a23862947d104244dbe19a77758429baeff11a73a3c7eb	docs/engineering/P1-08AZ-lane-b-svelte.md
+??	present	19fb75cb308ab40607a0f7f04d795b7dcfcd1c869c2aa3a3c552d612536709a2	docs/engineering/P1-08AZ-lane-c-angular.md
+??	present	4983533c0757c5b9f73b43839d3bc0474a08fbcc1f2e07a09325ed17bae1e73a	docs/engineering/P1-08BA-lane-a-vue.md
+??	present	52854b5b9248a1b219a796458220334e6759603ac64ca30f52d562905bf805c5	docs/engineering/P1-08BA-lane-b-svelte.md
+??	present	adb7411332f0fbf43a926f231f69ee6442cd5b040dd1d9c1b016703feb987bb2	docs/engineering/P1-08BA-lane-c-angular.md
+??	present	04da14be2d68d8d58082b375d610800a7e81ffc7148f30f0cea245b231952121	docs/engineering/P1-08BB-lane-a-renderer-lifecycle.md
+??	present	a7a32e251d7c1ce8bf7496a5e6b2ee8af653b7ffbeffa2988c177577bbd35d11	docs/engineering/P1-08BB-lane-b-framework-ownership.md
+??	present	e2464018802f151d4329735a6f5a780c0e63abe5632dbe472415efbeb7b45ec2	docs/engineering/P1-08BB-lane-c-real-renderer.md
+??	present	6f8bbc9da62d97611ed1ce6ccee12fe4d8737c0a6747d491615dd6c78d030321	docs/engineering/WP-A-BUNDLE-01-P1-08BB-evidence-supplement.tar.gz
+??	present	fd0af0729fffdea03782af46017f64977ff00c15bacb5c9e60b78588174aa1d9	docs/engineering/WP-A-BUNDLE-02-architectural-evidence.tar.gz
+??	present	2e2bddac1dc2fd3aca846d1f8e35e5cbefa5c8506ae50ea81569d0c2e0cbab71	docs/engineering/WP-A-D0-D1-D7-advisor-review-package.md
+??	present	9188e1c0aeed4c50d98ef5e7134942275f445bcb7978f3b57e26dfdbcd7a6b06	docs/engineering/WP-A-D0-D7-stakeholder-selections-and-gap-analysis-draft.md
+??	present	28a4457c32c74354c29154591670e2525f19ce5746b158b2aeb21cf377fd9731	docs/engineering/WP-A-D0-concurrency-boundary-proposal.md
+??	present	b9b78096b8fcf94f1a8b2dada6f9232ce35ec25593ebc2d5ef4941509f606814	docs/engineering/WP-A-NEXT-lane-b-workbook-api-owner-designation-request.md
+??	present	13affedbb76d34e0aa9f0fdec8f9816fcb2a4cc84a50ae938c471d92754c4c13	docs/engineering/WP-A-NEXT-lane-b-worksheet-api-owner-designation-request.md
+??	present	ef3f784bca981fa8aeb575082b67dee7a26aa1856cd3594418e5828e1d2a33c6	docs/engineering/WP-A-NEXT-lane-d-decision-readiness-kit.md
+??	present	e2a20c733d6eb1ab6fc783b0b2ff64b6a97b756a835302f3a75585d901aae4e6	docs/engineering/WP-A-NEXT-parallel-coordination-status.md
+??	present	253f89748025794f04a6a855f4ca8ed94bc44d7c460bcc5dccef2c48cee903b4	docs/engineering/WP-A-REVIEW-01-delivery-handoff.md
+??	present	e673bd7e11b339c7361a5bf1d3cd87f2a1a9d3eca1f4bcbd4f9de3fde98250b5	docs/engineering/WP-A-REVIEW-01-proposal-sequencing-status.md
+??	present	b2b815b1ac5a13bddb9f5ee92232a1d3ee401aea309617197309e0a946ce64a3	docs/engineering/WP-A-REVIEW-02-decision-reconciliation-template.md
+??	present	89cc38004d1df8ebc92c5799d2a3fc9564a6c55791fe5597ebfddda6f421bd26	e2e/fixtures/heatmap-retry.html
+??	present	01db4d77f2a033251a6202c286bd594126b9271746f72476f4e1b32efca20ad5	e2e/fixtures/heatmap-retry.ts
+??	present	8fbd63478b3b54a620db910bdd0dbeb9b30372dbc2cc874077b02ae02d39c33d	e2e/heatmap-retry-rendering.spec.ts
+??	present	4b0303bb7abfecb6483ba6d70fdeaf0b108f48ba695e3c16c4ff22642aa8a282	packages/angular/src/__tests__/cyber-sheet-service-initialization.p1-08az.spec.ts
+??	present	0f95fdd4bdad682fe2f3a9707768ec1fd7833bc946e8d1f83affeae6e3071757	packages/angular/src/__tests__/cyber-sheet-service-renderer-failure.p1-08ba.spec.ts
+??	present	cf7d62c5b423e7cb508736bac67f56d8fdb8ab80e7b60b56b2422d4d2c8796f7	packages/core/__tests__/EventBus.workbook-bridge.test.ts
+??	present	a74ce611fd450cb6cf3fa854dfe9847edd970277f93906f2bdaa69a19398596c	packages/core/__tests__/calculation-controller-contract.p1-08al.test.ts
+??	present	e184ad205bf4a36f932a2459b3d1eb9a9d30aa883302564f8481a11805fa0aeb	packages/core/__tests__/cell-store-address.p1-08ao.test.ts
+??	present	a8407a6179a1d3e6a80d2c9300bcfc60eee893ca60806edb15511b8a8d349f99	packages/core/__tests__/command-lifecycle-characterization.p1-08j.test.ts
+??	present	96d5adf2e6edfb67fd6850f6d2d374914852051457ea74fcbd2bed5fe626a18a	packages/core/__tests__/core-exact-key-batch.p1-08k.test.ts
+??	present	5573c18200035025907e85409b41c7eea87d7282463f46396f29e5e5c26f704b	packages/core/__tests__/core-typescript-first-resolver.p1-pkg-08a.test.ts
+??	present	98e27692b910172607cf3e4de017dcbdf0b58d87230282966dae7b91bfbecf4c	packages/core/__tests__/data-commands-owner-boundary.h81.test.ts
+??	present	f2745d785962d2d060b887ac718bc3bb60253bfb80b48b264c3a9b1d5ece5971	packages/core/__tests__/data-commands-owner-boundary.h83.test.ts
+??	present	26032c99c4901d9d8a80a4f2736dad0f08b8e074f5dc78293186faa842008915	packages/core/__tests__/data-commands-standalone-characterization.h84.test.ts
+??	present	3b446a62b5b953dbe87ad09856ef7705cc89e0ceaf99abaa81afb35b94be172e	packages/core/__tests__/delete-cells-boundary.p1-08j.test.ts
+??	present	6e35d265ebf2c1bb4ac6f98db2edeafcd2f23e8af8bee2be0333895e126993d5	packages/core/__tests__/delete-cells-formula-contract.p1-08k.test.ts
+??	present	9beedbe20c74cd1db6d0d7ab65b951b47d8d8b789b9e73a9eb3250e497cdd13e	packages/core/__tests__/delete-cells-lifecycle.p1-08j.test.ts
+??	present	fe6816de3a04b9504f8bdfc2849d34cfe071ee5c552bd5326ac34a19106e7efd	packages/core/__tests__/eventbus-reentrancy.p1-pkg-02f.test.ts
+??	present	1e537bc1ab3aca29aa2ace3d9dae9c2f703252fe786cb3d83e20d1196efe663c	packages/core/__tests__/formatting-controller-contract.i06.test.ts
+??	present	f9f95ca62a257b796cd403e034d4c936506ab76efb79f21316410d114cf73212	packages/core/__tests__/formula-a1-dollar-compatibility.p1-pkg-15a.test.ts
+??	present	a4f660252f3917aaba8c518759d5d4dad1f5dc1fcf838dd501d3246c8d00ff83	packages/core/__tests__/formula-controller-result-boundary.p1-08r.test.ts
+??	present	3a46602e2084534d66bf357b0624e584383240da735c5d131c0c8707ac0d528e	packages/core/__tests__/formula-engine-named-bindings.audit.p1-08ah.test.ts
+??	present	6fb8b1bd4490d69cd27613371093c9f08bf1dc9e3c790f52b50d81bd3c3f1daf	packages/core/__tests__/formula-engine-named-bindings.p1-08ag.test.ts
+??	present	cc831c2acb511f40423064595aa98f646847017020c19be3fcdcca004c0cd69c	packages/core/__tests__/graph-invariant-validator.p1-08ao.test.ts
+??	present	804eb0f48f5a32256d570f29523da4b464835459a106044337b1899bd44edba8	packages/core/__tests__/insert-cells-public-lifecycle.p1-08s.test.ts
+??	present	6fcbd0e76db9df1852d60d525803af5759bf199550084f536c1bca57a89a19fa	packages/core/__tests__/merge-read-identity-safety.p1-08as.test.ts
+??	present	7509636f9a7450c0791103bb43084818f83c6d36dfc458298736bb8280fc3a36	packages/core/__tests__/p1-08f-correctness-characterization.test.ts
+??	present	3ab635b149a60b046fbb2854529fbaa408f70b4962cd8fb0cac2b34fda9da934	packages/core/__tests__/p1-08g-cf-spill-characterization.test.ts
+??	present	83cad78e3845336250dc55167b4b806820dd800c449edd03de174448219e4a8e	packages/core/__tests__/p1-08g-delete-cells-exact-key-batch.test.ts
+??	present	54b56c66d40d5b7d31209908403f3c1da9d8669ff561a1b3a63f109367891a21	packages/core/__tests__/p1-08g-statistical-dispatch.test.ts
+??	present	16011d41cc1f87943ca41af9ab64d52e0939784f9774b7d3954c1d9b6ef5fd1d	packages/core/__tests__/p1-08h-deletion-undo-characterization.test.ts
+??	present	b13287b9f9e5ecc5f00371aa1ea7c384f59826e78d9e70de040877685f7c5e17	packages/core/__tests__/pivot-aggregate-contract.p1-08t.test.ts
+??	present	15af5e9a6514ad1f39cd951b41dc3a2fbffac952b30dc4c0768157561f6d544a	packages/core/__tests__/pivot-aggregate-resolution-contract.p1-08s.test.ts
+??	present	c8f52873671c93399e95a87174750b630b1af5074d01265f5679d2b4f163bbee	packages/core/__tests__/pivot-anchor-index.p1-08ao.test.ts
+??	present	bd5e513907aead1bd9047a6eda406f8b9c5b6c34f78b0d4e2af4a9db4811671f	packages/core/__tests__/pivot-calculated-fields-normalization.p1-08ah.test.ts
+??	present	ad21bd6b716142c4da9b657a2d3d7d5958514b6b143479a13d6325bb01f3b19d	packages/core/__tests__/pivot-calculated-fields-partial-recompute.p1-08ah.test.ts
+??	present	7294a9c55b07054389fbec938745e67672fe61d88205ed9f7b2fa9bf0df178b6	packages/core/__tests__/pivot-command-public-boundary.p1-08r.test.ts
+??	present	8852b03f77881b8ee566dd3bf0ceddd709277682b327fc1e70f9f073edcf0526	packages/core/__tests__/pivot-coordinate-integrity.p1-08v.test.ts
+??	present	b0fc175ad567b40f9b05b2f8685f51f75337d2b866d6232c5dda8a59b70da541	packages/core/__tests__/pivot-error-publication.p1-pkg-13c.test.ts
+??	present	5e33cad6643ac590831e5abb0c8021b626c55007a003d6bab42eaf4e6eb69bee	packages/core/__tests__/pivot-invalidation-workbook-bridge.test.ts
+??	present	5ec18e843781c1a7cb666c5acde571297c157a5c4908918d17c7512c654f085c	packages/core/__tests__/pivot-named-binding-integration.p1-08ah.test.ts
+??	present	f21a7475911a46e47ac6a4546a776936954cb5c973cd39844ada63c466cb4cad	packages/core/__tests__/pivot-partial-recompute-safety.p1-08x.test.ts
+??	present	b0609f025a69a5cc4ce12064341610cf3ef682375546ec3804b6bbba5d5d6ff0	packages/core/__tests__/pivot-recompute-validation-retry.p1-pkg-14c.test.ts
+??	present	1af2b1be1fbf5c1ae2a1eef8bfc2836b81ec9e9453c96aa01c53547d8d6c33c8	packages/core/__tests__/pivot-slicer-field-index.p1-08t.test.ts
+??	present	d305db875596ac7d5c56af5dce74a8c92df53d352406989595ad37831e997ed2	packages/core/__tests__/pivot-slicers-public-characterization.p1-08s.test.ts
+??	present	1dd9f8531a519ed35cb8fb4f14c69882918397c77cf95160f60bd98af57c23b0	packages/core/__tests__/spreadsheet-sdk-read-contract.p1-08e.test.ts
+??	present	12802dec480e24090a4cd0318b9ec727308a49829c21d46e8abc82d1a1e9668d	packages/core/__tests__/spreadsheet-sdk-retained-owner-boundary.h81.test.ts
+??	present	9a4ecb1b6a5f5732ceec537dbdc999c52b73b642f1e16f1a62f46c7c7b3cda51	packages/core/__tests__/spreadsheet-sdk-wave5-characterization.test.ts
+??	present	8a24080a5805c2b6ae674bc94c044435e42a76ea79af1ef5a6f0bc850a24118d	packages/core/__tests__/tsconfig.json
+??	present	ba68b5d3619d1a982561101efddd498bc38642cf2b442fa2d308d1f5831ac180	packages/core/__tests__/wave13-command-controller-characterization.p1-08p.test.ts
+??	present	24e2e1f4f4d122a2c4b8df0918d074fe7937886601d2ff1df5c897555f7fe8d4	packages/core/__tests__/workbook-column-width-journal.p1-pkg-02b.test.ts
+??	present	391a82752c9f00d2692abddba42820d1e9216ce00bcf5d58f5654108b153ec06	packages/core/__tests__/workbook-comment-delete-rollback-model.p1-pkg-06b.test.ts
+??	present	e3700057fe7fb6c1d18fb2eacb17486fb2c75cf51906e7ba60ff8a5ebbffad6d	packages/core/__tests__/workbook-cross-level-compatibility.p1-pkg-02g-c.test.ts
+??	present	8646ba680b940861bdb45bd9539d0b31f78de38b086d47799dc50cd1504b33f1	packages/core/__tests__/workbook-dimension-events.p1-pkg-02e.test.ts
+??	present	d1848e9b3d6ae68704af053d957829fed4b62fc47625d185cab45a9daa22de29	packages/core/__tests__/workbook-event-contract.p1-pkg-02d.test.ts
+??	present	ea4c522e6e0249ae07cdfc4951c83ed5bc2496e696692f865c4ccfead47b66d7	packages/core/__tests__/workbook-merged-formula-coordinate-contract.p1-pkg-14a.test.ts
+??	present	47981bf2c3af0bac7f3b8507d526b3a589c17caec2b04084c1d2812888f1bb6b	packages/core/__tests__/workbook-merged-member-formula-origin.p1-pkg-13a.test.ts
+??	present	e1d8a2b5116ab5a61b700ef46e95e0ddb9e95c6fdcb80c667e9d25072fd25d7b	packages/core/__tests__/workbook-merged-member-integrity.p1-pkg-12a.test.ts
+??	present	75c056994abc474e39806f37fd254ccfa7daaad5fbca3621f271de8e0e08ff32	packages/core/__tests__/workbook-multisheet-formula-graph-rollback.p1-pkg-15b.test.ts
+??	present	714aad799588143005abf783637c2524b42f396e98e53e8c913e65184e32e925	packages/core/__tests__/workbook-mutation-queue.p1-pkg-01.test.ts
+??	present	847b42cf272f6dba72a874060e8afe8ca32869317be448a192a839f9e92d0f9e	packages/core/__tests__/workbook-row-height-journal.p1-pkg-02a.test.ts
+??	present	bceeb65cf08542c7ee5c8bd0a3d57cb30bb4a9b6806c10c0db90c735a7668f62	packages/core/__tests__/workbook-seven-operation-benchmark.p1-pkg-02c.test.ts
+??	present	c019cc1a7ecfaa4c4a0f8c62a2032a9eff679eef44e696e9e64762f9ba261e13	packages/core/__tests__/workbook-seven-operation-differential.p1-pkg-02c.test.ts
+??	present	11056ce5e5ac36ce828a8b5734d03188fbc8affcee83ee2b67f715a374826138	packages/core/__tests__/workbook-seven-operation-observer-isolation.p1-pkg-08b.test.ts
+??	present	f4f778d1ff47022684570a3d41e7280fc7f663367b3e4c99201aa9caf230817a	packages/core/__tests__/workbook-transaction-disposal-publication.p1-pkg-14b.test.ts
+??	present	ce0183c35cf54de3aa785025b243be528bdc8e5f7553069868822b7cbe2af458	packages/core/__tests__/workbook-transaction-side-effect-matrix.p1-pkg-13b.test.ts
+??	present	66f81a6da4da043a7e7ccccf33053c352ef2772d0756a55beebb6bb063e21450	packages/core/__tests__/worksheet-comment-existing-contract.p1-pkg-04.test.ts
+??	present	170ce6f3bdad6489a29972b25dca7ca684b0716e552717cdf5ef56fb8a42ca8c	packages/core/__tests__/worksheet-comment-graph.p1-pkg-05.test.ts
+??	present	454bb21fbb4ddb3aebae9e4e8f59dcbbc2f44e7414cd3fb98f861ff61e824681	packages/core/__tests__/worksheet-comment-metadata-boundary.p1-pkg-06a.test.ts
+??	present	7fa5843d18c8f3e31aaeaad12578a126c3d5cf7535c1086cbb1a43b32b98c580	packages/core/__tests__/worksheet-comment-orphan-cascade-characterization.p1-pkg-07a.test.ts
+??	present	57c6e650e1f973d42774f7bfba41a46bd5ace050d2ecc577be856e1ac2707f36	packages/core/__tests__/worksheet-conditional-formatting-adoption-alias.test.ts
+??	present	4c8557372943ea7891d2fccb7da248f1cda9164835cda7d54703b61535b56b2b	packages/core/__tests__/worksheet-null-write-noop.p1-pkg-09c.test.ts
+??	present	70d6f43498a30bab6875807eb2f93ff42dd559130e25c43f7a2f29b772fd5256	packages/core/__tests__/worksheet-query-family-owner-boundary.p1-08b.test.ts
+??	present	2a88406bf9483e4f25401c5b802183bacfd8c0cda3d60c5e50bab3baae2b0b74	packages/core/benchmarks/p1-pkg-01b-transaction-benchmark.ts
+??	present	31b3b69d48c70090b958bdc7952ab95c6b064db615ce200a5b377113850a5acf	packages/core/benchmarks/p1-pkg-01c-journal-comparison.ts
+??	present	e296552135eadacb5e2ffdb3375568c1cef4517155359bd75cd7feb3216a979e	packages/core/benchmarks/p1-pkg-01g-formula-performance.ts
+??	present	4154f3d784c926f82ad7b8434a471b577a58af079392a1d09b0c4c6eed065f6b	packages/core/jest.typescript-first.config.cjs
+??	present	368930d6960f46fda1dd5a090091b180c56c876c1ca4fddccaf7760d7ce27577	packages/core/src/ExcelColor.d.ts.map
+??	present	23e36fc5f65f9ca5e8a4fa9fa8621e8d2fd369896195da10f01a63871dcfc16e	packages/core/src/ExcelColor.js
+??	present	a6231bfab3ad9b2f6b45922601a1c22d897fedd87c68e90559932ffc1a6bfd65	packages/core/src/ExcelColor.js.map
+??	present	84110f82676d7980b7d978cfb5b72957c0c6a407da25261342bc17dfacd8f6fb	packages/core/src/dag/DependencyGraph.d.ts.map
+??	present	8f3d038f84adce92cf80c8c35670ddbd5afd10a9c72ee40e4e2b151e5f014a7c	packages/core/src/dag/DependencyGraph.js
+??	present	ffd5357f688cfa7e866db47b2b90eee3d24d0157ddc0b697c989a6d92d2ac85e	packages/core/src/dag/DependencyGraph.js.map
+??	present	e7a302756969cdf5e78f74347fe1428a38c87dae78de73cdbea3fd9a0fad7150	packages/core/src/headerFooter.d.ts.map
+??	present	e23ef34fd185c735b7de26432dc332c2e6809b7baf78646b82b2fe3f7b4a78f3	packages/core/src/headerFooter.js
+??	present	73805f387ab87fde51ee10d1b27b2f0bf3aee06d2adfdbc9505e35ce9c585c79	packages/core/src/headerFooter.js.map
+??	present	972aecf407fc199c70a9a94de26cd6c6d050d733891ad88feab20f8793489f28	packages/core/src/sdk/errors.d.ts.map
+??	present	d33937a3eabbdabb7d2bf9ce7c3603e7d096dca5d9a6b333196236ab54d23436	packages/core/src/sdk/errors.js
+??	present	999efac3b96a3ad62107b6393f3ecacc16fb8ce0ba92db23ea0a57309600ec21	packages/core/src/sdk/errors.js.map
+??	present	73a0fe526d1cbe2194d9a16da8fb3392fa7166ec89dca9f5fb9b7953acbadfc3	packages/core/src/sdk/pivot.d.ts.map
+??	present	168fe5e36f7abfe3a4930680e6622a51630277ff7bfcee8572c2f423e33c97e5	packages/core/src/sdk/pivot.js
+??	present	daabfbea0f1e4e09d90f4a82783587dabd173462fe247ed8ae1d5108a301c5c9	packages/core/src/sdk/pivot.js.map
+??	present	30c4b2533299a57097c991c1b08bb1f5307222ea37951c002eeed7dba2320101	packages/core/src/storage/CellStoreV1.d.ts.map
+??	present	34131f5a64eb4d7a44db26672fca04001063f56b8f199da7ec851827dc5b589b	packages/core/src/storage/CellStoreV1.js
+??	present	d9f7ca84b1b72c382310eb1011e286d1d5706639a0f6471e7cacd82a4b90b16e	packages/core/src/storage/CellStoreV1.js.map
+??	present	5b5ba39ae2eb7c27e1e14fce68bfa36a336cb7818cbea0b24798a3a9a1386854	packages/core/src/storage/ICellStore.d.ts.map
+??	present	c777c2fa42b5ae54bf699cc3dd885e36ed293dbcc113fa5e3802865b6003a2b1	packages/core/src/storage/ICellStore.js
+??	present	f7a4e8356baa3800fd9fc9a05b79df1281ce54b9237d67415548f62286a720f7	packages/core/src/storage/ICellStore.js.map
+??	present	bcdec1053bd56e23203bde94484a4e3cb6f34f2c056bc1898969c58449677c48	packages/core/src/types.d.ts.map
+??	present	01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2	packages/core/src/types.js
+??	present	225333542ab9931e7d3ef14a5fe599d146bc3c70d452d10df5bbee7ca32ff18d	packages/core/src/types.js.map
+??	present	3de2e398ac9e74bd7f94a70646bb8a4bc24129c63cf2ab68bb743c786c0e29e0	packages/core/src/types/entity-types.d.ts.map
+??	present	1a4e0344b2d73365140a3ae80205d64cb7aca26e4491792aa26267931aa15908	packages/core/src/types/entity-types.js
+??	present	70d3cca9388a0990d54273b9890e8c6958fe1ca7482b32b1b441f22c634562da	packages/core/src/types/entity-types.js.map
+??	present	39c065bec11d7371ec72907ca7fca337f98530ac80b11e50aca7a4aff5949171	packages/core/src/workbookMutationStrategy.ts
+??	present	186a5894adf019f823d7ab990370c158e9ad6eb372f69d9e30a9a75777d25cd4	packages/core/src/workbookMutationTestHooks.ts
+??	present	0b96eefc5d57112b91c5d860c028786d007e3d32af8f659556ba44ba05e38c5c	packages/core/test/fixtures/typescript-first-resolver/outside-source-paired.js
+??	present	8ee8d1a303a20b9149785669ac1752313d124dcff3d9e5c8c58b3493c93d6453	packages/core/test/fixtures/typescript-first-resolver/outside-source-paired.ts
+??	present	5323d06b5d8c1f93deee37a7b6ba8fdd55b94caab44851a2b7e46da800c48af4	packages/core/test/fixtures/typescript-first-resolver/runtime-artifact.cjs
+??	present	ab99257389fa65d24478982c0366f50a652f3baded9ce0e723407340d007c205	packages/core/test/typescript-first-resolver.cjs
+??	present	aca3079c06865d33b6942528b65da2e182fd21cb72cbbebc4a6bb5527437434a	packages/io-xlsx/test/development-loader-ownership.test.ts
+??	present	1705697ffc3102c45437b62988951340df3980eb4f11bdd530b066d20914d805	packages/io-xlsx/test/export-retained-raw-owner-boundary.test.ts
+??	present	5f711309b0d551959ae110b7a6862f6bb3ef384ff87a5481503cdcb58cba38cb	packages/react/scripts/package-assets.mjs
+??	present	a18c0cc942e7954b1a8cabf4e0113d51909da15324bb0389f2d221341bd3a0ae	packages/react/src/__tests__/auto-sum-characterization.p1-08j.test.ts
+??	present	993bcd7f8c7d762383f59a3fb3de399fc30a287429f023dcecdb4894111da596	packages/react/src/__tests__/auto-sum-owner-boundary.p1-08b.test.ts
+??	present	02fdcc323273922224dde81fa32726ed1b8c8d23036b9ea013097a2442d163b1	packages/react/src/__tests__/clipboard-cut-owner-flow.r1.test.tsx
+??	present	8b0fa1eb44f178390a7df8dd30569774050de30e334dce472ccd815c50afae8b	packages/react/src/__tests__/clipboard-cut-retained-raw-owner-boundary.test.ts
+??	present	bb4f321726cabffdbfc833d867510c079480b88682f932f898ecc6ea4ffcf64d	packages/react/src/__tests__/clipboard-paste-retained-raw-owner-boundary.test.ts
+??	present	6d4c285ef9f181b6e8e9c604a10cb241dec7c3da56d6f5c4ab57e950df687c7b	packages/react/src/__tests__/clipboard-paste-sync-retained-raw-owner-boundary.test.ts
+??	present	53e9875ec121762685ffec993beb2014e49ace864dde558e40dbd643ec757004	packages/react/src/__tests__/conditional-formatting-helper-owner-flow.p1-08f.test.tsx
+??	present	d9f86f073c44247befe6fe672b8605592d41027dc5120560ab88932e22204860	packages/react/src/__tests__/create-copy-panel-stale-close.r1.test.tsx
+??	present	eec42da280790feb327c748304518c0e09f76aac6d9d1f8ba6b573d4428eed37	packages/react/src/__tests__/cyber-sheet-formula-sync-fallback.r1.test.ts
+??	present	b508b2d135432923ab7ea7dc0ee1e02e97ae7c320bcad9643f1c092ff97760c0	packages/react/src/__tests__/cyber-sheet-formula-worker-distribution.r1.test.tsx
+??	present	073a6416259734d2022bb6f3a376d2e94ea5c2cca286bec535b740cab219296c	packages/react/src/__tests__/cyber-sheet-touch-lifecycle.p1-08s.test.tsx
+??	present	58aae4844b0ebb380448fc4ec7ce4dedc2aa1e37847afd0543342c76a766d81b	packages/react/src/__tests__/drawing-canvas-snap-lifecycle.p1-08n.test.tsx
+??	present	25921b22d54538957f849981c02497e433f6bc296622a5b65bbe70d1503ae1b1	packages/react/src/__tests__/excel-app-edit-filter-owner-boundary.h84.test.tsx
+??	present	fc6c42ddae0f5e5317f8346dfa22f22f55932d3c410d98ca7e8cd34e5e90f743	packages/react/src/__tests__/excel-app-editor-lifecycle-owner-boundary.h85.test.tsx
+??	present	48d08bdc0e9927980a787ded225033ef4c53643c271320ed07aaeb8b910b1f4b	packages/react/src/__tests__/excel-app-formula-submit-owner-boundary.h83.test.tsx
+??	present	32c252ae3059aa4fc6c71127b3a534da036f4a853b9a08d424ff27054b569ddc	packages/react/src/__tests__/excel-ribbon-data-owner-boundary.h82.test.tsx
+??	present	9ecabd8f76fcceb306aef120945ccf92c8f8910bd085fc9947c90c74d32d81b8	packages/react/src/__tests__/export-panel-duplicate-download.r1.test.tsx
+??	present	936fc1a52d60220182e85c604e4bbfada8a511b96dfb365028445ebcce77fcd5	packages/react/src/__tests__/formula-controller-lifecycle.p1-08n.test.tsx
+??	present	886e87ad460d3ac8ffccf974ef327f1d3826f43789cd9c318f90d131db67d621	packages/react/src/__tests__/home-tab-autofit-owner-boundary.p1-08b.test.tsx
+??	present	ba34327705d2e09e13456760d306a994d24aee74423ce9a21906914dded4e3d6	packages/react/src/__tests__/home-tab-column-visibility-owner-boundary.b03.test.tsx
+??	present	de7e6c5b20a05c8d2eaf9ebd666abfe746daba12259de4f5a4d736af9f80fae0	packages/react/src/__tests__/home-tab-dimensions-owner-boundary.b02.test.tsx
+??	present	4017b1aae73140719c7c6f7498b8985fc890ee72a4927bac771187980b0c9e2e	packages/react/src/__tests__/home-tab-row-visibility-lock-owner-flow.p1-08e.test.tsx
+??	present	d6d3ea92febbdf48549be1026face8dc394d5285ffa09a7341b76548dd8cdbb3	packages/react/src/__tests__/insert-pivot-table-boundary.p1-08r.test.ts
+??	present	1d10c6af3cd4f77d81fad95dd7cea6f0ca9220a53199664a9a981093a767b452	packages/react/src/__tests__/p1-08g-react-exact-key-batch.test.tsx
+??	present	b56f6ce5b1c42d778c1f0372fd578839a8f2af08a536d9bed3a9cf4be0016193	packages/react/src/__tests__/p1-08h-react-imperative-owner-flow.test.tsx
+??	present	b52ff63adb4b49210f0b82a26f664e5551edf7dbfa26133be2e2e577fefbbb99	packages/react/src/__tests__/pivot-and-dialog-boundaries.p1-08v.test.tsx
+??	present	433900b9e48cbb5292144e8a01627d1a70706bf905b14610729ce0b7cd359665	packages/react/src/__tests__/react-public-module-boundaries.p1-08u.test.ts
+??	present	876b72670f7f78422082ba4bae409f466a5bfea46ef6ce5efe564b29d20856b6	packages/react/src/__tests__/styles-group-conditional-formatting-owner-flow.p1-08k.test.tsx
+??	present	a838c2c1adbfd73f5843d31643cc9182756821c17a12256436beefa123253df8	packages/react/vite.node.config.mjs
+??	present	b69ecefa62875c8f6e40a06b78d128450738181c0c3921cca4d14371d76b3188	packages/renderer-canvas/__tests__/advanced-export-engine-owner-boundary.test.ts
+??	present	d0304a7d345d8493e0207a649c3cf2676111f5ce5adfce51ab55e24f12343c38	packages/renderer-canvas/__tests__/data-manager-owner-boundary.r1.test.ts
+??	present	20961fd2c6beb428dba5f8ca8dd2cd7310acc397e8844f53850dc3d4ba6c7ab2	packages/renderer-canvas/__tests__/editing-manager-history-authority.r1.test.ts
+??	present	7e2e27f9624342fcd66271a488e2ef90f1b0e0490bb6c4d1a428cefb39b4a581	packages/renderer-canvas/__tests__/editing-manager-retained-lifecycle.r1.test.ts
+??	present	b936f2cf3b4c723b58993450d93a2e1dc1c50ab2917145e46e9b64b9c607f1e3	packages/renderer-canvas/__tests__/editing-manager-standalone-contract.r1.test.ts
+??	present	4e7c99382a7cdbeee01a2d710a3cc2b493eca2edab39d1ea6cc1479b214b4b7b	packages/renderer-canvas/__tests__/renderer-failure-cleanup.p1-08bb.test.ts
+??	present	99852d66480e07abcc0458c46ce7c34544eb2737493c223bca87c82c36b415e0	packages/renderer-canvas/__tests__/renderer-structural-view-facade.r1.test.ts
+??	present	ed018795f835363fed1ec961ac08ef32091907f8a306677bff1576945bd497b8	packages/renderer-canvas/vite.node.config.mjs
+??	present	3989b189a7f3976e5ebf34c8d65bfdcd80b087409682cecc21e9f698cde6a214	packages/svelte/src/__tests__/cyber-sheet-store-initialization.p1-08az.test.ts
+??	present	0f98c7b76d4372b65564626e557cb3bb642ef0f6c1ea275d972bc6671f0140bd	packages/svelte/src/__tests__/cyber-sheet-store-renderer-failure.p1-08ba.test.ts
+??	present	0cccaa634e8a1d4d6dd114fe6305c293bb67eafaf665464b9e332805aa1e5f61	packages/test-utils/jest.config.cjs
+??	present	fe6f22541daaeea263bf767f43f798094fea3d9ba052f2753f486688e405e71c	packages/vue/src/__tests__/fixtures/renderer-canvas.ts
+??	present	9396affbaaa45d3e42ebb5d3a16aa3ded69eb87381e450e5d3e6061724f3ff1b	packages/vue/src/__tests__/useCyberSheet-initialization.p1-08az.spec.ts
+??	present	557421555aed8ee41aa6dfbecedf7b7d0ad14d9f7fde8594cc9cfb79f8913513	packages/vue/src/__tests__/useCyberSheet-renderer-failure.p1-08ba.spec.ts
+??	present	7435a2409fb1e3246646e8300286ccd3483e8e65ada21973c135f924f9c23dae	packages/vue/vitest.p1-08az.config.ts
+??	present	d033fa247eea6b30a476a4024acd1b5de622d0d900f50b550d071b638e5e3965	packages/vue/vitest.p1-08ba.config.ts

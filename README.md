@@ -1,14 +1,13 @@
 # 🚀 CyberSheet Excel
 
-**Enterprise-Grade Canvas-First Spreadsheet Engine**
+**Canvas-first spreadsheet project — current supported boundaries are documented below**
 
 [![npm version](https://img.shields.io/npm/v/@cyber-sheet/core)](https://www.npmjs.com/package/@cyber-sheet/core)
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/@cyber-sheet/core)](https://bundlephobia.com/package/@cyber-sheet/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-2050%2B-brightgreen)](./docs)
+[![TypeScript](https://img.shields.io/badge/TypeScript-project-blue)](https://www.typescriptlang.org/)
 
-> **Zero-dependency, canvas-first spreadsheet engine with Excel-level fidelity, 10× performance, and 93-97% feature parity.**
+> **R1 status:** The supported React initialization path creates an empty Workbook with `Workbook.create()`. Workbook-owned sheets are read-only views. Workbook cell, style, and metadata writes are not available in this phase; XLSX Workbook restoration remains gated. The capability figures elsewhere in this README are historical project claims unless explicitly qualified and backed by linked evidence.
 
 ---
 
@@ -32,28 +31,26 @@
 
 ## 🎯 Overview
 
-**CyberSheet Excel** is a next-generation spreadsheet engine designed for modern web applications. Built from the ground up with a canvas-first architecture, it delivers **10× faster rendering**, **10× less memory usage**, and **Excel-level fidelity** compared to traditional DOM-based solutions.
+**CyberSheet Excel** is a spreadsheet project with a canvas renderer and framework packages. Current package and feature support varies; this README distinguishes the present R1 boundary from historical project goals and unverified claims.
 
 ### **Project Mission**
 
 To provide enterprise-grade spreadsheet functionality in web applications without the performance penalties, vendor lock-in, and accessibility gaps found in existing solutions. CyberSheet achieves this through:
 
 - **Canvas-First Rendering**: Multi-layer architecture with hardware acceleration
-- **Zero Dependencies**: Minimal footprint (~85KB gzipped)
-- **Framework Agnostic**: Works with React, Vue, Angular, Svelte, or vanilla JavaScript
-- **Excel Compatibility**: 98% formula parity, full XLSX import/export, theme colors
-- **Production Ready**: 2,050+ tests, WCAG 2.1 AA accessibility, i18n support
+- **Framework Packages**: React, Vue, Angular, Svelte, Core, and Canvas Renderer packages exist in this repository; their published compatibility and feature completeness are not established by package presence alone.
+- **R1 Workbook Boundary**: `Workbook.create()` creates empty sheets; Workbook sheet views support reads. Workbook-owned writes and XLSX restoration are unavailable pending later authorized slices.
+- **Export Boundary**: XLSX and CSV have bounded first-party export evidence. Other ExportPanel formats are unavailable or informational in the current implementation.
 
 ### **What Makes CyberSheet Different?**
 
-| Traditional Solutions | CyberSheet Excel |
-|:---------------------|:----------------|
-| ❌ 10,000+ DOM nodes → lag & bloat | ✅ 4 canvas layers → 125 FPS scrolling |
-| ❌ 200-500KB bundle sizes | ✅ ~85KB (min+gzip) |
-| ❌ Framework-specific | ✅ Framework agnostic |
-| ❌ Limited Excel support | ✅ 98-100% formula parity |
-| ❌ Poor accessibility | ✅ WCAG 2.1 AA compliant |
-| ❌ Memory-intensive | ✅ 10× less memory usage |
+| Comparison area | CyberSheet status |
+|:---|:---|
+| Rendering | Canvas renderer package is present; comparative performance is not currently qualified here. |
+| Bundle size and memory | Historical estimates; no current reproducible measurement is provided here. |
+| Framework support | Packages exist; framework-specific feature and compatibility claims require qualification. |
+| Workbook mutation and import | Workbook-owned writes and XLSX restoration are unavailable in R1. |
+| Accessibility | Accessibility-related source exists; WCAG conformance is not established by this README. |
 
 ---
 
@@ -72,52 +69,46 @@ Traditional spreadsheet libraries suffer from critical limitations:
 
 ### **The CyberSheet Solution**
 
-✅ **10× Faster Rendering** - Canvas-first architecture with multi-layer compositing  
-✅ **Excel-Level Fidelity** - 155+ functions, 11 border styles, Excel theme colors  
-✅ **85KB Bundle** - Zero dependencies, tree-shakeable ES modules  
-✅ **Framework Agnostic** - First-class React, Vue, Angular, Svelte bindings  
-✅ **Full Accessibility** - WCAG 2.1 AA compliant, screen reader support, IME support  
-✅ **Mobile-First** - Touch events, pinch-zoom, responsive virtualization  
-✅ **Production Ready** - 2,050+ tests, formula fuzzing, differential correctness validation
+**Historical feature inventory, not a current R1 verification statement:** Earlier project materials reported rendering, bundle-size, formula-count, framework, accessibility, mobile, and test-coverage figures. Those estimates have not been requalified by the current R1 review. Current Workbook writes and XLSX restoration remain unavailable; consult the API and export qualifications below before relying on any feature claim.
 
 ---
 
 ## 🎯 Key Features
 
-### **🚀 Performance & Scalability**
+### **🚀 Performance & Scalability — historical claims, not current guarantees**
 
 - **Multi-Layer Canvas Architecture**: 4 independent layers (background/grid/content/overlay)
 - **DPR-Perfect Rendering**: Crisp gridlines at 1×, 1.25×, 1.5×, 2×, 3×, 4× zoom levels
 - **Hardware Acceleration**: GPU-powered compositing with zero layout thrashing
-- **Virtualization**: Handle 1M+ cells with infinite scroll and intelligent viewport culling
-- **125 FPS Scrolling**: 15× smoother than DOM-based solutions
+- **Virtualization**: Large-sheet behavior and infinite-scroll limits require current measurement
+- **Scrolling performance**: Previously reported frame-rate figures are historical and unverified
 
-### **🎨 Excel-Level Rendering**
+### **🎨 Excel-Level Rendering — feature claims require current verification**
 
 - **11 Border Styles**: All Excel border types (thin, medium, dashed, dotted, double, etc.)
 - **Excel Theme Colors**: Full Office theme palette with tint/shade support
 - **Subpixel Text**: ClearType/LCD optimization for razor-sharp text
 - **Per-Layer Anti-Aliasing**: Granular AA control (crisp gridlines, smooth charts)
-- **Conditional Formatting**: 100% complete with icon sets, color scales, data bars
+- **Conditional Formatting**: Feature coverage and completion status are not currently qualified
 
-### **🧮 Formula Engine (98-100% Complete)**
+### **🧮 Formula Engine — completion percentage unverified**
 
-- **155+ Functions**: Math, statistical, financial, text, logical, lookup, date/time
+- **Formula functions**: Math, statistical, financial, text, logical, lookup, and date/time categories are represented; supported count and parity are unverified
 - **Advanced Functions**: Array formulas, LAMBDA, LET, MAKEARRAY, dynamic arrays
 - **Spill Support**: Dynamic array spilling with automatic range expansion
 - **Dependency Graph**: DAG-based recalculation with circular reference detection
 - **Differential Testing**: Optimized vs. naive engines validated at 100/1K/10K scale
 - **Formula Fuzzing**: 10K adversarial operations, 0 failures
 
-### **📊 Charts & Visualization (100% Complete)**
+### **📊 Charts & Visualization — completion percentage unverified**
 
 - **10 Chart Types**: Bar, line, pie, scatter, area, combo, waterfall, treemap, radar, 3D
 - **Advanced Features**: Dual Y-axes, trendlines, custom renderers, animations
 - **Interactive Charts**: Pan, zoom, touch gestures, real-time data streaming
 - **Accessibility**: ARIA labels, keyboard navigation, screen reader support
-- **740+ Tests**: Full coverage including interaction, rendering, and data binding
+- **Chart testing**: Current test count and coverage are not qualified here
 
-### **⌨️ Keyboard Shortcuts Engine (92-95% Complete)**
+### **⌨️ Keyboard Shortcuts Engine — completion percentage unverified**
 
 - **Transformation Engine**: Insert/delete columns with 11 structural invariants
 - **Differential Correctness**: Optimized vs. naive validation at scale
@@ -125,7 +116,7 @@ Traditional spreadsheet libraries suffer from critical limitations:
 - **Adversarial Fuzzing**: Formula operations stress-tested (tokenization, DAG rebuild)
 - **~40 Shortcuts Implemented**: Navigation, editing, formatting (60 more planned)
 
-### **♿ Accessibility (WCAG 2.1 AA)**
+### **♿ Accessibility — WCAG conformance unverified**
 
 - **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+shortcuts
 - **Screen Reader Support**: ARIA live regions, cell announcements, formula readback
@@ -133,25 +124,28 @@ Traditional spreadsheet libraries suffer from critical limitations:
 - **RTL Languages**: Full bidirectional text support (Arabic, Hebrew)
 - **High Contrast**: Respects system color preferences
 
-### **🌍 Internationalization**
+### **🌍 Internationalization — locale count and coverage unverified**
 
-- **10 Locales Supported**: en-US, es-ES, fr-FR, de-DE, ja-JP, zh-CN, ar-SA, ru-RU, pt-BR, it-IT
+- Earlier project materials listed these locale identifiers; current locale coverage is unverified: en-US, es-ES, fr-FR, de-DE, ja-JP, zh-CN, ar-SA, ru-RU, pt-BR, it-IT
 - **Locale-Aware Formatting**: Numbers, dates, currencies per region
 - **RTL Support**: Right-to-left layout and text direction
 - **Unicode Handling**: Full emoji, CJK, and symbol support
 
-### **💾 Import/Export**
+### **💾 Import/Export — current R1 qualification**
 
-- **XLSX Import/Export**: Read/write Excel files with native DecompressionStream
-- **CSV Export**: RFC 4180 compliant with custom delimiters
-- **JSON Export**: Structured data with formulas and formatting
-- **PNG Export**: Render sheets to images with OffscreenCanvas
+- **XLSX import**: Workbook-producing loaders are fail-closed pending R6 restoration; do not rely on Workbook restoration in this phase.
+- **XLSX export**: Bounded first-party Workbook export is available; this does not imply full XLSX feature preservation.
+- **CSV export**: Bounded first-party export supports the reviewed delimiter path; the header-option contract remains unresolved.
+- **PDF, ODS, TXT, and HTML ExportPanel choices**: PDF is informational; ODS/TXT/HTML do not currently produce artifacts through the reviewed panel.
+- **JSON and PNG export**: Availability and supported ownership paths are not established by the current R1 review.
 
 ---
 
 ## 🏆 Performance Benchmarks
 
-### **Real-World Performance (April 2026)**
+### **Historical Performance Snapshot (April 2026; not reverified for this release)**
+
+The following table records previously published estimates only. Its measurements, environment, competitor comparisons, and methodology have not been reproduced as part of the current R1 qualification and must not be read as present performance guarantees.
 
 | Benchmark | CyberSheet | AG Grid | Handsontable | RevoGrid | Univer |
 |-----------|------------|---------|--------------|----------|--------|
@@ -166,7 +160,7 @@ Traditional spreadsheet libraries suffer from critical limitations:
 
 **Test Environment**: MacBook Pro 16" (M1 Max), Chrome 120, 5K Retina (DPR=2)
 
-### **What This Means**
+### **Historical interpretation (not a current guarantee)**
 
 - ⚡ **Instant Load** - Render 10,000 cells in under 50ms
 - ⚡ **Butter-Smooth Scrolling** - 125 FPS on standard hardware
@@ -174,7 +168,7 @@ Traditional spreadsheet libraries suffer from critical limitations:
 - ⚡ **Tiny Footprint** - 85KB vs 300KB+ for competitors
 - ⚡ **Low Memory** - 10× less RAM usage
 
-📊 **[See Full Benchmarks →](./docs/PERFORMANCE.md)**
+📊 Historical benchmark claims require a current reproducible benchmark report before use as product guarantees. The previously linked `docs/PERFORMANCE.md` is not present in this repository.
 
 ---
 
@@ -185,12 +179,12 @@ Traditional spreadsheet libraries suffer from critical limitations:
 - **Canvas API**: Multi-layer rendering with hardware acceleration
 - **TypeScript 6.0**: Strict typing, advanced type inference
 - **ES Modules**: Tree-shakeable, zero-dependency architecture
-- **Web Workers**: Off-thread formula calculation (planned)
+- **Web Workers**: Off-thread formula calculation is planned; the React default worker distribution contract is not currently qualified.
 - **OffscreenCanvas**: Non-blocking chart/export rendering
 
 ### **Testing & Quality Assurance**
 
-- **Jest 30**: Unit testing framework with 2,050+ tests
+- **Jest**: Used in the repository; the previously stated 2,050+ total is a historical count and is not a current passing-test qualification.
 - **Playwright**: End-to-end testing for real-world scenarios
 - **Property-Based Testing**: Formula fuzzing with automatic shrinking
 - **Differential Testing**: Optimized vs. naive engine validation
@@ -208,17 +202,19 @@ Traditional spreadsheet libraries suffer from critical limitations:
 
 | Framework | Package | Status |
 |-----------|---------|--------|
-| React | `@cyber-sheet/react` | ✅ Production Ready |
-| Vue | `@cyber-sheet/vue` | ✅ Production Ready |
-| Angular | `@cyber-sheet/angular` | ✅ Production Ready |
-| Svelte | `@cyber-sheet/svelte` | ✅ Production Ready |
-| Vanilla JS | `@cyber-sheet/core` | ✅ Production Ready |
+| React | `@cyber-sheet/react` | Package exists; current supported boundary is qualified below |
+| Vue | `@cyber-sheet/vue` | Package exists; populated editing and framework compatibility are not qualified |
+| Angular | `@cyber-sheet/angular` | Package exists; populated editing and framework compatibility are not qualified |
+| Svelte | `@cyber-sheet/svelte` | Package exists; populated editing and framework compatibility are not qualified |
+| Core / standalone APIs | `@cyber-sheet/core` | Workbook-owned reads are available; standalone Worksheet APIs are a separate boundary |
 
 ---
 
 ## 📦 Installation
 
 ### **Prerequisites**
+
+The package names below match local workspace manifests. Registry publication, the latest released versions, and compatibility of those releases have not been checked here.
 
 - **Node.js**: 18.0.0 or higher
 - **npm**: 9.0.0 or higher (or yarn/pnpm)
@@ -257,17 +253,7 @@ pnpm add @cyber-sheet/core @cyber-sheet/renderer-canvas
 
 ### **CDN (for prototyping)**
 
-```html
-<!-- Core -->
-<script type="module">
-  import { Workbook } from 'https://cdn.jsdelivr.net/npm/@cyber-sheet/core/+esm';
-</script>
-
-<!-- Renderer -->
-<script type="module">
-  import { ExcelRenderer } from 'https://cdn.jsdelivr.net/npm/@cyber-sheet/renderer-canvas/+esm';
-</script>
-```
+The repository contains Core and Canvas Renderer package manifests, but CDN publication, `+esm` resolution, transitive dependency loading, and browser execution have not been verified. Do not treat the former CDN snippets as a supported distribution path.
 
 ---
 
@@ -276,150 +262,56 @@ pnpm add @cyber-sheet/core @cyber-sheet/renderer-canvas
 ### **1. Vanilla JavaScript**
 
 ```javascript
-import { Workbook, I18nManager } from '@cyber-sheet/core';
-import { 
-  ExcelRenderer, 
-  AccessibilityManager, 
-  VirtualizationManager,
-  ExportPlugin 
-} from '@cyber-sheet/renderer-canvas';
+import { Workbook } from '@cyber-sheet/core';
 
-// Create workbook and sheet
-const workbook = new Workbook();
-const sheet = workbook.addSheet('Sales Data');
-
-// Add data
-sheet.setCellValue({ row: 0, col: 0 }, 'Product');
-sheet.setCellValue({ row: 0, col: 1 }, 'Q1');
-sheet.setCellValue({ row: 0, col: 2 }, 'Q2');
-sheet.setCellValue({ row: 1, col: 0 }, 'Widget');
-sheet.setCellValue({ row: 1, col: 1 }, 1000);
-sheet.setCellValue({ row: 1, col: 2 }, 1200);
-sheet.setCellValue({ row: 2, col: 1 }, '=B2+C2'); // Formula
-
-// Initialize renderer with DPR-perfect gridlines
-const container = document.getElementById('spreadsheet');
-const renderer = new ExcelRenderer(container, sheet, {
-  antialiasing: 'high',      // High-quality anti-aliasing
-  snapToPixel: true,         // Crisp gridlines at all DPR
-  subpixelText: true,        // ClearType/LCD text rendering
-  enableComments: true,      // Excel-compatible comments
+// R1 creates an empty Workbook. Initial cell data and subsequent
+// Workbook-owned writes are not available in this phase.
+const workbook = Workbook.create({
+  sheets: [{ name: 'Sales Data', rows: 100, cols: 26 }],
 });
 
-// Enable accessibility (WCAG 2.1 AA)
-const a11y = new AccessibilityManager(container, sheet, {
-  enableKeyboardNavigation: true,
-  enableScreenReader: true,
-  enableIME: true,
-});
+// Workbook sheets are owner-backed read-only views.
+const sheet = workbook.getSheet('Sales Data');
+console.log(sheet?.getCellValue({ row: 1, col: 1 })); // null for an empty cell
+console.log(workbook.getSheetNames());
 
-// Enable virtualization for 1M+ cells
-const vm = new VirtualizationManager(sheet, {
-  enableInfiniteScroll: true,
-  maxRows: 1_000_000,
-});
-
-// Export to CSV/JSON/PNG
-const exporter = new ExportPlugin(sheet);
-const csvResult = await exporter.export('csv');
-ExportPlugin.download(csvResult);
-
-// Renders at 125 FPS with pixel-perfect quality
+// The Canvas Renderer APIs below currently accept standalone Worksheet,
+// not WorkbookSheetView. No Workbook-backed vanilla renderer example is
+// documented until an owner-view-compatible renderer contract is available.
 ```
+
+Standalone `Worksheet` mutation remains a separate API. It does not provide a way to write to a sheet owned by a Workbook. See the API boundary below.
 
 ### **2. React**
 
 ```tsx
 import { CyberSheet } from '@cyber-sheet/react';
 import { Workbook } from '@cyber-sheet/core';
-import { useState } from 'react';
+import { useMemo } from 'react';
 
 function App() {
-  const [workbook] = useState(() => {
-    const wb = new Workbook();
-    const sheet = wb.addSheet('Sheet1');
-    sheet.setCellValue({ row: 0, col: 0 }, 'Hello CyberSheet!');
-    return wb;
-  });
+  const workbook = useMemo(
+    () => Workbook.create({ sheets: [{ name: 'Sheet1', rows: 100, cols: 26 }] }),
+    [],
+  );
 
   return (
-    <CyberSheet
-      workbook={workbook}
-      sheetName="Sheet1"
-      width={800}
-      height={600}
-      accessibility={{
-        enableKeyboardNavigation: true,
-        enableScreenReader: true,
-      }}
-      onCellClick={(row, col) => console.log(`Clicked: ${row}, ${col}`)}
-    />
+    <div style={{ width: 800, height: 600 }}>
+      <CyberSheet workbook={workbook} />
+    </div>
   );
 }
 ```
 
+This renders the client-side sheet surface with empty initial cells. Initial data population, cell editing, and Workbook-owned formatting are unavailable pending their authorized mutation slices.
+
 ### **3. Vue**
 
-```vue
-<template>
-  <CyberSheet
-    :workbook="workbook"
-    sheet-name="Sheet1"
-    :width="800"
-    :height="600"
-    :accessibility="{ enableKeyboardNavigation: true }"
-    @cell-click="handleCellClick"
-  />
-</template>
-
-<script setup>
-import { CyberSheet } from '@cyber-sheet/vue';
-import { Workbook } from '@cyber-sheet/core';
-import { ref } from 'vue';
-
-const workbook = ref(new Workbook());
-const sheet = workbook.value.addSheet('Sheet1');
-sheet.setCellValue({ row: 0, col: 0 }, 'Vue rocks!');
-
-const handleCellClick = (row, col) => {
-  console.log(`Clicked: ${row}, ${col}`);
-};
-</script>
-```
+The earlier populated Workbook example is removed: the current adapter creates an empty Workbook and rejects nonempty initial data. Its write helper is unavailable pending R2. A current, populated Vue integration example is not yet qualified.
 
 ### **4. Angular**
 
-```typescript
-import { Component } from '@angular/core';
-import { CyberSheetModule, Workbook } from '@cyber-sheet/angular';
-
-@Component({
-  selector: 'app-spreadsheet',
-  template: `
-    <cyber-sheet
-      [workbook]="workbook"
-      sheetName="Sheet1"
-      [width]="800"
-      [height]="600"
-      [accessibility]="{ enableKeyboardNavigation: true }"
-      (cellClick)="handleCellClick($event)"
-    ></cyber-sheet>
-  `,
-  imports: [CyberSheetModule]
-})
-export class SpreadsheetComponent {
-  workbook = new Workbook();
-
-  constructor() {
-    const sheet = this.workbook.addSheet('Sheet1');
-    sheet.setCellValue({ row: 0, col: 0 }, 'Angular rocks!');
-  }
-
-  handleCellClick(event: { row: number; col: number }) {
-    console.log(`Clicked: ${event.row}, ${event.col}`);
-  }
-}
-```
+The earlier populated Workbook example is removed: the current component initializes an empty Workbook and rejects nonempty initial data. Its Workbook-owned editing behavior is unavailable pending R2. A current, populated Angular integration example is not yet qualified.
 
 ---
 
@@ -431,14 +323,41 @@ export class SpreadsheetComponent {
 npm install @cyber-sheet/react
 ```
 
-**Features**:
-- `<CyberSheet />` component with TypeScript support
-- React 19+ hooks integration
-- Event handlers (onCellClick, onCellChange, onSelectionChange)
-- Ref forwarding for programmatic control
-- Server-side rendering (SSR) compatible
+**Qualified boundary**: `<CyberSheet />` accepts a required `Workbook` and renders the client-side surface. Its current props are defined by the package declarations; this README does not claim cell-editing callbacks or workbook mutation support.
 
-**Example**: [examples/react-demo](./examples/react-demo)
+#### Server rendering and React Server Components
+
+`@cyber-sheet/react` supports traditional React server rendering of the `CyberSheet` host shell, followed by browser hydration and client-side spreadsheet initialization. The server output is an empty renderer container: it does not include spreadsheet cells, grid content, or workbook data. This is shell SSR, not server-rendered spreadsheet content.
+
+For React Server Components (RSC) applications, establish a client boundary in your application and create the `Workbook` inside that boundary. Do not import Cyber Sheet components directly into an RSC server component or pass a `Workbook` instance across the server/client boundary. Framework-specific RSC integration, including Next.js and React Flight, has not been verified.
+
+Load the exported stylesheets from the stylesheet entrypoint allowed by your host framework. The Node-target bundles omit stylesheet imports, so server-side package import does not load these styles automatically. The Excel application stylesheet is available at the public `@cyber-sheet/react/styles/excel-app.css` export; ribbon applications can also load `@cyber-sheet/react/styles/ribbon.css`.
+
+```tsx
+// In the host application's global stylesheet entrypoint:
+import '@cyber-sheet/react/styles/excel-app.css';
+```
+
+```tsx
+'use client';
+
+import { useMemo } from 'react';
+import { Workbook } from '@cyber-sheet/core';
+import { CyberSheet } from '@cyber-sheet/react';
+
+export function SpreadsheetClient() {
+  const workbook = useMemo(
+    () => Workbook.create({ sheets: [{ name: 'Sheet1', rows: 100, cols: 26 }] }),
+    [],
+  );
+
+  return (
+    <div style={{ width: '100%', height: 600 }}>
+      <CyberSheet workbook={workbook} />
+    </div>
+  );
+}
+```
 
 ### **Vue Integration**
 
@@ -446,14 +365,7 @@ npm install @cyber-sheet/react
 npm install @cyber-sheet/vue
 ```
 
-**Features**:
-- Vue 3 composition API
-- Two-way data binding with `v-model`
-- TypeScript support
-- Event emitters (`@cell-click`, `@cell-change`)
-- Teleport support for modals/dialogs
-
-**Example**: [examples/vue-demo](./examples/vue-demo)
+The package exposes Vue component/composable entrypoints. The current composable creates an empty Workbook and rejects nonempty initial data; Workbook writes are unavailable pending R2. Two-way binding, populated editing, and broader framework compatibility are not qualified here.
 
 ### **Angular Integration**
 
@@ -461,14 +373,7 @@ npm install @cyber-sheet/vue
 npm install @cyber-sheet/angular
 ```
 
-**Features**:
-- Angular standalone components
-- RxJS observables for events
-- Zone-aware change detection
-- Angular CLI integration
-- Ivy compiler optimized
-
-**Example**: [examples/angular-demo](./examples/angular-demo)
+The package exposes Angular component and service entrypoints. The current component initializes an empty Workbook and rejects nonempty initial data; Workbook writes are unavailable pending R2. Broader framework compatibility and the former event/accessibility claims are not qualified here.
 
 ### **Svelte Integration**
 
@@ -476,63 +381,29 @@ npm install @cyber-sheet/angular
 npm install @cyber-sheet/svelte
 ```
 
-**Features**:
-- Svelte 4+ reactive stores
-- Action directives
-- Two-way binding with `bind:`
-- TypeScript support
-- SvelteKit SSR compatible
-
-**Example**: [examples/svelte-demo](./examples/svelte-demo)
+The package exposes a Svelte component and store. Nonempty initial data is rejected pending R2, and populated editing/SSR compatibility are not qualified here. Do not rely on its write helper as a supported Workbook mutation path.
 
 ---
 
 ## 🏗️ Architecture
 
-### **Package Structure**
+### **Package Structure (simplified workspace view)**
 
 ```
 cyber-sheet-excel/
 ├── packages/
-│   ├── core/                 # Data model, formulas, filters, styles (0 deps)
-│   │   ├── src/
-│   │   │   ├── Workbook.ts
-│   │   │   ├── Worksheet.ts
-│   │   │   ├── FormulaEngine.ts
-│   │   │   ├── ConditionalFormatting.ts
-│   │   │   └── I18nManager.ts
-│   │   └── package.json
-│   │
-│   ├── renderer-canvas/      # Canvas rendering, charts, accessibility (0 deps)
-│   │   ├── src/
-│   │   │   ├── ExcelRenderer.ts
-│   │   │   ├── ChartEngine.ts
-│   │   │   ├── AccessibilityManager.ts
-│   │   │   ├── VirtualizationManager.ts
-│   │   │   └── ExportPlugin.ts
-│   │   └── package.json
-│   │
-│   ├── io-xlsx/              # XLSX import/export (native DecompressionStream)
-│   ├── react/                # React bindings
-│   ├── vue/                  # Vue bindings
-│   ├── angular/              # Angular bindings
-│   ├── svelte/               # Svelte bindings
-│   └── test-utils/           # Shared test utilities
-│
-├── examples/                 # Framework examples
-│   ├── react-demo/
-│   ├── vue-demo/
-│   ├── angular-demo/
-│   └── vanilla-js/
-│
-├── docs/                     # Documentation
-│   ├── ARCHITECTURE.md
-│   ├── PERFORMANCE.md
-│   ├── ACCESSIBILITY_GUIDE.md
-│   └── FORMULA_QUICK_START.md
-│
-└── tests/                    # Integration tests
+│   ├── core/                 # Workbook, Worksheet, formulas, read views
+│   ├── renderer-canvas/      # Canvas and chart rendering APIs
+│   ├── io-xlsx/              # XLSX import/export package
+│   ├── react/                # React components and Backstage panels
+│   ├── vue/                  # Vue adapter package
+│   ├── angular/              # Angular adapter package
+│   └── svelte/               # Svelte adapter package
+├── examples/                 # Repository examples (not all R1-qualified)
+└── docs/                     # Project and engineering documentation
 ```
+
+This is a navigation aid, not a statement that every package feature is currently supported or every example is compatible with the R1 Workbook boundary.
 
 ### **Multi-Layer Canvas Architecture**
 
@@ -563,7 +434,7 @@ FormulaEngine
 ├── Tokenizer           → Lexical analysis (=SUM(A1:B10) → tokens)
 ├── Parser              → AST generation (syntax validation)
 ├── DependencyGraph     → DAG for incremental recalculation
-├── FunctionRegistry    → 155+ Excel functions
+├── FunctionRegistry    → formula function registry (supported count unverified)
 ├── EvaluationContext   → Runtime environment (locale, precision)
 └── SpillManager        → Dynamic array expansion
 ```
@@ -586,147 +457,36 @@ CommandManager
 
 ### **Core API**
 
-#### **Workbook**
+#### **Workbook initialization and reads (R1)**
 
 ```typescript
-class Workbook {
-  constructor();
-  addSheet(name: string): Worksheet;
-  getSheet(name: string): Worksheet | undefined;
-  removeSheet(name: string): boolean;
-  getSheetNames(): string[];
-  setActiveSheet(name: string): void;
-}
+import { Workbook, type WorkbookSheetView } from '@cyber-sheet/core';
+
+const workbook = Workbook.create({
+  sheets: [{ name: 'Sheet1', rows: 100, cols: 26 }],
+});
+const sheet: WorkbookSheetView | undefined = workbook.getSheet('Sheet1');
+const value = sheet?.getCellValue({ row: 1, col: 1 }); // one-based address
 ```
 
-#### **Worksheet**
+`Workbook.create()` creates an initial directory of empty, adopted sheets. `getSheet()` and `activeSheet` return owner-backed, read-only views. Cell values that belong to formulas are not exposed as cached results. Workbook-owned cell, style, component, drawing, and other metadata writes are not available in R1. Adding, deleting, renaming, or switching sheets after publication is also unavailable. XLSX Workbook restoration remains gated pending R6.
+
+#### **Standalone Worksheet (separate ownership boundary)**
 
 ```typescript
-class Worksheet {
-  setCellValue(pos: CellPosition, value: any): void;
-  getCellValue(pos: CellPosition): any;
-  setCellStyle(pos: CellPosition, style: CellStyle | undefined): void;
-  getCellStyle(pos: CellPosition): CellStyle | undefined;
-  getDirectCellStyle(pos: CellPosition): CellStyle | undefined;
-  insertRows(rowIndex: number, count?: number): void;
-  insertColumns(colIndex: number, count?: number): void;
-  reorderRows(fromIndex: number, toIndex: number, count?: number): void;
-  reorderColumns(fromIndex: number, toIndex: number, count?: number): void;
-  setRowStyle(row: number, style: CellStyle | undefined): void;
-  setColumnStyle(col: number, style: CellStyle | undefined): void;
-  insertImage(options: AddPictureOptions): PictureObject;
-  getUsedRange(): CellRange;
-}
+import { Worksheet } from '@cyber-sheet/core';
 
-interface CellPosition {
-  row: number;
-  col: number;
-}
-
-interface CellStyle {
-  bold?: boolean;
-  italic?: boolean;
-  fontSize?: number;
-  fontFamily?: string;
-  fill?: string;
-  color?: string;
-  numberFormat?: string;
-  border?: BorderSpec;
-}
-
-interface AddPictureOptions {
-  source: string;
-  sourceType?: 'dataUri' | 'blob' | 'url' | 'stockImage' | 'svg';
-  placement?: 'cell' | 'floating';
-  cellAnchor?: { row: number; col: number; endRow?: number; endCol?: number };
-  position?: { x: number; y: number };
-  size?: { width: number; height: number };
-  clipToCell?: boolean;
-}
+const standalone = new Worksheet('Scratch');
+standalone.setCellValue({ row: 1, col: 1 }, 'Standalone data');
 ```
 
-Structural row/column operations remap sparse cells, merged ranges, hidden tracks, row/column defaults, image anchors, and formula references. For undo/redo, use the exported worksheet commands with `CommandManager`: `InsertRowsCommand`, `InsertColumnsCommand`, `ReorderRowsCommand`, `ReorderColumnsCommand`, `SetRowStyleCommand`, `SetColumnStyleCommand`, and `InsertImageCommand`.
+Standalone Worksheet mutation does not authorize mutation of a Workbook-owned sheet. Addresses are one-based. Do not pass a WorkbookSheetView to an API whose declaration requires a raw Worksheet. Workbook mutation, structural edits, and metadata operations remain unavailable pending their separately authorized R2/R5 slices.
 
 ### **Renderer API**
 
-#### **ExcelRenderer**
+The Canvas Renderer package root exports `ExcelRenderer`, `CanvasRenderer`, `AccessibilityManager`, `VirtualizationManager`, `ExportPlugin`, and chart-related symbols. Current declarations and input types are authoritative; the former pseudo-signatures in this README were removed because they did not match those declarations. In particular, the cited raw-Worksheet renderer APIs are not a supported WorkbookSheetView rendering route. See the [renderer package entrypoint](./packages/renderer-canvas/src/index.ts), [ExcelRenderer source](./packages/renderer-canvas/src/ExcelRenderer.ts), and [ChartEngine source](./packages/renderer-canvas/src/ChartEngine.ts). These source links document names and signatures, not a broader feature-completion or performance guarantee.
 
-```typescript
-class ExcelRenderer {
-  constructor(
-    container: HTMLElement,
-    worksheet: Worksheet,
-    options?: RendererOptions
-  );
-  
-  render(): void;
-  scrollToCell(row: number, col: number): void;
-  setSelection(range: CellRange): void;
-  dispose(): void;
-}
-
-interface RendererOptions {
-  antialiasing?: 'none' | 'low' | 'high';
-  snapToPixel?: boolean;
-  subpixelText?: boolean;
-  enableComments?: boolean;
-  showGridlines?: boolean;
-  showRowHeaders?: boolean;
-  showColumnHeaders?: boolean;
-}
-```
-
-#### **ChartEngine**
-
-```typescript
-class ChartEngine {
-  constructor(canvas: HTMLCanvasElement);
-  
-  render(data: ChartData, options: ChartOptions): void;
-  update(data: ChartData): void;
-  dispose(): void;
-}
-
-interface ChartData {
-  categories: string[];
-  series: ChartSeries[];
-}
-
-interface ChartOptions {
-  type: 'bar' | 'line' | 'pie' | 'scatter' | 'area' | 'combo';
-  title?: string;
-  width: number;
-  height: number;
-  legend?: boolean;
-  animations?: boolean;
-}
-```
-
-### **Accessibility API**
-
-```typescript
-class AccessibilityManager {
-  constructor(
-    container: HTMLElement,
-    worksheet: Worksheet,
-    options: A11yOptions
-  );
-  
-  enable(): void;
-  disable(): void;
-  announceCell(row: number, col: number): void;
-}
-
-interface A11yOptions {
-  enableKeyboardNavigation: boolean;
-  enableScreenReader: boolean;
-  enableIME: boolean;
-  announceFormulas?: boolean;
-  announceFormatting?: boolean;
-}
-```
-
-📖 **[Full API Documentation →](./docs/API_REFERENCE.md)**
+For the Core public exports, see the [Core package entrypoint](./packages/core/src/index.ts) and [Workbook read-view contract](./packages/core/src/workbook-access-types.ts). The previously linked `docs/API_REFERENCE.md`, `docs/RENDERER_API.md`, and `docs/CHART_API.md` files are not present in this repository.
 
 ---
 
@@ -734,52 +494,51 @@ interface A11yOptions {
 
 ### **Getting Started**
 
-- [Installation Guide](./docs/INSTALLATION.md)
-- [Quick Start Tutorial](./docs/QUICK_START.md)
-- [Framework Integration](./docs/FRAMEWORK_INTEGRATION.md)
+- [Core package metadata](./packages/core/package.json)
+- [Quick Start](#-quick-start)
+- [Framework Integration](#-framework-integration)
 
 ### **Core Concepts**
 
-- [Architecture Overview](./ARCHITECTURE.md)
-- [Canvas Rendering Deep Dive](./docs/CANVAS_RENDERING_ADVANTAGES.md)
-- [Formula Writing Guide](./docs/FORMULA_WRITING.md)
-- [Performance Guarantees](./docs/PERFORMANCE_GUARANTEES.md)
+- [Core architecture and performance notes](./docs/architecture/PERFORMANCE.md) — historical notes, not a current guarantee
+- [Formula engine source](./packages/core/src/FormulaEngine.ts)
+- [Canvas renderer source](./packages/renderer-canvas/src/index.ts)
 
 ### **Advanced Topics**
 
-- [Accessibility Guide](./docs/ACCESSIBILITY_GUIDE.md)
+- [Accessibility Guide](./docs/ACCESSIBILITY_GUIDE.md) — does not establish WCAG conformance
 - [Global Settings And User Fonts](./docs/guides/GLOBAL_SETTINGS.md)
-- [Keyboard Shortcuts](./docs/KEYBOARD_SHORTCUTS.md)
-- [Chart System](./docs/CHART_SYSTEM_100_PERCENT_COMPLETE.md)
-- [Conditional Formatting](./docs/CF_100_COMPLETE_SUMMARY.md)
-- [Internationalization](./docs/I18N_GUIDE.md)
+- [Keyboard Shortcuts](./docs/KEYBOARD_SHORTCUTS.md) — implementation coverage is not fully qualified here
+- [Chart engine source](./packages/renderer-canvas/src/ChartEngine.ts)
+- [Conditional-formatting source](./packages/core/src/ConditionalFormattingEngine.ts)
+- [Internationalization source](./packages/core/src/I18nManager.ts)
 
 ### **API References**
 
-- [Core API](./docs/API_REFERENCE.md)
-- [Renderer API](./docs/RENDERER_API.md)
-- [Chart API](./docs/CHART_API.md)
-- [Formula Functions](./docs/FORMULA_QUICK_START.md)
+- [Core API entrypoint](./packages/core/src/index.ts)
+- [Renderer API entrypoint](./packages/renderer-canvas/src/index.ts)
+- [Chart API source](./packages/renderer-canvas/src/ChartEngine.ts)
+- [Formula engine source](./packages/core/src/FormulaEngine.ts)
 
 ### **Project Status**
 
-- [Excel Feature Comparison](./EXCEL_FEATURE_COMPARISON_FEB_2026.md) - **93-97% parity**
 - [Changelog](./CHANGELOG.md)
-- [Roadmap](./docs/ROADMAP.md)
-- [Launch Summary](./LAUNCH_SUMMARY.md)
+- Historical feature-parity, roadmap, and launch-summary documents previously referenced here are not present; no parity percentage is asserted as a current guarantee.
 
 ---
 
 ## 🧪 Testing & Quality
 
-### **Test Coverage**
+### **Historical Test Counts — not a current passing-test total**
 
-- **2,050+ Total Tests**: Unit, integration, and E2E tests
-- **155 Formula Tests**: All Excel functions validated
-- **740 Chart Tests**: Full rendering and interaction coverage
-- **434 Conditional Formatting Tests**: All CF rules validated
-- **31 Transformation Engine Tests**: Invariants, differential, metamorphic, fuzzing
-- **50+ Error Handling Tests**: Edge cases and error states
+Earlier project notes reported the following counts. They are retained as historical figures only; they do not establish the current test inventory, passing status, feature completeness, or coverage.
+
+- 2,050+ total tests
+- 155 formula tests
+- 740 chart tests
+- 434 conditional-formatting tests
+- 31 transformation-engine tests
+- 50+ error-handling tests
 
 ### **Running Tests**
 
@@ -806,7 +565,7 @@ npm test -- --coverage
 2. **Differential Testing**: Optimized vs. naive engine validation
 3. **Metamorphic Testing**: 26 mathematical properties verified
 4. **Invariant Testing**: 11 structural invariants + 6 graph invariants
-5. **Accessibility Testing**: WCAG 2.1 AA compliance validation
+5. **Accessibility Testing**: Accessibility tests exist; WCAG 2.1 AA conformance is not established here
 
 ---
 
