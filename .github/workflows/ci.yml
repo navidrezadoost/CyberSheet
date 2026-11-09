@@ -126,7 +126,7 @@ jobs:
       - name: Test ${{ matrix.framework }} wrapper
         run: |
           cd packages/${{ matrix.framework }}
-          npm test || echo "No tests configured for ${{ matrix.framework }}"
+          npm test
       
       - name: Lint ${{ matrix.framework }} wrapper
         run: |
