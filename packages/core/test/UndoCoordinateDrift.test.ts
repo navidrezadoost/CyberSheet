@@ -18,15 +18,14 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { Workbook } from '../src/workbook';
+import { Worksheet } from '../src/worksheet';
 import { InsertColumnCommand } from '../src/InsertColumnCommand';
 import { DeleteColumnCommand } from '../src/DeleteColumnCommand';
 
 describe('Undo Coordinate Drift Bug (Fuzzer Discovery)', () => {
   
   it('minimal reproduction: setValue + deleteCol + undo + insertCol', () => {
-    const workbook = new Workbook();
-    const worksheet = workbook.addSheet('Test');
+    const worksheet = new Worksheet('Test');
 
     // Step 0: Set value at (1,7)
     worksheet.setCellValue({ row: 1, col: 7 }, 'V48');
@@ -67,8 +66,7 @@ describe('Undo Coordinate Drift Bug (Fuzzer Discovery)', () => {
     // undo:          (1,7) = "V48"  [shift right by 1]
     // insertCol(0):  (1,8) = "V48"  [shift right by 1]
     
-    const workbook = new Workbook();
-    const worksheet = workbook.addSheet('Test');
+    const worksheet = new Worksheet('Test');
 
     worksheet.setCellValue({ row: 1, col: 7 }, 'V48');
     const deleteCmd = new DeleteColumnCommand(worksheet, 0);

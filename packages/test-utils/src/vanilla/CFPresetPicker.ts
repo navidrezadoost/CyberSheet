@@ -394,12 +394,6 @@ export class CFPresetPicker {
     const container = document.createElement('div');
     container.className = 'cf-preset-picker__popular';
 
-    // Accessibility: Add ARIA attributes
-    if (this.options.enableA11y) {
-      container.setAttribute('role', 'list');
-      container.setAttribute('aria-label', 'Popular presets');
-    }
-
     const title = document.createElement('h4');
     title.className = 'cf-preset-picker__popular-title';
     title.textContent = 'Popular Presets';
@@ -407,6 +401,10 @@ export class CFPresetPicker {
 
     const grid = document.createElement('div');
     grid.className = 'cf-preset-picker__popular-grid';
+    if (this.options.enableA11y) {
+      grid.setAttribute('role', 'group');
+      grid.setAttribute('aria-label', 'Popular presets');
+    }
 
     presets.forEach((preset, index) => {
       const card = document.createElement('button');
@@ -417,9 +415,8 @@ export class CFPresetPicker {
 
       // Accessibility: Add ARIA attributes and keyboard navigation
       if (this.options.enableA11y) {
-        card.setAttribute('role', 'listitem');
         card.setAttribute('aria-label', preset.name);
-        card.setAttribute('aria-selected', String(selectedId === preset.id));
+        card.setAttribute('aria-pressed', String(selectedId === preset.id));
         card.setAttribute('tabindex', selectedId === preset.id ? '0' : '-1');
         card.addEventListener('keydown', (e) => this.handlePopularKeyDown(e, index, presets));
       }
@@ -460,7 +457,18 @@ export class CFPresetPicker {
       grid.setAttribute('aria-colcount', '2');
     }
 
+    let currentRow: HTMLElement | undefined;
     presets.forEach((preset, index) => {
+      if (index % 2 === 0) {
+        currentRow = document.createElement('div');
+        currentRow.className = 'cf-preset-picker__row';
+        if (this.options.enableA11y) {
+          currentRow.setAttribute('role', 'row');
+          currentRow.setAttribute('aria-rowindex', String(Math.floor(index / 2) + 1));
+        }
+        grid.appendChild(currentRow);
+      }
+
       const card = document.createElement('button');
       card.className = 'cf-preset-picker__card';
       if (selectedId === preset.id) {
@@ -469,13 +477,18 @@ export class CFPresetPicker {
 
       // Accessibility: Add ARIA attributes and keyboard navigation
       if (this.options.enableA11y) {
-        card.setAttribute('role', 'gridcell');
         card.setAttribute('aria-label', `${preset.name}. ${preset.description}`);
-        card.setAttribute('aria-selected', String(selectedId === preset.id));
-        card.setAttribute('aria-rowindex', String(Math.floor(index / 2) + 1));
-        card.setAttribute('aria-colindex', String((index % 2) + 1));
         card.setAttribute('tabindex', selectedId === preset.id ? '0' : '-1');
         card.addEventListener('keydown', (e) => this.handlePresetKeyDown(e, index, presets));
+      }
+
+      let cell: HTMLElement | undefined;
+      if (this.options.enableA11y) {
+        cell = document.createElement('div');
+        cell.setAttribute('role', 'gridcell');
+        cell.setAttribute('aria-colindex', String((index % 2) + 1));
+        cell.setAttribute('aria-selected', String(selectedId === preset.id));
+        cell.appendChild(card);
       }
 
       const icon = document.createElement('div');
@@ -517,7 +530,8 @@ export class CFPresetPicker {
         this.options.onPresetSelect(preset);
       });
 
-      grid.appendChild(card);
+      if (cell) currentRow!.appendChild(cell);
+      else currentRow!.appendChild(card);
     });
 
     return grid;
@@ -711,12 +725,17 @@ export class CFPresetPicker {
       .cf-preset-picker__popular-icon { font-size: 24px; margin-bottom: 4px; }
       .cf-preset-picker__popular-name { font-size: 11px; color: #333; }
       .cf-preset-picker__grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        display: flex;
+        flex-direction: column;
         gap: 12px;
         margin-bottom: 16px;
         max-height: 400px;
         overflow-y: auto;
+      }
+      .cf-preset-picker__row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
       }
       .cf-preset-picker__card {
         padding: 12px;

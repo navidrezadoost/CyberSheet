@@ -12,7 +12,7 @@ class CallRecordingWorksheet extends Worksheet {
 }
 
 describe('EditingManager cut undo owner boundary', () => {
-  test('publishes clipboard data before cut and consumes history when adopted restoration rejects', () => {
+  test('preserves standalone cut and retains undo history when restoration is rejected after adoption', () => {
     const worksheet = new CallRecordingWorksheet('Cut undo boundary', 2, 2);
     worksheet.setCellValue({ row: 1, col: 1 }, 'cut value');
     const manager = new EditingManager(worksheet);
@@ -41,14 +41,13 @@ describe('EditingManager cut undo owner boundary', () => {
     expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
 
     worksheet.calls.length = 0;
+    Object.defineProperty(worksheet, 'isWorkbookOwned', { value: () => false, configurable: true });
     adoptWorksheetByWorkbook(worksheet, 'editing-manager-cut-undo-owner' as WorkbookId);
 
-    expect(() => manager.undo()).toThrow(/Workbook-owned Worksheet\.setCellValue is unavailable/);
-    expect(worksheet.calls).toEqual([{
-      method: 'setCellValue',
-      args: [{ row: 1, col: 1 }, 'cut value'],
-    }]);
+    expect(() => manager.undo()).toThrow(/EditingManager cannot operate on a Workbook-owned Worksheet/);
+    expect(worksheet.calls).toEqual([]);
     expect(worksheet.getCell({ row: 1, col: 1 })?.value).toBeNull();
-    expect(manager.getHistoryStats()).toEqual({ undoCount: 0, redoCount: 0 });
+    expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
+    manager.dispose();
   });
 });

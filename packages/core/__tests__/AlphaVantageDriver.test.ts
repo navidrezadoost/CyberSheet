@@ -97,33 +97,48 @@ describe('AlphaVantageDriver - PR #4 Integration', () => {
     it('should not burst beyond throttle limit', async () => {
       const throttle = new WindowThrottle(3, 10_000); // 3 req per 10s (easier to test)
       const quota = new QuotaManager(100);
+      const requestTimestamps: number[] = [];
       
-      mockFetch.mockResolvedValue({
-        'Global Quote': {
-          '01. symbol': 'TEST',
-          '05. price': '100.00',
-          '09. change': '0',
-          '10. change percent': '0%',
-          '06. volume': '100',
-          '07. latest trading day': '2026-02-25'
-        }
+      mockFetch.mockImplementation(async () => {
+        requestTimestamps.push(Date.now());
+        return {
+          'Global Quote': {
+            '01. symbol': 'TEST',
+            '05. price': '100.00',
+            '09. change': '0',
+            '10. change percent': '0%',
+            '06. volume': '100',
+            '07. latest trading day': '2026-02-25'
+          }
+        };
       });
 
       const adapter = new HttpProviderAdapter(mockFetch, mockSleep, {}, mockRandom);
       const driver = new AlphaVantageDriver('test-key', registry, adapter, throttle, quota);
 
-      const startTime = Date.now();
-      
-      // Request 6 symbols (should take 2 windows: 3 + 3)
-      await driver.prefetch(['A', 'B', 'C', 'D', 'E', 'F'], {} as any);
-      
-      const duration = Date.now() - startTime;
+      // Exercise the actual WindowThrottle timer deterministically: three
+      // dispatches fit in the first sliding window and the fourth waits until
+      // the oldest timestamp expires (plus the implementation's 10ms buffer).
+      jest.useFakeTimers().setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      try {
+        const pending = driver.prefetch(['A', 'B', 'C', 'D', 'E', 'F'], {} as any);
+        await jest.advanceTimersByTimeAsync(10_010);
+        await pending;
 
-      // Should take at least 10s (one full window wait)
-      // In practice with real timing, this would be ~10s
-      // With mock timing, we verify throttle.acquire() was called 6 times
-      expect(mockFetch).toHaveBeenCalledTimes(6);
-      expect(quota.getUsed()).toBe(6);
+        expect(mockFetch).toHaveBeenCalledTimes(6);
+        expect(requestTimestamps).toHaveLength(6);
+        for (const windowStart of requestTimestamps) {
+          const requestsInWindow = requestTimestamps.filter(
+            timestamp => timestamp >= windowStart && timestamp < windowStart + 10_000,
+          ).length;
+          expect(requestsInWindow).toBeLessThanOrEqual(3);
+        }
+        expect(requestTimestamps.slice(0, 3).every(timestamp => timestamp === requestTimestamps[0])).toBe(true);
+        expect(requestTimestamps[3]).toBeGreaterThanOrEqual(requestTimestamps[0] + 10_000);
+        expect(quota.getUsed()).toBe(6);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

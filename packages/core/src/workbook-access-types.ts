@@ -19,16 +19,36 @@ export interface WorkbookCellRead {
 }
 
 /**
- * Typed workbook mutation boundary for caller migration. R1 exposes the shape
- * but every operation rejects before writing; journal-backed availability is
- * introduced only by the separately authorized R2 slice.
+ * Independent FIFO-queued Workbook writes. Calls made during a `transact`
+ * callback remain separate operations. Do not await one from that same
+ * callback: it cannot run until the callback's transaction releases the queue.
+ * Enqueue it without awaiting, await `transact()` first, then await its result.
  */
 export interface WorkbookMutationPort {
-  setCellValue(sheet: WorksheetId | WorkbookSheetView, address: Address, value: Cell['value']): never;
-  setCellFormula(sheet: WorksheetId | WorkbookSheetView, address: Address, formula: string): never;
-  clearCellContent(sheet: WorksheetId | WorkbookSheetView, address: Address): never;
-  clearCellFormula(sheet: WorksheetId | WorkbookSheetView, address: Address): never;
-  setCellStyle(sheet: WorksheetId | WorkbookSheetView, address: Address, style: import('./types').CellStyle | undefined): never;
+  setCellValue(sheet: WorksheetId | WorkbookSheetView, address: Address, value: Cell['value']): Promise<void>;
+  setCellFormula(sheet: WorksheetId | WorkbookSheetView, address: Address, formula: string, displayValue?: Cell['value']): Promise<void>;
+  clearCellContent(sheet: WorksheetId | WorkbookSheetView, address: Address): Promise<void>;
+  clearCellFormula(sheet: WorksheetId | WorkbookSheetView, address: Address): Promise<void>;
+  setCellStyle(sheet: WorksheetId | WorkbookSheetView, address: Address, style: import('./types').CellStyle | undefined): Promise<void>;
+  setRowHeight(sheet: WorksheetId | WorkbookSheetView, row: number, heightPx: number): Promise<void>;
+  setColumnWidth(sheet: WorksheetId | WorkbookSheetView, column: number, widthPx: number): Promise<void>;
+}
+
+/**
+ * Writes available only while an explicit Workbook transaction callback is
+ * active. These methods stage changes; the Workbook applies them atomically
+ * after the callback resolves. Use this context for writes that belong to the
+ * active atomic operation. Independent `mutationPort` promises must not be
+ * awaited from inside the callback.
+ */
+export interface WorkbookTransactionContext {
+  setCellValue(sheet: WorksheetId | WorkbookSheetView, address: Address, value: Cell['value']): void;
+  setCellFormula(sheet: WorksheetId | WorkbookSheetView, address: Address, formula: string, displayValue?: Cell['value']): void;
+  clearCellContent(sheet: WorksheetId | WorkbookSheetView, address: Address): void;
+  clearCellFormula(sheet: WorksheetId | WorkbookSheetView, address: Address): void;
+  setCellStyle(sheet: WorksheetId | WorkbookSheetView, address: Address, style: import('./types').CellStyle | undefined): void;
+  setRowHeight(sheet: WorksheetId | WorkbookSheetView, row: number, heightPx: number): void;
+  setColumnWidth(sheet: WorksheetId | WorkbookSheetView, column: number, widthPx: number): void;
 }
 
 export interface WorkbookSheetView {

@@ -21,4 +21,20 @@ export class Emitter<T> {
       l(event);
     }
   }
+
+  /** Dispatch to every observer while reporting failures without interrupting commit publication. */
+  emitSafely(event: T, onError: (error: unknown) => void, shouldContinue: () => boolean = () => true): void {
+    for (const listener of Array.from(this.listeners)) {
+      if (!shouldContinue()) break;
+      if (typeof listener !== 'function') {
+        this.listeners.delete(listener as unknown as (e: T) => void);
+        continue;
+      }
+      try {
+        listener(event);
+      } catch (error) {
+        try { onError(error); } catch { /* an error reporter cannot stop observer dispatch */ }
+      }
+    }
+  }
 }

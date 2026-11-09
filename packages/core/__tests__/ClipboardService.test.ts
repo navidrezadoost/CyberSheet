@@ -16,6 +16,9 @@
 
 import { ClipboardService, type ClipboardPayload, type CellSnapshot } from '../src/ClipboardService';
 import { Worksheet } from '../src/worksheet';
+import { OwnerBackedWorkbookSheetView } from '../src/WorkbookSheetView';
+import { Workbook } from '../src/workbook';
+import type { WorkbookId, WorksheetId, WorkbookSheetView } from '../src/workbook-access-types';
 import type { Address, Range, CellStyle } from '../src/types';
 
 describe('ClipboardService', () => {
@@ -25,6 +28,290 @@ describe('ClipboardService', () => {
   beforeEach(() => {
     service = new ClipboardService();
     worksheet = new Worksheet('Test', 100, 26);
+  });
+
+  describe('R1 ownership and diagnostics', () => {
+    const address = { row: 1, col: 1 };
+    const range = { start: address, end: address };
+
+    function adoptWithView(sheet: Worksheet) {
+      const workbook = Workbook.create({ sheets: [{ name: 'Owner container' }] });
+      workbook.attachDevImportSheet(sheet);
+      return workbook.getSheet(sheet.name)!;
+    }
+
+    test('owner-view Copy remains detached and formula-cache masked, while owner-view Cut fails without replacing payload', () => {
+      const source = new Worksheet('Owner view copy', 2, 2);
+      source.setCellFormula(address, '=40+2', 42);
+      const view = adoptWithView(source);
+      const seeded = new Worksheet('Standalone seed', 2, 2);
+      seeded.setCellValue(address, 'seed');
+      const priorPayload = service.copy(seeded, range);
+
+      const copied = service.copy(view, range);
+      expect(copied.cells).toMatchObject([{ value: null, formula: '40+2' }]);
+      expect(copied.cells[0]).not.toBe(source.getCell(address));
+
+      const currentPayload = service.getPayload();
+      expect(() => service.cut(view, range)).toThrow(/unavailable/);
+      expect(service.getPayload()).toBe(currentPayload);
+      expect(currentPayload).not.toBe(priorPayload);
+    });
+
+    test('merged Copy preserves standalone geometry and detaches an owner-view anchor without exposing its cached result', () => {
+      const copyRange: Range = {
+        start: address,
+        end: { row: 2, col: 2 },
+      };
+      const makeMergedSource = (name: string, cachedValue: string) => {
+        const source = new Worksheet(name, 2, 2);
+        source.setCellFormula(address, '=40+2', cachedValue);
+        source.setCellStyle(address, {
+          border: { top: { color: '#f00', style: 'thin' } },
+        });
+        source.mergeCells({ start: address, end: { row: 2, col: 2 } });
+        return source;
+      };
+
+      const standalone = makeMergedSource('Standalone merged copy', 'standalone-cache');
+      const standaloneEvents: unknown[] = [];
+      const disposeStandaloneEvents = standalone.on(event => standaloneEvents.push(event));
+      const standaloneMergesBefore = standalone.getMergedRanges();
+      const standalonePayload = service.copy(standalone, copyRange);
+      disposeStandaloneEvents.dispose();
+
+      expect(standalonePayload).toMatchObject({ width: 2, height: 2, isCut: false });
+      expect(standalonePayload.cells).toHaveLength(1);
+      expect(standalonePayload.cells[0]).toMatchObject({
+        rowOffset: 0,
+        colOffset: 0,
+        value: 'standalone-cache',
+        formula: '40+2',
+        isMergeAnchor: true,
+        mergeHeight: 2,
+        mergeWidth: 2,
+        style: { border: { top: { color: '#f00', style: 'thin' } } },
+      });
+      expect(standalone.getCell(address)).toMatchObject({ value: 'standalone-cache', formula: '=40+2' });
+      expect(standalone.getMergedRanges()).toEqual(standaloneMergesBefore);
+      expect(standaloneEvents).toHaveLength(0);
+
+      const ownerSource = makeMergedSource('Owner merged copy', 'owner-cache-sentinel');
+      const ownerCellBefore = ownerSource.getCell(address);
+      const ownerStyleBefore = JSON.stringify(ownerSource.getCellStyle(address));
+      const ownerMergesBefore = ownerSource.getMergedRanges();
+      const ownerEvents: unknown[] = [];
+      const disposeOwnerEvents = ownerSource.on(event => ownerEvents.push(event));
+      const ownerView = adoptWithView(ownerSource);
+      const mergeQuerySpy = jest.spyOn(OwnerBackedWorkbookSheetView.prototype, 'getMergedRangeForCell');
+
+      const ownerPayload = service.copy(ownerView, copyRange);
+
+      const ownerMergeQueryCalls = mergeQuerySpy.mock.calls.length;
+      const ownerMergeQueryResults = mergeQuerySpy.mock.results.map(result => result.value);
+      mergeQuerySpy.mockRestore();
+      disposeOwnerEvents.dispose();
+
+      expect(ownerMergeQueryCalls).toBe(4);
+      expect(JSON.stringify(ownerMergeQueryResults)).not.toContain('owner-cache-sentinel');
+      expect(ownerPayload).toMatchObject({ width: 2, height: 2, isCut: false });
+      expect(ownerPayload.cells).toHaveLength(1);
+      expect(ownerPayload.cells[0]).toMatchObject({
+        rowOffset: 0,
+        colOffset: 0,
+        value: null,
+        formula: '40+2',
+        isMergeAnchor: true,
+        mergeHeight: 2,
+        mergeWidth: 2,
+        style: { border: { top: { color: '#f00', style: 'thin' } } },
+      });
+      expect(ownerPayload.cells[0]?.value).not.toBe('owner-cache-sentinel');
+      expect(Object.isFrozen(ownerPayload.cells)).toBe(true);
+      expect(Object.isFrozen(ownerPayload.cells[0])).toBe(true);
+      expect(Reflect.set(ownerPayload.cells[0]!, 'mergeWidth', 9)).toBe(false);
+      expect(ownerPayload.cells[0]?.mergeWidth).toBe(2);
+      expect(ownerPayload.cells[0]?.style).not.toBe(ownerSource.getCellStyle(address));
+      expect(ownerPayload.cells[0]?.style?.border?.top).not.toBe(ownerSource.getCellStyle(address)?.border?.top);
+      ownerPayload.cells[0]!.style!.border!.top!.color = '#00f';
+      expect(JSON.stringify(ownerSource.getCellStyle(address))).toBe(ownerStyleBefore);
+      expect(ownerSource.getCell(address)).toMatchObject({
+        value: ownerCellBefore?.value,
+        formula: ownerCellBefore?.formula,
+      });
+      expect(ownerSource.getMergedRanges()).toEqual(ownerMergesBefore);
+      expect(ownerEvents).toHaveLength(0);
+    });
+
+    test('owner-view merged-range query returns frozen detached geometry while standalone queries remain mutable', () => {
+      const source = new Worksheet('Merge query detachment', 2, 2);
+      const mergedRange: Range = {
+        start: { row: 1, col: 1 },
+        end: { row: 2, col: 2 },
+      };
+      source.mergeCells(mergedRange);
+      const sourceGeometry = source.getMergedRanges();
+      const view = adoptWithView(source);
+
+      const ownerResult = view.getMergedRangeForCell({ row: 2, col: 2 });
+      expect(ownerResult).toEqual(mergedRange);
+      expect(Object.isFrozen(ownerResult)).toBe(true);
+      expect(Object.isFrozen(ownerResult?.start)).toBe(true);
+      expect(Object.isFrozen(ownerResult?.end)).toBe(true);
+      expect(Reflect.set(ownerResult!, 'end', { row: 2, col: 1 })).toBe(false);
+      expect(Reflect.set(ownerResult!.start, 'row', 2)).toBe(false);
+      expect(source.getMergedRanges()).toEqual(sourceGeometry);
+      expect(view.getMergedRangeForCell({ row: 2, col: 2 })).toEqual(mergedRange);
+
+      const standalone = new Worksheet('Standalone merge query', 2, 2);
+      standalone.mergeCells(mergedRange);
+      const standaloneResult = standalone.getMergedRangeForCell({ row: 2, col: 2 });
+      expect(standaloneResult).toEqual(mergedRange);
+      expect(Object.isFrozen(standaloneResult)).toBe(false);
+      standaloneResult!.start.row = 2;
+      expect(standalone.getMergedRanges()).toEqual([mergedRange]);
+      expect(standalone.getMergedRangeForCell({ row: 2, col: 2 })).toEqual(mergedRange);
+    });
+
+    test('only Workbook-issued views can copy adopted worksheet data', () => {
+      const sentinel = 'structural-facade-cache-sentinel';
+      const source = new Worksheet('Structural facade source', 2, 2);
+      source.setCellFormula(address, '=40+2', sentinel);
+      const sourceCellBefore = source.getCell(address);
+      const sourceMergesBefore = source.getMergedRanges();
+      const sourceEvents: unknown[] = [];
+      const disposeEvents = source.on(event => sourceEvents.push(event));
+      const genuineView = adoptWithView(source);
+
+      const seeded = new Worksheet('Facade payload seed', 2, 2);
+      seeded.setCellValue(address, 'prior-payload');
+      const priorPayload = service.copy(seeded, range);
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      let mergeReads = 0;
+      let cellReads = 0;
+      let valueReads = 0;
+      const facade = {
+        workbookId: 'clipboard-service-facade-owner',
+        worksheetId: source.getWorksheetId(),
+        getMergedRangeForCell: (cellAddress: Address) => {
+          mergeReads++;
+          return source.getMergedRangeForCell(cellAddress);
+        },
+        getCell: (cellAddress: Address) => {
+          cellReads++;
+          return source.getCell(cellAddress);
+        },
+        getCellValue: (cellAddress: Address) => {
+          valueReads++;
+          return source.getCellValue(cellAddress);
+        },
+      } as unknown as WorkbookSheetView;
+
+      expect(Workbook.isWorkbookIssuedSheetView(genuineView)).toBe(true);
+      expect(Workbook.isWorkbookIssuedSheetView(facade)).toBe(false);
+      expect(Object.getOwnPropertyDescriptor(Workbook, 'isWorkbookIssuedSheetView')).toMatchObject({
+        writable: false,
+        configurable: false,
+      });
+      expect(() => Object.defineProperty(Workbook, 'isWorkbookIssuedSheetView', { value: () => true })).toThrow();
+      expect(() => service.copy(facade, range)).toThrow(/Workbook-issued/);
+      expect(() => service.copy(facade, range, 'values')).toThrow(/Workbook-issued/);
+      expect(mergeReads).toBe(0);
+      expect(cellReads).toBe(0);
+      expect(valueReads).toBe(0);
+      expect(service.getPayload()).toBe(priorPayload);
+      expect(priorPayload.cells).toMatchObject([{ value: 'prior-payload' }]);
+      expect(log).not.toHaveBeenCalled();
+
+      let directResolverCalls = 0;
+      const directlyConstructedView = new OwnerBackedWorkbookSheetView(
+        'caller-workbook-id' as WorkbookId,
+        source.getWorksheetId() as WorksheetId,
+        () => {
+          directResolverCalls++;
+          return source;
+        },
+      );
+      expect(Workbook.isWorkbookIssuedSheetView(directlyConstructedView)).toBe(false);
+      expect(() => service.copy(directlyConstructedView, range)).toThrow(/Workbook-issued/);
+      expect(directResolverCalls).toBe(0);
+      expect(service.getPayload()).toBe(priorPayload);
+      expect(log).not.toHaveBeenCalled();
+      log.mockRestore();
+
+      const genuinePayload = service.copy(genuineView, range);
+      expect(genuinePayload.cells).toMatchObject([{ value: null, formula: '40+2' }]);
+      expect(genuinePayload.cells[0]?.value).not.toBe(sentinel);
+      expect(service.getPayload()).toBe(genuinePayload);
+      expect(priorPayload.cells).toMatchObject([{ value: 'prior-payload' }]);
+      expect(source.getCell(address)).toMatchObject({
+        value: sourceCellBefore?.value,
+        formula: sourceCellBefore?.formula,
+      });
+      expect(source.getMergedRanges()).toEqual(sourceMergesBefore);
+      expect(sourceEvents).toHaveLength(0);
+      disposeEvents.dispose();
+    });
+
+    test('adopted raw Copy/Cut reject before reads, payload replacement, or diagnostics, even when ownership is shadowed', () => {
+      const source = new Worksheet('Adopted raw clipboard source', 2, 2);
+      source.setCellFormula(address, '=40+2', 'raw-clipboard-sentinel');
+      Object.defineProperty(source, 'isWorkbookOwned', {
+        configurable: true,
+        value: () => false,
+      });
+      const standalonePayload = service.copy(source, range);
+      expect(standalonePayload.cells).toMatchObject([{ value: 'raw-clipboard-sentinel', formula: '40+2' }]);
+
+      const workbook = Workbook.create({ sheets: [{ name: 'Raw owner container' }] });
+      workbook.attachDevImportSheet(source);
+      const issuedView = workbook.getSheet(source.name)!;
+      const seeded = new Worksheet('Standalone seed', 2, 2);
+      seeded.setCellValue(address, 'seed');
+      const priorPayload = service.copy(seeded, range);
+
+      const getCell = jest.spyOn(Worksheet.prototype, 'getCell');
+      const getCellValue = jest.spyOn(Worksheet.prototype, 'getCellValue');
+      const getMerge = jest.spyOn(Worksheet.prototype, 'getMergedRangeForCell');
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+      Object.defineProperty(source, 'isWorkbookOwned', {
+        configurable: true,
+        value: () => false,
+      });
+
+      expect(() => service.copy(source, range)).toThrow(/unavailable/);
+      expect(() => service.cut(source, range)).toThrow(/unavailable/);
+      expect(getCell).not.toHaveBeenCalled();
+      expect(getCellValue).not.toHaveBeenCalled();
+      expect(getMerge).not.toHaveBeenCalled();
+      expect(service.getPayload()).toBe(priorPayload);
+      expect(log).not.toHaveBeenCalled();
+      expect(JSON.stringify(log.mock.calls)).not.toContain('raw-clipboard-sentinel');
+
+      getCell.mockRestore();
+      getCellValue.mockRestore();
+      getMerge.mockRestore();
+      log.mockRestore();
+
+      const issuedPayload = service.copy(issuedView, range);
+      expect(issuedPayload.cells).toMatchObject([{ value: null, formula: '40+2' }]);
+    });
+
+    test('snapshot diagnostics retain structural metadata and omit values and formula text', () => {
+      const sentinel = 'clipboard-diagnostic-private-value';
+      const formula = '=SECRET_FORMULA()';
+      worksheet.setCellFormula(address, formula, sentinel);
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      service.copy(worksheet, range);
+
+      const serialized = JSON.stringify(log.mock.calls);
+      expect(serialized).not.toContain(sentinel);
+      expect(serialized).not.toContain('SECRET_FORMULA');
+      expect(serialized).toContain('hasFormula');
+      expect(serialized).toContain('dimensions');
+    });
   });
   
   // ==================== SNAPSHOT INTEGRITY ====================
@@ -438,7 +725,7 @@ describe('ClipboardService', () => {
     
     test('Formula without leading = is preserved as-is', () => {
       // Directly set formula without =
-      (worksheet as any).cells.getOrCreate(1, 1).formula = 'A1+B1';
+      worksheet.setCellFormula({ row: 1, col: 1 }, 'A1+B1');
       
       const payload = service.copy(worksheet, {
         start: { row: (0) + 1, col: (0) + 1 },

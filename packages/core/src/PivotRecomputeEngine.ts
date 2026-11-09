@@ -157,6 +157,7 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
   private rebuild(pivotId: PivotId, meta: PivotMetadata): void {
     // Set rebuilding flag (re-entrancy protection)
     this.registry.setRebuilding(pivotId, true);
+    let fullBuildStarted = false;
 
     try {
       // Phase 36a: Try partial recompute first (row mutations only)
@@ -165,6 +166,7 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
       
       if (!partialSuccess) {
         // Full rebuild path (Phase 31a behavior)
+        fullBuildStarted = true;
         const snapshot = this.builder(pivotId, meta.config, meta.worksheetId);
         this.snapshotStore.set(pivotId, snapshot);
         this.registry.markClean(pivotId, snapshot.computedAt);
@@ -181,7 +183,10 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
     } catch (error) {
       // Builder failed — keep dirty=true
       // Phase 30a fallback: query will return #CALC!
-      // (No state mutation needed, dirty already true)
+      // The full builder may refresh incremental group state before snapshot
+      // publication. If any full-build step fails, do not reuse that state
+      // against the still-published snapshot on a later incremental no-op.
+      if (fullBuildStarted) groupStateStore.delete(pivotId);
       console.error(`[PivotRecomputeEngine] Rebuild failed for ${pivotId}:`, error);
     } finally {
       // Always clear rebuilding flag
@@ -203,12 +208,24 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
    * @returns true if partial recompute succeeded, false to force full rebuild
    */
   private tryPartialRecompute(pivotId: PivotId, meta: PivotMetadata): boolean {
+    // Incremental group state tracks aggregate accumulators, but does not
+    // contain calculated-field dependency results. Any source edit can change
+    // a named aggregate used by a calculated field, so calculate-field pivots
+    // must use the full builder as the correctness path.
+    const hasCalculatedValues =
+      (meta.config.calculatedFields?.length ?? 0) > 0 ||
+      meta.config.values.some(
+        (spec) => 'type' in spec && spec.type === 'calculated',
+      );
+    if (hasCalculatedValues) return false;
+
     // Safety gate: Can we safely do partial recompute?
     if (!this.canPartialRecompute(pivotId, meta)) {
       console.log(`[Phase 36a] ⚠️  FALLBACK TO FULL REBUILD: Safety gate failed`);
       return false; // Fall back to full rebuild
     }
     
+    let rowMutationAttempted = false;
     try {
       // Phase 36a: Implement diff algorithm
       const state = groupStateStore.get(pivotId);
@@ -227,7 +244,9 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
       }
       
       // Step 0: Precompute once (outside loop)
-      const relevantCols = getRelevantColumns(config);
+      const relevantCols = getRelevantColumns(config).map(
+        (column) => column - config.sourceRange.start.col,
+      );
       
       // Normalize value specs to new format (handle legacy configs)
       const valueSpecs: (import('./PivotEngine').AggregateValueSpec | import('./PivotEngine').CalculatedValueSpec)[] = 
@@ -274,11 +293,12 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
       // Step 4: Apply row mutations atomically
       for (const rowId of changedRows) {
         try {
+          rowMutationAttempted = true;
           this.applyRowMutation(rowId, sourceData, state, config, valueSpecs, affectedGroups);
         } catch (error) {
           // Mutation failed → fall back to full rebuild
           console.error(`[PartialRecompute] Row mutation failed for row ${rowId}:`, error);
-          return false;
+          throw error;
         }
       }
       
@@ -339,6 +359,11 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
       
     } catch (error) {
       // Any error → fall back to full rebuild
+      // A row mutation can update accumulators/metadata before a later
+      // operation (including snapshot publication) fails. The published
+      // snapshot is still the prior version, so this incremental state is no
+      // longer a safe basis for a later no-op partial recompute.
+      if (rowMutationAttempted) groupStateStore.delete(pivotId);
       console.error(`[PartialRecompute] Unexpected error:`, error);
       return false;
     }
@@ -394,7 +419,11 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
       const acc = oldGroup.values[valueSpec.label];
       if (!acc) continue;
       
-      const oldValue = extractValue(oldSnapshot, valueSpec);
+      const oldValue = extractValue(
+        oldSnapshot,
+        valueSpec,
+        config.sourceRange.start.col,
+      );
       if (oldValue != null) {
         acc.remove(oldValue);
       }
@@ -425,7 +454,11 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
       const acc = newGroup.values[valueSpec.label];
       if (!acc) continue;
       
-      const newValue = extractValue(newRow, valueSpec);
+      const newValue = extractValue(
+        newRow,
+        valueSpec,
+        config.sourceRange.start.col,
+      );
       if (newValue != null) {
         acc.add(newValue);
       }
@@ -439,7 +472,12 @@ export class PivotRecomputeEngineImpl implements PivotRecomputeEngine {
     
     // 4️⃣ UPDATE METADATA (ONLY AFTER SUCCESS)
     state.rowToGroup.set(rowId, newGroupKey);
-    const newHash = hashRowRelevant(newRow, getRelevantColumns(config));
+    const newHash = hashRowRelevant(
+      newRow,
+      getRelevantColumns(config).map(
+        (column) => column - config.sourceRange.start.col,
+      ),
+    );
     state.rowHashes.set(rowId, newHash);
     state.rowSnapshots.set(rowId, [...newRow]); // Copy to prevent mutation
   }

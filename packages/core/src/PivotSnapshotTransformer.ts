@@ -72,11 +72,20 @@ export function transformToPivotSnapshot(
       // Add value (aggregated data)
       const cell = table.data[rowIdx]?.[colIdx];
       if (cell) {
-        // Use first value field label as the value field name
-        // For multi-value pivots, this needs refinement in future phases
+        // Preserve the original primary value for older PivotTable producers
+        // that do not populate the named values map. New multi-value pivots
+        // expose all aggregate and calculated results through that map.
         const valueFieldLabel = valueFieldLabels[0] || 'Value';
-        row[valueFieldLabel] = cell.value;
-        allFields.add(valueFieldLabel);
+        if (cell.values) {
+          for (const [label, value] of Object.entries(cell.values)) {
+            row[label] = value;
+            allFields.add(label);
+          }
+        }
+        if (row[valueFieldLabel] === undefined) {
+          row[valueFieldLabel] = cell.value;
+          allFields.add(valueFieldLabel);
+        }
       }
 
       rows.push(row);
@@ -98,7 +107,7 @@ export function transformToPivotSnapshot(
 function extractValueFieldLabels(config: PivotConfig): string[] {
   const values = Array.isArray(config.values) ? config.values : [];
   
-  return values.map(v => {
+  const aggregateLabels = values.map(v => {
     // Handle both new and legacy formats
     if ('type' in v) {
       const spec = v as PivotValueSpec;
@@ -108,4 +117,6 @@ function extractValueFieldLabels(config: PivotConfig): string[] {
       return (v as any).label || 'Value';
     }
   });
+  const calculatedLabels = (config.calculatedFields ?? []).map(field => field.name);
+  return [...aggregateLabels, ...calculatedLabels];
 }

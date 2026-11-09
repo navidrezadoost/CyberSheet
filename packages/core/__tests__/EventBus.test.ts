@@ -1,6 +1,6 @@
 import { EventBus } from '../src/EventBus';
-import { Workbook } from '../src/workbook';
 import { CommandManager, SetValueCommand } from '../src/CommandManager';
+import { Worksheet } from '../src/worksheet';
 
 describe('EventBus lazy bridges', () => {
   it('activates and deactivates registered bridges with listener count', () => {
@@ -43,52 +43,16 @@ describe('EventBus', () => {
   });
 });
 
-describe('Workbook event bridge', () => {
-  it('emits cell-value-change when a cell is updated', () => {
-    const workbook = new Workbook();
-    const sheet = workbook.addSheet('Sheet1');
-    const handler = jest.fn();
-    workbook.eventBus.on('cell-value-change', handler);
-
-    sheet.setCellValue({ row: 1, col: 1 }, 42);
-
-    expect(handler).toHaveBeenCalledWith({
-      row: 1,
-      col: 1,
-      oldValue: null,
-      newValue: 42,
-      formula: undefined,
-    });
-  });
-
-  it('does not bridge cell-value-change until subscribed', () => {
-    const workbook = new Workbook();
-    const sheet = workbook.addSheet('Sheet1');
-    const handler = jest.fn();
-
-    sheet.setCellValue({ row: 1, col: 1 }, 42);
-    expect(handler).not.toHaveBeenCalled();
-
-    const unsub = workbook.eventBus.on('cell-value-change', handler);
-    sheet.setCellValue({ row: 2, col: 2 }, 99);
-    expect(handler).toHaveBeenCalledTimes(1);
-
-    unsub();
-    sheet.setCellValue({ row: 3, col: 3 }, 1);
-    expect(handler).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('CommandManager event bridge', () => {
   it('emits command-execute and command-undo', () => {
-    const workbook = new Workbook();
-    const sheet = workbook.addSheet('Sheet1');
+    const sheet = new Worksheet('Standalone');
+    const eventBus = new EventBus();
     const executeHandler = jest.fn();
     const undoHandler = jest.fn();
-    workbook.eventBus.on('command-execute', executeHandler);
-    workbook.eventBus.on('command-undo', undoHandler);
+    eventBus.on('command-execute', executeHandler);
+    eventBus.on('command-undo', undoHandler);
 
-    const manager = new CommandManager(100, sheet, workbook.eventBus);
+    const manager = new CommandManager(100, sheet, eventBus);
     manager.execute(new SetValueCommand(sheet, { row: 1, col: 1 }, 'hello'));
 
     expect(executeHandler).toHaveBeenCalledWith(

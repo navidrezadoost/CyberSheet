@@ -31,6 +31,26 @@ function normalizeRange(range: DeleteCellsRange) {
   };
 }
 
+function assertDeleteRange(worksheet: Worksheet, range: DeleteCellsRange): void {
+  const { start, end } = range;
+  if (
+    !Number.isInteger(start.row) ||
+    !Number.isInteger(start.col) ||
+    !Number.isInteger(end.row) ||
+    !Number.isInteger(end.col) ||
+    start.row < 1 ||
+    start.col < 1 ||
+    end.row < 1 ||
+    end.col < 1 ||
+    Math.max(start.row, end.row) > worksheet.rowCount ||
+    Math.max(start.col, end.col) > worksheet.colCount
+  ) {
+    throw new RangeError(
+      `Delete range out of bounds: (${start.row},${start.col}) to (${end.row},${end.col}); expected an ordered range within rows 1–${worksheet.rowCount} and columns 1–${worksheet.colCount}.`,
+    );
+  }
+}
+
 function snapshotCell(worksheet: Worksheet, addr: Address): CellSnapshot {
   const cell = worksheet.getCell(addr);
   return {
@@ -73,6 +93,9 @@ export class DeleteCellsCommand implements Command {
     range: DeleteCellsRange,
     mode: DeleteCellsMode = 'up'
   ) {
+    // Validate before snapshots are captured so invalid requests cannot reach
+    // either the mutation loop or the CommandManager history path.
+    assertDeleteRange(worksheet, range);
     this.worksheet = worksheet;
     this.range = range;
     this.mode = mode;
@@ -188,9 +211,10 @@ export class DeleteCellsCommand implements Command {
         this.worksheet.setCellValue(snapshot.addr, snapshot.value);
       }
 
-      if (snapshot.style !== undefined) {
-        this.worksheet.setCellStyle(snapshot.addr, snapshot.style);
-      }
+      // Every destination is part of the captured style state. Clearing an
+      // originally unstyled destination is necessary when deletion shifted a
+      // styled cell into it.
+      this.worksheet.setCellStyle(snapshot.addr, snapshot.style);
     }
   }
 }

@@ -28,6 +28,7 @@
     "test:behavioral:phase2": "node scripts/run-behavioral-tests.js --phase=2",
     "test:behavioral:export": "node scripts/run-behavioral-tests.js --export",
     "validate:metadata": "./scripts/validate-metadata.sh",
+    "pree2e": "npm run build --workspace @cyber-sheet/core",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "bench": "node benchmarks/run.js",

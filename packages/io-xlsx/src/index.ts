@@ -15,15 +15,10 @@ type FetchLike = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 
 const XLSX_IMPORT_UNAVAILABLE = 'XLSX import is unavailable until R6 staged restore is authorized';
 
-declare const __CYBER_SHEET_DEV__: boolean | undefined;
-
-function isXlsxImportEnabled(): boolean {
-  const env = (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } })
-    .process?.env;
-  if (env?.CYBER_SHEET_ENABLE_XLSX_IMPORT === '1') {
-    return true;
-  }
-  return typeof __CYBER_SHEET_DEV__ !== 'undefined' && __CYBER_SHEET_DEV__;
+function isR6StagedRestoreAuthorized(): boolean {
+  // No R6 staged-restore path is authorized yet. Build flags and environment overrides
+  // must not expose Workbook construction before that lifecycle is implemented.
+  return false;
 }
 
 function displayDimension(value: number, defaultValue: number): number {
@@ -31,7 +26,7 @@ function displayDimension(value: number, defaultValue: number): number {
 }
 
 export async function loadXlsxFromUrl(url: string, fetchFn?: FetchLike): Promise<Workbook> {
-  if (!isXlsxImportEnabled()) {
+  if (!isR6StagedRestoreAuthorized()) {
     throw new Error(XLSX_IMPORT_UNAVAILABLE);
   }
   const f = fetchFn ?? fetch;
@@ -42,7 +37,7 @@ export async function loadXlsxFromUrl(url: string, fetchFn?: FetchLike): Promise
 }
 
 export function loadXlsxFromArrayBuffer(data: Uint8Array): Workbook {
-  if (!isXlsxImportEnabled()) {
+  if (!isR6StagedRestoreAuthorized()) {
     throw new Error(XLSX_IMPORT_UNAVAILABLE);
   }
   const files = unzipSync(data);

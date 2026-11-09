@@ -31,6 +31,41 @@ import { ProviderResolutionContext, ProviderRef, MockBatchResolver, ProviderErro
 // Re-export types for backward compatibility
 export type { FormulaValue, FormulaFunction, LambdaFunction, FormulaContext };
 
+const DOTTED_STATISTICAL_FUNCTION_CALLS = new Set([
+  'CHISQ.DIST.RT', 'CHISQ.INV.RT',
+  'F.DIST.RT', 'F.INV.RT',
+  'T.DIST.RT', 'T.DIST.2T', 'T.INV.2T',
+  'NORM.S.DIST', 'NORM.S.INV',
+]);
+
+const NAMED_BINDINGS_CONTEXT = Symbol('FormulaEngine.namedBindings');
+const EXPLICIT_NAMED_NULL: unique symbol = Symbol('FormulaEngine.explicitNamedNull');
+type InternalFormulaValue = FormulaValue | typeof EXPLICIT_NAMED_NULL;
+type NamedBindingsContext = FormulaContext & {
+  [NAMED_BINDINGS_CONTEXT]?: ReadonlyMap<string, FormulaValue>;
+};
+
+function containsExplicitNamedNull(value: FormulaValue): boolean {
+  if ((value as unknown) === EXPLICIT_NAMED_NULL) return true;
+  return Array.isArray(value) && value.some((item) => containsExplicitNamedNull(item as FormulaValue));
+}
+
+function unwrapExplicitNamedNull(value: InternalFormulaValue): FormulaValue {
+  if (value === EXPLICIT_NAMED_NULL) return null;
+  if (Array.isArray(value)) {
+    return value.map((item) => unwrapExplicitNamedNull(item as InternalFormulaValue)) as FormulaValue;
+  }
+  return value as FormulaValue;
+}
+
+function inheritNamedBindings(source: FormulaContext, target: FormulaContext): FormulaContext {
+  const bindings = (source as NamedBindingsContext)[NAMED_BINDINGS_CONTEXT];
+  if (bindings) {
+    Object.defineProperty(target, NAMED_BINDINGS_CONTEXT, { value: bindings });
+  }
+  return target;
+}
+
 /**
  * Week 3 Phase 1B: Token structures for member chain extraction
  */
@@ -208,6 +243,42 @@ export class FormulaEngine {
     
     // Delegate to internal evaluator (keeps a stable entry point for evaluateWithProviders)
     return this.evaluateInternal(formula, context);
+  }
+
+  /**
+   * Evaluate a formula with an explicit, case-insensitive namespace of
+   * aggregate or other caller-supplied values. Ordinary `evaluate()` calls
+   * never consult this namespace.
+   *
+   * A declared value that is unavailable for this calculation is represented
+   * by an Error('#REF!') entry; an identifier absent from the map is #NAME?.
+   * This keeps declaration state distinct from a present null value while
+   * retaining the existing FormulaValue map contract.
+   */
+  evaluateWithBindings(
+    formula: string,
+    worksheetContext: FormulaContext,
+    namedValues: ReadonlyMap<string, FormulaValue>,
+  ): FormulaValue {
+    const normalized = new Map<string, FormulaValue>();
+    for (const [name, value] of namedValues) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+        throw new TypeError(`Invalid named binding identifier: ${name}`);
+      }
+      const key = name.toUpperCase();
+      if (normalized.has(key)) {
+        throw new TypeError(`Duplicate named binding identifier: ${name}`);
+      }
+      normalized.set(key, value);
+    }
+
+    const context = {
+      ...worksheetContext,
+      [NAMED_BINDINGS_CONTEXT]: normalized,
+    } as NamedBindingsContext;
+    this.providerRegistry.clearCache();
+    const result = this.evaluateInternal(formula, context) as InternalFormulaValue;
+    return unwrapExplicitNamedNull(result);
   }
 
   /**
@@ -927,7 +998,7 @@ export class FormulaEngine {
         }
       }
     }
-    
+
     // Named lambda - check if this is a named lambda identifier
     if (context.namedLambdas && /^[a-zA-Z_][a-zA-Z0-9_]*$/i.test(expr)) {
       // Try exact case match first
@@ -951,10 +1022,23 @@ export class FormulaEngine {
       return this.evaluateRangeReference(expr, context);
     }
 
+    // Explicit aggregate/caller bindings are a final bare-name fallback. By
+    // resolving them after lambda locals, Boolean literals, and A1/range
+    // references, this API cannot shadow existing FormulaEngine tokens.
+    const bindingMatch = expr.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+    const namedBindings = (context as NamedBindingsContext)[NAMED_BINDINGS_CONTEXT];
+    if (bindingMatch && namedBindings) {
+      const binding = namedBindings.get(bindingMatch[1].toUpperCase());
+      if (binding !== undefined) {
+        return (binding === null ? EXPLICIT_NAMED_NULL : binding) as InternalFormulaValue as FormulaValue;
+      }
+    }
+
     // Unary minus (e.g., -5, -val, -A1)
     if (expr.startsWith('-') && expr.length > 1) {
       const operand = this.evaluateExpression(expr.substring(1), context);
       if (operand instanceof Error) return operand;
+      if (containsExplicitNamedNull(operand)) return EXPLICIT_NAMED_NULL as unknown as FormulaValue;
       if (typeof operand === 'number') {
         return -operand;
       }
@@ -981,16 +1065,33 @@ export class FormulaEngine {
     // IMPORTANT: Only check if there are periods/brackets outside of string literals
     
     const hasMemberAccessOutsideStrings = this.hasMemberAccessMarkers(expr);
+
+    // Dotted built-in statistical function names also contain member-access
+    // punctuation (for example T.DIST.RT(...)). Keep this allowlist at the
+    // dispatch boundary so those registered calls reach the function parser
+    // below without changing generic entity/member-expression handling.
+    const dottedStatisticalFunctionMatch = expr.match(/^([A-Z_][A-Z0-9_.]*)\s*\(/i);
+    const isDottedStatisticalFunctionCall =
+      dottedStatisticalFunctionMatch != null &&
+      DOTTED_STATISTICAL_FUNCTION_CALLS.has(dottedStatisticalFunctionMatch[1].toUpperCase());
     
     // Chained member access (future-proofing for Week 3+)
     // Example: A1.Stock.Price (Week 2: not supported, returns #VALUE!)
-    if (hasMemberAccessOutsideStrings && this.looksLikeChainedMemberExpression(expr)) {
+    if (
+      !isDottedStatisticalFunctionCall &&
+      hasMemberAccessOutsideStrings &&
+      this.looksLikeChainedMemberExpression(expr)
+    ) {
       return this.evaluateChainedMemberExpressionStub(expr, context);
     }
 
     // Dot notation member access
     // Example: A1.Price, B2.Ticker
-    if (hasMemberAccessOutsideStrings && this.looksLikeDotMemberExpression(expr)) {
+    if (
+      !isDottedStatisticalFunctionCall &&
+      hasMemberAccessOutsideStrings &&
+      this.looksLikeDotMemberExpression(expr)
+    ) {
       return this.evaluateDotMemberExpressionStub(expr, context);
     }
 
@@ -1115,13 +1216,13 @@ export class FormulaEngine {
     
     // Create new context with lambda bindings and incremented recursion depth
     // Explicitly preserve namedLambdas for recursion support
-    const newContext: FormulaContext = {
+    const newContext = inheritNamedBindings(context, {
       worksheet: context.worksheet,
       currentCell: context.currentCell,
       namedLambdas: context.namedLambdas, // Explicit preservation for recursion
       lambdaContext,
       recursionDepth: currentDepth + 1
-    } as any;
+    } as any);
     
     // Evaluate the lambda body with the bound parameters
     return this.evaluateExpression(lambda.body, newContext);
@@ -1172,6 +1273,9 @@ export class FormulaEngine {
   private applyOperator(op: string, left: FormulaValue, right: FormulaValue): FormulaValue {
     if (left instanceof Error) return left;
     if (right instanceof Error) return right;
+    if (containsExplicitNamedNull(left) || containsExplicitNamedNull(right)) {
+      return EXPLICIT_NAMED_NULL as unknown as FormulaValue;
+    }
 
     // Array broadcasting: if either operand is an array, apply operator element-wise
     // Handle nested arrays (2D arrays)
@@ -1690,13 +1794,13 @@ export class FormulaEngine {
         
         // Evaluate the value expression with current context
         // This allows later variables to reference earlier ones
-        const tempContext: FormulaContext = {
+        const tempContext = inheritNamedBindings(context, {
           worksheet: context.worksheet,
           currentCell: context.currentCell,
           namedLambdas: context.namedLambdas,
           lambdaContext: letContext,
           recursionDepth: context.recursionDepth
-        };
+        });
         
         // Special handling: if value is a range reference, store it as a string
         // so it can be used in function calls later
@@ -1720,13 +1824,13 @@ export class FormulaEngine {
       }
       
       // Evaluate the final calculation with all variables bound
-      const finalContext: FormulaContext = {
+      const finalContext = inheritNamedBindings(context, {
         worksheet: context.worksheet,
         currentCell: context.currentCell,
         namedLambdas: context.namedLambdas,
         lambdaContext: letContext,
         recursionDepth: context.recursionDepth
-      };
+      });
       
       return this.evaluateExpression(rawArgs[rawArgs.length - 1], finalContext);
     }
@@ -1742,6 +1846,7 @@ export class FormulaEngine {
       // Evaluate the condition
       const condition = this.evaluateExpression(rawArgs[0], context);
       if (condition instanceof Error) return condition;
+      if (containsExplicitNamedNull(condition)) return EXPLICIT_NAMED_NULL as unknown as FormulaValue;
       
       // Evaluate only the appropriate branch
       if (condition) {
@@ -1962,13 +2067,13 @@ export class FormulaEngine {
       const lambdaContext = new Map<string, FormulaValue>(lambda.capturedContext || []);
       lambdaContext.set(lambda.parameters[0], array);
       
-      const newContext: FormulaContext = {
+      const newContext = inheritNamedBindings(context, {
         worksheet: context.worksheet,
         currentCell: context.currentCell,
         namedLambdas: context.namedLambdas,
         lambdaContext,
         recursionDepth: ((context as any).recursionDepth || 0) + 1
-      } as any;
+      } as any);
       
       // Evaluate the lambda body with the array bound
       const result = this.evaluateExpression(lambda.body, newContext);
@@ -2096,13 +2201,13 @@ export class FormulaEngine {
       const lambdaContext = new Map<string, FormulaValue>(lambda.capturedContext || []);
       lambdaContext.set(lambda.parameters[0], array);
       
-      const newContext: FormulaContext = {
+      const newContext = inheritNamedBindings(context, {
         worksheet: context.worksheet,
         currentCell: context.currentCell,
         namedLambdas: context.namedLambdas,
         lambdaContext,
         recursionDepth: ((context as any).recursionDepth || 0) + 1
-      } as any;
+      } as any);
       
       // Evaluate the lambda body with the array bound
       const result = this.evaluateExpression(lambda.body, newContext);
@@ -2138,6 +2243,13 @@ export class FormulaEngine {
     }
 
     const args = this.parseArguments(argsStr, context);
+    // Null from an explicit named binding is a deliberate propagated value,
+    // not the empty-cell coercion used by ordinary Worksheet formulas.
+    if (args.some((arg) => containsExplicitNamedNull(arg))) {
+      const error = args.find((arg) => arg instanceof Error);
+      if (error) return error;
+      return EXPLICIT_NAMED_NULL as unknown as FormulaValue;
+    }
     
     // Extract the function handler
     const func = funcMetadata.handler;

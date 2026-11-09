@@ -6,10 +6,18 @@
   "main": "dist/src/index.js",
   "module": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "browser": "./dist/src/index.js",
+      "node": "./dist/node/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
   "sideEffects": false,
   "files": ["dist"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build --config vite.node.config.mjs",
     "clean": "rm -rf dist",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -18,7 +18,9 @@
 import { PasteCommand } from '../src/PasteCommand';
 import { ClipboardService } from '../src/ClipboardService';
 import { CommandManager } from '../src/CommandManager';
-import { Worksheet } from '../src/worksheet';
+import { Worksheet, adoptWorksheetByWorkbook } from '../src/worksheet';
+import { OwnerBackedWorkbookSheetView } from '../src/WorkbookSheetView';
+import type { WorkbookId, WorksheetId } from '../src/workbook-access-types';
 import type { Address, Range } from '../src/types';
 
 describe('PasteCommand - Phase 0.3 (Steps 1-6 COMPLETE: Full Clipboard Architecture)', () => {
@@ -30,6 +32,80 @@ describe('PasteCommand - Phase 0.3 (Steps 1-6 COMPLETE: Full Clipboard Architect
     worksheet = new Worksheet('Test', 100, 26);
     clipboard = new ClipboardService();
     commandManager = new CommandManager(100, worksheet); // Enable DAG validation
+  });
+
+  describe('R1 ownership and diagnostics', () => {
+    const address = { row: 1, col: 1 };
+    const range = { start: address, end: address };
+
+    function createPayload(value = 'clipboard-value', formula?: string) {
+      const source = new Worksheet('Paste payload source', 2, 2);
+      if (formula) source.setCellFormula(address, formula, value);
+      else source.setCellValue(address, value);
+      return clipboard.copy(source, range);
+    }
+
+    test('constructor rejects adopted raw targets before target reads or sensitive diagnostics', () => {
+      const target = new Worksheet('Adopted raw paste target', 2, 2);
+      target.setCellFormula(address, '=40+2', 'target-private-sentinel');
+      Object.defineProperty(target, 'isWorkbookOwned', {
+        configurable: true,
+        value: () => false,
+      });
+      adoptWorksheetByWorkbook(target, 'paste-command-raw-owner' as WorkbookId);
+      const payload = createPayload('source-private-sentinel', '=1+1');
+      const getCell = jest.spyOn(Worksheet.prototype, 'getCell');
+      const getMerge = jest.spyOn(Worksheet.prototype, 'getMergedRangeForCell');
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      expect(() => new PasteCommand(target, payload, address)).toThrow(/unavailable/);
+      expect(getCell).not.toHaveBeenCalled();
+      expect(getMerge).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
+      expect(JSON.stringify(log.mock.calls)).not.toContain('target-private-sentinel');
+    });
+
+    test('constructor rejects an owner view before resolving its target cells', () => {
+      const target = new Worksheet('Owner view paste target', 2, 2);
+      target.setCellValue(address, 'owner-target-sentinel');
+      adoptWorksheetByWorkbook(target, 'paste-command-view-owner' as WorkbookId);
+      const view = new OwnerBackedWorkbookSheetView(
+        'paste-command-view-owner' as WorkbookId,
+        target.getWorksheetId() as WorksheetId,
+        () => target,
+      );
+      const payload = createPayload();
+      const getCell = jest.spyOn(Worksheet.prototype, 'getCell');
+      const getMerge = jest.spyOn(Worksheet.prototype, 'getMergedRangeForCell');
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+      getCell.mockClear();
+      getMerge.mockClear();
+      log.mockClear();
+
+      expect(() => new PasteCommand(view as unknown as Worksheet, payload, address)).toThrow();
+      expect(getCell).not.toHaveBeenCalled();
+      expect(getMerge).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
+    });
+
+    test('constructor diagnostics preserve structure without payload or target values/formulas', () => {
+      const sentinel = 'paste-command-private-sentinel';
+      const formula = '=SECRET_PASTE_FORMULA()';
+      const target = new Worksheet('Paste diagnostic target', 2, 2);
+      target.setCellValue(address, sentinel);
+      const payload = createPayload(sentinel, formula);
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const command = new PasteCommand(target, payload, address);
+      command.execute();
+
+      const serialized = JSON.stringify(log.mock.calls);
+      expect(serialized).not.toContain(sentinel);
+      expect(serialized).not.toContain('SECRET_PASTE_FORMULA');
+      expect(serialized).toContain('hasValue');
+      expect(serialized).toContain('hasFormula');
+      expect(serialized).toContain('targetRange');
+    });
   });
 
   // ==================== BASIC VALUE PASTE ====================
@@ -901,19 +977,15 @@ describe('PasteCommand - Phase 0.3 (Steps 1-6 COMPLETE: Full Clipboard Architect
         end: { row: 1, col: 1 }
       });
 
-      // Spy on registerDependencies to verify it's only called once (by formula, not style)
-      let registerCallCount = 0;
-      const originalRegister = worksheet.registerDependencies.bind(worksheet);
-      worksheet.registerDependencies = (addr: Address, deps: Address[]) => {
-        registerCallCount++;
-        return originalRegister(addr, deps);
-      };
-
       const cmd = new PasteCommand(worksheet, payload, { row: 6, col: 6 });
       cmd.execute();
 
-      // DAG registration should happen exactly once (for formula, not for style)
-      expect(registerCallCount).toBe(1);
+      // The copied formula registers its precedents; its style must not add
+      // unrelated dependency edges.
+      expect(worksheet.getPrecedents({ row: 6, col: 6 })).toEqual([
+        { row: 6, col: 7 },
+        { row: 6, col: 8 },
+      ]);
 
       // Verify style applied independently
       expect(worksheet.getCell({ row: 6, col: 6 })?.style?.bold).toBe(true);
@@ -1239,19 +1311,15 @@ describe('PasteCommand - Phase 0.3 (Steps 1-6 COMPLETE: Full Clipboard Architect
         end: { row: 2, col: 2 }
       });
 
-      // Spy on registerDependencies
-      let registerCallCount = 0;
-      const originalRegister = worksheet.registerDependencies.bind(worksheet);
-      worksheet.registerDependencies = (addr: Address, deps: Address[]) => {
-        registerCallCount++;
-        return originalRegister(addr, deps);
-      };
-
       const cmd = new PasteCommand(worksheet, payload, { row: 6, col: 6 });
       cmd.execute();
 
-      // DAG registration should happen exactly once (for formula only, not merge)
-      expect(registerCallCount).toBe(1);
+      // The formula registers its shifted precedents; the merged region must
+      // not add unrelated dependency edges.
+      expect(worksheet.getPrecedents({ row: 6, col: 6 })).toEqual([
+        { row: 6, col: 7 },
+        { row: 6, col: 8 },
+      ]);
 
       // Verify merge applied independently
       expect(worksheet.getMergedRangeForCell({ row: 6, col: 6 })).toBeDefined();

@@ -248,20 +248,43 @@ describe('Worksheet merge behavior table', () => {
 
   // ── PM BT-2: Read non-anchor → return anchor cell ─────────────────────────
 
-  test('BT-2 · read non-anchor cell returns anchor cell object', () => {
+  test('BT-2 · merged member reads return detached snapshots of the anchor cell', () => {
     sheet.setCellValue({ row: 1, col: 1 }, 'AnchorData');
     sheet.setCellStyle({ row: 1, col: 1 }, { bold: true });
     sheet.mergeCells({ start: { row: 1, col: 1 }, end: { row: 3, col: 3 } });
 
-    // All non-anchor cells should return the anchor cell
+    // Member addresses observe anchor content through independently owned reads.
     const r2c2 = sheet.getCell({ row: 2, col: 2 });
     const r3c3 = sheet.getCell({ row: 3, col: 3 });
     const anchor = sheet.getCell({ row: 1, col: 1 });
 
-    expect(r2c2).toBe(anchor);      // same object reference
-    expect(r3c3).toBe(anchor);      // same object reference
+    expect(r2c2).toEqual(anchor);
+    expect(r3c3).toEqual(anchor);
+    expect(r2c2).not.toBe(anchor);
+    expect(r3c3).not.toBe(anchor);
+    expect(r2c2).not.toBe(r3c3);
     expect(r2c2?.value).toBe('AnchorData');
     expect(r2c2?.style?.bold).toBe(true);
+    expect(r3c3?.value).toBe('AnchorData');
+    expect(r3c3?.style?.bold).toBe(true);
+
+    expect(Object.isFrozen(r2c2)).toBe(true);
+    expect(Reflect.set(r2c2!, 'value', 'Mutated detached read')).toBe(false);
+    expect(sheet.getCellValue({ row: 2, col: 2 })).toBe('AnchorData');
+  });
+
+  test('BT-2 characterization · non-anchor reads preserve values but return a different record', () => {
+    sheet.setCellValue({ row: 1, col: 1 }, 'AnchorData');
+    sheet.setCellStyle({ row: 1, col: 1 }, { bold: true });
+    sheet.mergeCells({ start: { row: 1, col: 1 }, end: { row: 3, col: 3 } });
+
+    const nonAnchor = sheet.getCell({ row: 2, col: 2 });
+    const anchor = sheet.getCell({ row: 1, col: 1 });
+
+    expect(nonAnchor).toEqual(anchor);
+    expect(nonAnchor).not.toBe(anchor);
+    expect(nonAnchor?.value).toBe('AnchorData');
+    expect(nonAnchor?.style?.bold).toBe(true);
   });
 
   // ── PM BT-3: Find across merged region → single logical cell ─────────────

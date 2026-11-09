@@ -320,6 +320,21 @@ export class EdgeList implements Iterable<NodeKey> {
   }
 }
 
+export interface DependencyGraphMutationJournal {
+  rollback(): void;
+  commit(): void;
+}
+
+/** Detached, canonical graph state for internal parity tests. */
+export type DependencyGraphTestState = Readonly<{
+  formulaNodes: readonly NodeKey[];
+  predecessors: readonly (readonly [NodeKey, readonly NodeKey[]])[];
+  successors: readonly (readonly [NodeKey, readonly NodeKey[]])[];
+  ranges: readonly (readonly [NodeKey, readonly AddressRange[]])[];
+  volatiles: readonly NodeKey[];
+  dirty: readonly NodeKey[];
+}>;
+
 // ---------------------------------------------------------------------------
 // 2. DependencyGraph — core structure
 // ---------------------------------------------------------------------------
@@ -360,6 +375,87 @@ export class DependencyGraph {
    */
   readonly dirtySet = new Set<NodeKey>();
 
+  #activeMutationJournal?: {
+    structures: Map<NodeKey, {
+      formulaNode: boolean;
+      predecessors?: number[];
+      successors?: number[];
+      ranges?: AddressRange[];
+      volatile: boolean;
+    }>;
+    dirty: Map<NodeKey, boolean>;
+  };
+  #mutationFailureInjector?: (phase: 'during-dependency-update' | 'after-predecessor-removal' | 'after-dependency-registration' | 'after-range-watcher-registration' | 'after-formula-node-registration' | 'after-dirty-propagation' | 'after-volatile-state-change') => void;
+
+  /** @internal Deterministic fault injection used only by Workbook tests. */
+  setMutationFailureInjector(injector?: (phase: 'during-dependency-update' | 'after-predecessor-removal' | 'after-dependency-registration' | 'after-range-watcher-registration' | 'after-formula-node-registration' | 'after-dirty-propagation' | 'after-volatile-state-change') => void): void {
+    this.#mutationFailureInjector = injector;
+  }
+
+  #injectDependencyUpdateFailure(phase: 'during-dependency-update' | 'after-predecessor-removal' | 'after-dependency-registration' | 'after-range-watcher-registration' | 'after-formula-node-registration' | 'after-dirty-propagation' | 'after-volatile-state-change' = 'during-dependency-update'): void {
+    this.#mutationFailureInjector?.(phase);
+  }
+
+  /** @internal Start an exact before-image journal for subsequent graph writes. */
+  beginMutationJournal(): DependencyGraphMutationJournal {
+    if (this.#activeMutationJournal) throw new Error('DependencyGraph already has an active mutation journal');
+    const state = { structures: new Map<NodeKey, {
+      formulaNode: boolean;
+      predecessors?: number[];
+      successors?: number[];
+      ranges?: AddressRange[];
+      volatile: boolean;
+    }>(), dirty: new Map<NodeKey, boolean>() };
+    this.#activeMutationJournal = state;
+    const detach = () => {
+      if (this.#activeMutationJournal === state) this.#activeMutationJournal = undefined;
+    };
+    return {
+      commit: () => detach(),
+      rollback: () => {
+        detach();
+        for (const [key, before] of state.structures) {
+          if (before.formulaNode) this.formulaNodes.add(key);
+          else this.formulaNodes.delete(key);
+          if (before.predecessors) this.predecessors.set(key, EdgeList.from(before.predecessors));
+          else this.predecessors.delete(key);
+          if (before.successors) this.successors.set(key, EdgeList.from(before.successors));
+          else this.successors.delete(key);
+          if (before.ranges) this.rangeDependencies.set(key, before.ranges.map((range) => ({ ...range })));
+          else this.rangeDependencies.delete(key);
+          if (before.volatile) this.volatiles.add(key);
+          else this.volatiles.delete(key);
+        }
+        for (const [key, wasDirty] of state.dirty) {
+          if (wasDirty) this.dirtySet.add(key);
+          else this.dirtySet.delete(key);
+        }
+        state.structures.clear();
+        state.dirty.clear();
+      },
+    };
+  }
+
+  #recordStructureBeforeWrite(key: NodeKey): void {
+    const journal = this.#activeMutationJournal;
+    if (!journal || journal.structures.has(key)) return;
+    const predecessors = this.predecessors.get(key);
+    const successors = this.successors.get(key);
+    const ranges = this.rangeDependencies.get(key);
+    journal.structures.set(key, {
+      formulaNode: this.formulaNodes.has(key),
+      predecessors: predecessors ? [...predecessors] : undefined,
+      successors: successors ? [...successors] : undefined,
+      ranges: ranges?.map((range) => ({ ...range })),
+      volatile: this.volatiles.has(key),
+    });
+  }
+
+  #recordDirtyBeforeWrite(key: NodeKey): void {
+    const journal = this.#activeMutationJournal;
+    if (journal && !journal.dirty.has(key)) journal.dirty.set(key, this.dirtySet.has(key));
+  }
+
   /** Return all graph nodes downstream of seeds, including range watchers. */
   getDependentClosure(seeds: Iterable<NodeKey>): Set<NodeKey> {
     const found = new Set<NodeKey>();
@@ -386,20 +482,24 @@ export class DependencyGraph {
 
   /** Record a formula coordinate so range watchers can order formula inputs. */
   registerFormulaNode(key: NodeKey): void {
+    if (!this.formulaNodes.has(key)) this.#recordStructureBeforeWrite(key);
     this.formulaNodes.add(key);
     const { row, col } = unpackKey(key);
     for (const [dependent, ranges] of this.rangeDependencies) {
       if (ranges.some((range) => contains(range, row, col))) this.addEdge(key, dependent);
     }
+    this.#injectDependencyUpdateFailure('after-formula-node-registration');
   }
 
   private addEdge(precedent: NodeKey, dependent: NodeKey): void {
     let preds = this.predecessors.get(dependent);
+    if (preds?.has(precedent)) return;
+    this.#recordStructureBeforeWrite(precedent);
+    this.#recordStructureBeforeWrite(dependent);
     if (!preds) {
       preds = new EdgeList();
       this.predecessors.set(dependent, preds);
     }
-    if (preds.has(precedent)) return;
     preds.add(precedent);
     let successors = this.successors.get(precedent);
     if (!successors) {
@@ -428,13 +528,20 @@ export class DependencyGraph {
     dependsOn: readonly NodeKey[],
     ranges: readonly AddressRange[] = [],
   ): void {
+    this.#recordStructureBeforeWrite(dependent);
     // Remove stale predecessors
     const oldPreds = this.predecessors.get(dependent);
     if (oldPreds) {
       for (const pred of oldPreds) {
+        this.#recordStructureBeforeWrite(pred);
         this.successors.get(pred)?.delete(dependent);
       }
+      this.#injectDependencyUpdateFailure('after-predecessor-removal');
     }
+
+    // A test-only seam between inverse-edge removal and replacement. The
+    // Workbook's full snapshot or active node journal must restore this cut.
+    this.#injectDependencyUpdateFailure();
 
     this.rangeDependencies.delete(dependent);
 
@@ -449,9 +556,14 @@ export class DependencyGraph {
     const newPreds = EdgeList.from([...allPreds]);
     this.predecessors.set(dependent, newPreds);
     if (ranges.length > 0) this.rangeDependencies.set(dependent, ranges.map((range) => ({ ...range })));
+    this.#injectDependencyUpdateFailure('after-range-watcher-registration');
 
     // Register inverse edges (successor links)
     for (const pred of newPreds) {
+      // The predecessor may have had no successor bucket before this
+      // registration. Capture that absent before-image before creating it so
+      // rollback can remove a newly introduced inverse-edge entry.
+      this.#recordStructureBeforeWrite(pred);
       let suc = this.successors.get(pred);
       if (!suc) {
         suc = new EdgeList();
@@ -459,6 +571,7 @@ export class DependencyGraph {
       }
       suc.add(dependent);
     }
+    this.#injectDependencyUpdateFailure('after-dependency-registration');
   }
 
   /**
@@ -466,11 +579,14 @@ export class DependencyGraph {
    * O(k) where k = number of previous dependencies.
    */
   clearDependencies(node: NodeKey): void {
+    this.#recordStructureBeforeWrite(node);
     const preds = this.predecessors.get(node);
     if (preds) {
       for (const pred of preds) {
+        this.#recordStructureBeforeWrite(pred);
         this.successors.get(pred)?.delete(node);
       }
+      this.#injectDependencyUpdateFailure('after-predecessor-removal');
       this.predecessors.delete(node);
     }
     this.rangeDependencies.delete(node);
@@ -480,8 +596,10 @@ export class DependencyGraph {
 
   /** Mark a cell as volatile (recalculated every cycle). */
   setVolatile(node: NodeKey, isVolatile: boolean): void {
+    if (this.volatiles.has(node) !== isVolatile) this.#recordStructureBeforeWrite(node);
     if (isVolatile) this.volatiles.add(node);
     else this.volatiles.delete(node);
+    this.#injectDependencyUpdateFailure('after-volatile-state-change');
   }
 
   /** Number of cells currently registered as volatile. O(1). */
@@ -519,12 +637,14 @@ export class DependencyGraph {
     const queue: NodeKey[] = [];
     for (const node of changed) {
       if (!this.dirtySet.has(node)) {
+        this.#recordDirtyBeforeWrite(node);
         this.dirtySet.add(node);
         queue.push(node);
       }
     }
     for (const v of this.volatiles) {
       if (!this.dirtySet.has(v)) {
+        this.#recordDirtyBeforeWrite(v);
         this.dirtySet.add(v);
         queue.push(v);
       }
@@ -537,6 +657,7 @@ export class DependencyGraph {
       const { row, col } = unpackKey(node);
       for (const [dependent, ranges] of this.rangeDependencies) {
         if (ranges.some((range) => contains(range, row, col)) && !this.dirtySet.has(dependent)) {
+          this.#recordDirtyBeforeWrite(dependent);
           this.dirtySet.add(dependent);
           queue.push(dependent);
         }
@@ -545,11 +666,13 @@ export class DependencyGraph {
       if (!sucSet) continue;
       for (const suc of sucSet) {
         if (!this.dirtySet.has(suc)) {
+          this.#recordDirtyBeforeWrite(suc);
           this.dirtySet.add(suc);
           queue.push(suc);
         }
       }
     }
+    this.#injectDependencyUpdateFailure('after-dirty-propagation');
   }
 
   // ── Topological sort (Kahn's BFS, CLRS §22.4) ────────────────────────────
@@ -701,12 +824,16 @@ export class DependencyGraph {
 
   /** Clear the dirty set after evaluation completes. */
   clearDirty(): void {
+    for (const key of this.dirtySet) this.#recordDirtyBeforeWrite(key);
     this.dirtySet.clear();
   }
 
   /** Clear selected nodes from the dirty set after a lazy evaluation pass. */
   clearDirtyNodes(nodes: Iterable<NodeKey>): void {
-    for (const node of nodes) this.dirtySet.delete(node);
+    for (const node of nodes) {
+      this.#recordDirtyBeforeWrite(node);
+      this.dirtySet.delete(node);
+    }
   }
 
   /** True if a node is currently dirty. */
@@ -883,6 +1010,35 @@ export class DependencyGraph {
    */
   getDirtySet(): ReadonlySet<NodeKey> {
     return this.dirtySet;
+  }
+
+  /** @internal Detached diagnostic; deliberately not re-exported from the package barrel. */
+  getStateForTesting(): DependencyGraphTestState {
+    const edges = (source: Map<NodeKey, EdgeList>) => [...source.entries()]
+      .map(([key, values]) => Object.freeze([key, Object.freeze([...values].sort((a, b) => a - b))] as const))
+      .sort(([a], [b]) => a - b);
+    const ranges = [...this.rangeDependencies.entries()]
+      .map(([key, values]) => Object.freeze([key, Object.freeze(values.map((range) => Object.freeze({ ...range }))
+        .sort((a, b) => a.startRow - b.startRow || a.startCol - b.startCol || a.endRow - b.endRow || a.endCol - b.endCol))] as const))
+      .sort(([a], [b]) => a - b);
+    return Object.freeze({
+      formulaNodes: Object.freeze([...this.formulaNodes].sort((a, b) => a - b)),
+      predecessors: Object.freeze(edges(this.predecessors)),
+      successors: Object.freeze(edges(this.successors)),
+      ranges: Object.freeze(ranges),
+      volatiles: Object.freeze([...this.volatiles].sort((a, b) => a - b)),
+      dirty: Object.freeze([...this.dirtySet].sort((a, b) => a - b)),
+    });
+  }
+
+  /** @internal Reports journal ownership without exposing mutable records. */
+  getMutationJournalStatusForTesting(): Readonly<{ active: boolean; structureKeys: readonly NodeKey[]; dirtyKeys: readonly NodeKey[] }> {
+    const journal = this.#activeMutationJournal;
+    return Object.freeze({
+      active: !!journal,
+      structureKeys: Object.freeze(journal ? [...journal.structures.keys()].sort((a, b) => a - b) : []),
+      dirtyKeys: Object.freeze(journal ? [...journal.dirty.keys()].sort((a, b) => a - b) : []),
+    });
   }
 
   // ── Serialisation (Phase 7) ───────────────────────────────────────────────

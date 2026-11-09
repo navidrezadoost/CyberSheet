@@ -15,9 +15,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
-    "test": "jest --config jest.config.js",
-    "test:watch": "jest --watch --config jest.config.js",
-    "test:a11y": "jest --config jest.config.js src/vanilla/__tests__/CFPresetPicker.a11y.test.ts"
+    "test": "jest --config jest.config.cjs",
+    "test:watch": "jest --watch --config jest.config.cjs",
+    "test:a11y": "jest --config jest.config.cjs src/vanilla/__tests__/CFPresetPicker.a11y.test.ts"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",

@@ -28,7 +28,7 @@ const fillCases: Array<{ name: string; sourceValue: ExtendedCellValue; expectedV
 ];
 
 describe.each(fillCases)('EditingManager fill $name owner boundary', ({ name, sourceValue, expectedValue }) => {
-  test('writes standalone and rejects after adoption following source and target reads', () => {
+  test('writes standalone and rejects after adoption before source reads or history changes', () => {
     const worksheet = new CallRecordingWorksheet(`Fill ${name}`, 4, 2);
     worksheet.setCellValue({ row: 1, col: 1 }, sourceValue);
     worksheet.setCellValue({ row: 2, col: 1 }, 'standalone target');
@@ -48,16 +48,14 @@ describe.each(fillCases)('EditingManager fill $name owner boundary', ({ name, so
     expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
 
     worksheet.calls.length = 0;
+    Object.defineProperty(worksheet, 'isWorkbookOwned', { value: () => false, configurable: true });
     adoptWorksheetByWorkbook(worksheet, `editing-manager-fill-${name.replace(/ /g, '-')}` as WorkbookId);
 
     expect(() => manager.fillCells(
       { row: 1, col: 1 },
       { start: { row: 3, col: 1 }, end: { row: 3, col: 1 } },
-    )).toThrow(/Workbook-owned Worksheet\.setCellValue is unavailable/);
-    expect(worksheet.calls.map(({ method }) => method)).toEqual(['getCell', 'getCell', 'setCellValue']);
-    expect(worksheet.calls[0].args).toEqual([{ row: 1, col: 1 }]);
-    expect(worksheet.calls[1].args).toEqual([{ row: 3, col: 1 }]);
-    expect(worksheet.calls[2].args).toEqual([{ row: 3, col: 1 }, expectedValue]);
+    )).toThrow(/EditingManager cannot operate on a Workbook-owned Worksheet/);
+    expect(worksheet.calls).toEqual([]);
     expect(worksheet.getCell({ row: 3, col: 1 })?.value).toBe('adopted target');
     expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
   });

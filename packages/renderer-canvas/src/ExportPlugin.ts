@@ -5,7 +5,10 @@
  * Uses native browser APIs (OffscreenCanvas for PNG) and is fully pluggable.
  */
 
+import { Worksheet as WorksheetClass } from '@cyber-sheet/core';
 import type { Worksheet } from '@cyber-sheet/core';
+
+const worksheetIsWorkbookOwned = WorksheetClass.prototype.isWorkbookOwned;
 
 export type ExportFormat = 'csv' | 'json' | 'png';
 
@@ -72,6 +75,7 @@ export class ExportPlugin {
    * Exports the worksheet in the specified format.
    */
   public async export(format: ExportFormat, options: ExportOptions = {}): Promise<ExportResult> {
+    this.assertStandaloneWorksheet();
     switch (format) {
       case 'csv':
         return this.exportCSV(options);
@@ -81,6 +85,22 @@ export class ExportPlugin {
         return await this.exportPNG(options);
       default:
         throw new Error(`Unsupported export format: ${format}`);
+    }
+  }
+
+  /** ExportPlugin has no owner-view projection, so reject adopted or structural sources before reading. */
+  private assertStandaloneWorksheet(): void {
+    let isWorkbookOwned: boolean;
+    try {
+      // Call the captured prototype method so an own-property shadow cannot
+      // make an adopted Worksheet appear standalone. Its private-field brand
+      // also rejects structural facades before they can delegate a read.
+      isWorkbookOwned = worksheetIsWorkbookOwned.call(this.worksheet);
+    } catch {
+      throw new Error('ExportPlugin requires an authentic standalone Worksheet');
+    }
+    if (isWorkbookOwned) {
+      throw new Error('ExportPlugin cannot read a Workbook-owned Worksheet');
     }
   }
 

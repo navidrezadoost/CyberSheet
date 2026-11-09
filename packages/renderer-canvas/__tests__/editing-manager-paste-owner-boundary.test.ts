@@ -26,7 +26,7 @@ class CallRecordingWorksheet extends Worksheet {
 function createPasteEvent(values: ClipboardValues): Event {
   const event = new Event('paste', { cancelable: true });
   Object.defineProperty(event, 'clipboardData', {
-    value: { getData: (format: string) => values[format] ?? '' },
+    value: { getData: jest.fn((format: string) => values[format] ?? '') },
   });
   return event;
 }
@@ -61,6 +61,14 @@ describe('EditingManager document paste owner boundary', () => {
     adoptWorksheetByWorkbook(worksheet, 'editing-manager-paste-owner' as WorkbookId);
 
     const listenerErrors: ErrorEvent[] = [];
+    const adoptedPasteEvent = createPasteEvent({
+      'application/x-cyber-sheet': JSON.stringify({
+        cells: [[{ value: 'blocked custom', style: { italic: true } }]],
+        range: { start: { row: 1, col: 1 }, end: { row: 1, col: 1 } },
+        isCut: false,
+      }),
+      'text/plain': 'blocked plain',
+    });
     const captureListenerError = (event: ErrorEvent) => {
       listenerErrors.push(event);
       event.preventDefault();
@@ -68,14 +76,7 @@ describe('EditingManager document paste owner boundary', () => {
     window.addEventListener('error', captureListenerError);
     let adoptedDispatchResult: boolean;
     try {
-      adoptedDispatchResult = document.dispatchEvent(createPasteEvent({
-        'application/x-cyber-sheet': JSON.stringify({
-          cells: [[{ value: 'blocked custom', style: { italic: true } }]],
-          range: { start: { row: 1, col: 1 }, end: { row: 1, col: 1 } },
-          isCut: false,
-        }),
-        'text/plain': 'blocked plain',
-      }));
+      adoptedDispatchResult = document.dispatchEvent(adoptedPasteEvent);
     } finally {
       window.removeEventListener('error', captureListenerError);
       disposeEvents.dispose();
@@ -83,28 +84,20 @@ describe('EditingManager document paste owner boundary', () => {
 
     // dispatchEvent reports cancellation separately; listener exceptions are
     // surfaced by jsdom as window error events and are captured above.
-    expect(adoptedDispatchResult!).toBe(false);
+    expect(adoptedDispatchResult!).toBe(true);
     expect(listenerErrors).toHaveLength(2);
     expect(listenerErrors.every(({ error, message }) =>
-      error instanceof Error && /Workbook-owned Worksheet\.setCellValue is unavailable/.test(message),
+      error instanceof Error && /EditingManager cannot operate on a Workbook-owned Worksheet/.test(message),
     )).toBe(true);
-    expect(worksheet.calls.map(({ method }) => method)).toEqual([
-      'getCell', 'setCellValue', 'getCell', 'setCellValue',
-      'getCell', 'setCellValue', 'getCell', 'setCellValue',
-    ]);
-    expect(worksheet.calls.filter(({ method }) => method === 'setCellValue').map(({ args }) => args)).toEqual([
-      [{ row: 2, col: 1 }, 'blocked custom'],
-      [{ row: 2, col: 1 }, 'blocked plain'],
-      [{ row: 2, col: 1 }, 'blocked custom'],
-      [{ row: 2, col: 1 }, 'blocked plain'],
-    ]);
+    expect((adoptedPasteEvent as Event & { clipboardData: { getData: jest.Mock } }).clipboardData.getData).not.toHaveBeenCalled();
+    expect(worksheet.calls).toEqual([]);
     expect(worksheet.getCell({ row: 2, col: 1 })).toMatchObject({ value: 'custom value', style: { bold: true } });
     expect(worksheetEvents).toEqual([]);
     expect(first.getSelection()).toEqual({ start: { row: 2, col: 1 }, end: { row: 2, col: 1 } });
     expect(second.getSelection()).toEqual({ start: { row: 2, col: 1 }, end: { row: 2, col: 1 } });
     expect(first.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
     expect(second.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
-    expect((first as unknown as { clipboardData: unknown }).clipboardData).toBeNull();
-    expect((second as unknown as { clipboardData: unknown }).clipboardData).toBeNull();
+    first.dispose();
+    second.dispose();
   });
 });

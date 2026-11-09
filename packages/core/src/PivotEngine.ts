@@ -17,7 +17,9 @@
 
 import type { Address, CellValue, ExtendedCellValue } from './types';
 import type { Worksheet } from './worksheet';
+import { FormulaEngine } from './FormulaEngine';
 import type { CalculatedField, CompiledCalculatedField, PivotEvalContext } from './PivotCalculatedFields';
+import { PivotCalculatedFieldError } from './PivotCalculatedFields';
 import { toDisplayValue } from './utils/cell-value-normalizer';
 import { PivotCalculatedFieldEngine } from './PivotCalculatedFields';
 import type { PivotId } from './PivotRegistry';
@@ -195,6 +197,7 @@ export interface PivotTable {
 
 export class PivotEngine {
   private worksheet: Worksheet;
+  private readonly formulaEngine: FormulaEngine;
   
   // Allocation-safe row wrapper (reused across all calculations)
   private readonly rowWrapper = new PivotSourceRow();
@@ -204,6 +207,9 @@ export class PivotEngine {
 
   constructor(worksheet: Worksheet) {
     this.worksheet = worksheet;
+    // Calculated pivot formulas are evaluated over an explicit aggregate
+    // namespace; they do not depend on or mutate the Worksheet's evaluator.
+    this.formulaEngine = new FormulaEngine();
   }
   
   /**
@@ -211,12 +217,7 @@ export class PivotEngine {
    */
   private getCalcFieldEngine(): PivotCalculatedFieldEngine {
     if (!this.calcFieldEngine) {
-      // Get formula engine from worksheet
-      const formulaEngine = (this.worksheet as any).formulaEngine;
-      if (!formulaEngine) {
-        throw new Error('FormulaEngine required for calculated fields');
-      }
-      this.calcFieldEngine = new PivotCalculatedFieldEngine(formulaEngine);
+      this.calcFieldEngine = new PivotCalculatedFieldEngine(this.formulaEngine);
     }
     return this.calcFieldEngine;
   }
@@ -234,6 +235,18 @@ export class PivotEngine {
       ...config,
       values: this.normalizeValueSpecs(config.values)
     };
+    const declaredValueNames = new Set<string>();
+    for (const spec of normalizedConfig.values as PivotValueSpec[]) {
+      const name = spec.type === 'aggregate' ? spec.label : spec.name;
+      const normalizedName = name.toUpperCase();
+      if (declaredValueNames.has(normalizedName)) {
+        throw new PivotCalculatedFieldError(
+          'INVALID_FORMULA',
+          `Duplicate pivot value name: ${name}`,
+        );
+      }
+      declaredValueNames.add(normalizedName);
+    }
 
     // Extract source data
     let sourceData = this.extractSourceData(normalizedConfig.sourceRange);
@@ -244,15 +257,27 @@ export class PivotEngine {
     }
     
     // Build dimension maps
-    const rowDimensions = this.buildDimensions(sourceData, normalizedConfig.rows);
-    const colDimensions = this.buildDimensions(sourceData, normalizedConfig.columns);
+    const sourceStartColumn = normalizedConfig.sourceRange.start.col;
+    const rowDimensions = this.buildDimensions(
+      sourceData,
+      normalizedConfig.rows,
+      sourceStartColumn,
+    );
+    const colDimensions = this.buildDimensions(
+      sourceData,
+      normalizedConfig.columns,
+      sourceStartColumn,
+    );
     
     // Aggregate data (Phase 27: handles both aggregate and calculated)
     const aggregatedData = this.aggregateData(
       sourceData,
       rowDimensions,
       colDimensions,
-      normalizedConfig.values as PivotValueSpec[]
+      normalizedConfig.values as PivotValueSpec[],
+      sourceStartColumn,
+      (normalizedConfig.values as PivotValueSpec[]).length > 1 ||
+        (normalizedConfig.calculatedFields?.length ?? 0) > 0,
     );
     
     // Phase 33: Evaluate post-aggregation calculated fields
@@ -316,12 +341,14 @@ export class PivotEngine {
     }
     
     // Get relevant columns for hashing
-    const relevantColumns = getRelevantColumns(config);
+    const relevantColumns = getRelevantColumns(config).map(
+      (column) => column - config.sourceRange.start.col,
+    );
     
     // Get dimension columns (for grouping)
     const dimensionColumns = [
-      ...config.rows.map(r => r.column),
-      ...config.columns.map(c => c.column)
+      ...config.rows.map((field) => field.column - config.sourceRange.start.col),
+      ...config.columns.map((field) => field.column - config.sourceRange.start.col),
     ];
     
     // Skip header row (first row is headers)
@@ -362,7 +389,7 @@ export class PivotEngine {
         if (spec.type === 'aggregate') {
           const acc = group.values[spec.label];
           if (acc) {
-            const value = row[spec.column];
+            const value = row[spec.column - config.sourceRange.start.col];
             const numValue = typeof value === 'number' && isFinite(value) ? value : null;
             acc.add(numValue);
           }
@@ -486,10 +513,11 @@ export class PivotEngine {
     const filteredDataRows = dataRows.filter(row => {
       // Apply each slicer (AND logic)
       for (const slicer of runtimeSlicers.values()) {
-        const columnIndex = fieldToColumn.get(slicer.field);
+        const sourceColumn = fieldToColumn.get(slicer.field);
         
         // If field not found, skip this slicer (defensive: should be validated at setSlicer)
-        if (columnIndex === undefined) continue;
+        if (sourceColumn === undefined) continue;
+        const columnIndex = sourceColumn - config.sourceRange.start.col;
         
         // Get cell value
         const cellValue = row[columnIndex];
@@ -519,13 +547,19 @@ export class PivotEngine {
   /**
    * Build dimension keys for grouping
    */
-  private buildDimensions(data: ExtendedCellValue[][], fields: PivotField[]): Map<string, ExtendedCellValue[][]> {
+  private buildDimensions(
+    data: ExtendedCellValue[][],
+    fields: PivotField[],
+    sourceStartColumn: number,
+  ): Map<string, ExtendedCellValue[][]> {
     const dimensions = new Map<string, ExtendedCellValue[][]>();
     
     // Skip header row
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      const key = fields.map(f => String(row[f.column] ?? '')).join('|');
+      const key = fields
+        .map((field) => String(row[field.column - sourceStartColumn] ?? ''))
+        .join('|');
       
       if (!dimensions.has(key)) {
         dimensions.set(key, []);
@@ -558,7 +592,9 @@ export class PivotEngine {
     sourceData: ExtendedCellValue[][],
     rowDimensions: Map<string, ExtendedCellValue[][]>,
     colDimensions: Map<string, ExtendedCellValue[][]>,
-    valueSpecs: PivotValueSpec[]
+    valueSpecs: PivotValueSpec[],
+    sourceStartColumn: number,
+    includeNamedValues: boolean,
   ): PivotCell[][] {
     const result: PivotCell[][] = [];
     const rowKeys = Array.from(rowDimensions.keys());
@@ -576,16 +612,28 @@ export class PivotEngine {
         // Find intersection (grouped rows for this cell)
         const intersection = this.findIntersection(rowData, colData);
         
-        // Use first value spec for primary value (backward compatibility)
+        // Preserve every configured aggregate independently. `value` remains
+        // the first configured spec for existing grid consumers; `values` is
+        // the named multi-value surface used by calculated fields and the
+        // snapshot adapter.
         const primarySpec = valueSpecs[0];
-        const primaryValue = this.aggregateValueSpec(primarySpec, intersection);
+        const values: Record<string, CellValue | Error> = {};
+        let primaryValue: { value: number | null; error?: string } = { value: null };
+        for (let valueIndex = 0; valueIndex < valueSpecs.length; valueIndex++) {
+          const spec = valueSpecs[valueIndex];
+          const result = this.aggregateValueSpec(spec, intersection, sourceStartColumn);
+          const label = spec.type === 'aggregate' ? spec.label : spec.name;
+          if (includeNamedValues) values[label] = result.value;
+          if (valueIndex === 0) primaryValue = result;
+        }
         
         row.push({
           value: primaryValue.value,
           rowKeys: rowKey.split('|'),
           colKeys: colKey.split('|'),
           aggregation: primarySpec.type === 'aggregate' ? primarySpec.aggregation : 'calculated',
-          error: primaryValue.error
+          error: primaryValue.error,
+          ...(includeNamedValues ? { values } : {}),
         });
       }
       
@@ -603,11 +651,12 @@ export class PivotEngine {
    */
   private aggregateValueSpec(
     spec: PivotValueSpec,
-    rows: ExtendedCellValue[][]
+    rows: ExtendedCellValue[][],
+    sourceStartColumn: number,
   ): { value: number | null; error?: string } {
     if (spec.type === 'aggregate') {
       // Phase 25/26 behavior preserved exactly
-      return { value: this.aggregateColumn(spec, rows) };
+      return { value: this.aggregateColumn(spec, rows, sourceStartColumn) };
     } else {
       // Phase 27: Calculated field
       return this.aggregateCalculated(spec, rows);
@@ -619,10 +668,11 @@ export class PivotEngine {
    */
   private aggregateColumn(
     spec: AggregateValueSpec,
-    rows: ExtendedCellValue[][]
+    rows: ExtendedCellValue[][],
+    sourceStartColumn: number,
   ): number | null {
     const values = rows
-      .map(row => row[spec.column])
+      .map(row => row[spec.column - sourceStartColumn])
       .filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v)) as number[];
     
     // Null semantics: no valid values → null (not 0)
@@ -784,6 +834,39 @@ export class PivotEngine {
     calculatedFields: CalculatedField[]
   ): void {
     const engine = this.getCalcFieldEngine();
+
+    // Formula bindings are bare identifiers. Reject ambiguous declarations
+    // before aggregating them into the per-cell namespace.
+    const declaredNames = new Set<string>();
+    const formulaEngine = this.formulaEngine;
+    const names = [
+      ...valueSpecs.map(spec => spec.type === 'aggregate' ? spec.label : spec.name),
+      ...calculatedFields.map(field => field.name),
+    ];
+    for (const name of names) {
+      const normalized = name.toUpperCase();
+      const isA1Reference = /^[A-Z]+[1-9][0-9]*$/i.test(name);
+      const isBooleanLiteral = /^(TRUE|FALSE)$/i.test(name);
+      const isFunctionName = formulaEngine?.functions?.has?.(name) === true;
+      if (
+        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ||
+        isA1Reference ||
+        isBooleanLiteral ||
+        isFunctionName
+      ) {
+        throw new PivotCalculatedFieldError(
+          'INVALID_FORMULA',
+          `Invalid or reserved pivot value name: ${name}`,
+        );
+      }
+      if (declaredNames.has(normalized)) {
+        throw new PivotCalculatedFieldError(
+          'INVALID_FORMULA',
+          `Duplicate pivot value name: ${name}`,
+        );
+      }
+      declaredNames.add(normalized);
+    }
     
     // Phase 33b: Clear cache at start of build (fresh caching per pivot)
     engine.clearCache();
@@ -800,27 +883,27 @@ export class PivotEngine {
     // Evaluate calculated fields for each cell
     for (const row of data) {
       for (const cell of row) {
-        // Build evaluation context from aggregated base values
+        // Build named bindings from all aggregate results. Missing declared
+        // operands use #REF!, while present empty aggregate results remain null.
         const baseContext: PivotEvalContext = {};
-        
-        // Map value specs to their aggregated values
         for (let i = 0; i < valueSpecs.length; i++) {
           const spec = valueSpecs[i];
           const fieldLabel = baseFieldLabels[i];
-          
-          // For the primary value, use cell.value
-          if (i === 0) {
-            baseContext[fieldLabel] = typeof cell.value === 'number' ? cell.value : null;
-          }
-          // For additional values, would need to be stored separately
-          // For now, Phase 33 focuses on single-value pivots with calculated fields
+          const value = cell.values?.[fieldLabel];
+          baseContext[fieldLabel] = value === undefined
+            ? new Error('#REF!')
+            : value instanceof Error
+              ? value
+              : typeof value === 'number' || value === null
+                ? value
+                : new Error('#VALUE!');
         }
         
         // Evaluate all calculated fields
         const fullContext = engine.evaluateAll(sorted, baseContext);
         
         // Attach all values (base + calculated) to cell
-        cell.values = { ...fullContext };
+        cell.values = { ...cell.values, ...fullContext };
       }
     }
   }

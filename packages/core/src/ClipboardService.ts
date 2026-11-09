@@ -16,9 +16,38 @@
  */
 
 import type { Address, Range, ExtendedCellValue, CellStyle } from './types';
-import type { Worksheet } from './worksheet';
+import { Worksheet } from './worksheet';
+import { Workbook } from './workbook';
 import type { WorkbookSheetView } from './workbook-access-types';
 type ClipboardReadSheet = Worksheet | WorkbookSheetView;
+
+const worksheetIsWorkbookOwned = Worksheet.prototype.isWorkbookOwned;
+
+function assertClipboardSourceAllowed(source: ClipboardReadSheet, isCut: boolean): void {
+  if (source instanceof Worksheet) {
+    let isOwned: boolean;
+    try {
+      // Call the captured prototype method so an instance override cannot
+      // disguise Workbook adoption.
+      isOwned = worksheetIsWorkbookOwned.call(source);
+    } catch {
+      throw new Error('Unable to classify Worksheet ownership for clipboard access');
+    }
+    if (isOwned) {
+      throw new Error('Workbook-owned Worksheet clipboard access is unavailable until its journal slice is authorized');
+    }
+    return;
+  }
+
+  if (Workbook.isWorkbookIssuedSheetView(source)) {
+    if (isCut) {
+      throw new Error('Workbook-owned Cut is unavailable until its journal slice is authorized');
+    }
+    return;
+  }
+
+  throw new Error('Unsupported clipboard source; expected a standalone Worksheet or Workbook-issued WorkbookSheetView');
+}
 
 /**
  * Serialized style representation — pure data, no object references.
@@ -302,6 +331,7 @@ export class ClipboardService {
     isCut: boolean,
     mode: ClipboardCopyMode = 'all'
   ): ClipboardPayload {
+    assertClipboardSourceAllowed(worksheet, isCut);
     const { start, end } = range;
     const width = end.col - start.col + 1;
     const height = end.row - start.row + 1;
@@ -326,7 +356,7 @@ export class ClipboardService {
           const snapshot = this.createCellSnapshot(worksheet, addr, start, undefined, undefined, 'values');
           if (snapshot) {
             logEntry.action = 'captured value';
-            logEntry.value = snapshot.value;
+            logEntry.hasValue = true;
             cells.push(snapshot);
           } else {
             logEntry.action = 'skip - empty';
@@ -371,7 +401,7 @@ export class ClipboardService {
             
             if (snapshot) {
               logEntry.action = 'captured merge anchor';
-              logEntry.value = snapshot.value;
+              logEntry.hasValue = snapshot.value !== null && snapshot.value !== undefined;
               logEntry.hasFormula = !!snapshot.formula;
               cells.push(snapshot);
             } else {
@@ -390,7 +420,7 @@ export class ClipboardService {
         const snapshot = this.createCellSnapshot(worksheet, addr, start);
         if (snapshot) {
           logEntry.action = 'captured';
-          logEntry.value = snapshot.value;
+          logEntry.hasValue = snapshot.value !== null && snapshot.value !== undefined;
           logEntry.hasFormula = !!snapshot.formula;
           logEntry.hasStyle = !!snapshot.style;
           cells.push(snapshot);
@@ -419,8 +449,9 @@ export class ClipboardService {
         dimensions: `${width}x${height}`,
         cells: cells.map(c => ({
           offset: `(${c.rowOffset},${c.colOffset})`,
-          value: c.value,
-          formula: c.formula,
+          hasValue: c.value !== null && c.value !== undefined,
+          hasFormula: !!c.formula,
+          hasStyle: !!c.style,
           isMergeAnchor: c.isMergeAnchor
         }))
       }

@@ -25,7 +25,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Workbook } from '@cyber-sheet/core';
 import { rejectR1ExampleInitialization } from './r1-initialization-gate';
-import { ExcelApp } from '@cyber-sheet/react/src/components/ExcelApp';
+import { ExcelApp } from '@cyber-sheet/react';
 
 // Create sample workbook with searchable data
 function createDemoWorkbook(): Workbook {

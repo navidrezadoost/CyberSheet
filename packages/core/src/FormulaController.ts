@@ -5,7 +5,7 @@
  * Provides a controlled interface for React components to interact with formulas.
  */
 
-import { Address, Cell, CellValue, ExtendedCellValue } from './types';
+import { Address, CellValue, ExtendedCellValue } from './types';
 import { Worksheet } from './worksheet';
 import { FormulaEngine, FormulaValue } from './FormulaEngine';
 
@@ -89,25 +89,9 @@ export class FormulaController {
       currentCell: address,
     });
     
-    // Get or create cell (make mutable copy)
-    const existing = this.worksheet.getCell(address);
-    const cell: Cell = existing ? { ...existing } : { value: null };
-    
-    // Store formula and computed value
-    cell.formula = normalized;
-    
-    // Handle error results
-    if (result instanceof Error) {
-      cell.value = result.message;
-    } else if (typeof result === 'object' && result !== null) {
-      // Handle non-primitive results
-      cell.value = String(result);
-    } else {
-      cell.value = result as CellValue;
-    }
-    
-    // Update cell using worksheet method
-    this.updateCell(address, cell);
+    // Use Worksheet's supported mutation path to register dependencies and
+    // publish its normal cell-change/recalculation notifications.
+    this.worksheet.setCellFormula(address, normalized, this.toCellValue(result));
     
     return { isValid: true };
   }
@@ -124,12 +108,8 @@ export class FormulaController {
    */
   clearFormula(address: Address): void {
     const existing = this.worksheet.getCell(address);
-    if (!existing || !existing.formula) return;
-    
-    // Create mutable copy and remove formula
-    const cell: Cell = { ...existing };
-    delete cell.formula;
-    this.updateCell(address, cell);
+    if (!existing || existing.formula === undefined) return;
+    this.worksheet.clearCellFormula(address);
   }
 
   /**
@@ -144,19 +124,14 @@ export class FormulaController {
       currentCell: address,
     });
     
-    // Create mutable copy
-    const cell: Cell = { ...existing };
-    
-    if (result instanceof Error) {
-      cell.value = result.message;
-    } else if (typeof result === 'object' && result !== null) {
-      cell.value = String(result);
-    } else {
-      cell.value = result as CellValue;
-    }
-    
-    this.updateCell(address, cell);
+    this.worksheet.setCellFormula(address, existing.formula, this.toCellValue(result));
     return true;
+  }
+
+  private toCellValue(result: FormulaValue): CellValue {
+    if (result instanceof Error) return result.message;
+    if (typeof result === 'object' && result !== null) return String(result);
+    return result as CellValue;
   }
 
   /**
@@ -228,20 +203,5 @@ export class FormulaController {
     if (message.includes('#VALUE')) return 'VALUE';
     if (message.includes('#REF')) return 'REF';
     return 'SYNTAX';
-  }
-
-  /**
-   * Update cell in worksheet (internal helper)
-   */
-  private updateCell(address: Address, cell: Cell): void {
-    // We need to access the internal cells map
-    // For now, use setCellValue to trigger events
-    const k = `${address.row}:${address.col}`;
-    (this.worksheet as any).cells.set(k, cell);
-    (this.worksheet as any).events.emit({ 
-      type: 'cell-changed', 
-      address, 
-      cell: { ...cell } 
-    });
   }
 }

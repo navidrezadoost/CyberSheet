@@ -25,7 +25,7 @@ export default defineConfig({
   
   use: {
     actionTimeout: 0,
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://127.0.0.1:5173',
     trace: 'on-first-retry',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -54,8 +54,8 @@ export default defineConfig({
   
   // Start dev server before running tests
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
+    command: `${process.execPath} node_modules/vite/bin/vite.js --host 127.0.0.1`,
+    port: 5173,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

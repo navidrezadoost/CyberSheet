@@ -32,6 +32,10 @@ import { recordingApplyPatch } from '../patch/PatchRecorder';
 import { buildPivot, pivotGridToValues } from './pivot';
 import type { PivotDefinition, PivotGrid } from './pivot';
 
+// Capture the Core ownership predicate so retained SDK handles cannot have
+// their owner check bypassed by an instance-level shadow property.
+const worksheetIsWorkbookOwned = Worksheet.prototype.isWorkbookOwned;
+
 // ---------------------------------------------------------------------------
 // Typed errors — defined in errors.ts, re-exported from here for back-compat.
 // ---------------------------------------------------------------------------
@@ -624,13 +628,19 @@ class SpreadsheetV1 implements SpreadsheetSDK {
   getCell(row: number, col: number): Cell | undefined {
     this._guard('getCell');
     this._checkBounds(row, col);
-    return this._ws.getCell({ row, col });
+    const cell = this._ws.getCell({ row, col });
+    if (cell && worksheetIsWorkbookOwned.call(this._ws) && cell.formula) {
+      return Object.freeze({ ...cell, value: null });
+    }
+    return cell;
   }
 
   getCellValue(row: number, col: number): ExtendedCellValue {
     this._guard('getCellValue');
     this._checkBounds(row, col);
-    return this._ws.getCellValue({ row, col });
+    const cell = this._ws.getCell({ row, col });
+    if (cell?.formula && worksheetIsWorkbookOwned.call(this._ws)) return null;
+    return cell?.value ?? null;
   }
 
   // ── Patch API ─────────────────────────────────────────────────────────────

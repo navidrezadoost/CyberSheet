@@ -232,7 +232,14 @@ describe('Phase 32: Filter Handling', () => {
     expect((result as Error).message).toBe('#REF!');
   });
 
+});
+
+describe('Phase 32: Standalone GETPIVOTDATA argument validation', () => {
   test('odd number of filter arguments → #VALUE!', () => {
+    // Argument arity is validated before the pivot query, so this contract
+    // does not require Workbook registration or a published pivot snapshot.
+    const worksheet = new Worksheet('Standalone', 100, 26);
+    const engine = new FormulaEngine();
     const context: FormulaContext = {
       worksheet,
       currentCell: { row: 10, col: 1 },

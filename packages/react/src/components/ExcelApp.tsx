@@ -22,7 +22,6 @@ import {
   FormulaEngine,
   DropdownList,
   FileOperations,
-  SetViewModeCommand,
   SetHeaderFooterCommand,
   FormattingController,
   SetHyperlinkCommand,
@@ -128,6 +127,7 @@ import {
   performCut,
   performPasteAsync,
   normalizeSelectionRange,
+  getClipboardOperationErrorMessage,
   type ClipboardCopyMode,
 } from "../utils/clipboardOperations";
 import { normalizeRange } from "../utils/sortFilterCommands";
@@ -157,6 +157,59 @@ type NumberFormatCategory =
   | "percentage"
   | "number"
   | "comma";
+
+const WORKBOOK_MUTATION_UNAVAILABLE =
+  "Workbook-owned mutations are unavailable until their journal slice is authorized";
+const WORKBOOK_OPERATION_UNAVAILABLE =
+  "This workbook-owned operation is unavailable until its journal slice is authorized";
+const WORKBOOK_FILTER_QUERY_UNAVAILABLE =
+  "Workbook-owned filtered-row query is unavailable when a filter depends on formula cached values";
+
+function getWorkbookOperationAlert(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  if (error.message === WORKBOOK_MUTATION_UNAVAILABLE) {
+    return "Editing is unavailable for this Workbook-owned sheet. Your draft has been kept.";
+  }
+  if (error.message === WORKBOOK_OPERATION_UNAVAILABLE) {
+    return "This action is unavailable for this Workbook-owned sheet.";
+  }
+  if (error.message === WORKBOOK_FILTER_QUERY_UNAVAILABLE) {
+    return "This filter cannot be opened while another filter depends on formula results.";
+  }
+  return null;
+}
+
+const UNSUPPORTED_DATA_ACTIONS: Record<string, string> = {
+  setDataValidation: "Set Data Validation",
+  removeDuplicates: "Remove Duplicates",
+  textToColumns: "Text to Columns",
+  groupOutline: "Group Outline",
+  ungroupOutline: "Ungroup Outline",
+  autoOutline: "Auto Outline",
+  clearOutline: "Clear Outline",
+  circleInvalidData: "Circle Invalid Data",
+  clearValidationCircles: "Clear Validation Circles",
+  flashFill: "Flash Fill",
+  refreshAllConnections: "Refresh All Connections",
+};
+
+function getDataActionLabel(type: string): string {
+  switch (type) {
+    case "sort": return "Sort";
+    case "toggleAutoFilter": return "Filter";
+    case "clearFilter": return "Clear Filter";
+    default: return UNSUPPORTED_DATA_ACTIONS[type] ?? "Data action";
+  }
+}
+
+function getDataActionFailureMessage(type: string, error: unknown): string {
+  const action = getDataActionLabel(type);
+  const operationError = getWorkbookOperationAlert(error);
+  if (operationError) {
+    return `${action} is unavailable for this Workbook-owned sheet. No changes were made.`;
+  }
+  return `${action} could not be completed. Check the selection and action settings. Any reported error has been logged.`;
+}
 
 function getUsedDataRange(sheet: any): CellRange {
   let minRow = Number.POSITIVE_INFINITY;
@@ -392,6 +445,16 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
   const [tableInsertError, setTableInsertError] = useState<string | null>(null);
   const [pivotTableError, setPivotTableError] = useState<string | null>(null);
+  const [clipboardOperationError, setClipboardOperationError] = useState<string | null>(null);
+  const [workbookOperationError, setWorkbookOperationErrorState] = useState<string | null>(null);
+  const [workbookOperationAlertVersion, setWorkbookOperationAlertVersion] = useState(0);
+  const setWorkbookOperationError = useCallback((message: string | null) => {
+    if (message !== null) {
+      setWorkbookOperationAlertVersion((version) => version + 1);
+    }
+    setWorkbookOperationErrorState(message);
+  }, []);
+  const editRejectionPendingRef = useRef(false);
   const [commentDialog, setCommentDialog] = useState<{
     address: { row: number; col: number };
     comments: CellComment[];
@@ -732,6 +795,16 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     [workbook, commandManager, renderer],
   );
 
+  const captureExpectedWorkbookOperationError = useCallback((
+    error: unknown,
+    alertOverride?: string,
+  ): boolean => {
+    const message = getWorkbookOperationAlert(error);
+    if (!message) return false;
+    setWorkbookOperationError(alertOverride ?? message);
+    return true;
+  }, []);
+
   const handleRibbonFilter = useCallback(
     (action: "toggle" | "clear" | "reapply") => {
       const sheet = workbook.activeSheet;
@@ -871,49 +944,78 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
   const handleDataCommand = useCallback(
     (command: { type: string; [key: string]: unknown }) => {
-      const sheet = workbook.activeSheet;
-      if (!sheet) return;
-      requireStandaloneWorksheet(sheet);
+      setWorkbookOperationError(null);
+      if (command.type === "invalidSelection") {
+        const action = typeof command.action === "string" ? command.action : "This action";
+        setWorkbookOperationError(`Select a cell or range before using ${action}. No changes were made.`);
+        return;
+      }
+      const unsupportedAction = UNSUPPORTED_DATA_ACTIONS[command.type];
+      if (unsupportedAction) {
+        setWorkbookOperationError(
+          `${unsupportedAction} is not available in the mounted ExcelApp yet. No command was run and no changes were made.`,
+        );
+        return;
+      }
 
-      switch (command.type) {
-        case "sort":
-          commandManager.execute(
-            new SortCommand(
-              requireStandaloneWorksheet(sheet),
-              command.range as any,
-              command.sortBy as any,
-              (command.hasHeaders as boolean | undefined) ?? true,
-            ),
-          );
-          renderer?.redraw?.();
-          break;
-        case "toggleAutoFilter": {
-          const enabling = (command.enabled as boolean | undefined) ?? true;
-          commandManager.execute(
-            new ToggleAutoFilterCommand(requireStandaloneWorksheet(sheet), command.range as any, enabling),
-          );
-          setIsAutoFilterEnabled(enabling);
-          if (!enabling) {
-            executeFilterStateCommand(
-              (activeSheet) => activeSheet.clearAllFilters?.(),
-              "Clear All Filters",
+      // Reapply currently means redraw only. Keep that behavior explicit and
+      // avoid implying that filter criteria were recomputed.
+      if (command.type === "reapplyFilter") {
+        renderer?.redraw?.();
+        return;
+      }
+
+      const sheet = workbook.activeSheet;
+      if (!sheet) {
+        setWorkbookOperationError("Select an active worksheet before using this Data action.");
+        return;
+      }
+
+      try {
+        switch (command.type) {
+          case "sort":
+            commandManager.execute(
+              new SortCommand(
+                requireStandaloneWorksheet(sheet),
+                command.range as any,
+                command.sortBy as any,
+                (command.hasHeaders as boolean | undefined) ?? true,
+              ),
             );
-            setFilterMenu(null);
-          } else {
-            setTimeout(() => recomputeHeaderFilterIcons(), 0);
+            renderer?.redraw?.();
+            break;
+          case "toggleAutoFilter": {
+            const enabling = (command.enabled as boolean | undefined) ?? true;
+            commandManager.execute(
+              new ToggleAutoFilterCommand(requireStandaloneWorksheet(sheet), command.range as any, enabling),
+            );
+            setIsAutoFilterEnabled(enabling);
+            if (!enabling) {
+              executeFilterStateCommand(
+                (activeSheet) => activeSheet.clearAllFilters?.(),
+                "Clear All Filters",
+              );
+              setFilterMenu(null);
+            } else {
+              setTimeout(() => recomputeHeaderFilterIcons(), 0);
+            }
+            renderer?.redraw?.();
+            break;
           }
-          renderer?.redraw?.();
-          break;
+          case "clearFilter":
+            commandManager.execute(new ClearFilterCommand(requireStandaloneWorksheet(sheet)));
+            renderer?.redraw?.();
+            break;
+          default:
+            setWorkbookOperationError(
+              `${getDataActionLabel(command.type)} is not available in the mounted ExcelApp yet. No command was run and no changes were made.`,
+            );
         }
-        case "clearFilter":
-          commandManager.execute(new ClearFilterCommand(requireStandaloneWorksheet(sheet)));
-          renderer?.redraw?.();
-          break;
-        case "reapplyFilter":
-          renderer?.redraw?.();
-          break;
-        default:
-          console.warn("Unhandled data command:", command.type);
+      } catch (error) {
+        if (!getWorkbookOperationAlert(error)) {
+          console.error(`ExcelApp ${command.type} action failed`, error);
+        }
+        setWorkbookOperationError(getDataActionFailureMessage(command.type, error));
       }
     },
     [
@@ -929,61 +1031,82 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     (col: number, x: number, y: number) => {
       const r = renderer;
       if (!r) return;
+      setWorkbookOperationError(null);
+      try {
+        const rows = r.sheetReadonly.getVisibleRowIndicesExcluding(col);
+        const seen = new Map<string, number>();
+        for (const rr of rows) {
+          const v = r.sheetReadonly.getCellValue({ row: rr, col });
+          const key = v == null ? "" : String(v);
+          seen.set(key, (seen.get(key) || 0) + 1);
+        }
+        const values = Array.from(seen.entries())
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => a.value.localeCompare(b.value));
 
-      const rows = r.sheetReadonly.getVisibleRowIndicesExcluding(col);
-      const seen = new Map<string, number>();
-      for (const rr of rows) {
-        const v = r.sheetReadonly.getCellValue({ row: rr, col });
-        const key = v == null ? "" : String(v);
-        seen.set(key, (seen.get(key) || 0) + 1);
-      }
-      const values = Array.from(seen.entries())
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => a.value.localeCompare(b.value));
-
-      const existing = r.sheetReadonly.getColumnFilter?.(col);
-      const allValues = values.map((v) => v.value);
-      let selected: Set<string>;
-      if (existing && existing.type === "in" && Array.isArray(existing.value)) {
-        selected = new Set((existing.value as any[]).map(String));
-      } else {
-        const present = new Set<string>();
-        try {
-          const visibleRows: number[] = r.sheetReadonly.getVisibleRowIndices();
-          for (const rr of visibleRows) {
-            const v = r.sheetReadonly.getCellValue({ row: rr, col });
-            present.add(v == null ? "" : String(v));
-          }
-        } catch {}
-        selected = present.size ? present : new Set(allValues);
-      }
-
-      setFilterSel(selected);
-      setFilterSearch("");
-      setFilterMenu({
-        col,
-        x,
-        y,
-        values,
-        apply: (sel) => {
-          executeFilterStateCommand((sheet) => {
-            if (sel.length === allValues.length) {
-              sheet.clearColumnFilter(col);
-            } else {
-              sheet.setColumnFilter(col, { type: "in", value: sel });
+        const existing = r.sheetReadonly.getColumnFilter?.(col);
+        const allValues = values.map((v) => v.value);
+        let selected: Set<string>;
+        if (existing && existing.type === "in" && Array.isArray(existing.value)) {
+          selected = new Set((existing.value as any[]).map(String));
+        } else {
+          const present = new Set<string>();
+          try {
+            const visibleRows: number[] = r.sheetReadonly.getVisibleRowIndices();
+            for (const rr of visibleRows) {
+              const v = r.sheetReadonly.getCellValue({ row: rr, col });
+              present.add(v == null ? "" : String(v));
             }
-          }, `Filter Column ${col}`);
-          setFilterMenu(null);
-        },
-        clear: () => {
-          executeFilterStateCommand((sheet) => {
-            sheet.clearColumnFilter(col);
-          }, `Clear Filter Column ${col}`);
-          setFilterMenu(null);
-        },
-      });
+          } catch (error) {
+            if (!captureExpectedWorkbookOperationError(error)) throw error;
+            setFilterMenu(null);
+            return;
+          }
+          selected = present.size ? present : new Set(allValues);
+        }
+
+        setFilterSel(selected);
+        setFilterSearch("");
+        setFilterMenu({
+          col,
+          x,
+          y,
+          values,
+          apply: (sel) => {
+            try {
+              executeFilterStateCommand((sheet) => {
+                if (sel.length === allValues.length) {
+                  sheet.clearColumnFilter(col);
+                } else {
+                  sheet.setColumnFilter(col, { type: "in", value: sel });
+                }
+              }, `Filter Column ${col}`);
+              setWorkbookOperationError(null);
+              setFilterMenu(null);
+            } catch (error) {
+              if (!captureExpectedWorkbookOperationError(error)) throw error;
+              setFilterMenu(null);
+            }
+          },
+          clear: () => {
+            try {
+              executeFilterStateCommand((sheet) => {
+                sheet.clearColumnFilter(col);
+              }, `Clear Filter Column ${col}`);
+              setWorkbookOperationError(null);
+              setFilterMenu(null);
+            } catch (error) {
+              if (!captureExpectedWorkbookOperationError(error)) throw error;
+              setFilterMenu(null);
+            }
+          },
+        });
+      } catch (error) {
+        if (!captureExpectedWorkbookOperationError(error)) throw error;
+        setFilterMenu(null);
+      }
     },
-    [renderer, executeFilterStateCommand],
+    [renderer, executeFilterStateCommand, captureExpectedWorkbookOperationError],
   );
 
   // Create formula engine for autocomplete and formula evaluation
@@ -1241,11 +1364,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
 
   const handleViewModeChange = useCallback(
     (mode: ViewMode) => {
-      commandManager.execute(new SetViewModeCommand(workbook, mode));
       setViewMode(mode);
       renderer?.setViewMode(mode);
     },
-    [workbook, commandManager, renderer],
+    [renderer],
   );
 
   const handleInsertHeaderFooter = useCallback(() => {
@@ -1279,9 +1401,17 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const handleAutoSum = useCallback(
     (functionType: string) => {
       if (functionType.toLowerCase() === "more") return;
+      setWorkbookOperationError(null);
 
       const sheet = workbook.activeSheet;
-      if (!sheet || !selection?.start || !selection?.end) return;
+      if (!sheet) {
+        setWorkbookOperationError("Select an active worksheet before using AutoSum.");
+        return;
+      }
+      if (!selection?.start || !selection?.end) {
+        setWorkbookOperationError("Select a cell or range before using AutoSum.");
+        return;
+      }
 
       const range = normalizeRange({
         start: selection.start,
@@ -1290,13 +1420,27 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       const activeCell = { row: selection.start.row, col: selection.start.col };
       const fn = functionType.toUpperCase() as AutoSumFunction;
 
-      const outputCells = executeAutoSum(
-        commandManager,
-        sheet,
-        range,
-        activeCell,
-        fn,
-      );
+      let outputCells: Address[];
+      try {
+        outputCells = executeAutoSum(
+          commandManager,
+          sheet,
+          range,
+          activeCell,
+          fn,
+        );
+      } catch (error) {
+        const ownerMessage = getWorkbookOperationAlert(error);
+        if (!ownerMessage) {
+          console.error("ExcelApp AutoSum action failed", error);
+        }
+        setWorkbookOperationError(
+          ownerMessage
+            ? "AutoSum is unavailable for this Workbook-owned sheet. No command was run and no changes were made."
+            : "AutoSum could not be completed. Check the selection and try again. Any reported error has been logged.",
+        );
+        return;
+      }
       if (outputCells.length === 0) return;
 
       for (const addr of outputCells) {
@@ -1393,8 +1537,18 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const applyEditedCellValue = useCallback(
     (address: Address, value: string) => {
       const sheet = workbook.activeSheet;
-      if (!sheet || !renderer) return;
-      rejectWorkbookMutation();
+      if (!sheet || !renderer) return false;
+      setWorkbookOperationError(null);
+      try {
+        rejectWorkbookMutation();
+        return true;
+      } catch (error) {
+        const message = getWorkbookOperationAlert(error);
+        if (!message) throw error;
+        editRejectionPendingRef.current = true;
+        setWorkbookOperationError(message);
+        return false;
+      }
     },
     [workbook, renderer],
   );
@@ -1501,10 +1655,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           sel.start.row !== inCellEdit.cell.row ||
           sel.start.col !== inCellEdit.cell.col;
         if (isDifferentCell) {
-          applyEditedCellValue(
+          if (!applyEditedCellValue(
             { row: inCellEdit.cell.row, col: inCellEdit.cell.col },
             inCellEdit.currentValue,
-          );
+          )) return;
           setInCellEdit(null);
           inCellEditRef.current = null;
           setIsPickingReference(false);
@@ -1518,10 +1672,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         const formula = formulaBarValueRef.current;
         const editCell = selectedCellRef.current;
         if (editCell && canEditCellValue(appConfig, formula)) {
-          applyEditedCellValue(
+          if (!applyEditedCellValue(
             { row: editCell.row, col: editCell.col },
             formula,
-          );
+          )) return;
         }
         setIsEditingFormula(false);
         isEditingFormulaRef.current = false;
@@ -1558,10 +1712,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     (formula: string) => {
       if (!selectedCell || !canEditCellValue(appConfig, formula)) return;
 
-      applyEditedCellValue(
+      if (!applyEditedCellValue(
         { row: selectedCell.row, col: selectedCell.col },
         formula,
-      );
+      )) return;
       setCellFormula(formula.startsWith("=") ? formula : "");
       setCellValue(formula.startsWith("=") ? "" : formula);
       setFormulaBarValue(formula);
@@ -1574,6 +1728,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const handleFormulaEditModeChange = useCallback(
     (editing: boolean) => {
       if (editing && !canStartCellEdit(appConfig)) return;
+      if (!editing && editRejectionPendingRef.current) {
+        editRejectionPendingRef.current = false;
+        return;
+      }
       setIsEditingFormula(editing);
     },
     [appConfig],
@@ -1617,10 +1775,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     (value: string) => {
       if (!inCellEdit || !canEditCellValue(appConfig, value)) return;
 
-      applyEditedCellValue(
+      if (!applyEditedCellValue(
         { row: inCellEdit.cell.row, col: inCellEdit.cell.col },
         value,
-      );
+      )) return;
       setCellFormula(value.startsWith("=") ? value : "");
       setCellValue(value.startsWith("=") ? "" : value);
       setFormulaBarValue(value);
@@ -1714,6 +1872,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     [workbook, commandManager, clipboardService, renderer],
   );
 
+  const handleClipboardOperationError = useCallback((error: unknown, operation: "Cut" | "Paste") => {
+    setClipboardOperationError(getClipboardOperationErrorMessage(error, operation));
+  }, []);
+
   const copySelection = useCallback(
     (
       sel: { start: Address; end: Address } | null,
@@ -1736,11 +1898,17 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       const sheet = workbook.activeSheet;
       const range = normalizeSelectionRange(sel);
       if (!sheet || !range) return false;
-      performCut(sheet, clipboardService, range, { mode });
-      setCutRange(range);
-      return true;
+      setClipboardOperationError(null);
+      try {
+        performCut(sheet, clipboardService, range, { mode });
+        setCutRange(range);
+        return true;
+      } catch (error) {
+        handleClipboardOperationError(error, "Cut");
+        return false;
+      }
     },
-    [workbook, clipboardService],
+    [workbook, clipboardService, handleClipboardOperationError],
   );
 
   // Get context menu items
@@ -1795,7 +1963,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
         shortcut: "Ctrl+V",
         onClick: () => {
           debugMenu("Paste clicked");
-          void pasteAtSelection(contextMenuSelectionRef.current);
+          setClipboardOperationError(null);
+          void pasteAtSelection(contextMenuSelectionRef.current).catch((error: unknown) =>
+            handleClipboardOperationError(error, "Paste"),
+          );
         },
       },
       { id: "sep1", label: "", separator: true },
@@ -2027,6 +2198,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     cutSelection,
     copySelection,
     pasteAtSelection,
+    handleClipboardOperationError,
   ]);
 
   // Handle right-click (context menu)
@@ -2481,7 +2653,10 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       // Ctrl+V (Paste)
       if (isCtrlLetter(e, "v")) {
         e.preventDefault();
-        void pasteAtSelection(selection);
+        setClipboardOperationError(null);
+        void pasteAtSelection(selection).catch((error: unknown) =>
+          handleClipboardOperationError(error, "Paste"),
+        );
         return;
       }
 
@@ -2942,6 +3117,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     copySelection,
     cutSelection,
     pasteAtSelection,
+    handleClipboardOperationError,
     handleInsertSheet,
     handleAutoSum,
     appConfig,
@@ -3002,7 +3178,14 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
   const handleCommentDialogSave = useCallback(
     (text: string) => {
       if (!commentDialog) return;
-      rejectWorkbookMutation();
+      try {
+        rejectWorkbookMutation();
+      } catch (error) {
+        if (!captureExpectedWorkbookOperationError(
+          error,
+          "This action is unavailable for this Workbook-owned sheet.",
+        )) throw error;
+      }
     },
     [
       commentDialog,
@@ -3010,6 +3193,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       renderer,
       appConfig.authorName,
       appConfig.authorAvatar,
+      captureExpectedWorkbookOperationError,
     ],
   );
 
@@ -3019,14 +3203,19 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       const sheet = workbook.activeSheet;
       if (!sheet) return;
 
-      commandManager.execute(
-        new SetHyperlinkCommand(
-          requireStandaloneWorksheet(sheet),
-          hyperlinkDialog.address,
-          result.hyperlink,
-          { displayText: result.displayText },
-        ),
-      );
+      try {
+        commandManager.execute(
+          new SetHyperlinkCommand(
+            requireStandaloneWorksheet(sheet),
+            hyperlinkDialog.address,
+            result.hyperlink,
+            { displayText: result.displayText },
+          ),
+        );
+      } catch (error) {
+        if (!captureExpectedWorkbookOperationError(error)) throw error;
+        return;
+      }
 
       if (result.editNewDocumentNow && result.hyperlink.newDocumentName) {
         downloadBlankWorkbook(result.hyperlink.newDocumentName);
@@ -3037,7 +3226,7 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
       renderer?.invalidateRange(row, col, row, col);
       renderer?.scheduleRedraw();
     },
-    [hyperlinkDialog, workbook, commandManager, renderer],
+    [hyperlinkDialog, workbook, commandManager, renderer, captureExpectedWorkbookOperationError],
   );
 
   const handleHyperlinkDialogRemove = useCallback(() => {
@@ -3045,23 +3234,81 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
     const sheet = workbook.activeSheet;
     if (!sheet) return;
 
-    commandManager.execute(
-      new SetHyperlinkCommand(requireStandaloneWorksheet(sheet), hyperlinkDialog.address, null),
-    );
+    try {
+      commandManager.execute(
+        new SetHyperlinkCommand(requireStandaloneWorksheet(sheet), hyperlinkDialog.address, null),
+      );
+    } catch (error) {
+      if (!captureExpectedWorkbookOperationError(error)) throw error;
+      return;
+    }
 
     const { row, col } = hyperlinkDialog.address;
     setHyperlinkDialog(null);
     renderer?.invalidateRange(row, col, row, col);
     renderer?.scheduleRedraw();
-  }, [hyperlinkDialog, workbook, commandManager, renderer]);
+  }, [hyperlinkDialog, workbook, commandManager, renderer, captureExpectedWorkbookOperationError]);
 
   const handleCommentDialogDelete = useCallback(() => {
     if (!commentDialog) return;
-    rejectWorkbookMutation();
-  }, [commentDialog, workbook, renderer]);
+    try {
+      rejectWorkbookMutation();
+    } catch (error) {
+      if (!captureExpectedWorkbookOperationError(
+        error,
+        "This action is unavailable for this Workbook-owned sheet.",
+      )) throw error;
+    }
+  }, [commentDialog, captureExpectedWorkbookOperationError]);
 
   return (
     <div className="excel-app" style={style}>
+      {clipboardOperationError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#fde7e9",
+            color: "#a4262c",
+            border: "1px solid #f1aeb5",
+            borderRadius: 4,
+            padding: "10px 16px",
+            zIndex: 10013,
+            fontFamily: "Segoe UI, Arial, sans-serif",
+            fontSize: 13,
+          }}
+        >
+          {clipboardOperationError}
+        </div>
+      )}
+      {workbookOperationError && (
+        <div
+          key={workbookOperationAlertVersion}
+          role="alert"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#fde7e9",
+            color: "#a4262c",
+            border: "1px solid #f1aeb5",
+            borderRadius: 4,
+            padding: "10px 16px",
+            zIndex: 10013,
+            fontFamily: "Segoe UI, Arial, sans-serif",
+            fontSize: 13,
+          }}
+        >
+          {workbookOperationError}
+        </div>
+      )}
+
       {/* Title Bar */}
       <TitleBar
         fileName={`${fileName} - Excel`}
@@ -3173,55 +3420,77 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
                 clear,
               }: any) => {
                 if (!isAutoFilterEnabled) return;
-                const existing =
-                  renderer?.sheetReadonly?.getColumnFilter?.(col);
-                const allValues = values.map(
-                  (v: { value: string; count: number }) => v.value,
-                );
-                let selected: Set<string>;
-                if (
-                  existing &&
-                  existing.type === "in" &&
-                  Array.isArray(existing.value)
-                ) {
-                  selected = new Set((existing.value as any[]).map(String));
-                } else {
-                  const present = new Set<string>();
-                  try {
-                    const visibleRows: number[] =
-                      renderer?.sheetReadonly?.getVisibleRowIndices?.() || [];
-                    for (const rr of visibleRows) {
-                      const v = renderer?.sheetReadonly?.getCellValue({
-                        row: rr,
-                        col,
-                      });
-                      present.add(v == null ? "" : String(v));
+                setWorkbookOperationError(null);
+                try {
+                  const existing =
+                    renderer?.sheetReadonly?.getColumnFilter?.(col);
+                  const allValues = values.map(
+                    (v: { value: string; count: number }) => v.value,
+                  );
+                  let selected: Set<string>;
+                  if (
+                    existing &&
+                    existing.type === "in" &&
+                    Array.isArray(existing.value)
+                  ) {
+                    selected = new Set((existing.value as any[]).map(String));
+                  } else {
+                    const present = new Set<string>();
+                    try {
+                      const visibleRows: number[] =
+                        renderer?.sheetReadonly?.getVisibleRowIndices?.() || [];
+                      for (const rr of visibleRows) {
+                        const v = renderer?.sheetReadonly?.getCellValue({
+                          row: rr,
+                          col,
+                        });
+                        present.add(v == null ? "" : String(v));
+                      }
+                    } catch (error) {
+                      if (!captureExpectedWorkbookOperationError(error)) throw error;
+                      setFilterMenu(null);
+                      return;
                     }
-                  } catch {}
-                  selected = present.size ? present : new Set(allValues);
+                    selected = present.size ? present : new Set(allValues);
+                  }
+                  setFilterSel(selected);
+                  setFilterSearch("");
+                  setFilterMenu({
+                    col,
+                    x: anchor.x,
+                    y: anchor.y,
+                    values,
+                    apply: (sel) => {
+                      try {
+                        executeFilterStateCommand((sheet) => {
+                          if (sel.length === allValues.length) clear();
+                          else apply(sel);
+                        }, `Filter Column ${col}`);
+                        setWorkbookOperationError(null);
+                        setFilterMenu(null);
+                      } catch (error) {
+                        if (!captureExpectedWorkbookOperationError(error)) throw error;
+                        setFilterMenu(null);
+                      }
+                    },
+                    clear: () => {
+                      try {
+                        executeFilterStateCommand(
+                          () => clear(),
+                          `Clear Filter Column ${col}`,
+                        );
+                        setWorkbookOperationError(null);
+                        setFilterMenu(null);
+                      } catch (error) {
+                        if (!captureExpectedWorkbookOperationError(error)) throw error;
+                        setFilterMenu(null);
+                      }
+                    },
+                  });
+                } catch (error) {
+                  if (!captureExpectedWorkbookOperationError(error)) throw error;
+                  setFilterMenu(null);
                 }
-                setFilterSel(selected);
-                setFilterSearch("");
-                setFilterMenu({
-                  col,
-                  x: anchor.x,
-                  y: anchor.y,
-                  values,
-                  apply: (sel) => {
-                    executeFilterStateCommand((sheet) => {
-                      if (sel.length === allValues.length) clear();
-                      else apply(sel);
-                    }, `Filter Column ${col}`);
-                    setFilterMenu(null);
-                  },
-                  clear: () => {
-                    executeFilterStateCommand(
-                      () => clear(),
-                      `Clear Filter Column ${col}`,
-                    );
-                    setFilterMenu(null);
-                  },
-                });
               },
             }}
             onRendererReady={handleRendererReady}
@@ -3985,8 +4254,15 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
           onSelect={(value) => {
             const sheet = workbook.activeSheet;
             if (sheet && canEditCellValue(appConfig, value)) {
-              rejectWorkbookMutation();
-              renderer?.scheduleRedraw();
+              try {
+                rejectWorkbookMutation();
+                renderer?.scheduleRedraw();
+              } catch (error) {
+                if (!captureExpectedWorkbookOperationError(
+                  error,
+                  "This action is unavailable for this Workbook-owned sheet.",
+                )) throw error;
+              }
             }
             setValidationDropdown(null);
           }}
@@ -4074,14 +4350,8 @@ const ExcelAppView: React.FC<ExcelAppProps> = ({
             setBackstageOpen(false);
           }}
           onExportComplete={(blob) => {
-            // Trigger download
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${fileName}.xlsx`;
-            a.click();
-            URL.revokeObjectURL(url);
-            console.log("Export complete, download triggered");
+            // ExportPanel owns the browser download; this callback reports completion only.
+            console.log(`Export complete, size: ${(blob.size / 1024).toFixed(1)} KB`);
           }}
           onVersionRestored={() => {
             console.log("Version restored");

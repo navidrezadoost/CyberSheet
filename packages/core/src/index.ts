@@ -1,9 +1,15 @@
 export * from './types';
 export { toDisplayValue } from './utils/cell-value-normalizer';
-export { Worksheet, DEFAULT_WORKSHEET_ROWS, DEFAULT_WORKSHEET_COLS } from './worksheet';
+export {
+  Worksheet,
+  DEFAULT_WORKSHEET_ROWS,
+  DEFAULT_WORKSHEET_COLS,
+  WorksheetFormulaPostCommitError,
+} from './worksheet';
+export type { WorksheetFormulaPostCommitPhase } from './worksheet';
 export type { WorksheetSnapshot } from './worksheet';
 export * from './workbook';
-export type { WorkbookId, WorksheetId, WorkbookSheetView, WorkbookCellRead, ReadonlyCellSnapshot, WorkbookMutationPort } from './workbook-access-types';
+export type { WorkbookId, WorksheetId, WorkbookSheetView, WorkbookCellRead, ReadonlyCellSnapshot, WorkbookMutationPort, WorkbookTransactionContext } from './workbook-access-types';
 export * from './events';
 export * from './EventBus';
 export { getCommandEventType } from './eventBridge';

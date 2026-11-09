@@ -32,10 +32,10 @@ function createClipboardEvent(type: 'copy' | 'cut', values: ClipboardValues, wri
   return event;
 }
 
-describe('EditingManager clipboard read characterization', () => {
-  test('valid standalone copy works, and a retained raw sheet publishes cached formula data before cut rejects', () => {
+describe('EditingManager clipboard owner boundary', () => {
+  test('preserves standalone copy and rejects copy/cut after ownership changes before reads or publication', () => {
     const formats = ['text/plain', 'text/html', 'text/csv', 'application/x-cyber-sheet'];
-    const worksheet = new Worksheet('Clipboard boundary', 2, 2);
+    const worksheet = new CallRecordingWorksheet('Clipboard boundary', 2, 2);
     worksheet.setCellFormula({ row: 1, col: 1 }, '=40+2', 42);
     worksheet.addComment({ row: 1, col: 1 }, { text: 'review note', author: 'Reviewer' });
 
@@ -57,21 +57,31 @@ describe('EditingManager clipboard read characterization', () => {
       isCut: false,
     });
 
+    const worksheetEvents: unknown[] = [];
+    const disposeEvents = worksheet.on((event) => worksheetEvents.push(event));
+    Object.defineProperty(worksheet, 'isWorkbookOwned', { value: () => false, configurable: true });
     adoptWorksheetByWorkbook(worksheet, 'editing-manager-retained-owner' as WorkbookId);
+    worksheet.calls.length = 0;
 
     const adoptedClipboard: ClipboardValues = {};
     const adoptedWrites: string[] = [];
-    document.dispatchEvent(createClipboardEvent('copy', adoptedClipboard, adoptedWrites));
-    expect(adoptedWrites).toEqual([...formats, ...formats]);
-
-    expect(adoptedClipboard['text/plain']).toBe('42');
-    expect(adoptedClipboard['text/html']).toContain('<td>42</td>');
-    expect(adoptedClipboard['text/csv']).toBe('42');
-    const adoptedPayload = JSON.parse(adoptedClipboard['application/x-cyber-sheet']);
-    expect(adoptedPayload).toMatchObject({
-      cells: [[{ value: 42, formula: '=40+2', comments: [{ text: 'review note', author: 'Reviewer' }] }]],
-      isCut: false,
-    });
+    const copyErrors: ErrorEvent[] = [];
+    const captureCopyError = (event: ErrorEvent) => { copyErrors.push(event); event.preventDefault(); };
+    window.addEventListener('error', captureCopyError);
+    let copyDispatchResult: boolean;
+    try {
+      copyDispatchResult = document.dispatchEvent(createClipboardEvent('copy', adoptedClipboard, adoptedWrites));
+    } finally {
+      window.removeEventListener('error', captureCopyError);
+    }
+    expect(copyDispatchResult!).toBe(true);
+    expect(copyErrors).toHaveLength(2);
+    expect(copyErrors.every(({ error, message }) =>
+      error instanceof Error && /EditingManager cannot operate on a Workbook-owned Worksheet/.test(message),
+    )).toBe(true);
+    expect(adoptedWrites).toEqual([]);
+    expect(adoptedClipboard).toEqual({});
+    expect(worksheet.calls).toEqual([]);
 
     const cutClipboard: ClipboardValues = {};
     const cutWrites: string[] = [];
@@ -87,28 +97,30 @@ describe('EditingManager clipboard read characterization', () => {
     } finally {
       window.removeEventListener('error', captureUncaught);
     }
-    expect(dispatchResult!).toBe(false);
+    expect(dispatchResult!).toBe(true);
     expect(uncaught).toHaveLength(2);
-    expect(uncaught.every((event) => event.error instanceof Error)).toBe(true);
-    expect(uncaught.every((event) => /Workbook-owned Worksheet\.setCellValue/.test(event.message))).toBe(true);
-    expect(cutWrites).toEqual([...formats, ...formats]);
-
-    expect(cutClipboard['text/plain']).toBe('42');
-    expect(cutClipboard['text/html']).toContain('<td>42</td>');
-    expect(cutClipboard['text/csv']).toBe('42');
-    expect(JSON.parse(cutClipboard['application/x-cyber-sheet'])).toMatchObject({ isCut: false });
+    expect(uncaught.every(({ error, message }) =>
+      error instanceof Error && /EditingManager cannot operate on a Workbook-owned Worksheet/.test(message),
+    )).toBe(true);
+    expect(cutWrites).toEqual([]);
+    expect(cutClipboard).toEqual({});
+    expect(worksheet.calls).toEqual([]);
     expect(worksheet.getCell({ row: 1, col: 1 })).toMatchObject({
       value: 42,
       formula: '=40+2',
       comments: [{ text: 'review note', author: 'Reviewer' }],
     });
+    expect(worksheetEvents).toEqual([]);
+    disposeEvents.dispose();
 
     // The constructor registered both instances with document and exposes no
-    // disposal method, so they remain active for later clipboard events.
+    // automatic ownership transition hook; they remain until explicit dispose.
     expect(secondManager.getSelection()).toEqual({ start: { row: 1, col: 1 }, end: { row: 1, col: 1 } });
+    manager.dispose();
+    secondManager.dispose();
   });
 
-  test('retained fill reads formula data before write rejection and undo pops history before its guard rejects', () => {
+  test('retained fill and undo reject before reads, writes, or history changes', () => {
     const worksheet = new CallRecordingWorksheet('Fill undo boundary', 3, 3);
     worksheet.setCellFormula({ row: 1, col: 1 }, '=8+2', 10);
     worksheet.setCellValue({ row: 2, col: 1 }, 99);
@@ -125,21 +137,19 @@ describe('EditingManager clipboard read characterization', () => {
     expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
 
     worksheet.calls.length = 0;
+    Object.defineProperty(worksheet, 'isWorkbookOwned', { value: () => false, configurable: true });
     adoptWorksheetByWorkbook(worksheet, 'editing-manager-fill-undo-owner' as WorkbookId);
 
     expect(() => manager.fillCells({ row: 1, col: 1 }, { start: { row: 3, col: 1 }, end: { row: 3, col: 1 } }))
-      .toThrow(/Workbook-owned Worksheet\.setCellValue is unavailable/);
-    expect(worksheet.calls.map(({ method }) => method)).toEqual(['getCell', 'getCell', 'setCellValue']);
-    expect(worksheet.calls[2].args).toEqual([{ row: 3, col: 1 }, 10]);
+      .toThrow(/EditingManager cannot operate on a Workbook-owned Worksheet/);
+    expect(worksheet.calls).toEqual([]);
     expect(worksheet.getCell({ row: 3, col: 1 })?.value).toBe(77);
     expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
 
     worksheet.calls.length = 0;
-
-    expect(() => manager.undo()).toThrow(/Workbook-owned Worksheet\.setCellValue is unavailable/);
-    expect(worksheet.calls.map(({ method }) => method)).toEqual(['setCellValue']);
-    expect(worksheet.calls[0].args).toEqual([{ row: 2, col: 1 }, 99]);
+    expect(() => manager.undo()).toThrow(/EditingManager cannot operate on a Workbook-owned Worksheet/);
+    expect(worksheet.calls).toEqual([]);
     expect(worksheet.getCell({ row: 2, col: 1 })?.value).toBe(10);
-    expect(manager.getHistoryStats()).toEqual({ undoCount: 0, redoCount: 0 });
+    expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
   });
 });

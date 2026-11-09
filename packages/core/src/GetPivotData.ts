@@ -44,7 +44,7 @@ export interface PivotDataFilter {
  * Result of GETPIVOTDATA query.
  * Returns value, null (valid empty), or error.
  */
-export type GetPivotDataResult = CellValue | PivotDataError;
+export type GetPivotDataResult = CellValue | Error | PivotDataError;
 
 /**
  * GETPIVOTDATA Query Engine
@@ -169,7 +169,7 @@ export class GetPivotData {
    * - Missing field in row: no match
    */
   private rowMatches(
-    row: Record<string, CellValue>,
+    row: Record<string, CellValue | Error>,
     filters: PivotDataFilter[]
   ): boolean {
     return filters.every(filter => {

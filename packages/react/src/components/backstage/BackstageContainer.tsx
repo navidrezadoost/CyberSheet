@@ -74,17 +74,39 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
 }) => {
   const [activePanel, setActivePanel] = useState<BackstagePanel>(initialPanel);
   const [isAnimating, setIsAnimating] = useState(false);
+  const createCopySessionGenerationRef = React.useRef(0);
+  const [createCopySessionGeneration, setCreateCopySessionGeneration] = useState(0);
+  const closeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const advanceCreateCopySession = useCallback(() => {
+    const nextGeneration = createCopySessionGenerationRef.current + 1;
+    createCopySessionGenerationRef.current = nextGeneration;
+    setCreateCopySessionGeneration(nextGeneration);
+    return nextGeneration;
+  }, []);
 
   // Reset to initial panel when backstage opens
   useEffect(() => {
     if (isOpen) {
+      advanceCreateCopySession();
+      if (closeTimerRef.current !== null) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
       setActivePanel(initialPanel);
       setIsAnimating(true);
       // Allow animation to complete
       const timer = setTimeout(() => setIsAnimating(false), 300);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, initialPanel]);
+  }, [isOpen, initialPanel, advanceCreateCopySession]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
 
   const handlePanelChange = useCallback((panel: BackstagePanel) => {
     setIsAnimating(true);
@@ -93,12 +115,20 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
   }, []);
 
   const handleClose = useCallback(() => {
+    const closingGeneration = advanceCreateCopySession();
+    if (closeTimerRef.current !== null) {
+      clearTimeout(closeTimerRef.current);
+    }
     setIsAnimating(true);
-    setTimeout(() => {
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null;
+      if (createCopySessionGenerationRef.current !== closingGeneration) {
+        return;
+      }
       onClose();
       setIsAnimating(false);
     }, 200);
-  }, [onClose]);
+  }, [advanceCreateCopySession, onClose]);
 
   // Keyboard handler: Esc to close
   useEffect(() => {
@@ -134,6 +164,8 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
             currentFileName={workbookMetadata.name}
             currentLocation={workbookMetadata.location}
             workbook={workbook}
+            sessionGeneration={createCopySessionGeneration}
+            sessionGenerationRef={createCopySessionGenerationRef}
             onClose={onClose}
           />
         );
@@ -144,6 +176,8 @@ export const BackstageContainer: React.FC<BackstageContainerProps> = ({
             fileOperations={fileOperations}
             workbookName={workbookMetadata.name}
             workbook={workbook}
+            sessionGeneration={createCopySessionGeneration}
+            sessionGenerationRef={createCopySessionGenerationRef}
             onExportComplete={(blob, format) => {
               onExportComplete?.(blob);
               // Log or track export

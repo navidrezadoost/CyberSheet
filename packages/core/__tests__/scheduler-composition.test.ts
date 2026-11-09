@@ -55,7 +55,7 @@ function makeIntegratedScheduler(ws: Worksheet, engine: FormulaEngine) {
       return value;
     },
     onComplete: (task: ScheduledTask, value: unknown) => {
-      ws.setCellValue(task, value as CellValue);
+      ws.applyFormulaResults([task], Float64Array.of(value as number));
       evaluated.push({ addr: task, value: value as CellValue });
     },
   });
@@ -98,7 +98,7 @@ function recomputeSync(ws: Worksheet, engine: FormulaEngine) {
         worksheet: ws,
         currentCell: addr,
       });
-      ws.setCellValue(addr, value as CellValue);
+      ws.applyFormulaResults([addr], Float64Array.of(value as number));
     }
   }
 }
@@ -146,9 +146,14 @@ describe('Composition Test 1 — Sync vs Scheduled Equivalence', () => {
     expect(ws1.getCellValue({ row: 4, col: 1 })).toBe(60);   // 30*2
     expect(ws1.getCellValue({ row: 5, col: 1 })).toBe(160);  // 60+100
 
+    expect(ws1.getCell({ row: 3, col: 1 })?.formula).toBe('=A1+A2');
+    expect(ws1.getCell({ row: 4, col: 1 })?.formula).toBe('=A3*2');
+    expect(ws1.getCell({ row: 5, col: 1 })?.formula).toBe('=A4+100');
+
     expect(ws2.getCellValue({ row: 3, col: 1 })).toBe(30);
     expect(ws2.getCellValue({ row: 4, col: 1 })).toBe(60);
     expect(ws2.getCellValue({ row: 5, col: 1 })).toBe(160);
+    expect(ws2.getCell({ row: 3, col: 1 })?.formula).toBe('=A1+A2');
   });
 });
 
@@ -183,7 +188,7 @@ describe('Composition Test 2 — Time-Slicing Preserves Topology', () => {
         return engine.evaluate(cell.formula, { worksheet: ws, currentCell: task });
       },
       onComplete: (task: ScheduledTask, value: unknown) => {
-        ws.setCellValue(task, value as CellValue);
+        ws.applyFormulaResults([task], Float64Array.of(value as number));
         evaluated.push({ addr: task, value: value as CellValue });
       },
     });
@@ -222,7 +227,7 @@ describe('Composition Test 2 — Time-Slicing Preserves Topology', () => {
         return engine.evaluate(cell.formula, { worksheet: ws, currentCell: task });
       },
       onComplete: (task: ScheduledTask, value: unknown) => {
-        ws.setCellValue(task, value as CellValue);
+        ws.applyFormulaResults([task], Float64Array.of(value as number));
         evaluated.push(task);
       },
     });
@@ -270,7 +275,7 @@ describe('Composition Test 3 — Interrupt + Mutation Safety', () => {
         return engine.evaluate(cell.formula, { worksheet: ws, currentCell: task });
       },
       onComplete: (task: ScheduledTask, value: unknown) => {
-        ws.setCellValue(task, value as CellValue);
+        ws.applyFormulaResults([task], Float64Array.of(value as number));
       },
     });
 
@@ -317,7 +322,7 @@ describe('Composition Test 3 — Interrupt + Mutation Safety', () => {
         return engine.evaluate(cell.formula, { worksheet: ws, currentCell: task });
       },
       onComplete: (task: ScheduledTask, value: unknown) => {
-        ws.setCellValue(task, value as CellValue);
+        ws.applyFormulaResults([task], Float64Array.of(value as number));
       },
     });
 
@@ -336,6 +341,7 @@ describe('Composition Test 3 — Interrupt + Mutation Safety', () => {
     // Only generation-1 task should execute
     expect(executed).toEqual([1]);
     expect(ws.getCellValue({ row: 2, col: 1 })).toBe(2);
+    expect(ws.getCell({ row: 2, col: 1 })?.formula).toBe('=A1+1');
   });
 });
 
@@ -399,7 +405,7 @@ describe('Composition Test 4 — Viewport Priority Does Not Break Correctness', 
         return engine.evaluate(cell.formula, { worksheet: ws, currentCell: task });
       },
       onComplete: (task: ScheduledTask, value: unknown) => {
-        ws.setCellValue(task, value as CellValue);
+        ws.applyFormulaResults([task], Float64Array.of(value as number));
       },
     });
 

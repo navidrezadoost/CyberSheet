@@ -21,6 +21,7 @@ import {
   performCut,
   performPasteAsync,
   normalizeSelectionRange,
+  getClipboardOperationErrorMessage,
 } from "../../utils/clipboardOperations";
 
 export interface ClipboardGroupProps {
@@ -98,6 +99,7 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     onFormatPainterActivate?.(active);
   };
   const [clipboardHasContent, setClipboardHasContent] = useState(false);
+  const [clipboardOperationError, setClipboardOperationError] = useState<string | null>(null);
 
   const getRange = (): Range | null => {
     if (currentRange) return normalizeSelectionRange(currentRange);
@@ -112,7 +114,13 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     const range = getRange();
     if (!range) return;
 
-    performCut(worksheet, clipboardService, range);
+    setClipboardOperationError(null);
+    try {
+      performCut(worksheet, clipboardService, range);
+    } catch (error) {
+      setClipboardOperationError(getClipboardOperationErrorMessage(error, "Cut"));
+      return;
+    }
     setClipboardHasContent(true);
     onCutComplete?.(range);
     onCut?.();
@@ -146,6 +154,7 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     const range = getRange();
     if (!range) return;
 
+    setClipboardOperationError(null);
     void performPasteAsync(
       worksheet,
       commandManager,
@@ -154,6 +163,8 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
     ).then(() => {
       onPaste?.();
       onAfterClipboard?.();
+    }).catch((error: unknown) => {
+      setClipboardOperationError(getClipboardOperationErrorMessage(error, "Paste"));
     });
   };
 
@@ -209,6 +220,29 @@ export const ClipboardGroup: React.FC<ClipboardGroupProps> = ({
 
   return (
     <div className="home-ribbon-surface home-clipboard-group ribbon-group ">
+      {clipboardOperationError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="clipboard-operation-error"
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#fde7e9",
+            color: "#a4262c",
+            border: "1px solid #f1aeb5",
+            borderRadius: 4,
+            padding: "10px 16px",
+            zIndex: 10013,
+            fontFamily: "Segoe UI, Arial, sans-serif",
+            fontSize: 13,
+          }}
+        >
+          {clipboardOperationError}
+        </div>
+      )}
       <div className="home-clipboard-body">
         <div className="home-clipboard-main">
           <div className="home-clipboard-paste-zone" ref={pasteMenuRef}>

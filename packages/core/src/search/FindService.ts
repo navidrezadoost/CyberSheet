@@ -8,10 +8,12 @@
  */
 
 import type { Address } from '../types';
-import type { Worksheet } from '../worksheet';
+import { Worksheet } from '../worksheet';
 import type { WorkbookSheetView } from '../workbook-access-types';
 import type { SearchOptions, SearchLookIn, SearchLookAt, SearchOrder } from '../types/search-types';
 import { cellValueToString, escapeRegexLiteral } from '../search-engine';
+
+const worksheetIsWorkbookOwned = Worksheet.prototype.isWorkbookOwned;
 
 export interface FindResult {
   address: Address;
@@ -61,17 +63,35 @@ function applyTextReplacement(
   return source.replace(new RegExp(escaped, flags), () => replacement);
 }
 
+function cloneFindResult(result: FindResult): FindResult {
+  return {
+    address: { row: result.address.row, col: result.address.col },
+    value: result.value,
+    formula: result.formula,
+    match: result.match,
+  };
+}
+
 export class FindService {
-  private worksheet: Worksheet | WorkbookSheetView;
-  private lastResults: FindResult[] = [];
-  private currentIndex = -1;
-  private lastOptions: SearchOptions | null = null;
+  #worksheet: Worksheet | WorkbookSheetView;
+  #lastResults: FindResult[] = [];
+  #currentIndex = -1;
+  #lastOptions: SearchOptions | null = null;
 
   constructor(worksheet: Worksheet | WorkbookSheetView) {
-    this.worksheet = worksheet;
+    this.#worksheet = worksheet;
   }
 
-  private buildSearchOptions(query: string, options?: Partial<FindServiceOptions>): SearchOptions {
+  #assertSourceIsAvailable(): void {
+    if (
+      this.#worksheet instanceof Worksheet &&
+      worksheetIsWorkbookOwned.call(this.#worksheet)
+    ) {
+      throw new Error('FindService cannot use an adopted Worksheet; use a WorkbookSheetView');
+    }
+  }
+
+  #buildSearchOptions(query: string, options?: Partial<FindServiceOptions>): SearchOptions {
     return {
       what: query,
       lookIn: options?.lookIn ?? 'values',
@@ -82,122 +102,134 @@ export class FindService {
   }
 
   findAll(query: string, options?: Partial<FindServiceOptions>): FindResult[] {
+    this.#assertSourceIsAvailable();
+
     if (!query) {
-      this.lastResults = [];
-      this.currentIndex = -1;
-      this.lastOptions = null;
+      this.#lastResults = [];
+      this.#currentIndex = -1;
+      this.#lastOptions = null;
       return [];
     }
 
-    const searchOptions = this.buildSearchOptions(query, options);
-    this.lastOptions = searchOptions;
+    const searchOptions = this.#buildSearchOptions(query, options);
+    this.#lastOptions = searchOptions;
 
-    const addresses = this.worksheet.findAll(searchOptions);
+    const addresses = this.#worksheet.findAll(searchOptions);
 
-    this.lastResults = addresses.map((address) => {
-      const cell = this.worksheet.getCell(address);
+    this.#lastResults = addresses.map((address) => {
+      const cell = this.#worksheet.getCell(address);
       const source = getCellSourceText(cell, searchOptions.lookIn ?? 'values') ?? '';
       return {
         address,
-        value: this.getCellValue(address),
+        value: this.#getCellValue(address),
         formula: cell?.formula,
         match: source,
       };
     });
 
-    this.currentIndex = this.lastResults.length > 0 ? 0 : -1;
-    return this.lastResults;
+    this.#currentIndex = this.#lastResults.length > 0 ? 0 : -1;
+    return this.#lastResults.map(cloneFindResult);
   }
 
   findNext(): FindResult | null {
-    if (this.lastResults.length === 0) return null;
+    this.#assertSourceIsAvailable();
 
-    this.currentIndex = (this.currentIndex + 1) % this.lastResults.length;
-    return this.lastResults[this.currentIndex];
+    if (this.#lastResults.length === 0) return null;
+
+    this.#currentIndex = (this.#currentIndex + 1) % this.#lastResults.length;
+    return cloneFindResult(this.#lastResults[this.#currentIndex]);
   }
 
   findPrevious(): FindResult | null {
-    if (this.lastResults.length === 0) return null;
+    this.#assertSourceIsAvailable();
 
-    this.currentIndex -= 1;
-    if (this.currentIndex < 0) {
-      this.currentIndex = this.lastResults.length - 1;
+    if (this.#lastResults.length === 0) return null;
+
+    this.#currentIndex -= 1;
+    if (this.#currentIndex < 0) {
+      this.#currentIndex = this.#lastResults.length - 1;
     }
-    return this.lastResults[this.currentIndex];
+    return cloneFindResult(this.#lastResults[this.#currentIndex]);
   }
 
   getCurrentMatch(): FindResult | null {
-    if (this.currentIndex >= 0 && this.currentIndex < this.lastResults.length) {
-      return this.lastResults[this.currentIndex];
-    }
-    return null;
+    this.#assertSourceIsAvailable();
+
+    const current = this.#getCurrentResult();
+    return current ? cloneFindResult(current) : null;
   }
 
   getMatchCount(): number {
-    return this.lastResults.length;
+    this.#assertSourceIsAvailable();
+    return this.#lastResults.length;
   }
 
   getCurrentIndex(): number {
-    return this.currentIndex + 1;
+    this.#assertSourceIsAvailable();
+    return this.#currentIndex + 1;
   }
 
   replaceCurrent(replacement: string): boolean {
-    if ('workbookId' in this.worksheet) {
+    this.#assertSourceIsAvailable();
+
+    if ('workbookId' in this.#worksheet) {
       throw new Error('Workbook-owned replace is unavailable until its journal slice is authorized');
     }
-    const current = this.getCurrentMatch();
-    if (!current || !this.lastOptions) return false;
+    const current = this.#getCurrentResult();
+    if (!current || !this.#lastOptions) return false;
 
-    const cell = this.worksheet.getCell(current.address);
+    const cell = this.#worksheet.getCell(current.address);
     if (!cell) return false;
 
-    const lookIn = this.lastOptions.lookIn ?? 'values';
+    const lookIn = this.#lastOptions.lookIn ?? 'values';
     const source = getCellSourceText(cell, lookIn);
     if (source === null) return false;
 
     const newText = applyTextReplacement(
       source,
-      this.lastOptions.what,
+      this.#lastOptions.what,
       replacement,
-      this.lastOptions.lookAt ?? 'part',
-      this.lastOptions.matchCase ?? false,
+      this.#lastOptions.lookAt ?? 'part',
+      this.#lastOptions.matchCase ?? false,
     );
 
     if (newText === source) return false;
 
     if (lookIn === 'formulas' && cell.formula != null) {
-      this.worksheet.setCellFormula(current.address, newText);
+      this.#worksheet.setCellFormula(current.address, newText);
     } else if (lookIn === 'comments') {
       const comments = cell.comments;
       if (!comments?.length) return false;
       const latest = comments[comments.length - 1];
-      this.worksheet.updateComment(current.address, latest.id, { text: newText });
+      this.#worksheet.updateComment(current.address, latest.id, { text: newText });
     } else {
-      this.worksheet.setCellValue(current.address, newText);
+      this.#worksheet.setCellValue(current.address, newText);
     }
 
-    this.lastResults.splice(this.currentIndex, 1);
-    if (this.lastResults.length === 0) {
-      this.currentIndex = -1;
-    } else if (this.currentIndex >= this.lastResults.length) {
-      this.currentIndex = this.lastResults.length - 1;
+    this.#lastResults.splice(this.#currentIndex, 1);
+    if (this.#lastResults.length === 0) {
+      this.#currentIndex = -1;
+    } else if (this.#currentIndex >= this.#lastResults.length) {
+      this.#currentIndex = this.#lastResults.length - 1;
     }
 
     return true;
   }
 
   replaceAllMatches(query: string, replacement: string, options?: Partial<FindServiceOptions>): number {
-    if ('workbookId' in this.worksheet) {
+    this.#assertSourceIsAvailable();
+
+    if ('workbookId' in this.#worksheet) {
       throw new Error('Workbook-owned replace is unavailable until its journal slice is authorized');
     }
     if (!query) return 0;
 
-    const searchOptions = this.buildSearchOptions(query, options);
-    const addresses = this.worksheet.findAll(searchOptions);
+    const searchOptions = this.#buildSearchOptions(query, options);
+    const addresses = this.#worksheet.findAll(searchOptions);
     let count = 0;
 
     for (const address of addresses) {
-      const cell = this.worksheet.getCell(address);
+      const cell = this.#worksheet.getCell(address);
       if (!cell) continue;
 
       const lookIn = searchOptions.lookIn ?? 'values';
@@ -215,33 +247,33 @@ export class FindService {
       if (newText === source) continue;
 
       if (lookIn === 'formulas' && cell.formula != null) {
-        this.worksheet.setCellFormula(address, newText);
+        this.#worksheet.setCellFormula(address, newText);
       } else if (lookIn === 'comments') {
         const comments = cell.comments;
         if (!comments?.length) continue;
         const latest = comments[comments.length - 1];
-        this.worksheet.updateComment(address, latest.id, { text: newText });
+        this.#worksheet.updateComment(address, latest.id, { text: newText });
       } else {
-        this.worksheet.setCellValue(address, newText);
+        this.#worksheet.setCellValue(address, newText);
       }
       count += 1;
     }
 
-    this.lastResults = [];
-    this.currentIndex = -1;
-    this.lastOptions = searchOptions;
+    this.#lastResults = [];
+    this.#currentIndex = -1;
+    this.#lastOptions = searchOptions;
 
     return count;
   }
 
   clear(): void {
-    this.lastResults = [];
-    this.currentIndex = -1;
-    this.lastOptions = null;
+    this.#lastResults = [];
+    this.#currentIndex = -1;
+    this.#lastOptions = null;
   }
 
-  private getCellValue(address: Address): string {
-    const cell = this.worksheet.getCell(address);
+  #getCellValue(address: Address): string {
+    const cell = this.#worksheet.getCell(address);
     if (!cell) return '';
 
     const value = cell.value;
@@ -250,5 +282,12 @@ export class FindService {
     if (typeof value === 'number') return String(value);
     if (typeof value === 'string') return value;
     return String(value);
+  }
+
+  #getCurrentResult(): FindResult | null {
+    if (this.#currentIndex >= 0 && this.#currentIndex < this.#lastResults.length) {
+      return this.#lastResults[this.#currentIndex];
+    }
+    return null;
   }
 }

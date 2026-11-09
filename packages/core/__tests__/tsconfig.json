@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.spec.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "composite": false
+  },
+  "include": ["**/*.ts"],
+  "exclude": []
+}

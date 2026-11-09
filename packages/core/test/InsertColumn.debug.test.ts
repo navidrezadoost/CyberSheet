@@ -3,13 +3,12 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { Workbook } from '../src/workbook';
+import { Worksheet } from '../src/worksheet';
 import { InsertColumnCommand } from '../src/InsertColumnCommand';
 
 describe('InsertColumn Debug', () => {
   it('should not duplicate cells after insert', () => {
-    const workbook = new Workbook();
-    const worksheet = workbook.addSheet('Test');
+    const worksheet = new Worksheet('Test', 10, 10);
 
     // Initial state: A at col 0, B at col 1, C at col 2
     worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');

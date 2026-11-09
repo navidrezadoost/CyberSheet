@@ -92,11 +92,61 @@ export class PivotCalculatedFieldEngine {
    * Throws if any formula is invalid.
    */
   compile(fields: CalculatedField[]): CompiledCalculatedField[] {
+    this.assertValidUniqueFieldNames(fields);
     return fields.map(field => ({
       name: field.name,
       formula: field.formula,
       dependsOn: this.extractDependencies(field.formula)
     }));
+  }
+
+  private normalizeFieldName(name: string): string {
+    // Calculated-field identifiers use the same ASCII, case-insensitive
+    // namespace as FormulaEngine's explicit named bindings.
+    return name.toUpperCase();
+  }
+
+  private compareFieldNames(left: string, right: string): number {
+    const normalizedLeft = this.normalizeFieldName(left);
+    const normalizedRight = this.normalizeFieldName(right);
+    return normalizedLeft < normalizedRight ? -1 : normalizedLeft > normalizedRight ? 1 : 0;
+  }
+
+  private assertValidUniqueFieldNames(fields: readonly { name: string }[]): void {
+    const names = new Set<string>();
+    for (const field of fields) {
+      if (
+        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field.name) ||
+        this.isCellReference(field.name) ||
+        /^(TRUE|FALSE)$/i.test(field.name) ||
+        this.formulaEngine.functions.has(field.name)
+      ) {
+        throw new PivotCalculatedFieldError(
+          'INVALID_FORMULA',
+          `Invalid or reserved calculated field name: ${field.name}`
+        );
+      }
+      const normalized = this.normalizeFieldName(field.name);
+      if (names.has(normalized)) {
+        throw new PivotCalculatedFieldError(
+          'INVALID_FORMULA',
+          `Duplicate calculated field name: ${field.name}`
+        );
+      }
+      names.add(normalized);
+    }
+  }
+
+  private isCellReference(identifier: string): boolean {
+    const match = /^([A-Z]{1,3})([1-9][0-9]{0,6})$/i.exec(identifier);
+    if (!match) return false;
+    const row = Number(match[2]);
+    if (row > 1_048_576) return false;
+    let column = 0;
+    for (const character of match[1].toUpperCase()) {
+      column = column * 26 + character.charCodeAt(0) - 64;
+    }
+    return column <= 16_384;
   }
 
   /**
@@ -111,7 +161,7 @@ export class PivotCalculatedFieldEngine {
     // Simple implementation: extract all identifiers that look like field names
     // (not cell references like A1, not function names)
     
-    const deps = new Set<string>();
+    const deps = new Map<string, string>();
     
     // Match identifiers: sequences of letters/underscores/numbers starting with letter
     // Exclude cell references (letter followed by number like "A1")
@@ -121,18 +171,23 @@ export class PivotCalculatedFieldEngine {
     while ((match = identifierRegex.exec(formula)) !== null) {
       const identifier = match[1];
       
-      // Exclude Excel functions (they're uppercase and common)
-      const commonFunctions = new Set([
-        'SUM', 'AVERAGE', 'COUNT', 'MIN', 'MAX', 'IF', 'AND', 'OR', 'NOT',
-        'ABS', 'ROUND', 'SQRT', 'POW', 'LOG', 'EXP', 'SIN', 'COS', 'TAN'
-      ]);
-      
-      if (!commonFunctions.has(identifier.toUpperCase())) {
-        deps.add(identifier);
-      }
+      const next = formula.slice(identifierRegex.lastIndex);
+      // A token followed by '(' is a function name. TRUE/FALSE are formula
+      // literals, and valid A1 tokens are references rather than field names.
+      if (
+        /^\s*\(/.test(next) ||
+        /^(TRUE|FALSE)$/i.test(identifier) ||
+        this.isCellReference(identifier) ||
+        /^\$[1-9][0-9]{0,6}(?![A-Z0-9_])/.test(next)
+      ) continue;
+
+      const normalized = this.normalizeFieldName(identifier);
+      if (!deps.has(normalized)) deps.set(normalized, identifier);
     }
     
-    return Array.from(deps);
+    // Keep the first authored spelling for source compatibility while all
+    // matching and sorting use the normalized identifier.
+    return Array.from(deps.values());
   }
 
   /**
@@ -142,41 +197,47 @@ export class PivotCalculatedFieldEngine {
    * Throws: PivotCalculatedFieldError if circular dependency detected
    */
   topologicalSort(fields: CompiledCalculatedField[]): CompiledCalculatedField[] {
+    this.assertValidUniqueFieldNames(fields);
     const sorted: CompiledCalculatedField[] = [];
     const visited = new Set<string>();
     const inProgress = new Set<string>();
-    const fieldMap = new Map(fields.map(f => [f.name, f]));
+    const fieldMap = new Map(fields.map(f => [this.normalizeFieldName(f.name), f]));
 
     const visit = (fieldName: string): void => {
-      if (visited.has(fieldName)) return;
+      const normalizedName = this.normalizeFieldName(fieldName);
+      if (visited.has(normalizedName)) return;
       
-      if (inProgress.has(fieldName)) {
+      if (inProgress.has(normalizedName)) {
         throw new PivotCalculatedFieldError(
           'CIRCULAR_DEP',
           `Circular dependency detected involving field: ${fieldName}`
         );
       }
 
-      const field = fieldMap.get(fieldName);
+      const field = fieldMap.get(normalizedName);
       if (!field) {
         // Field is a base aggregated field (not a calculated field), skip
         return;
       }
 
-      inProgress.add(fieldName);
+      inProgress.add(normalizedName);
 
       // Visit dependencies first
-      for (const dep of field.dependsOn) {
+      for (const dep of field.dependsOn
+        .slice()
+        .sort((left, right) => this.compareFieldNames(left, right))) {
         visit(dep);
       }
 
-      inProgress.delete(fieldName);
-      visited.add(fieldName);
+      inProgress.delete(normalizedName);
+      visited.add(normalizedName);
       sorted.push(field);
     };
 
-    // Visit all fields
-    for (const field of fields) {
+    // Stable lexical root order means equivalent input permutations produce
+    // the same valid topological ordering.
+    for (const field of fields.slice().sort((left, right) =>
+      this.compareFieldNames(left.name, right.name))) {
       visit(field.name);
     }
 
@@ -188,9 +249,9 @@ export class PivotCalculatedFieldEngine {
    */
   private makeCacheKey(fieldName: string, context: PivotEvalContext): string {
     // Stable stringify: sort keys for deterministic output
-    const keys = Object.keys(context).sort();
-    const parts = keys.map(k => `${k}:${context[k]}`);
-    return `${fieldName}|${parts.join(',')}`;
+    const keys = Object.keys(context).sort((left, right) => this.compareFieldNames(left, right));
+    const parts = keys.map(k => `${this.normalizeFieldName(k)}:${context[k]}`);
+    return `${this.normalizeFieldName(fieldName)}|${parts.join(',')}`;
   }
   
   /**
@@ -213,9 +274,20 @@ export class PivotCalculatedFieldEngine {
     }
     
     try {
+      const normalizedContext = new Set<string>();
+      for (const [name] of Object.entries(context)) {
+        const normalizedName = this.normalizeFieldName(name);
+        if (normalizedContext.has(normalizedName)) {
+          const error = new Error('#REF!');
+          this.cache.set(cacheKey, error);
+          return error;
+        }
+        normalizedContext.add(normalizedName);
+      }
+
       // Validate dependencies exist in context
       for (const dep of field.dependsOn) {
-        if (!(dep in context)) {
+        if (!normalizedContext.has(this.normalizeFieldName(dep))) {
           const error = new Error('#REF!'); // Missing field
           this.cache.set(cacheKey, error);
           return error;
@@ -230,7 +302,15 @@ export class PivotCalculatedFieldEngine {
       };
 
       // Evaluate formula
-      const result = this.formulaEngine.evaluate(field.formula, formulaContext);
+      const namedValues = new Map<string, FormulaValue>();
+      for (const [name, value] of Object.entries(context)) {
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) namedValues.set(name, value);
+      }
+      const result = this.formulaEngine.evaluateWithBindings(
+        field.formula,
+        formulaContext,
+        namedValues
+      );
 
       // Handle result types
       if (result instanceof Error) {

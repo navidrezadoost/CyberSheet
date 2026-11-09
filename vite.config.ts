@@ -36,8 +36,6 @@ export default defineConfig(({ mode }) => ({
       '@cybersheet/core': path.resolve(__dirname, './packages/core/src/index.ts'),
       '@cybersheet/renderer-canvas': path.resolve(__dirname, './packages/renderer-canvas/src/index.ts'),
       '@cybersheet/io-xlsx': path.resolve(__dirname, './packages/io-xlsx/src/index.ts'),
-      '@cyber-sheet/core': path.resolve(__dirname, './packages/core/src/index.ts'),
-      '@cyber-sheet/core/sdk': path.resolve(__dirname, './packages/core/src/sdk/index.ts'),
       '@cyber-sheet/react': path.resolve(__dirname, './packages/react/src/index.ts'),
       '@cyber-sheet/io-xlsx': path.resolve(__dirname, './packages/io-xlsx/src/index.ts'),
       '@cyber-sheet/cf-ui-core': path.resolve(__dirname, './packages/cf-ui-core/src/index.ts'),

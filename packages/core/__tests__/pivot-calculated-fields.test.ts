@@ -7,7 +7,6 @@ declare function describe(name: string, fn: () => void): void;
 declare function test(name: string, fn: () => void | Promise<void>): void;
 declare function beforeEach(fn: () => void | Promise<void>): void;
 declare const expect: any;
-import { Workbook } from '../src/workbook';
 import { Worksheet } from '../src/worksheet';
 import { FormulaEngine } from '../src/FormulaEngine';
 import { PivotEngine } from '../src/PivotEngine';
@@ -61,13 +60,11 @@ function makePivotConfig(calculatedFields?: CalculatedField[]): PivotConfig {
 // ============================================================================
 
 describe('Calculated Fields - Basic Arithmetic', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -130,13 +127,11 @@ describe('Calculated Fields - Basic Arithmetic', () => {
 // ============================================================================
 
 describe('Calculated Fields - Chained Dependencies', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -181,13 +176,11 @@ describe('Calculated Fields - Chained Dependencies', () => {
 // ============================================================================
 
 describe('Calculated Fields - Circular Dependencies', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -229,13 +222,11 @@ describe('Calculated Fields - Circular Dependencies', () => {
 // ============================================================================
 
 describe('Calculated Fields - Missing Fields', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -264,13 +255,11 @@ describe('Calculated Fields - Missing Fields', () => {
 // ============================================================================
 
 describe('Calculated Fields - Error Isolation', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -307,13 +296,11 @@ describe('Calculated Fields - Error Isolation', () => {
 // ============================================================================
 
 describe('Calculated Fields - Determinism', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -420,13 +407,11 @@ describe('PivotCalculatedFieldEngine - Unit Tests', () => {
 // ============================================================================
 
 describe('Phase 33b - Error Propagation', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -503,14 +488,12 @@ describe('Phase 33b - Error Propagation', () => {
 // ============================================================================
 
 describe('Phase 33b - Caching', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
   let formulaEngine: FormulaEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     
@@ -574,13 +557,11 @@ describe('Phase 33b - Caching', () => {
 // ============================================================================
 
 describe('Phase 33b - Edge Cases', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
   let engine: PivotEngine;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Sheet1', 100, 26);
+    worksheet = new Worksheet('Sheet1', 100, 26);
     const formulaEngine = new FormulaEngine();
     (worksheet as any).formulaEngine = formulaEngine;
     

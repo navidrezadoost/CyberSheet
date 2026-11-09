@@ -1,4 +1,5 @@
 import {
+  Workbook,
   Worksheet,
   type WorkbookSheetView,
   Address,
@@ -418,6 +419,7 @@ export class CanvasRenderer {
   private formulaWorkerGeneration = 0;
   private disposed = false;
   private layoutCacheDirty = true;
+  private layoutCacheWorkbookOwned: boolean | null = null;
   private visibleRowsCache: number[] = [];
   private visibleColsCache: number[] = [];
   private visibleColIndexCache = new Map<number, number>();
@@ -442,6 +444,16 @@ export class CanvasRenderer {
     col: number,
     options?: { domain?: "all" | "visible" | "filtered"; search?: string },
   ): Array<{ value: string; count: number }> {
+    const workbookOwned =
+      !(this.#sheet instanceof Worksheet) || this.#sheet.isWorkbookOwned();
+
+    // A column-value cache populated while standalone may contain formula
+    // cached values. Invalidate it when ownership changes.
+    if (this._valueCacheWorkbookOwned !== workbookOwned) {
+      this.clearValueCacheForColumn();
+      this._valueCacheWorkbookOwned = workbookOwned;
+    }
+
     const domain = options?.domain ?? "all";
     const searchRaw = options?.search?.toLowerCase() ?? "";
     let map: Map<string, number> | undefined;
@@ -486,6 +498,7 @@ export class CanvasRenderer {
   }
   // Distinct value cache per column for filter menus
   private _valueCache: Map<number, Map<string, number>> = new Map();
+  private _valueCacheWorkbookOwned: boolean | null = null;
 
   private standaloneMutationTarget(): Worksheet {
     if (!(this.#sheet instanceof Worksheet)) {
@@ -499,6 +512,9 @@ export class CanvasRenderer {
     sheet: Worksheet | WorkbookSheetView,
     options: CanvasRendererOptions = {},
   ) {
+    if (!(sheet instanceof Worksheet) && !Workbook.isWorkbookIssuedSheetView(sheet)) {
+      throw new Error("CanvasRenderer requires a Workbook-issued sheet view");
+    }
     this.container = container;
     this.#sheet = sheet instanceof Worksheet ? createWorksheetObservationHandle(sheet) : sheet;
     if (!(sheet instanceof Worksheet) && options.autoSizeColumns) {
@@ -798,7 +814,11 @@ export class CanvasRenderer {
   }
 
   private ensureLayoutCache(): void {
-    if (!this.layoutCacheDirty) return;
+    const workbookOwned = !(this.#sheet instanceof Worksheet) || this.#sheet.isWorkbookOwned();
+    if (!this.layoutCacheDirty && this.layoutCacheWorkbookOwned === workbookOwned) return;
+    // Worksheet adoption does not necessarily emit a renderer-observed change
+    // event. Never reuse row membership computed under a different owner state.
+    this.layoutCacheDirty = true;
 
     const rows = this.#sheet.getVisibleRowIndices();
     const cols = this.#sheet.getVisibleColumnIndices();
@@ -822,6 +842,7 @@ export class CanvasRenderer {
     this.visibleColIndexCache = new Map(cols.map((col, index) => [col, index]));
     this.rowTopsCache = rowTops;
     this.colLeftsCache = colLefts;
+    this.layoutCacheWorkbookOwned = workbookOwned;
     this.layoutCacheDirty = false;
   }
 
@@ -954,6 +975,11 @@ export class CanvasRenderer {
     maxWidth?: number;
     maxRowsToScan?: number;
   }) {
+    const mutationTarget = this.standaloneMutationTarget();
+    if (mutationTarget.isWorkbookOwned()) {
+      throw new Error("Workbook-owned renderer mutations are unavailable until their journal slice is authorized");
+    }
+
     const mode = opts?.mode ?? "visible";
     const includeHeader = opts?.includeHeader ?? true;
     const padding = opts?.padding ?? 12;
@@ -971,9 +997,12 @@ export class CanvasRenderer {
       let w = this.textCache.get(font, text);
       if (w == null) {
         ctx.save();
-        ctx.font = font;
-        w = ctx.measureText(text).width;
-        ctx.restore();
+        try {
+          ctx.font = font;
+          w = ctx.measureText(text).width;
+        } finally {
+          ctx.restore();
+        }
         this.textCache.set(font, text, w);
       }
       return w;
@@ -984,6 +1013,7 @@ export class CanvasRenderer {
         : Array.from({ length: this.#sheet.rowCount }, (_, i) => i + 1);
     const limitedRows =
       rows.length > maxRowsToScan ? rows.slice(0, maxRowsToScan) : rows;
+    const measuredWidths: Array<[number, number]> = [];
     for (let c = 1; c <= this.#sheet.colCount; c++) {
       let maxW = includeHeader ? measure(this.colLabel(c)) : 0;
       for (const r of limitedRows) {
@@ -1006,7 +1036,17 @@ export class CanvasRenderer {
         maxWidth,
         Math.max(minWidth, Math.ceil(maxW + padding)),
       );
-      this.standaloneMutationTarget().setColumnWidth(c, finalW);
+      measuredWidths.push([c, finalW]);
+    }
+
+    // Measurement can invoke canvas/application code that adopts the retained
+    // Worksheet. Do not begin dimension writes if ownership changed mid-scan.
+    if (mutationTarget.isWorkbookOwned()) {
+      throw new Error("Workbook-owned renderer mutations are unavailable until their journal slice is authorized");
+    }
+
+    for (const [col, width] of measuredWidths) {
+      mutationTarget.setColumnWidth(col, width);
     }
     this.redraw();
   }
@@ -1023,19 +1063,81 @@ export class CanvasRenderer {
     return this.plugins.find((p) => p.id === id);
   }
   computeHeatmapRange() {
-    let min = Infinity,
-      max = -Infinity;
-    for (let r = 1; r <= this.#sheet.rowCount; r++) {
-      for (let c = 1; c <= this.#sheet.colCount; c++) {
-        const v = this.#sheet.getCellValue({ row: r, col: c });
-        if (typeof v === "number") {
-          min = Math.min(min, v);
-          max = Math.max(max, v);
+    const isWorkbookOwned = () =>
+      !(this.#sheet instanceof Worksheet) || this.#sheet.isWorkbookOwned();
+    const scan = (expectedOwnership: boolean) => {
+      let min = Infinity,
+        max = -Infinity;
+      for (let r = 1; ; r++) {
+        const rowCount = this.#sheet.rowCount;
+        if (isWorkbookOwned() !== expectedOwnership) {
+          return { consistent: false as const };
+        }
+        if (r > rowCount) break;
+
+        for (let c = 1; ; c++) {
+          const colCount = this.#sheet.colCount;
+          if (isWorkbookOwned() !== expectedOwnership) {
+            return { consistent: false as const };
+          }
+          if (c > colCount) break;
+
+          const v = this.#sheet.getCellValue({ row: r, col: c });
+          if (isWorkbookOwned() !== expectedOwnership) {
+            return { consistent: false as const };
+          }
+          if (typeof v === "number") {
+            min = Math.min(min, v);
+            max = Math.max(max, v);
+          }
         }
       }
+
+      return {
+        consistent: true as const,
+        range: min !== Infinity ? { min, max } : null,
+      };
+    };
+
+    let expectedOwnership = isWorkbookOwned();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let result: ReturnType<typeof scan>;
+      try {
+        result = scan(expectedOwnership);
+      } catch (error) {
+        if (isWorkbookOwned() !== expectedOwnership) {
+          this.heatmapRange = null;
+        }
+        if (attempt === 1 && expectedOwnership) {
+          // The owner-aware retry failed after the previous frame may have
+          // painted a standalone aggregate. Clear it from the canvas without
+          // re-entering formula evaluation or scheduling another attempt.
+          this.heatmapRange = null;
+          try {
+            this.paintFrame();
+          } catch {
+            // Preserve the original retry failure if best-effort painting also
+            // fails. The cleared aggregate remains authoritative either way.
+          }
+        }
+        throw error;
+      }
+
+      const currentOwnership = isWorkbookOwned();
+      if (result.consistent && currentOwnership === expectedOwnership) {
+        this.heatmapRange = result.range;
+        this.redraw();
+        return;
+      }
+
+      // Never retain or publish an aggregate assembled under a prior owner.
+      this.heatmapRange = null;
+      if (attempt === 1) {
+        this.redraw();
+        throw new Error('Worksheet ownership changed repeatedly during heatmap range computation');
+      }
+      expectedOwnership = currentOwnership;
     }
-    this.heatmapRange = min !== Infinity ? { min, max } : null;
-    this.redraw();
   }
 
   /**
@@ -1521,27 +1623,50 @@ export class CanvasRenderer {
   }
 
   private evaluateVisibleFormulaCells(): void {
+    const source = this.#sheet;
     if (
       this.disposed ||
-      !(this.#sheet instanceof Worksheet) ||
-      this.#sheet.isWorkbookOwned()
+      !(source instanceof Worksheet) ||
+      source.isWorkbookOwned()
     ) return;
-    const worksheet = this.#sheet;
     const visibleAddresses = this.getVisibleCellAddresses();
-    const isDirty = worksheet.isDirty;
-    const dirtyAddresses =
-      typeof isDirty === "function"
-        ? visibleAddresses.filter((addr) => isDirty.call(this.#sheet, addr))
-        : visibleAddresses;
-    const formulaAddresses = dirtyAddresses.filter(
-      (addr) => !!this.#sheet.getCell(addr)?.formula,
-    );
+    const isDirty = source.isDirty;
+    const dirtyAddresses: Address[] = [];
+    if (typeof isDirty === "function") {
+      for (const address of visibleAddresses) {
+        if (!this.isCurrentStandaloneWorksheet(source)) return;
+        const dirty = isDirty.call(source, address);
+        // isDirty can be shadowed by an application callback and re-enter the
+        // workbook while this preflight is in progress. Stop before the next
+        // address is inspected under the changed owner state.
+        if (!this.isCurrentStandaloneWorksheet(source)) return;
+        if (dirty) dirtyAddresses.push(address);
+      }
+    } else {
+      if (!this.isCurrentStandaloneWorksheet(source)) return;
+      dirtyAddresses.push(...visibleAddresses);
+    }
+
+    const formulaAddresses: Address[] = [];
+    for (const address of dirtyAddresses) {
+      if (!this.isCurrentStandaloneWorksheet(source)) return;
+      const cell = source.getCell(address);
+      // The observation handle masks formula cached results. Still stop the
+      // pass if the read synchronously changes ownership or disposes us.
+      if (!this.isCurrentStandaloneWorksheet(source)) return;
+      if (cell?.formula) formulaAddresses.push(address);
+    }
     if (formulaAddresses.length === 0) return;
 
     const worker = this.getFormulaWorker(true);
+    // Worker creation and hydration call caller-controlled code. Either can
+    // adopt this Worksheet or dispose the renderer before this pass resumes.
+    if (!this.isCurrentStandaloneWorksheet(source)) return;
+
     const threshold = this.options.formulaWorkerThreshold;
     if (!worker || formulaAddresses.length < threshold) {
-      worksheet.evaluateBatch(formulaAddresses);
+      if (!this.isCurrentStandaloneWorksheet(source)) return;
+      source.evaluateBatch(formulaAddresses);
       return;
     }
 
@@ -1557,20 +1682,29 @@ export class CanvasRenderer {
     // The bridge may mutate its input array. Keep renderer-owned addresses
     // private for result application and pending-cell cleanup.
     const workerAddresses = pending.map((address) => ({ ...address }));
+    if (!this.isCurrentStandaloneWorksheet(source)) {
+      for (const addr of pending) {
+        const key = `${addr.row}:${addr.col}`;
+        if (this.workerPendingCells.get(key) === this.formulaWorkerGeneration) {
+          this.workerPendingCells.delete(key);
+        }
+      }
+      return;
+    }
     worker
       .evaluateBatch(workerAddresses)
       .then((result) => {
         // A renderer may outlive the worksheet's standalone phase. Worker
         // results started before adoption must not apply to the now-owned sheet.
-        if (!this.isCurrentFormulaWorker(worker, workerGeneration) || worksheet.isWorkbookOwned()) return;
-        worksheet.applyFormulaResults(pending, result.values);
+        if (!this.isCurrentFormulaWorker(worker, workerGeneration) || source.isWorkbookOwned()) return;
+        source.applyFormulaResults(pending, result.values);
       })
       .catch((error) => {
         console.warn("Formula worker batch failed.", error);
         // Do not run the synchronous fallback after adoption, disposal, or
         // worker replacement: it is a worksheet mutation path.
-        if (!this.isCurrentFormulaWorker(worker, workerGeneration) || worksheet.isWorkbookOwned()) return;
-        worksheet.evaluateBatch(pending);
+        if (!this.isCurrentFormulaWorker(worker, workerGeneration) || source.isWorkbookOwned()) return;
+        source.evaluateBatch(pending);
       })
       .finally(() => {
         for (const addr of pending) {
@@ -1585,6 +1719,15 @@ export class CanvasRenderer {
 
   private isCurrentFormulaWorker(worker: FormulaWorkerBridge, generation: number): boolean {
     return !this.disposed && this.formulaWorker === worker && this.formulaWorkerGeneration === generation;
+  }
+
+  private isCurrentStandaloneWorksheet(worksheet: Worksheet): boolean {
+    return (
+      !this.disposed &&
+      this.#sheet === worksheet &&
+      this.#sheet instanceof Worksheet &&
+      !this.#sheet.isWorkbookOwned()
+    );
   }
 
   private replaceFormulaWorker(worker: FormulaWorkerBridge): void {
@@ -1603,9 +1746,10 @@ export class CanvasRenderer {
     addr: Address,
     cell: { value?: unknown; formula?: string },
   ): void {
-    if (this.disposed || !(this.#sheet instanceof Worksheet) || this.#sheet.isWorkbookOwned()) return;
+    const source = this.#sheet;
+    if (this.disposed || !(source instanceof Worksheet) || source.isWorkbookOwned()) return;
     const worker = this.getFormulaWorker(!!cell.formula);
-    if (!worker) return;
+    if (!worker || !this.isCurrentStandaloneWorksheet(source)) return;
     if (cell.formula) {
       worker
         .setCellFormula(
@@ -1633,16 +1777,22 @@ export class CanvasRenderer {
   }
 
   private hydrateFormulaWorker(worker: FormulaWorkerBridge): void {
-    if (this.disposed || !(this.#sheet instanceof Worksheet) || this.#sheet.isWorkbookOwned()) return;
+    const source = this.#sheet;
+    if (this.disposed || !(source instanceof Worksheet) || source.isWorkbookOwned()) return;
     if (this.formulaWorkerHydrated) return;
     this.formulaWorkerHydrated = true;
 
-    this.#sheet.forEachNonEmptyCell(
+    source.forEachNonEmptyCell(
       (
         row: number,
         col: number,
         cell: { value?: unknown; formula?: string },
       ) => {
+        // Worker methods are caller-controlled and may synchronously adopt the
+        // retained Worksheet. Recheck through the observation handle before
+        // reading or publishing each subsequent cell.
+        if (this.disposed || source.isWorkbookOwned()) return;
+
         const value =
           typeof cell.value === "number" ||
           typeof cell.value === "string" ||
@@ -1670,6 +1820,22 @@ export class CanvasRenderer {
     if (typeof factory !== "function") return undefined;
     try {
       const worker = factory();
+      const source = this.#sheet;
+      // A factory is caller-controlled and may adopt the Worksheet before it
+      // returns. Reject and dispose of that worker before installation or
+      // hydration so no caller-owned worker is retained after the transition.
+      if (
+        this.disposed ||
+        !(source instanceof Worksheet) ||
+        source.isWorkbookOwned()
+      ) {
+        try {
+          worker.terminate?.();
+        } catch (error) {
+          console.warn("Failed to terminate a formula worker created during an ownership transition.", error);
+        }
+        return undefined;
+      }
       this.replaceFormulaWorker(worker);
     } catch (error) {
       console.warn(
@@ -1878,7 +2044,11 @@ export class CanvasRenderer {
     }
     const t0 = performance.now();
     this.evaluateVisibleFormulaCells();
+    this.paintFrame(t0);
+  }
 
+  /** Paint the current renderer state without evaluating or scheduling formulas. */
+  private paintFrame(t0 = performance.now()) {
     // OPTIMIZATION: Dirty-cell-only rendering
     // If gridlines don't need redraw and we have a small set of dirty cells,
     // only redraw those specific cells for massive performance gain
@@ -3705,6 +3875,9 @@ export class CanvasRenderer {
 
   private handleMouseUp = (e: MouseEvent) => {
     this.isDragging = false;
+    if (this.resizeState) {
+      this.canvas.style.cursor = "default";
+    }
     this.resizeState = null;
   };
 
@@ -3761,120 +3934,126 @@ export class CanvasRenderer {
   // Auto-size column to fit content
   private autoSizeColumn(col: number) {
     this.ctx.save();
-    this.ctx.font = `${this.theme.fontSize}px ${this.theme.fontFamily}`;
+    try {
+      this.ctx.font = `${this.theme.fontSize}px ${this.theme.fontFamily}`;
 
-    let maxWidth = 50; // minimum width
+      let maxWidth = 50; // minimum width
 
-    // Scan visible rows for max content width
-    const visRows = this.getVisibleRows();
-    const scanRows = visRows.slice(0, Math.min(100, visRows.length)); // limit scan
+      // Scan visible rows for max content width
+      const visRows = this.getVisibleRows();
+      const scanRows = visRows.slice(0, Math.min(100, visRows.length)); // limit scan
 
-    for (const row of scanRows) {
-      const addr = { row, col };
-      const cell = this.#sheet.getCell(addr);
-      if (!cell) continue;
+      for (const row of scanRows) {
+        const addr = { row, col };
+        const cell = this.#sheet.getCell(addr);
+        if (!cell) continue;
 
-      const value = cell.value;
-      if (value != null) {
-        const style = this.#sheet.getCellStyle(addr);
-        const formatted = this.formatCache.formatValue(
-          value,
-          style?.numberFormat,
-        );
-        const text = formatted.text;
-        const width = this.ctx.measureText(text).width;
-        maxWidth = Math.max(maxWidth, width + 12); // 12px padding (6px each side)
+        const value = cell.value;
+        if (value != null) {
+          const style = this.#sheet.getCellStyle(addr);
+          const formatted = this.formatCache.formatValue(
+            value,
+            style?.numberFormat,
+          );
+          const text = formatted.text;
+          const width = this.ctx.measureText(text).width;
+          maxWidth = Math.max(maxWidth, width + 12); // 12px padding (6px each side)
+        }
       }
-    }
 
       this.standaloneMutationTarget().setColumnWidth(col, Math.min(maxWidth, 400)); // cap at 400px
-    this.ctx.restore();
+    } finally {
+      this.ctx.restore();
+    }
     this.scheduleRedraw();
   }
 
   // Auto-size row to fit content - calculates height needed to show all content
   private autoSizeRow(row: number) {
     this.ctx.save();
-    this.ctx.font = `${this.theme.fontSize}px ${this.theme.fontFamily}`;
+    try {
+      this.ctx.font = `${this.theme.fontSize}px ${this.theme.fontFamily}`;
 
-    let maxHeight = 20; // minimum height (default)
-    const paddingTop = 2; // px
-    const paddingBottom = 4; // px
-    const totalVerticalPadding = paddingTop + paddingBottom; // 6px total
+      let maxHeight = 20; // minimum height (default)
+      const paddingTop = 2; // px
+      const paddingBottom = 4; // px
+      const totalVerticalPadding = paddingTop + paddingBottom; // 6px total
 
-    // Scan visible columns for max content height in this row
-    for (const col of this.getVisibleCols().slice(0, 100)) {
-      const addr = { row, col };
-      const cell = this.#sheet.getCell(addr);
-      if (!cell) continue;
+      // Scan visible columns for max content height in this row
+      for (const col of this.getVisibleCols().slice(0, 100)) {
+        const addr = { row, col };
+        const cell = this.#sheet.getCell(addr);
+        if (!cell) continue;
 
-      const value = cell.value;
-      if (value == null) continue;
+        const value = cell.value;
+        if (value == null) continue;
 
-      const style = this.#sheet.getCellStyle(addr);
-      const formatted = this.formatCache.formatValue(
-        value,
-        style?.numberFormat,
-      );
-      const text = formatted.text;
+        const style = this.#sheet.getCellStyle(addr);
+        const formatted = this.formatCache.formatValue(
+          value,
+          style?.numberFormat,
+        );
+        const text = formatted.text;
 
-      // Get cell-specific font size
-      const cellFontSize = style?.fontSize ?? this.theme.fontSize;
-      const lineHeight = cellFontSize * 1.2; // Line height includes spacing between lines
+        // Get cell-specific font size
+        const cellFontSize = style?.fontSize ?? this.theme.fontSize;
+        const lineHeight = cellFontSize * 1.2; // Line height includes spacing between lines
 
-      // Get column width to calculate how many lines the content needs
-      const colWidth = this.#sheet.getColumnWidth(col);
-      const horizontalPadding = 8; // 4px each side
-      const maxTextWidth = colWidth - horizontalPadding;
+        // Get column width to calculate how many lines the content needs
+        const colWidth = this.#sheet.getColumnWidth(col);
+        const horizontalPadding = 8; // 4px each side
+        const maxTextWidth = colWidth - horizontalPadding;
 
-      let lineCount = 1;
+        let lineCount = 1;
 
-      // Check for explicit newlines first
-      if (text.includes("\n")) {
-        // Text has newlines - each line might also wrap
-        const lines = text.split("\n");
-        lineCount = 0;
+        // Check for explicit newlines first
+        if (text.includes("\n")) {
+          // Text has newlines - each line might also wrap
+          const lines = text.split("\n");
+          lineCount = 0;
 
-        // Set font for this specific cell
-        this.ctx.font = `${cellFontSize}px ${style?.fontFamily ?? this.theme.fontFamily}`;
+          // Set font for this specific cell
+          this.ctx.font = `${cellFontSize}px ${style?.fontFamily ?? this.theme.fontFamily}`;
 
-        for (const line of lines) {
-          if (line.length === 0) {
-            // Empty line still takes up space
-            lineCount += 1;
-          } else {
-            const lineWidth = this.ctx.measureText(line).width;
-            if (lineWidth > maxTextWidth) {
-              // This line wraps - calculate how many wrapped lines
-              lineCount += Math.ceil(lineWidth / maxTextWidth);
-            } else {
+          for (const line of lines) {
+            if (line.length === 0) {
+              // Empty line still takes up space
               lineCount += 1;
+            } else {
+              const lineWidth = this.ctx.measureText(line).width;
+              if (lineWidth > maxTextWidth) {
+                // This line wraps - calculate how many wrapped lines
+                lineCount += Math.ceil(lineWidth / maxTextWidth);
+              } else {
+                lineCount += 1;
+              }
             }
           }
-        }
-      } else {
-        // No newlines - calculate if text would wrap based on width
-        this.ctx.font = `${cellFontSize}px ${style?.fontFamily ?? this.theme.fontFamily}`;
-        const textWidth = this.ctx.measureText(text).width;
-
-        if (textWidth > maxTextWidth) {
-          // Text is wider than cell - calculate wrapped lines
-          lineCount = Math.ceil(textWidth / maxTextWidth);
         } else {
-          // Text fits in one line
-          lineCount = 1;
+          // No newlines - calculate if text would wrap based on width
+          this.ctx.font = `${cellFontSize}px ${style?.fontFamily ?? this.theme.fontFamily}`;
+          const textWidth = this.ctx.measureText(text).width;
+
+          if (textWidth > maxTextWidth) {
+            // Text is wider than cell - calculate wrapped lines
+            lineCount = Math.ceil(textWidth / maxTextWidth);
+          } else {
+            // Text fits in one line
+            lineCount = 1;
+          }
         }
+
+        // Calculate total height needed: content + padding above and below
+        const contentHeight = lineCount * lineHeight;
+        const cellHeight = contentHeight + totalVerticalPadding;
+
+        maxHeight = Math.max(maxHeight, cellHeight);
       }
 
-      // Calculate total height needed: content + padding above and below
-      const contentHeight = lineCount * lineHeight;
-      const cellHeight = contentHeight + totalVerticalPadding;
-
-      maxHeight = Math.max(maxHeight, cellHeight);
+      this.standaloneMutationTarget().setRowHeight(row, Math.min(Math.ceil(maxHeight), 300)); // cap at 300px
+    } finally {
+      this.ctx.restore();
     }
-
-    this.standaloneMutationTarget().setRowHeight(row, Math.min(Math.ceil(maxHeight), 300)); // cap at 300px
-    this.ctx.restore();
     this.scheduleRedraw();
   }
 

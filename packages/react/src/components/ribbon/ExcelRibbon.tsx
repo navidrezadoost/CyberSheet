@@ -65,6 +65,7 @@ import { DataTab } from "./data/DataTab";
 import { ViewTab } from "./view/ViewTab";
 import { ReviewTab } from "./review/ReviewTab";
 import { RibbonSelect } from "./RibbonSelect";
+import { requireStandaloneWorksheet } from "../../utils/workbookSheetAccess";
 import "./ribbon.css";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
   onStyleChange,
 }) => {
   const [activeTab, setActiveTab] = useState<RibbonTab>("home");
+  const [dataCommandError, setDataCommandError] = useState<string | null>(null);
 
   // Drawing layer for Insert tab
   const drawingLayer = useMemo(() => new DrawingLayer(), []);
@@ -588,106 +590,128 @@ export const ExcelRibbon: React.FC<ExcelRibbonProps> = ({
           calculationMode={calculationController.getMode()}
         />
       ) : activeTab === "data" ? (
-        <DataTab
-          workbook={workbook}
-          selectedCells={cells}
-          onCommand={(command) => {
-            console.log("Data tab command:", command);
+        <>
+          <DataTab
+            workbook={workbook}
+            selectedCells={cells}
+            onCommand={(command) => {
+              console.log("Data tab command:", command);
 
-            const sheet = worksheet || workbook?.activeSheet;
-            if (!sheet || !commandManager) return;
+              const sheet = worksheet || workbook?.activeSheet;
+              if (!sheet || !commandManager) return;
 
-            try {
-              switch (command.type) {
-                case "sort":
-                  commandManager.execute(
-                    new SortCommand(
-                      sheet,
-                      command.range,
-                      command.sortBy,
-                      command.hasHeaders,
-                    ),
-                  );
-                  break;
-
-                case "toggleAutoFilter":
-                  commandManager.execute(
-                    new ToggleAutoFilterCommand(
-                      sheet,
-                      command.range,
-                      command.enabled ?? true,
-                    ),
-                  );
-                  break;
-
-                case "clearFilter":
-                  commandManager.execute(new ClearFilterCommand(sheet));
-                  break;
-
-                case "setDataValidation":
-                  commandManager.execute(
-                    new SetDataValidationCommand(
-                      sheet,
-                      command.range,
-                      command.rule,
-                    ),
-                  );
-                  break;
-
-                case "clearDataValidation":
-                  commandManager.execute(
-                    new ClearDataValidationCommand(sheet, command.range),
-                  );
-                  break;
-
-                case "removeDuplicates":
-                  commandManager.execute(
-                    new RemoveDuplicatesCommand(
-                      sheet,
-                      command.range,
-                      command.compareColumns,
-                      command.hasHeaders,
-                    ),
-                  );
-                  break;
-
-                case "textToColumns":
-                  commandManager.execute(
-                    new TextToColumnsCommand(
-                      sheet,
-                      command.range,
-                      command.delimiter,
-                      command.dataType,
-                    ),
-                  );
-                  break;
-
-                case "group":
-                  commandManager.execute(
-                    new GroupOutlineCommand(sheet, command.range, command.axis),
-                  );
-                  break;
-
-                case "ungroup":
-                  commandManager.execute(
-                    new UngroupOutlineCommand(
-                      sheet,
-                      command.range,
-                      command.axis,
-                    ),
-                  );
-                  break;
-
-                default:
-                  console.warn("Unknown Data command:", command.type);
+              let commandSheet: Worksheet;
+              try {
+                // Data-tab commands still operate on standalone Worksheets.
+                // Reject a Workbook-issued view or an adopted Worksheet before
+                // constructing or dispatching any command.
+                commandSheet = requireStandaloneWorksheet(sheet as any);
+              } catch {
+                setDataCommandError(
+                  "This data operation is unavailable for the current Workbook-owned sheet.",
+                );
+                return;
               }
+              setDataCommandError(null);
 
-              onStructureChange?.();
-            } catch (error) {
-              console.error("Data command error:", error);
-            }
-          }}
-        />
+              try {
+                switch (command.type) {
+                  case "sort":
+                    commandManager.execute(
+                      new SortCommand(
+                        commandSheet,
+                        command.range,
+                        command.sortBy,
+                        command.hasHeaders,
+                      ),
+                    );
+                    break;
+
+                  case "toggleAutoFilter":
+                    commandManager.execute(
+                      new ToggleAutoFilterCommand(
+                        commandSheet,
+                        command.range,
+                        command.enabled ?? true,
+                      ),
+                    );
+                    break;
+
+                  case "clearFilter":
+                    commandManager.execute(new ClearFilterCommand(commandSheet));
+                    break;
+
+                  case "setDataValidation":
+                    commandManager.execute(
+                      new SetDataValidationCommand(
+                        commandSheet,
+                        command.range,
+                        command.rule,
+                      ),
+                    );
+                    break;
+
+                  case "clearDataValidation":
+                    commandManager.execute(
+                      new ClearDataValidationCommand(commandSheet, command.range),
+                    );
+                    break;
+
+                  case "removeDuplicates":
+                    commandManager.execute(
+                      new RemoveDuplicatesCommand(
+                        commandSheet,
+                        command.range,
+                        command.compareColumns,
+                        command.hasHeaders,
+                      ),
+                    );
+                    break;
+
+                  case "textToColumns":
+                    commandManager.execute(
+                      new TextToColumnsCommand(
+                        commandSheet,
+                        command.range,
+                        command.delimiter,
+                        command.dataType,
+                      ),
+                    );
+                    break;
+
+                  case "group":
+                    commandManager.execute(
+                      new GroupOutlineCommand(commandSheet, command.range, command.axis),
+                    );
+                    break;
+
+                  case "ungroup":
+                    commandManager.execute(
+                      new UngroupOutlineCommand(
+                        commandSheet,
+                        command.range,
+                        command.axis,
+                      ),
+                    );
+                    break;
+
+                  default:
+                    console.warn("Unknown Data command:", command.type);
+                }
+
+                onStructureChange?.();
+              } catch (error) {
+                setDataCommandError(
+                  "The data operation could not be completed.",
+                );
+                console.error("Data command error:", error);
+              }
+            }}
+          />
+          <div role="alert" aria-live="assertive">
+            {dataCommandError}
+          </div>
+        </>
       ) : activeTab === "review" ? (
         <ReviewTab
           workbook={workbook}

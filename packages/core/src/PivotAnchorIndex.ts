@@ -129,11 +129,28 @@ export class PivotAnchorIndexImpl implements PivotAnchorIndex {
   set(anchor: Address, pivotId: PivotId, sheetId: string): void {
     const key = this.makeKey(anchor, sheetId);
 
-    // Remove old anchor for this pivot (if moving)
+    // Remove the old forward association only when it still belongs to this
+    // pivot. A displaced pivot can retain a stale reverse entry from older
+    // index state, and must not remove a replacement at that address.
     const oldContext = this.pivotAnchors.get(pivotId);
     if (oldContext) {
       const oldKey = this.makeKey(oldContext.address, oldContext.sheetId);
-      this.anchors.delete(oldKey);
+      if (oldKey !== key && this.anchors.get(oldKey) === pivotId) {
+        this.anchors.delete(oldKey);
+      }
+    }
+
+    // Replacing an occupied address also removes the displaced pivot's
+    // reverse association, so both directions describe the same live index.
+    const displacedPivotId = this.anchors.get(key);
+    if (displacedPivotId != null && displacedPivotId !== pivotId) {
+      const displacedContext = this.pivotAnchors.get(displacedPivotId);
+      if (
+        displacedContext &&
+        this.makeKey(displacedContext.address, displacedContext.sheetId) === key
+      ) {
+        this.pivotAnchors.delete(displacedPivotId);
+      }
     }
 
     // Set new anchor
@@ -168,7 +185,9 @@ export class PivotAnchorIndexImpl implements PivotAnchorIndex {
     if (!context) return false; // Pivot not anchored
 
     const key = this.makeKey(context.address, context.sheetId);
-    this.anchors.delete(key);
+    // A stale reverse association must never delete another pivot's forward
+    // mapping at the same address.
+    if (this.anchors.get(key) === pivotId) this.anchors.delete(key);
     this.pivotAnchors.delete(pivotId);
     return true;
   }

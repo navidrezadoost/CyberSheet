@@ -9,6 +9,8 @@ export interface ExportPanelProps {
   fileOperations: FileOperations;
   workbookName: string;
   workbook?: any; // Workbook instance
+  sessionGeneration?: number;
+  sessionGenerationRef?: { readonly current: number };
   onExportComplete?: (blob: Blob, format: ExportFormat) => void;
 }
 
@@ -76,6 +78,8 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   fileOperations,
   workbookName,
   workbook,
+  sessionGeneration,
+  sessionGenerationRef,
   onExportComplete,
 }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat | null>(null);
@@ -94,15 +98,58 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   const [pdfFitToPage, setPdfFitToPage] = useState(true);
   
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const publicationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const publicationDelayResolveRef = useRef<(() => void) | null>(null);
+  const activeExportGenerationRef = useRef<number | null>(null);
+  const isMountedRef = useRef(false);
+
+  const getCurrentSessionGeneration = useCallback(
+    () => sessionGenerationRef?.current ?? sessionGeneration ?? 0,
+    [sessionGeneration, sessionGenerationRef],
+  );
+  const isCurrentExportSession = useCallback((generation: number) => (
+    isMountedRef.current && getCurrentSessionGeneration() === generation
+  ), [getCurrentSessionGeneration]);
 
   // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
       }
+      if (publicationTimerRef.current !== null) {
+        clearTimeout(publicationTimerRef.current);
+        publicationTimerRef.current = null;
+      }
+      const resolvePublicationDelay = publicationDelayResolveRef.current;
+      publicationDelayResolveRef.current = null;
+      resolvePublicationDelay?.();
     };
   }, []);
+
+  useEffect(() => {
+    const activeGeneration = activeExportGenerationRef.current;
+    if (activeGeneration === null || isCurrentExportSession(activeGeneration)) return;
+
+    if (progressIntervalRef.current !== null) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (publicationTimerRef.current !== null) {
+      clearTimeout(publicationTimerRef.current);
+      publicationTimerRef.current = null;
+    }
+    const resolvePublicationDelay = publicationDelayResolveRef.current;
+    publicationDelayResolveRef.current = null;
+    activeExportGenerationRef.current = null;
+    resolvePublicationDelay?.();
+    setIsExporting(false);
+    setExportProgress(0);
+    setExportComplete(false);
+  }, [sessionGeneration, isCurrentExportSession]);
 
   const handleFormatSelect = useCallback((format: ExportFormat) => {
     setSelectedFormat(format);
@@ -114,6 +161,10 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
 
   const handleExport = useCallback(async () => {
     if (!selectedFormat) return;
+
+    const operationGeneration = getCurrentSessionGeneration();
+    if (!isCurrentExportSession(operationGeneration)) return;
+    activeExportGenerationRef.current = operationGeneration;
     
     setIsExporting(true);
     setExportProgress(0);
@@ -132,6 +183,13 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
     const estimatedDuration = 1500; // 1.5 seconds
     
     progressIntervalRef.current = setInterval(() => {
+      if (!isCurrentExportSession(operationGeneration)) {
+        if (progressIntervalRef.current !== null) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+        return;
+      }
       const elapsed = Date.now() - startTime;
       const progress = Math.min((elapsed / estimatedDuration) * 100, 95);
       setExportProgress(progress);
@@ -153,6 +211,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
       if (selectedFormat === 'xlsx') {
         // Use actual exportXLSX from io-xlsx
         const arrayBuffer = await exportXLSX(workbook);
+        if (!isCurrentExportSession(operationGeneration)) return;
         blob = new Blob([arrayBuffer], { 
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
         });
@@ -162,16 +221,16 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
         if (!sheet) throw new Error('No active sheet to export');
         
         const rows: string[][] = [];
-        const maxRow = 100; // Limit to reasonable size for demo
-        const maxCol = 26; // A-Z
+        const maxRow = Math.min(sheet.rowCount, 100); // Keep the existing demo export limit
+        const maxCol = Math.min(sheet.colCount, 26); // Keep the existing A-Z demo limit
         
-        for (let r = 0; r < maxRow; r++) {
+        for (let r = 1; r <= maxRow; r++) {
           const row: string[] = [];
-          for (let c = 0; c < maxCol; c++) {
+          for (let c = 1; c <= maxCol; c++) {
             const value = sheet.getCellValue({ row: r, col: c }) ?? '';
             // Basic CSV escaping
             const strValue = String(value);
-            if (strValue.includes(',') || strValue.includes('\"') || strValue.includes('\\n')) {
+            if (strValue.includes(csvDelimiter) || /[\"\r\n]/.test(strValue)) {
               row.push(`\"${strValue.replace(/\"/g, '\"\"')}\"`);
             } else {
               row.push(strValue);
@@ -183,7 +242,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
           }
         }
         
-        const csvContent = rows.map(row => row.join(',')).join('\\n');
+        const csvContent = rows.map(row => row.join(csvDelimiter)).join('\\n');
         blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       } else if (selectedFormat === 'pdf') {
         // PDF: Use browser print dialog as fallback
@@ -199,19 +258,36 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
       } else if (selectedFormat === 'txt' || selectedFormat === 'html') {
         // TXT/HTML: Fallback to FileOperations stub (will throw)
         blob = await fileOperations.exportWorkbook(selectedFormat, options);
+        if (!isCurrentExportSession(operationGeneration)) return;
       } else {
         // Unknown format
         blob = await fileOperations.exportWorkbook(selectedFormat, options);
+        if (!isCurrentExportSession(operationGeneration)) return;
       }
       
       // Complete
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
       }
+      if (!isCurrentExportSession(operationGeneration)) return;
       setExportProgress(100);
       
       // Brief delay to show 100%
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise<void>((resolve) => {
+        publicationDelayResolveRef.current = resolve;
+        publicationTimerRef.current = setTimeout(() => {
+          publicationTimerRef.current = null;
+          const resolvePublicationDelay = publicationDelayResolveRef.current;
+          publicationDelayResolveRef.current = null;
+          if (!isCurrentExportSession(operationGeneration)) {
+            resolvePublicationDelay?.();
+            return;
+          }
+          resolvePublicationDelay?.();
+        }, 300);
+      });
+      if (!isCurrentExportSession(operationGeneration)) return;
       
       // Trigger download
       const url = URL.createObjectURL(blob);
@@ -230,16 +306,23 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
         onExportComplete(blob, selectedFormat);
       }
     } catch (error) {
+      if (!isCurrentExportSession(operationGeneration)) return;
       // Handle error
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
       }
       setExportProgress(0);
       setIsExporting(false);
     } finally {
-      setIsExporting(false);
+      if (activeExportGenerationRef.current === operationGeneration) {
+        activeExportGenerationRef.current = null;
+      }
+      if (isCurrentExportSession(operationGeneration)) {
+        setIsExporting(false);
+      }
     }
-  }, [selectedFormat, csvDelimiter, csvIncludeHeaders, pdfOrientation, pdfFitToPage, fileOperations, workbookName, onExportComplete]);
+  }, [selectedFormat, csvDelimiter, csvIncludeHeaders, pdfOrientation, pdfFitToPage, fileOperations, workbookName, onExportComplete, getCurrentSessionGeneration, isCurrentExportSession]);
 
   const handleReset = useCallback(() => {
     setSelectedFormat(null);
@@ -523,7 +606,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
             >
               <option value=",">Comma (,)</option>
               <option value=";">Semicolon (;)</option>
-              <option value="\t">Tab</option>
+              <option value={'\t'}>Tab</option>
             </SmilodonNativeSelect>
           </label>
           <label style={checkboxLabelStyle}>

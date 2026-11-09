@@ -397,12 +397,12 @@ export function computeGroupKey(row: ExtendedCellValue[], config: PivotConfig): 
   
   // Extract row dimension values
   for (const field of config.rows) {
-    dimensions.push(row[field.column] ?? null);
+    dimensions.push(row[field.column - config.sourceRange.start.col] ?? null);
   }
   
   // Extract column dimension values
   for (const field of config.columns) {
-    dimensions.push(row[field.column] ?? null);
+    dimensions.push(row[field.column - config.sourceRange.start.col] ?? null);
   }
   
   return makeGroupKey(dimensions);
@@ -417,7 +417,8 @@ export function computeGroupKey(row: ExtendedCellValue[], config: PivotConfig): 
  */
 export function extractValue(
   row: ExtendedCellValue[], 
-  valueSpec: import('./PivotEngine').AggregateValueSpec | import('./PivotEngine').CalculatedValueSpec
+  valueSpec: import('./PivotEngine').AggregateValueSpec | import('./PivotEngine').CalculatedValueSpec,
+  sourceStartColumn = 0,
 ): number | null {
   const type = 'type' in valueSpec ? valueSpec.type : 'aggregate';
   
@@ -429,7 +430,7 @@ export function extractValue(
   
   // Aggregate spec - extract column value
   if ('column' in valueSpec) {
-    const value = row[valueSpec.column];
+    const value = row[valueSpec.column - sourceStartColumn];
     
     // Convert to number if possible
     if (value == null) return null;

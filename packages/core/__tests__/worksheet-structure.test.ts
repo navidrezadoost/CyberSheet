@@ -3,7 +3,10 @@ import {
   InsertColumnsCommand,
   InsertImageCommand,
   InsertRowsCommand,
+  ReorderColumnsCommand,
   ReorderRowsCommand,
+  SetColumnStyleCommand,
+  SetRowStyleCommand,
   Worksheet,
 } from '../src';
 
@@ -150,5 +153,41 @@ describe('Worksheet snapshot commands', () => {
     expect(manager.redo()).toBe(true);
     expect(ws.getImages()).toHaveLength(1);
     expect(imageCommand.imageId).toBeDefined();
+  });
+
+  test('CommandManager can undo and replay column reorder and row/column style commands', () => {
+    const ws = new Worksheet('Sheet1', 6, 6);
+    const manager = new CommandManager(10, ws);
+    ws.setCellValue({ row: 1, col: 1 }, 'first');
+    ws.setCellValue({ row: 1, col: 2 }, 'second');
+    ws.setCellValue({ row: 1, col: 3 }, 'third');
+    ws.setCellValue({ row: 1, col: 4 }, 'fourth');
+
+    manager.execute(new ReorderColumnsCommand(ws, 2, 4));
+    expect(ws.getCellValue({ row: 1, col: 1 })).toBe('first');
+    expect(ws.getCellValue({ row: 1, col: 2 })).toBe('third');
+    expect(ws.getCellValue({ row: 1, col: 4 })).toBe('second');
+    expect(manager.undo()).toBe(true);
+    expect(ws.getCellValue({ row: 1, col: 2 })).toBe('second');
+    expect(ws.getCellValue({ row: 1, col: 3 })).toBe('third');
+    expect(manager.redo()).toBe(true);
+    expect(ws.getCellValue({ row: 1, col: 3 })).toBe('fourth');
+    expect(ws.getCellValue({ row: 1, col: 4 })).toBe('second');
+
+    const rowStyle = { bold: true, fill: '#fff4cc' };
+    manager.execute(new SetRowStyleCommand(ws, 2, rowStyle));
+    expect(ws.getRowStyle(2)).toEqual(rowStyle);
+    expect(manager.undo()).toBe(true);
+    expect(ws.getRowStyle(2)).toBeUndefined();
+    expect(manager.redo()).toBe(true);
+    expect(ws.getRowStyle(2)).toEqual(rowStyle);
+
+    const columnStyle = { italic: true, fill: '#eef6ff' };
+    manager.execute(new SetColumnStyleCommand(ws, 3, columnStyle));
+    expect(ws.getColumnStyle(3)).toEqual(columnStyle);
+    expect(manager.undo()).toBe(true);
+    expect(ws.getColumnStyle(3)).toBeUndefined();
+    expect(manager.redo()).toBe(true);
+    expect(ws.getColumnStyle(3)).toEqual(columnStyle);
   });
 });

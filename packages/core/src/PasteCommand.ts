@@ -23,9 +23,27 @@
 
 import type { Command } from './CommandManager';
 import type { Address, ExtendedCellValue, CellStyle } from './types';
-import type { Worksheet } from './worksheet';
+import { Worksheet } from './worksheet';
 import type { ClipboardPayload } from './ClipboardService';
 import { FormulaShiftingService } from './FormulaShiftingService';
+
+const worksheetIsWorkbookOwned = Worksheet.prototype.isWorkbookOwned;
+
+function assertStandalonePasteTarget(target: unknown): asserts target is Worksheet {
+  if (!(target instanceof Worksheet)) {
+    throw new Error('Paste target is unavailable unless it is a standalone Worksheet');
+  }
+
+  let isOwned: boolean;
+  try {
+    isOwned = worksheetIsWorkbookOwned.call(target);
+  } catch {
+    throw new Error('Unable to classify Worksheet ownership for Paste');
+  }
+  if (isOwned) {
+    throw new Error('Workbook-owned Paste is unavailable until its journal slice is authorized');
+  }
+}
 
 /**
  * Cell state snapshot for undo.
@@ -86,6 +104,7 @@ export class PasteCommand implements Command {
     payload: ClipboardPayload,
     targetAnchor: Address
   ) {
+    assertStandalonePasteTarget(worksheet);
     this.worksheet = worksheet;
     this.payload = payload;
     this.targetAnchor = targetAnchor;
@@ -99,8 +118,9 @@ export class PasteCommand implements Command {
       isCut: payload.isCut,
       cells: payload.cells.map(c => ({
         offset: `(${c.rowOffset},${c.colOffset})`,
-        value: c.value,
-        formula: c.formula,
+        hasValue: c.value !== null && c.value !== undefined,
+        hasFormula: !!c.formula,
+        hasStyle: !!c.style,
         isMergeAnchor: c.isMergeAnchor,
         mergeSize: c.mergeWidth && c.mergeHeight ? `${c.mergeWidth}x${c.mergeHeight}` : undefined
       }))
@@ -173,7 +193,7 @@ export class PasteCommand implements Command {
         const cell = this.worksheet.getCell(resolvedAddr);
         
         logEntry.captured = {
-          value: cell?.value,
+          hasValue: cell?.value !== null && cell?.value !== undefined,
           hasFormula: !!cell?.formula,
           hasStyle: !!cell?.style
         };
@@ -331,8 +351,8 @@ export class PasteCommand implements Command {
       const logEntry: any = {
         sourceOffset: `(${cellSnapshot.rowOffset},${cellSnapshot.colOffset})`,
         targetAddr: `(${targetAddr.row},${targetAddr.col})`,
-        sourceValue: cellSnapshot.value,
-        sourceFormula: cellSnapshot.formula
+        hasSourceValue: cellSnapshot.value !== null && cellSnapshot.value !== undefined,
+        hasSourceFormula: !!cellSnapshot.formula
       };
       
       // PRIORITY RULE: formula > value
@@ -349,7 +369,7 @@ export class PasteCommand implements Command {
         );
         
         logEntry.operation = 'write formula';
-        logEntry.shiftedFormula = shiftedFormula;
+        logEntry.hasShiftedFormula = !!shiftedFormula;
         
         // Write formula to cell (shiftedFormula already has '=')
         this.worksheet.setCellFormula(targetAddr, shiftedFormula);

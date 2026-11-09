@@ -35,7 +35,7 @@ describe('XLSX export projection', () => {
     expect(files.sheet).toContain('<c r="A1"');
     expect(files.sheet).toContain('<c r="XFD1048576"');
     expect(getCellValue).toHaveBeenCalledTimes(2);
-    expect(getCellStyle).toHaveBeenCalledTimes(4);
+    expect(getCellStyle).toHaveBeenCalledTimes(2);
   });
 
   it('projects strikethrough and font size', async () => {
