@@ -18,31 +18,12 @@
 declare function describe(name: string, fn: () => void): void;
 declare function test(name: string, fn: () => void | Promise<void>): void;
 declare function beforeEach(fn: () => void | Promise<void>): void;
+declare function afterEach(fn: () => void | Promise<void>): void;
 declare const expect: any;
 
-import { groupStateStore } from '../PivotGroupStateStore';
+import { groupStateStore, SumAccumulator, type PivotGroupState } from '../PivotGroupStateStore';
 import type { PivotConfig } from '../PivotEngine';
 import type { ExtendedCellValue } from '../types';
-
-// Simplified accumulator interface for testing (bypasses actual class instances)
-interface SimplifiedAccumulator {
-  sum?: number;
-  count?: number;
-}
-
-// Simplified state interface for testing
-interface SimplifiedGroupState {
-  groups: Map<string, {
-    rowCount: number;
-    values: Record<string, SimplifiedAccumulator>;
-  }>;
-  rowToGroup: Map<number, string>;
-  rowSnapshots: Map<number, ExtendedCellValue[]>;
-  rowHashes: Map<number, number>;
-  lastFullRebuildVersion: number;
-  version: number;
-  lastBuiltAt: number;
-}
 
 // ============================================================================
 // IN-MEMORY TEST DATA (No external dependencies)
@@ -86,6 +67,8 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
     groupStateStore.clear();
   });
 
+  afterEach(() => groupStateStore.clear());
+
   test('TRUTH FUNCTION: partial === full (single mutation)', () => {
     console.log('\n🔬 FORCED IN-MEMORY DETERMINISM TEST\n');
     
@@ -96,58 +79,15 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
    const pivotId = 'test-pivot-forced';
     const initialData = createHardcodedDataset();
     
-    // Simulate PivotEngine.populateGroupState()
-    const initialState: SimplifiedGroupState = {
-      groups: new Map(),
-      rowToGroup: new Map(),
-      rowSnapshots: new Map(),
-      rowHashes: new Map(),
-      lastFullRebuildVersion: 0,
-      version: 0,
-      lastBuiltAt: Date.now()
-    };
-    
-    // Populate initial state (row 0 is header, skip it)
-    for (let rowIdx = 1; rowIdx < initialData.length; rowIdx++) {
-      const row = initialData[rowIdx];
-      const region = String(row[0]);
-      const revenue = Number(row[1]);
-      
-      // Create group if doesn't exist
-      if (!initialState.groups.has(region)) {
-        initialState.groups.set(region, {
-          rowCount: 0,
-          values: {}
-        });
-      }
-      
-      const group = initialState.groups.get(region)!;
-      group.rowCount++;
-      
-      // Initialize SUM accumulator
-      if (!group.values['Revenue']) {
-        group.values['Revenue'] = { sum: 0, count: 0 };
-      }
-      
-      const acc = group.values['Revenue'];
-      acc.sum! += revenue;
-      acc.count!++;
-      
-      // Store row snapshot (CRITICAL: Must be cloned!)
-      initialState.rowSnapshots.set(rowIdx, [...row]);
-      initialState.rowToGroup.set(rowIdx, region);
-      
-      // Store hash (simulate FNV-1a - simple version for test)
-      const hashInput = `${region}|${revenue}`;
-      initialState.rowHashes.set(rowIdx, simpleHash(hashInput));
-    }
-    
-    (groupStateStore as any).set(pivotId, initialState);
+    // Start through the supported store initialization path and populate the
+    // standalone state used by this deterministic full-vs-partial comparison.
+    const initialState = groupStateStore.create(pivotId);
+    populateState(initialState, initialData);
     
     console.log('📊 Initial State:');
-    console.log('  West:  ', initialState.groups.get('West')?.values['Revenue']?.sum);
-    console.log('  East:  ', initialState.groups.get('East')?.values['Revenue']?.sum);
-    console.log('  North: ', initialState.groups.get('North')?.values['Revenue']?.sum);
+    console.log('  West:  ', initialState.groups.get('West')?.values['Revenue']?.get());
+    console.log('  East:  ', initialState.groups.get('East')?.values['Revenue']?.get());
+    console.log('  North: ', initialState.groups.get('North')?.values['Revenue']?.get());
     
     // ========================================================================
     // STEP 2: Simulate PARTIAL recompute (mutation: West 1000 → 999)
@@ -176,13 +116,13 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
     // Apply atomic mutation
     const groupKey = String(newRow[0]); // Same group (West)
     const group = state.groups.get(groupKey)!;
-    const acc = group.values['Revenue'] as SimplifiedAccumulator;
+    const acc = group.values['Revenue'];
     
     // 1️⃣ REMOVE old value
-    acc.sum! -= Number(oldRow[1]); // -1000
+    acc.remove(Number(oldRow[1])); // -1000
     
     // 2️⃣ ADD new value
-    acc.sum! += Number(newRow[1]); // +999
+    acc.add(Number(newRow[1])); // +999
     
     // 3️⃣ UPDATE snapshot (CRITICAL: Clone!)
     state.rowSnapshots.set(changedRowIdx, [...newRow]);
@@ -193,59 +133,20 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
     state.version++;
     
     console.log('\n📊 After Partial Recompute:');
-    console.log('  West:  ', (state.groups.get('West')?.values['Revenue'] as SimplifiedAccumulator)?.sum);
-    console.log('  East:  ', (state.groups.get('East')?.values['Revenue'] as SimplifiedAccumulator)?.sum);
-    console.log('  North: ', (state.groups.get('North')?.values['Revenue'] as SimplifiedAccumulator)?.sum);
+    console.log('  West:  ', state.groups.get('West')?.values['Revenue']?.get());
+    console.log('  East:  ', state.groups.get('East')?.values['Revenue']?.get());
+    console.log('  North: ', state.groups.get('North')?.values['Revenue']?.get());
     
     // ========================================================================
     // STEP 3: Full rebuild for comparison
     // ========================================================================
     
-    const fullRebuildState: SimplifiedGroupState = {
-      groups: new Map(),
-      rowToGroup: new Map(),
-      rowSnapshots: new Map(),
-      rowHashes: new Map(),
-      lastFullRebuildVersion: 0,
-      version: 0,
-      lastBuiltAt: Date.now()
-    };
-    
-    // Build from mutated data
-    for (let rowIdx = 1; rowIdx < mutatedData.length; rowIdx++) {
-      const row = mutatedData[rowIdx];
-      const region = String(row[0]);
-      const revenue = Number(row[1]);
-      
-      if (!fullRebuildState.groups.has(region)) {
-        fullRebuildState.groups.set(region, {
-          rowCount: 0,
-          values: {}
-        });
-      }
-      
-      const group = fullRebuildState.groups.get(region)!;
-      group.rowCount++;
-      
-      if (!group.values['Revenue']) {
-        group.values['Revenue'] = { sum: 0, count: 0 };
-      }
-      
-      const acc = group.values['Revenue'];
-      acc.sum! += revenue;
-      acc.count!++;
-      
-      fullRebuildState.rowSnapshots.set(rowIdx, [...row]);
-      fullRebuildState.rowToGroup.set(rowIdx, region);
-      
-      const hashInput = `${region}|${revenue}`;
-      fullRebuildState.rowHashes.set(rowIdx, simpleHash(hashInput));
-    }
+    const fullRebuildState = buildFullState(mutatedData);
     
     console.log('\n📊 Full Rebuild:');
-    console.log('  West:  ', fullRebuildState.groups.get('West')?.values['Revenue']?.sum);
-    console.log('  East:  ', fullRebuildState.groups.get('East')?.values['Revenue']?.sum);
-    console.log('  North: ', fullRebuildState.groups.get('North')?.values['Revenue']?.sum);
+    console.log('  West:  ', fullRebuildState.groups.get('West')?.values['Revenue']?.get());
+    console.log('  East:  ', fullRebuildState.groups.get('East')?.values['Revenue']?.get());
+    console.log('  North: ', fullRebuildState.groups.get('North')?.values['Revenue']?.get());
     
     // ========================================================================
     // STEP 4: TRUTH FUNCTION - Does partial === full?
@@ -253,13 +154,13 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
     
     console.log('\n🔍 DETERMINISM CHECK:\n');
     
-    const partialWest = (state.groups.get('West')?.values['Revenue'] as SimplifiedAccumulator)?.sum;
-    const partialEast = (state.groups.get('East')?.values['Revenue'] as SimplifiedAccumulator)?.sum;
-    const partialNorth = (state.groups.get('North')?.values['Revenue'] as SimplifiedAccumulator)?.sum;
+    const partialWest = state.groups.get('West')?.values['Revenue']?.get();
+    const partialEast = state.groups.get('East')?.values['Revenue']?.get();
+    const partialNorth = state.groups.get('North')?.values['Revenue']?.get();
     
-    const fullWest = (fullRebuildState.groups.get('West')?.values['Revenue'] as SimplifiedAccumulator)?.sum;
-    const fullEast = (fullRebuildState.groups.get('East')?.values['Revenue'] as SimplifiedAccumulator)?.sum;
-    const fullNorth = (fullRebuildState.groups.get('North')?.values['Revenue'] as SimplifiedAccumulator)?.sum;
+    const fullWest = fullRebuildState.groups.get('West')?.values['Revenue']?.get();
+    const fullEast = fullRebuildState.groups.get('East')?.values['Revenue']?.get();
+    const fullNorth = fullRebuildState.groups.get('North')?.values['Revenue']?.get();
     
     console.log(`  West:  partial=${partialWest} vs full=${fullWest}`);
     console.log(`  East:  partial=${partialEast} vs full=${fullEast}`);
@@ -290,8 +191,8 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
     
     // Initial build
     const initialData = createHardcodedDataset();
-    const state: SimplifiedGroupState = buildFullState(initialData);
-    (groupStateStore as any).set(pivotId, state);
+    const state = groupStateStore.create(pivotId);
+    populateState(state, initialData);
     
     // Run 100 random mutations
     for (let i = 0; i < 100; i++) {
@@ -310,8 +211,8 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
       const group = state.groups.get(groupKey)!;
       const acc = group.values['Revenue'];
       
-      acc.sum! -= Number(oldRow[1]);  // Remove old
-      acc.sum! += Number(newRevenue); // Add new
+      acc.remove(Number(oldRow[1]));  // Remove old
+      acc.add(Number(newRevenue)); // Add new
       
       state.rowSnapshots.set(rowIdx, [...newRow]); // Clone!
       
@@ -331,8 +232,8 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
       // VALIDATE: partial === full
       for (const [groupKey, partialGroup] of state.groups.entries()) {
         const fullGroup = fullState.groups.get(groupKey);
-        const partialSum = partialGroup.values['Revenue']?.sum;
-        const fullSum = fullGroup?.values['Revenue']?.sum;
+        const partialSum = partialGroup.values['Revenue']?.get();
+        const fullSum = fullGroup?.values['Revenue']?.get();
         
         if (partialSum !== fullSum) {
           console.error(`❌ DIVERGENCE at iteration ${i}`);
@@ -358,7 +259,7 @@ describe('Phase 36a: FORCED Determinism Proof (In-Memory)', () => {
   
   test('BUG CHECK #1: Row snapshot must be cloned (not referenced)', () => {
     const row = ['West', 1000];
-    const state: SimplifiedGroupState = {
+    const state: PivotGroupState = {
       groups: new Map(),
       rowToGroup: new Map(),
       rowSnapshots: new Map(),
@@ -443,8 +344,8 @@ function simpleHash(input: string): number {
   return hash >>> 0; // Unsigned 32-bit
 }
 
-function buildFullState(data: ExtendedCellValue[][]): SimplifiedGroupState {
-  const state: SimplifiedGroupState = {
+function buildFullState(data: ExtendedCellValue[][]): PivotGroupState {
+  const state: PivotGroupState = {
     groups: new Map(),
     rowToGroup: new Map(),
     rowSnapshots: new Map(),
@@ -454,6 +355,11 @@ function buildFullState(data: ExtendedCellValue[][]): SimplifiedGroupState {
     lastBuiltAt: Date.now()
   };
   
+  populateState(state, data);
+  return state;
+}
+
+function populateState(state: PivotGroupState, data: ExtendedCellValue[][]): void {
   for (let rowIdx = 1; rowIdx < data.length; rowIdx++) {
     const row = data[rowIdx];
     const region = String(row[0]);
@@ -462,20 +368,15 @@ function buildFullState(data: ExtendedCellValue[][]): SimplifiedGroupState {
     if (!state.groups.has(region)) {
       state.groups.set(region, {
         rowCount: 0,
-        values: {}
+        values: { Revenue: new SumAccumulator() }
       });
     }
     
     const group = state.groups.get(region)!;
     group.rowCount++;
     
-    if (!group.values['Revenue']) {
-      group.values['Revenue'] = { sum: 0, count: 0 };
-    }
-    
     const acc = group.values['Revenue'];
-    acc.sum! += revenue;
-    acc.count!++;
+    acc.add(revenue);
     
     state.rowSnapshots.set(rowIdx, [...row]); // Clone!
     state.rowToGroup.set(rowIdx, region);
@@ -484,5 +385,4 @@ function buildFullState(data: ExtendedCellValue[][]): SimplifiedGroupState {
     state.rowHashes.set(rowIdx, simpleHash(hashInput));
   }
   
-  return state;
 }

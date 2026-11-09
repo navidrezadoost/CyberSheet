@@ -205,12 +205,15 @@ describe('Date Arithmetic Functions', () => {
     });
 
     test('works with TODAY', () => {
-      const result = evaluate('=EOMONTH(TODAY(), 1)');
-      const month = evaluate(`=MONTH(${result})`);
-      
-      // Should be February or March depending on current date
-      expect(month).toBeGreaterThanOrEqual(2);
-      expect(month).toBeLessThanOrEqual(3);
+      jest.useFakeTimers().setSystemTime(new Date('2026-01-31T12:00:00.000Z'));
+      try {
+        const result = evaluate('=EOMONTH(TODAY(), 1)');
+        expect(evaluate(`=YEAR(${result})`)).toBe(2026);
+        expect(evaluate(`=MONTH(${result})`)).toBe(2);
+        expect(evaluate(`=DAY(${result})`)).toBe(28);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     test('returns error for non-numeric date', () => {
@@ -362,12 +365,15 @@ describe('Date Arithmetic Functions', () => {
   // ============================================================================
   describe('Integration Tests', () => {
     test('next month end from today', () => {
-      const result = evaluate('=EOMONTH(TODAY(), 1)');
-      const month = evaluate(`=MONTH(${result})`);
-      
-      // February or March
-      expect(month).toBeGreaterThanOrEqual(2);
-      expect(month).toBeLessThanOrEqual(3);
+      jest.useFakeTimers().setSystemTime(new Date('2026-12-15T12:00:00.000Z'));
+      try {
+        const result = evaluate('=EOMONTH(TODAY(), 1)');
+        expect(evaluate(`=YEAR(${result})`)).toBe(2027);
+        expect(evaluate(`=MONTH(${result})`)).toBe(1);
+        expect(evaluate(`=DAY(${result})`)).toBe(31);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     test('project duration in workdays', () => {

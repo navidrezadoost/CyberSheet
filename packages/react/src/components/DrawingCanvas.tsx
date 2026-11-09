@@ -6,7 +6,7 @@
  * drag-to-move, resize, and rotation interactions.
  */
 
-import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { isCtrlLetter, hasCtrlOrMeta } from '../utils/keyboardLayout';
 import type {
   DrawingLayer,
@@ -260,8 +260,22 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
   const insertIconTemplateRef = useRef<IconInsertTemplate | null>(null);
   const insertFormControlTemplateRef = useRef<FormControlInsertTemplate | null>(null);
   const insertTextBoxTemplateRef = useRef<TextBoxInsertTemplate | null>(null);
+  const activeInsertPointerCleanupRef = useRef<(() => void) | null>(null);
+  const insertAuthorityRef = useRef<{ worksheet?: Worksheet | WorkbookSheetView; owned: boolean } | null>(null);
+  const activeInsertAuthorityRef = useRef<{ worksheet?: Worksheet | WorkbookSheetView; owned: boolean } | null>(null);
+
+  const worksheetIsOwned = useCallback((source?: Worksheet | WorkbookSheetView) =>
+    !!source && ('workbookId' in source || source.isWorkbookOwned()), []);
+
+  const cleanupInsertPointerListeners = useCallback(() => {
+    const cleanup = activeInsertPointerCleanupRef.current;
+    activeInsertPointerCleanupRef.current = null;
+    activeInsertAuthorityRef.current = null;
+    cleanup?.();
+  }, []);
 
   const cancelInsertMode = useCallback(() => {
+    cleanupInsertPointerListeners();
     insertModeRef.current = 'none';
     insertShapeTypeRef.current = null;
     insertPictureTemplateRef.current = null;
@@ -273,10 +287,11 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
     if (canvasRef.current) {
       canvasRef.current.style.cursor = 'default';
     }
-  }, []);
+  }, [cleanupInsertPointerListeners]);
 
   useImperativeHandle(ref, () => ({
     startShapeInsert(shapeType: string) {
+      cleanupInsertPointerListeners();
       insertModeRef.current = 'shape';
       insertShapeTypeRef.current = shapeType;
       insertPictureTemplateRef.current = null;
@@ -291,6 +306,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       }
     },
     startPictureInsert(template: PictureInsertTemplate) {
+      cleanupInsertPointerListeners();
       insertModeRef.current = 'picture';
       insertPictureTemplateRef.current = template;
       insertShapeTypeRef.current = null;
@@ -305,6 +321,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       }
     },
     startIconInsert(template: IconInsertTemplate) {
+      cleanupInsertPointerListeners();
       insertModeRef.current = 'icon';
       insertIconTemplateRef.current = template;
       insertShapeTypeRef.current = null;
@@ -319,6 +336,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       }
     },
     startFormControlInsert(template: FormControlInsertTemplate) {
+      cleanupInsertPointerListeners();
       insertModeRef.current = 'formControl';
       insertFormControlTemplateRef.current = template;
       insertShapeTypeRef.current = null;
@@ -333,6 +351,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       }
     },
     startTextBoxInsert(template: TextBoxInsertTemplate) {
+      cleanupInsertPointerListeners();
       insertModeRef.current = 'textBox';
       insertTextBoxTemplateRef.current = template;
       insertShapeTypeRef.current = null;
@@ -347,6 +366,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       }
     },
     startWordArtInsert(template: TextBoxInsertTemplate) {
+      cleanupInsertPointerListeners();
       insertModeRef.current = 'textBox';
       insertTextBoxTemplateRef.current = template;
       insertShapeTypeRef.current = null;
@@ -363,7 +383,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
     cancelInsert() {
       cancelInsertMode();
     },
-  }), [drawingLayer, cancelInsertMode]);
+  }), [drawingLayer, cancelInsertMode, cleanupInsertPointerListeners]);
 
   const finalizeInsert = useCallback(
     (startX: number, startY: number, endX: number, endY: number) => {
@@ -1201,10 +1221,24 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
         e.stopPropagation();
 
         const snapStart = !e.altKey;
+        const authority = { worksheet, owned: worksheetIsOwned(worksheet) };
+        insertAuthorityRef.current = authority;
+        activeInsertAuthorityRef.current = authority;
+        const authorityIsCurrent = () => {
+          const current = insertAuthorityRef.current;
+          const active = activeInsertAuthorityRef.current;
+          const valid = !!current && !!active &&
+            active.worksheet === current.worksheet && active.owned === current.owned &&
+            authority.worksheet === current.worksheet && authority.owned === current.owned &&
+            worksheetIsOwned(authority.worksheet) === authority.owned;
+          if (!valid) cancelInsertMode();
+          return valid;
+        };
         const startPoint = clientToSheetPoint(e.clientX, e.clientY, rect, zoom, scrollLeft, scrollTop);
         const startSnapped = snapSheetPoint(startPoint.x, startPoint.y, worksheet, snapStart);
 
         const onMouseMove = (moveEvent: MouseEvent) => {
+          if (!authorityIsCurrent()) return;
           const snapMove = !moveEvent.altKey;
           const currentPoint = clientToSheetPoint(
             moveEvent.clientX,
@@ -1224,6 +1258,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
         };
 
         const onMouseUp = (upEvent: MouseEvent) => {
+          if (!authorityIsCurrent()) return;
           const snapEnd = !upEvent.altKey;
           const endPoint = clientToSheetPoint(
             upEvent.clientX,
@@ -1234,11 +1269,23 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
             scrollTop,
           );
           const endSnapped = snapSheetPoint(endPoint.x, endPoint.y, worksheet, snapEnd);
-          finalizeInsert(startSnapped.x, startSnapped.y, endSnapped.x, endSnapped.y);
+          try {
+            finalizeInsert(startSnapped.x, startSnapped.y, endSnapped.x, endSnapped.y);
+          } finally {
+            if (activeInsertPointerCleanupRef.current === cleanup) {
+              cleanupInsertPointerListeners();
+            }
+          }
+        };
+
+        const cleanup = () => {
           window.removeEventListener('mousemove', onMouseMove);
           window.removeEventListener('mouseup', onMouseUp);
         };
 
+        cleanupInsertPointerListeners();
+        activeInsertAuthorityRef.current = authority;
+        activeInsertPointerCleanupRef.current = cleanup;
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
         return;
@@ -1371,7 +1418,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
       }
       onObjectChange?.();
     },
-    [drawingLayer, zoom, scrollLeft, scrollTop, onObjectChange, worksheet, finalizeInsert, passClickToSpreadsheet, toggleFormControlCheckbox, selectFormControlOptionButton, textEdit]
+    [drawingLayer, zoom, scrollLeft, scrollTop, onObjectChange, worksheet, worksheetIsOwned, cancelInsertMode, finalizeInsert, passClickToSpreadsheet, toggleFormControlCheckbox, selectFormControlOptionButton, textEdit]
   );
 
   const handleDoubleClick = useCallback(
@@ -1489,6 +1536,20 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
   }, []);
 
   // ─── Effects ─────────────────────────────────────────────
+
+  useEffect(() => () => cleanupInsertPointerListeners(), [cleanupInsertPointerListeners]);
+
+  const worksheetOwned = worksheetIsOwned(worksheet);
+  useLayoutEffect(() => {
+    const previousAuthority = insertAuthorityRef.current;
+    const nextAuthority = { worksheet, owned: worksheetOwned };
+    insertAuthorityRef.current = nextAuthority;
+    const activeAuthority = activeInsertAuthorityRef.current;
+    if (activeAuthority && previousAuthority &&
+      (activeAuthority.worksheet !== nextAuthority.worksheet || activeAuthority.owned !== nextAuthority.owned)) {
+      cancelInsertMode();
+    }
+  }, [worksheet, worksheetOwned, cancelInsertMode]);
 
   useEffect(() => {
     render();

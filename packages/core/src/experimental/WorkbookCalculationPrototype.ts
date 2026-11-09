@@ -200,10 +200,10 @@ export class WorkbookCalculationPrototype {
     const entry = this.byId.get(id)!;
     if (trimmed === entry.name) return true;
 
-    // Identity survives rename; only the display label changes.
+    // Identity survives rename; the prototype owns the display label in its
+    // directory. Worksheet.name is intentionally immutable after construction.
     this.byName.delete(entry.name.toLowerCase());
     entry.name = trimmed;
-    (entry.ws as { name: string }).name = trimmed;
     this.byName.set(trimmed.toLowerCase(), id);
 
     // Rewrite only parsed qualified token spans that targeted the old label.
@@ -963,7 +963,6 @@ export class WorkbookCalculationPrototype {
         if (existing && existing.ws === s.ws) {
           // Survived: restore IN PLACE, preserving object identity + listener.
           existing.name = s.name;
-          (existing.ws as { name: string }).name = s.name;
           existing.ws.applySnapshot(s.snapshot);
         } else {
           // Deleted during the transaction: reinstall the original object.

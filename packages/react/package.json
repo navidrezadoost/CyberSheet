@@ -6,13 +6,38 @@
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/index.js",
+      "node": "./dist/node/index.js",
+      "default": "./dist/index.js"
+    },
+    "./components/ribbon": {
+      "types": "./dist/components/ribbon/index.d.ts",
+      "browser": "./dist/components/ribbon/index.js",
+      "node": "./dist/node/components/ribbon/index.js",
+      "default": "./dist/components/ribbon/index.js"
+    },
+    "./components/dialogs/FindReplaceDialog": {
+      "types": "./dist/components/dialogs/FindReplaceDialog.d.ts",
+      "browser": "./dist/components/dialogs/FindReplaceDialog.js",
+      "node": "./dist/node/components/dialogs/FindReplaceDialog.js",
+      "default": "./dist/components/dialogs/FindReplaceDialog.js"
+    },
+    "./dist/excel-app.css": "./dist/components/excel-app.css",
+    "./styles/excel-app.css": "./dist/components/excel-app.css",
+    "./styles/ribbon.css": "./dist/components/ribbon/ribbon.css"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.json && node scripts/package-assets.mjs && vite build --config vite.node.config.mjs && CS_REACT_NODE_SUBPATH=ribbon vite build --config vite.node.config.mjs && CS_REACT_NODE_SUBPATH=findReplace vite build --config vite.node.config.mjs",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "jest --config jest.config.cjs --runInBand",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -23,6 +48,8 @@
     "react-dom": ">=17"
   },
   "dependencies": {
+    "@fluentui/react-icons": "^2.0.337",
+    "@cyber-sheet/icons": "*",
     "@cyber-sheet/cf-ui-core": "*",
     "@cyber-sheet/io-xlsx": "*"
   },

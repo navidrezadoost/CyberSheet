@@ -14,6 +14,11 @@
 import { zipSync, strToU8 } from 'fflate';
 import { Workbook, Worksheet, CellStyle, WorkbookSheetView } from '@cyber-sheet/core';
 
+const worksheetOwnershipPredicate = Object.getOwnPropertyDescriptor(
+  Worksheet.prototype,
+  'isWorkbookOwned',
+)?.value;
+
 type ReadableSheet = WorkbookSheetView | Worksheet;
 interface XLSXExportSource {
   getSheetNames(): string[];
@@ -27,6 +32,18 @@ function exportSource(source: Workbook | Worksheet): XLSXExportSource {
   return source;
 }
 
+function assertExportableSource(source: Workbook | Worksheet): void {
+  if (!(source instanceof Worksheet)) return;
+  if (typeof worksheetOwnershipPredicate !== 'function') {
+    throw new Error('Worksheet ownership check is unavailable');
+  }
+  if (Reflect.apply(worksheetOwnershipPredicate, source, []) === true) {
+    throw new Error(
+      'Cannot export a Workbook-owned raw Worksheet; pass the Workbook to use owner-backed reads',
+    );
+  }
+}
+
 /**
  * Export workbook to XLSX ArrayBuffer.
  * 
@@ -34,9 +51,11 @@ function exportSource(source: Workbook | Worksheet): XLSXExportSource {
  * Never touches cell.style directly - enforces access discipline.
  */
 export async function exportXLSX(source: Workbook | Worksheet): Promise<ArrayBuffer> {
+  assertExportableSource(source);
   const workbook = exportSource(source);
   // Collect all unique canonical styles (reference-based deduplication)
   const styleMap = new Map<CellStyle, number>(); // canonical reference → xf index
+  const styleIndexByCell = new Map<string, Map<string, number>>();
   // OOXML reserves cell format index 0 for the default style. Keep the default
   // entry even when the sheet has no explicit cell styles so mapped styles
   // always use a valid, nonzero style index.
@@ -51,15 +70,25 @@ export async function exportXLSX(source: Workbook | Worksheet): Promise<ArrayBuf
       // Discipline: Read via getCellStyle() only. Iterating stored cells keeps
       // widely separated addresses proportional to populated cells, not area.
       const style = sheet.getCellStyle({ row, col });
-      if (style && !styleMap.has(style)) {
-        styleMap.set(style, styles.length);
-        styles.push(style); // Store canonical reference
+      if (style) {
+        let styleIndex = styleMap.get(style);
+        if (styleIndex === undefined) {
+          styleIndex = styles.length;
+          styleMap.set(style, styleIndex);
+          styles.push(style); // Store canonical reference
+        }
+        let sheetStyleIndexes = styleIndexByCell.get(sheetName);
+        if (!sheetStyleIndexes) {
+          sheetStyleIndexes = new Map<string, number>();
+          styleIndexByCell.set(sheetName, sheetStyleIndexes);
+        }
+        sheetStyleIndexes.set(`${row}:${col}`, styleIndex);
       }
     });
   }
   
   // Generate XLSX XML parts
-  const xmlParts = generateXLSXParts(workbook, styles, styleMap);
+  const xmlParts = generateXLSXParts(workbook, styles, styleIndexByCell);
   
   // Convert strings to Uint8Array for fflate
   const files: Record<string, Uint8Array> = {};
@@ -99,7 +128,7 @@ interface XLSXParts {
 function generateXLSXParts(
   workbook: XLSXExportSource,
   styles: CellStyle[],
-  styleMap: Map<CellStyle, number>
+  styleIndexByCell: Map<string, Map<string, number>>
 ): XLSXParts {
   const parts: XLSXParts = {
     'xl/workbook.xml': generateWorkbookXML(workbook),
@@ -112,7 +141,7 @@ function generateXLSXParts(
   sheetNames.forEach((name, idx) => {
     const sheet = workbook.getSheet(name);
     if (sheet) {
-      parts[`xl/worksheets/sheet${idx + 1}.xml`] = generateSheetXML(sheet, styleMap);
+      parts[`xl/worksheets/sheet${idx + 1}.xml`] = generateSheetXML(sheet, styleIndexByCell.get(name));
     }
   });
   
@@ -304,7 +333,7 @@ function styleToAlignmentXML(style: CellStyle): string {
   return attrs.length > 0 ? `<alignment ${attrs.join(' ')}/>` : '';
 }
 
-function generateSheetXML(sheet: ReadableSheet, styleMap: Map<CellStyle, number>): string {
+function generateSheetXML(sheet: ReadableSheet, styleIndexes: Map<string, number> | undefined): string {
   const rows: string[] = [];
   const cellsByRow = new Map<number, Array<{ col: number; xml: string }>>();
   sheet.forEachNonEmptyCell((row, col, cell) => {
@@ -312,9 +341,7 @@ function generateSheetXML(sheet: ReadableSheet, styleMap: Map<CellStyle, number>
     const value = sheet.getCellValue(addr);
     const formula = cell.formula as string | undefined;
 
-    // Discipline: Read via getCellStyle() only
-    const style = sheet.getCellStyle(addr);
-    const styleIdx = style ? styleMap.get(style) : undefined;
+    const styleIdx = styleIndexes?.get(`${row}:${col}`);
     if (value === null && styleIdx === undefined && !formula) return;
 
     const cellRef = colToA1(col) + row;

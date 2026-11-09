@@ -380,17 +380,62 @@ describe('R1 workbook-owned worksheet escapes', () => {
     expect('registerBridge' in workbook.eventBus).toBe(false);
   });
 
-  test('R1 mutation port has stable typed calls that reject before any write', () => {
+  test('owner view does not expose its backing Worksheet through reflective properties', () => {
+    const workbook = Workbook.create({ sheets: [{ name: 'Owned' }] });
+    const view = workbook.getSheet('Owned')!;
+    const prototype = Object.getPrototypeOf(view);
+
+    expect(Reflect.get(prototype, 'sheet')).toBeUndefined();
+    expect(Reflect.get(prototype, 'assertNoFormulaValuesInFilters')).toBeUndefined();
+    expect(Reflect.get(view, '#resolve')).toBeUndefined();
+    expect(Reflect.ownKeys(prototype)).not.toContain('sheet');
+    expect(Reflect.ownKeys(view)).not.toContain('#resolve');
+    expect(view.getCellValue({ row: 1, col: 1 })).toBeNull();
+  });
+
+  test('dev-import sheet is adopted before Workbook publication and keeps formula results masked', () => {
+    const workbook = Workbook.create({ sheets: [{ name: 'Initial' }] });
+    const worksheet = workbook.createDevImportWorksheet('Imported', 2, 2);
+    worksheet.setCellFormula({ row: 1, col: 1 }, '=700+77', 777);
+
+    workbook.attachDevImportSheet(worksheet);
+    const view = workbook.getSheet('Imported')!;
+    const prototype = Object.getPrototypeOf(view);
+
+    expect(worksheet.isWorkbookOwned()).toBe(true);
+    expect(view.getCellValue({ row: 1, col: 1 })).toBeNull();
+    expect(view.getCell({ row: 1, col: 1 })?.value).toBeNull();
+    expect(() => worksheet.setCellValue({ row: 1, col: 2 }, 'blocked')).toThrow(/Workbook-owned Worksheet/);
+    expect(() => worksheet.setCellFormula({ row: 1, col: 2 }, '=1+1', 2)).toThrow(/Workbook-owned Worksheet/);
+    expect(Reflect.get(prototype, 'sheet')).toBeUndefined();
+    expect(view.getCellValue({ row: 1, col: 2 })).toBeNull();
+  });
+
+  test('failed dev-import adoption does not publish its candidate in another Workbook', () => {
+    const owner = Workbook.create({ sheets: [{ name: 'Owner' }] });
+    const other = Workbook.create({ sheets: [{ name: 'Other' }] });
+    const worksheet = owner.createDevImportWorksheet('Candidate', 2, 2);
+    owner.attachDevImportSheet(worksheet);
+
+    expect(() => other.attachDevImportSheet(worksheet)).toThrow(/already belongs to another workbook/);
+    expect(other.getSheetNames()).toEqual(['Other']);
+    expect(other.getSheet('Candidate')).toBeUndefined();
+    expect(worksheet.isWorkbookOwned()).toBe(true);
+    expect(() => worksheet.setCellValue({ row: 1, col: 1 }, 'blocked')).toThrow(/Workbook-owned Worksheet/);
+  });
+
+  test('Workbook mutation port exposes async journal-backed writes without exposing raw Worksheet authority', async () => {
     const workbook = Workbook.create({ sheets: [{ name: 'Owned' }] });
     const view = workbook.getSheet('Owned')!;
     expect(Object.isFrozen(workbook.mutationPort)).toBe(true);
-    expect(() => workbook.mutationPort.setCellValue(view, { row: 1, col: 1 }, 'blocked')).toThrow(/unavailable/);
-    expect(() => workbook.mutationPort.setCellFormula(view, { row: 1, col: 1 }, '=1+1')).toThrow(/unavailable/);
-    expect(() => workbook.mutationPort.clearCellContent(view, { row: 1, col: 1 })).toThrow(/unavailable/);
-    expect(() => workbook.mutationPort.clearCellFormula(view, { row: 1, col: 1 })).toThrow(/unavailable/);
-    expect(() => workbook.mutationPort.setCellStyle(view, { row: 1, col: 1 }, { bold: true })).toThrow(/unavailable/);
-    expect(view.getCell({ row: 1, col: 1 })).toBeUndefined();
-    expect(view.getUsedRange()).toBeNull();
+    await workbook.mutationPort.setCellValue(view, { row: 1, col: 1 }, 'authorized');
+    await workbook.mutationPort.setCellFormula(view, { row: 1, col: 2 }, '=A1+1', 2);
+    await workbook.mutationPort.clearCellFormula(view, { row: 1, col: 2 });
+    await workbook.mutationPort.setCellStyle(view, { row: 1, col: 1 }, { bold: true });
+    await workbook.mutationPort.clearCellContent(view, { row: 1, col: 1 });
+    expect(view.getCell({ row: 1, col: 1 })).toMatchObject({ value: null, style: { bold: true } });
+    expect(view.getCell({ row: 1, col: 2 })).toMatchObject({ value: 2 });
+    expect(view.getUsedRange()).toEqual({ start: { row: 1, col: 1 }, end: { row: 1, col: 2 } });
   });
 
   test('owner and mutable services are not exposed as runtime workbook properties', () => {

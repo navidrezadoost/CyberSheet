@@ -11,7 +11,7 @@ import {
   buildPivot,
   pivotGridToValues,
   type PivotDefinition,
-} from '../../../core/src/sdk/pivot';
+} from '@cyber-sheet/core/sdk';
 import { requireStandaloneWorksheet } from './workbookSheetAccess';
 
 function colToLetter(col: number): string {

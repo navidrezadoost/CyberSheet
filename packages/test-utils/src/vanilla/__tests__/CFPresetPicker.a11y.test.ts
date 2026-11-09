@@ -11,6 +11,28 @@ import type { CFPreset } from '@cyber-sheet/cf-ui-core';
 expect.extend(toHaveNoViolations);
 
 describe('CFPresetPicker - Accessibility', () => {
+  const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    'scrollIntoView',
+  );
+
+  beforeAll(() => {
+    // jsdom has no layout/scrolling geometry. Arrow-key tests assert focus
+    // movement; browser scrolling is covered by browser-level tests.
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: jest.fn(),
+    });
+  });
+
+  afterAll(() => {
+    if (originalScrollIntoView) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  });
+
   let container: HTMLDivElement;
   let picker: CFPresetPicker;
   let mockOnPresetSelect: jest.Mock;
@@ -181,17 +203,35 @@ describe('CFPresetPicker - Accessibility', () => {
       expect(grid?.getAttribute('aria-label')).toBe('Preset grid');
       expect(grid?.getAttribute('aria-rowcount')).toBeTruthy();
       expect(grid?.getAttribute('aria-colcount')).toBe('2');
+      const group = container.querySelector('.cf-preset-picker__popular-grid');
+      expect(group?.getAttribute('role')).toBe('group');
+      expect(group?.getAttribute('aria-label')).toBe('Popular presets');
+
+      const cards = container.querySelectorAll('.cf-preset-picker__popular-card');
+      expect(cards.length).toBeGreaterThan(0);
+      cards.forEach(card => {
+        expect(card.tagName).toBe('BUTTON');
+        expect(card.getAttribute('aria-pressed')).toMatch(/^(true|false)$/);
+        expect(card.hasAttribute('aria-selected')).toBe(false);
+        expect(card.hasAttribute('role')).toBe(false);
+      });
     });
 
-    it('should have role="gridcell" on each preset card with position', () => {
+    it('should place selected grid cells in indexed rows with interactive buttons', () => {
       const cards = container.querySelectorAll('.cf-preset-picker__card');
       expect(cards.length).toBeGreaterThan(0);
 
       cards.forEach((card, index) => {
-        expect(card.getAttribute('role')).toBe('gridcell');
-        expect(card.getAttribute('aria-rowindex')).toBeTruthy();
-        expect(card.getAttribute('aria-colindex')).toBeTruthy();
-        expect(card.getAttribute('aria-selected')).toMatch(/^(true|false)$/);
+        const cell = card.parentElement;
+        const row = cell?.parentElement;
+        expect(cell?.getAttribute('role')).toBe('gridcell');
+        expect(cell?.getAttribute('aria-colindex')).toBe(String((index % 2) + 1));
+        expect(cell?.getAttribute('aria-selected')).toMatch(/^(true|false)$/);
+        expect(row?.getAttribute('role')).toBe('row');
+        expect(row?.getAttribute('aria-rowindex')).toBe(String(Math.floor(index / 2) + 1));
+        expect(card.tagName).toBe('BUTTON');
+        expect(card.hasAttribute('aria-selected')).toBe(false);
+        expect(card.getAttribute('tabindex')).toMatch(/^(0|-1)$/);
       });
     });
 
@@ -280,10 +320,10 @@ describe('CFPresetPicker - Accessibility', () => {
       const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
       secondBtn.dispatchEvent(enterEvent);
 
-      // Check if category changed (second button should now be active)
-      setTimeout(() => {
-        expect(secondBtn.classList.contains('cf-preset-picker__category-btn--active')).toBe(true);
-      }, 100);
+      // Selecting rerenders the category buttons synchronously, so inspect the
+      // current DOM rather than the detached pre-render button reference.
+      const activeButton = container.querySelector('.cf-preset-picker__category-btn--active');
+      expect(activeButton?.textContent).toBe(secondBtn.textContent);
     });
 
     it('should navigate preset grid with all arrow keys', () => {
@@ -320,12 +360,19 @@ describe('CFPresetPicker - Accessibility', () => {
     it('should focus apply button with Escape key', () => {
       const cards = container.querySelectorAll('.cf-preset-picker__card') as NodeListOf<HTMLButtonElement>;
       const firstCard = cards[0];
-      const applyBtn = container.querySelector('.cf-preset-picker__apply-btn') as HTMLButtonElement;
 
       firstCard.focus();
+      firstCard.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      // Escape is documented to return focus to Apply. First select a preset,
+      // because a disabled button cannot receive focus.
+      const selectedCard = container.querySelector('.cf-preset-picker__card') as HTMLButtonElement;
+      const applyBtn = container.querySelector('.cf-preset-picker__apply-btn') as HTMLButtonElement;
+      expect(applyBtn.disabled).toBe(false);
+      selectedCard.focus();
 
       const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
-      firstCard.dispatchEvent(escapeEvent);
+      selectedCard.dispatchEvent(escapeEvent);
 
       expect(document.activeElement).toBe(applyBtn);
     });
@@ -510,19 +557,21 @@ describe('CFPresetPicker - Accessibility', () => {
       });
     });
 
-    it('should have role="list" on popular presets container', () => {
-      const popular = container.querySelector('.cf-preset-picker__popular');
-      expect(popular?.getAttribute('role')).toBe('list');
+    it('should have a named group for popular preset controls', () => {
+      const popular = container.querySelector('.cf-preset-picker__popular-grid');
+      expect(popular?.getAttribute('role')).toBe('group');
       expect(popular?.getAttribute('aria-label')).toBe('Popular presets');
     });
 
-    it('should have role="listitem" on popular preset cards', () => {
+    it('should expose popular preset selection on native buttons', () => {
       const popularCards = container.querySelectorAll('.cf-preset-picker__popular-card');
       if (popularCards.length > 0) {
         popularCards.forEach(card => {
-          expect(card.getAttribute('role')).toBe('listitem');
+          expect(card.tagName).toBe('BUTTON');
+          expect(card.hasAttribute('role')).toBe(false);
           expect(card.getAttribute('aria-label')).toBeTruthy();
-          expect(card.getAttribute('aria-selected')).toMatch(/^(true|false)$/);
+          expect(card.getAttribute('aria-pressed')).toMatch(/^(true|false)$/);
+          expect(card.hasAttribute('aria-selected')).toBe(false);
         });
       }
     });

@@ -12,7 +12,7 @@ class CallRecordingWorksheet extends Worksheet {
 }
 
 describe('EditingManager paste undo owner boundary', () => {
-  test('restores value only in standalone mode and rejects adopted value restoration after popping history', () => {
+  test('preserves standalone behavior and rejects adopted undo before consuming history', () => {
     const worksheet = new CallRecordingWorksheet('Paste undo boundary', 2, 2);
     worksheet.setCellValue({ row: 1, col: 1 }, 'original');
     worksheet.setCellStyle({ row: 1, col: 1 }, { italic: true });
@@ -44,14 +44,13 @@ describe('EditingManager paste undo owner boundary', () => {
     expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
 
     worksheet.calls.length = 0;
+    Object.defineProperty(worksheet, 'isWorkbookOwned', { value: () => false, configurable: true });
     adoptWorksheetByWorkbook(worksheet, 'editing-manager-paste-undo-owner' as WorkbookId);
 
-    expect(() => manager.undo()).toThrow(/Workbook-owned Worksheet\.setCellValue is unavailable/);
-    expect(worksheet.calls).toEqual([{
-      method: 'setCellValue',
-      args: [{ row: 1, col: 1 }, 'original'],
-    }]);
+    expect(() => manager.undo()).toThrow(/EditingManager cannot operate on a Workbook-owned Worksheet/);
+    expect(worksheet.calls).toEqual([]);
     expect(worksheet.getCell({ row: 1, col: 1 })).toMatchObject({ value: 'pasted', style: { bold: true } });
-    expect(manager.getHistoryStats()).toEqual({ undoCount: 0, redoCount: 0 });
+    expect(manager.getHistoryStats()).toEqual({ undoCount: 1, redoCount: 0 });
+    manager.dispose();
   });
 });

@@ -42,7 +42,11 @@ export const SortFilterGroup: React.FC<SortFilterGroupProps> = ({
 
   const handleSortAscending = useCallback(() => {
     const selection = getSelectionRange();
-    if (!sheet || !selection) return;
+    if (!sheet) return;
+    if (!selection) {
+      onCommand?.({ type: "invalidSelection", action: "Sort" });
+      return;
+    }
 
     const sortRange = resolveSortRange(sheet, selection);
     onCommand?.({
@@ -55,7 +59,11 @@ export const SortFilterGroup: React.FC<SortFilterGroupProps> = ({
 
   const handleSortDescending = useCallback(() => {
     const selection = getSelectionRange();
-    if (!sheet || !selection) return;
+    if (!sheet) return;
+    if (!selection) {
+      onCommand?.({ type: "invalidSelection", action: "Sort" });
+      return;
+    }
 
     const sortRange = resolveSortRange(sheet, selection);
     onCommand?.({
@@ -72,7 +80,11 @@ export const SortFilterGroup: React.FC<SortFilterGroupProps> = ({
 
   const handleToggleFilter = useCallback(() => {
     const selection = getSelectionRange();
-    if (!sheet || !selection) return;
+    if (!sheet) return;
+    if (!selection) {
+      onCommand?.({ type: "invalidSelection", action: "Filter" });
+      return;
+    }
 
     onCommand?.({
       type: "toggleAutoFilter",

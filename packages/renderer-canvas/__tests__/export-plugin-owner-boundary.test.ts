@@ -3,7 +3,7 @@ import { adoptWorksheetByWorkbook, Worksheet } from '../../core/src/worksheet';
 import type { WorkbookId } from '../../core/src/workbook-access-types';
 
 describe('ExportPlugin Worksheet read characterization', () => {
-  test('explicit valid ranges serialize cached formula values from a retained Worksheet after adoption', async () => {
+  test('preserves standalone export and rejects a retained Worksheet after adoption before reads', async () => {
     const worksheet = new Worksheet('Export boundary', 2, 2);
     worksheet.setCellFormula({ row: 1, col: 1 }, '=40+2', 42);
     worksheet.addComment({ row: 1, col: 1 }, { text: 'review note', author: 'Reviewer' });
@@ -13,15 +13,24 @@ describe('ExportPlugin Worksheet read characterization', () => {
     expect((await plugin.export('csv', explicitRange)).data).toBe('42');
     expect((await plugin.export('json', explicitRange)).data).toBe('[{"col1":42}]');
 
+    Object.defineProperty(worksheet, 'isWorkbookOwned', {
+      configurable: true,
+      value: () => false,
+    });
     adoptWorksheetByWorkbook(worksheet, 'export-plugin-retained-owner' as WorkbookId);
 
-    expect((await plugin.export('csv', explicitRange)).data).toBe('42');
-    expect((await plugin.export('json', explicitRange)).data).toBe('[{"col1":42}]');
-    await expect(plugin.export('csv')).rejects.toThrow(/Worksheet address out of bounds: row=0, col=0/);
+    const getCell = jest.spyOn(Worksheet.prototype, 'getCell');
+    await expect(plugin.export('csv', explicitRange)).rejects.toThrow(/Workbook-owned Worksheet/);
+    expect(getCell).not.toHaveBeenCalled();
+    await expect(plugin.export('json', explicitRange)).rejects.toThrow(/Workbook-owned Worksheet/);
+    expect(getCell).not.toHaveBeenCalled();
+    await expect(plugin.export('csv')).rejects.toThrow(/Workbook-owned Worksheet/);
+    expect(getCell).not.toHaveBeenCalled();
+    getCell.mockRestore();
     expect(worksheet.getCell({ row: 1, col: 1 })).toMatchObject({ value: 42, formula: '=40+2' });
   });
 
-  test('JSON includeHeaders uses a cached formula value as the property name before and after adoption', async () => {
+  test('JSON includeHeaders preserves standalone headers and rejects an adopted source before reads', async () => {
     const worksheet = new Worksheet('Export headers', 2, 1);
     worksheet.setCellFormula({ row: 1, col: 1 }, '=40+2', 42);
     worksheet.setCellValue({ row: 2, col: 1 }, 'body');
@@ -31,14 +40,19 @@ describe('ExportPlugin Worksheet read characterization', () => {
       includeHeaders: true,
     };
 
-    expect((await plugin.export('json', explicitRangeWithHeaders)).data).toBe('[{"42":"body"}]');
+    const standaloneResult = await plugin.export('json', explicitRangeWithHeaders);
+    expect(standaloneResult.data).toBe('[{"42":"body"}]');
 
     adoptWorksheetByWorkbook(worksheet, 'export-plugin-json-header-owner' as WorkbookId);
 
-    expect((await plugin.export('json', explicitRangeWithHeaders)).data).toBe('[{"42":"body"}]');
+    const getCell = jest.spyOn(Worksheet.prototype, 'getCell');
+    await expect(plugin.export('json', explicitRangeWithHeaders)).rejects.toThrow(/Workbook-owned Worksheet/);
+    expect(getCell).not.toHaveBeenCalled();
+    getCell.mockRestore();
+    expect(standaloneResult.data).toBe('[{"42":"body"}]');
   });
 
-  test('explicit-range PNG passes an adopted cached formula value to the canvas text renderer', async () => {
+  test('PNG rejects an adopted Worksheet before canvas creation or cell reads', async () => {
     const worksheet = new Worksheet('PNG export boundary', 2, 2);
     worksheet.setCellFormula({ row: 1, col: 1 }, '=40+2', 42);
     const plugin = new ExportPlugin(worksheet);
@@ -63,16 +77,14 @@ describe('ExportPlugin Worksheet read characterization', () => {
 
     try {
       adoptWorksheetByWorkbook(worksheet, 'export-plugin-png-owner' as WorkbookId);
-      const result = await plugin.export('png', explicitRange);
-
-      expect(canvasConstructor).toHaveBeenCalledTimes(1);
-      expect(getContext).toHaveBeenCalledWith('2d');
-      expect(drawText).toHaveBeenCalledWith('42', 8, 12.5, 84);
-      expect(convertToBlob).toHaveBeenCalledWith({ type: 'image/png' });
-      expect(result.data).toBeInstanceOf(Blob);
-
-      await expect(plugin.export('png')).rejects.toThrow(/Worksheet address out of bounds: row=0, col=0/);
-      expect(canvasConstructor).toHaveBeenCalledTimes(1);
+      const getCell = jest.spyOn(Worksheet.prototype, 'getCell');
+      await expect(plugin.export('png', explicitRange)).rejects.toThrow(/Workbook-owned Worksheet/);
+      expect(getCell).not.toHaveBeenCalled();
+      expect(canvasConstructor).not.toHaveBeenCalled();
+      expect(getContext).not.toHaveBeenCalled();
+      expect(drawText).not.toHaveBeenCalled();
+      expect(convertToBlob).not.toHaveBeenCalled();
+      getCell.mockRestore();
     } finally {
       if (previousDescriptor) {
         Object.defineProperty(globalThis, 'OffscreenCanvas', previousDescriptor);

@@ -1,8 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Workbook, FormulaWorkerProxy, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, type WorkbookSheetView } from '@cyber-sheet/core';
+import { Workbook, type Address, type Command, type CommandManager, type CustomCellComponent, type EventAPI, type WorkbookSheetView } from '@cyber-sheet/core';
 import { ComponentRegistry, CustomCellOverlay, type CustomCellComponentRenderProps, type RegisteredCellComponent } from './customComponents';
-// Import locally to ensure dev picks up latest CanvasRenderer implementation
-import { CanvasRenderer, CanvasRendererOptions, type ViewMode } from '../../renderer-canvas/src';
+import { CanvasRenderer, type CanvasRendererOptions, type ViewMode } from '@cyber-sheet/renderer-canvas';
 import { useCyberSheetConfig } from './config/CyberSheetConfigContext';
 import { isArrowKey } from './utils/keyboardLayout';
 import { registerRendererLazyBridges, reactivateRendererLazyBridges } from './rendererEventBridge';
@@ -187,11 +186,6 @@ export const CyberSheet = forwardRef<CyberSheetHandle, CyberSheetProps>(function
     const el = containerRef.current!;
     const effectiveRendererOptions: CanvasRendererOptions = {
       ...(rendererOptions ?? {}),
-      formulaWorkerFactory: rendererOptions?.formulaWorker || rendererOptions?.formulaWorkerFactory
-        ? rendererOptions.formulaWorkerFactory
-        : () => new FormulaWorkerProxy(
-            new Worker(new URL('../../core/src/worker/formula-worker.ts', import.meta.url), { type: 'module' })
-          ),
     };
     const r = new CanvasRenderer(el, sheetRef.current, effectiveRendererOptions);
     rendererRef.current = r;

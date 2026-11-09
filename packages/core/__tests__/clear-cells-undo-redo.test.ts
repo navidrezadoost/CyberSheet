@@ -1,9 +1,8 @@
-import { Workbook, CommandManager, ClearCellsCommand } from "../src";
+import { CommandManager, ClearCellsCommand, Worksheet } from "../src";
 
 describe("ClearCellsCommand undo/redo stability", () => {
   test("restores formula text and display value after undo", () => {
-    const workbook = new Workbook();
-    const sheet = workbook.addSheet("Sheet1", 100, 26);
+    const sheet = new Worksheet("Sheet1", 100, 26);
     const commands = new CommandManager(100, sheet);
 
     sheet.setCellValue({ row: 1, col: 1 }, 5);
@@ -32,8 +31,7 @@ describe("ClearCellsCommand undo/redo stability", () => {
   });
 
   test("remains stable over repeated undo/redo cycles", () => {
-    const workbook = new Workbook();
-    const sheet = workbook.addSheet("Sheet1", 100, 26);
+    const sheet = new Worksheet("Sheet1", 100, 26);
     const commands = new CommandManager(100, sheet);
 
     sheet.setCellValue({ row: 2, col: 1 }, 7);

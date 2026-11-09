@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomCellComponent, WorkbookSheetView } from '@cyber-sheet/core';
-import type { CanvasRenderer } from '../../../renderer-canvas/src';
+import type { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
 import type { ComponentRegistry } from './ComponentRegistry';
 
 export interface CustomCellOverlayProps {

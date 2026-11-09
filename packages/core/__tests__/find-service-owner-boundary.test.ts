@@ -57,29 +57,133 @@ describe('FindService Workbook ownership boundary characterization', () => {
     expect(service.findAll('777', { lookIn: 'comments' })).toEqual([]);
   });
 
-  test('a retained standalone Worksheet reference still exposes cached formula values after internal adoption', () => {
-    const worksheet = new Worksheet('Retained', 4, 4);
+  test('former private field names cannot reveal or replace FindService state', () => {
+    const worksheet = new Worksheet('Private state source', 4, 4);
+    worksheet.setCellValue({ row: 1, col: 1 }, 'needle');
+    worksheet.setCellValue({ row: 1, col: 2 }, 'needle');
+    const decoy = new Worksheet('Shadow source', 4, 4);
+    decoy.setCellValue({ row: 1, col: 1 }, 'decoy');
+    const service = new FindService(worksheet);
+    const results = service.findAll('needle');
+
+    for (const name of ['worksheet', 'lastResults', 'currentIndex', 'lastOptions']) {
+      expect(Reflect.get(service, name)).toBeUndefined();
+    }
+    expect(Reflect.get(service, 'getCellValue')).toBeUndefined();
+    expect(Reflect.get(service, 'getCurrentResult')).toBeUndefined();
+
+    const shadowResults = [{ address: { row: 1, col: 2 }, value: 'shadow', match: 'shadow' }];
+    Object.assign(service, {
+      worksheet: decoy,
+      lastResults: shadowResults,
+      currentIndex: 1,
+      lastOptions: { what: 'decoy', lookIn: 'formulas' },
+    });
+    shadowResults[0].address.col = 4;
+    Reflect.set(service, 'lastResults', [{ address: { row: 1, col: 2 }, value: 'replacement shadow', match: 'replacement shadow' }]);
+    Reflect.set(service, 'currentIndex', -1);
+
+    expect(Reflect.get(service, 'worksheet')).toBe(decoy);
+    expect(service.getMatchCount()).toBe(2);
+    expect(service.getCurrentIndex()).toBe(1);
+    expect(service.getCurrentMatch()).toMatchObject({ address: { row: 1, col: 1 }, value: 'needle' });
+    expect(results[0].address).toEqual({ row: 1, col: 1 });
+    expect(service.replaceCurrent('changed')).toBe(true);
+    expect(worksheet.getCell({ row: 1, col: 1 })?.value).toBe('changed');
+    expect(worksheet.getCell({ row: 1, col: 2 })?.value).toBe('needle');
+    expect(decoy.getCell({ row: 1, col: 1 })?.value).toBe('decoy');
+    expect(service.getMatchCount()).toBe(1);
+  });
+
+  test('a retained raw Worksheet rejects formula-sensitive search after internal adoption', () => {
+    const worksheet = new CallRecordingWorksheet('Retained', 4, 4);
     worksheet.setCellFormula({ row: 1, col: 1 }, '=700+77', 777);
     const service = new FindService(worksheet);
 
     const workbookId = 'find-service-retained-owner' as WorkbookId;
     const worksheetId = worksheet.getWorksheetId() as WorksheetId;
+    worksheet.calls.length = 0;
     adoptWorksheetByWorkbook(worksheet, workbookId);
 
     // This helper exercises the internal adoption transition. The public Workbook
     // API currently creates its own sheets and does not adopt caller Worksheets.
-    const results = service.findAll('777');
+    expect(() => service.findAll('777')).toThrow(/cannot use an adopted Worksheet/);
+    expect(worksheet.calls).toEqual([]);
     const ownerView = new OwnerBackedWorkbookSheetView(workbookId, worksheetId, () => worksheet);
+
+    expect(() => new FindService(ownerView).findAll('777')).toThrow(/formula cached values could affect matches/);
+  });
+
+  test('all retained-result and replacement entrypoints reject before access after adoption', () => {
+    const worksheet = new CallRecordingWorksheet('Retained result state', 4, 4);
+    worksheet.setCellValue({ row: 1, col: 1 }, 'needle');
+    let events = 0;
+    const dispose = worksheet.on(() => { events += 1; });
+    const service = new FindService(worksheet);
+    const initialResults = service.findAll('needle');
+    const currentMatch = service.getCurrentMatch();
+    const matchCount = service.getMatchCount();
+    worksheet.calls.length = 0;
+
+    adoptWorksheetByWorkbook(worksheet, 'find-service-retained-state-owner' as WorkbookId);
+
+    expect(() => service.findAll('other')).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.findAll('')).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.findNext()).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.findPrevious()).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.getCurrentMatch()).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.getMatchCount()).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.getCurrentIndex()).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.replaceCurrent('changed')).toThrow(/cannot use an adopted Worksheet/);
+    expect(() => service.replaceAllMatches('needle', 'changed')).toThrow(/cannot use an adopted Worksheet/);
+
+    expect(worksheet.calls).toEqual([]);
+    expect(events).toBe(0);
+    expect(currentMatch).not.toBe(initialResults[0]);
+    expect(currentMatch).toEqual(initialResults[0]);
+    expect(matchCount).toBe(1);
+    expect(worksheet.getCell({ row: 1, col: 1 })?.value).toBe('needle');
+    dispose.dispose();
+  });
+
+  test('captured ownership predicate defeats a shadowed instance method', () => {
+    const worksheet = new CallRecordingWorksheet('Shadowed ownership predicate', 4, 4);
+    worksheet.setCellFormula({ row: 1, col: 1 }, '=700+77', 777);
+    const service = new FindService(worksheet);
+    Object.defineProperty(worksheet, 'isWorkbookOwned', {
+      configurable: true,
+      value: () => false,
+    });
+    worksheet.calls.length = 0;
+
+    adoptWorksheetByWorkbook(worksheet, 'find-service-shadowed-owner' as WorkbookId);
+
+    expect(worksheet.isWorkbookOwned()).toBe(false);
+    expect(() => service.findAll('777')).toThrow(/cannot use an adopted Worksheet/);
+    expect(worksheet.calls).toEqual([]);
+  });
+
+  test('WorkbookSheetView owner-backed comment results remain detached and formula-masked', () => {
+    const worksheet = new Worksheet('Retained owner view', 4, 4);
+    worksheet.setCellFormula({ row: 1, col: 1 }, '=700+77', 777);
+    worksheet.addComment({ row: 1, col: 1 }, { text: 'review marker', author: 'Reviewer' });
+    const workbookId = 'find-service-existing-owner-view' as WorkbookId;
+    const worksheetId = worksheet.getWorksheetId() as WorksheetId;
+    adoptWorksheetByWorkbook(worksheet, workbookId);
+    const view = new OwnerBackedWorkbookSheetView(workbookId, worksheetId, () => worksheet);
+    const service = new FindService(view);
+
+    const results = service.findAll('review marker', { lookIn: 'comments' });
 
     expect(results).toMatchObject([
       {
         address: { row: 1, col: 1 },
-        value: '777',
+        value: '',
         formula: '=700+77',
-        match: '777',
+        match: 'review marker',
       },
     ]);
-    expect(() => new FindService(ownerView).findAll('777')).toThrow(/formula cached values could affect matches/);
+    expect(results[0].match).not.toContain('777');
   });
 
   test('WorkbookSheetView rejects both replacement entry points before search, read, or write', () => {
@@ -111,7 +215,8 @@ describe('FindService Workbook ownership boundary characterization', () => {
 
     expect(observedCalls).toEqual([]);
     expect(service.getMatchCount()).toBe(1);
-    expect(service.getCurrentMatch()).toBe(currentMatchBefore);
+    expect(service.getCurrentMatch()).not.toBe(currentMatchBefore);
+    expect(service.getCurrentMatch()).toEqual(currentMatchBefore);
     expect(service.getCurrentIndex()).toBe(currentIndexBefore);
     expect(worksheet.getCell({ row: 1, col: 1 })?.value).toBe('needle');
   });
@@ -159,34 +264,37 @@ describe('FindService Workbook ownership boundary characterization', () => {
     expect(worksheet.getCell({ row: 1, col: 1 })?.comments?.[0].text).toBe('review marker');
   });
 
-  test('a retained raw Worksheet replacement reads or searches before the guarded write rejects', () => {
-    const currentWorksheet = new Worksheet('Retained current', 4, 4);
+  test('retained raw replacement entrypoints reject before search, reads, or writes', () => {
+    const currentWorksheet = new CallRecordingWorksheet('Retained current', 4, 4);
     currentWorksheet.setCellValue({ row: 1, col: 1 }, 'needle');
     const currentService = new FindService(currentWorksheet);
     currentService.findAll('needle');
     const currentMatchBefore = currentService.getCurrentMatch();
+    currentWorksheet.calls.length = 0;
 
     adoptWorksheetByWorkbook(currentWorksheet, 'find-service-retained-current-owner' as WorkbookId);
 
-    expect(() => currentService.replaceCurrent('changed')).toThrow(/Workbook-owned Worksheet\.setCellValue is unavailable/);
+    expect(() => currentService.replaceCurrent('changed')).toThrow(/cannot use an adopted Worksheet/);
+    expect(currentWorksheet.calls).toEqual([]);
     expect(currentWorksheet.getCell({ row: 1, col: 1 })?.value).toBe('needle');
-    expect(currentService.getMatchCount()).toBe(1);
-    expect(currentService.getCurrentMatch()).toBe(currentMatchBefore);
+    // Result access is blocked too; the rejected operation did not erase the cached result.
+    expect(currentMatchBefore?.value).toBe('needle');
 
-    const allWorksheet = new Worksheet('Retained all', 4, 4);
+    const allWorksheet = new CallRecordingWorksheet('Retained all', 4, 4);
     allWorksheet.setCellValue({ row: 1, col: 1 }, 'needle');
     allWorksheet.setCellValue({ row: 1, col: 2 }, 'needle');
     const allService = new FindService(allWorksheet);
     allService.findAll('needle');
     const allCurrentMatchBefore = allService.getCurrentMatch();
+    allWorksheet.calls.length = 0;
 
     adoptWorksheetByWorkbook(allWorksheet, 'find-service-retained-all-owner' as WorkbookId);
 
-    expect(() => allService.replaceAllMatches('needle', 'changed')).toThrow(/Workbook-owned Worksheet\.setCellValue is unavailable/);
+    expect(() => allService.replaceAllMatches('needle', 'changed')).toThrow(/cannot use an adopted Worksheet/);
+    expect(allWorksheet.calls).toEqual([]);
     expect(allWorksheet.getCell({ row: 1, col: 1 })?.value).toBe('needle');
     expect(allWorksheet.getCell({ row: 1, col: 2 })?.value).toBe('needle');
-    expect(allService.getMatchCount()).toBe(2);
-    expect(allService.getCurrentMatch()).toBe(allCurrentMatchBefore);
+    expect(allCurrentMatchBefore?.value).toBe('needle');
   });
 
   test('standalone Worksheet replacement remains functional for current and all matches', () => {
@@ -206,7 +314,124 @@ describe('FindService Workbook ownership boundary characterization', () => {
     expect(service.getMatchCount()).toBe(0);
   });
 
-  test('retained raw formula and comment replacements read their targets before guarded writes reject', () => {
+  test('mutating findAll snapshots cannot change service match count or navigation order', () => {
+    const worksheet = new Worksheet('Detached findAll results', 4, 4);
+    worksheet.setCellValue({ row: 1, col: 1 }, 'needle');
+    worksheet.setCellValue({ row: 1, col: 2 }, 'needle');
+    const service = new FindService(worksheet);
+
+    const results = service.findAll('needle');
+    expect(results).toHaveLength(2);
+    results[0].value = 'changed';
+    results[0].formula = '=9+9';
+    results[0].match = 'changed';
+    results[0].address.row = 4;
+    results[0].address.col = 4;
+    results.reverse();
+    results.splice(0, 1);
+    results.push({ address: { row: 4, col: 4 }, value: 'injected', match: 'injected' });
+
+    expect(service.getMatchCount()).toBe(2);
+    expect(service.getCurrentMatch()).toMatchObject({
+      address: { row: 1, col: 1 },
+      value: 'needle',
+      match: 'needle',
+    });
+    expect(service.findNext()).toMatchObject({
+      address: { row: 1, col: 2 },
+      value: 'needle',
+      match: 'needle',
+    });
+    expect(service.findNext()).toMatchObject({
+      address: { row: 1, col: 1 },
+      value: 'needle',
+      match: 'needle',
+    });
+  });
+
+  test('current and navigation results are detached, including nested addresses', () => {
+    const worksheet = new Worksheet('Detached navigation results', 4, 4);
+    worksheet.setCellFormula({ row: 1, col: 1 }, '=needle', 123);
+    worksheet.setCellFormula({ row: 1, col: 2 }, '=needle+1', 124);
+    const service = new FindService(worksheet);
+    service.findAll('needle', { lookIn: 'formulas' });
+
+    const current = service.getCurrentMatch();
+    expect(current).not.toBe(service.getCurrentMatch());
+    if (!current) throw new Error('Expected current match');
+    current.value = 'changed';
+    current.formula = '=changed';
+    current.match = 'changed';
+    current.address.col = 4;
+    expect(service.getCurrentMatch()).toMatchObject({
+      address: { row: 1, col: 1 },
+      formula: '=needle',
+      match: '=needle',
+    });
+
+    const next = service.findNext();
+    expect(next).not.toBe(service.getCurrentMatch());
+    if (!next) throw new Error('Expected next match');
+    next.address.col = 4;
+    next.match = 'changed next';
+    expect(service.getCurrentMatch()).toMatchObject({
+      address: { row: 1, col: 2 },
+      formula: '=needle+1',
+      match: '=needle+1',
+    });
+
+    const previous = service.findPrevious();
+    expect(previous).not.toBe(service.getCurrentMatch());
+    if (!previous) throw new Error('Expected previous match');
+    previous.address.row = 4;
+    previous.match = 'changed previous';
+    expect(service.getCurrentMatch()).toMatchObject({
+      address: { row: 1, col: 1 },
+      formula: '=needle',
+      match: '=needle',
+    });
+  });
+
+  test('mutating a returned address cannot redirect standalone replacement', () => {
+    const worksheet = new Worksheet('Detached replacement target', 4, 4);
+    worksheet.setCellValue({ row: 1, col: 1 }, 'needle');
+    worksheet.setCellValue({ row: 1, col: 2 }, 'needle');
+    const service = new FindService(worksheet);
+
+    const results = service.findAll('needle');
+    results[0].address.col = 2;
+    results[0].match = 'mutated';
+
+    expect(service.replaceCurrent('changed')).toBe(true);
+    expect(worksheet.getCell({ row: 1, col: 1 })?.value).toBe('changed');
+    expect(worksheet.getCell({ row: 1, col: 2 })?.value).toBe('needle');
+    expect(service.getMatchCount()).toBe(1);
+  });
+
+  test('clear resets only local search state and leaves Worksheet data intact', () => {
+    const worksheet = new Worksheet('Clear local FindService state', 4, 4);
+    worksheet.setCellValue({ row: 1, col: 1 }, 'needle');
+    worksheet.setCellValue({ row: 1, col: 2 }, 'needle');
+    const service = new FindService(worksheet);
+    service.findAll('needle');
+
+    service.clear();
+
+    expect(service.getMatchCount()).toBe(0);
+    expect(service.getCurrentIndex()).toBe(0);
+    expect(service.getCurrentMatch()).toBeNull();
+    expect(service.findNext()).toBeNull();
+    expect(service.findPrevious()).toBeNull();
+    expect(service.replaceCurrent('changed')).toBe(false);
+    expect(worksheet.getCell({ row: 1, col: 1 })?.value).toBe('needle');
+    expect(worksheet.getCell({ row: 1, col: 2 })?.value).toBe('needle');
+
+    expect(service.findAll('needle')).toHaveLength(2);
+    expect(service.replaceCurrent('changed')).toBe(true);
+    expect(worksheet.getCell({ row: 1, col: 1 })?.value).toBe('changed');
+  });
+
+  test('retained raw formula and comment replacements reject before reading their targets', () => {
     const formulaCurrentWorksheet = new CallRecordingWorksheet('Retained formula current', 4, 4);
     formulaCurrentWorksheet.setCellFormula({ row: 1, col: 1 }, '=100+2', 102);
     const formulaCurrentService = new FindService(formulaCurrentWorksheet);
@@ -216,10 +441,11 @@ describe('FindService Workbook ownership boundary characterization', () => {
     formulaCurrentWorksheet.calls.length = 0;
     adoptWorksheetByWorkbook(formulaCurrentWorksheet, 'find-service-formula-current-owner' as WorkbookId);
 
-    expect(() => formulaCurrentService.replaceCurrent('=100+3')).toThrow(/Workbook-owned Worksheet\.setCellFormula is unavailable/);
-    expect(formulaCurrentWorksheet.calls).toEqual(['getCell', 'setCellFormula']);
+    expect(() => formulaCurrentService.replaceCurrent('=100+3')).toThrow(/cannot use an adopted Worksheet/);
+    expect(formulaCurrentWorksheet.calls).toEqual([]);
     expect(formulaCurrentWorksheet.getCell({ row: 1, col: 1 })).toMatchObject({ value: 102, formula: '=100+2' });
-    expect(formulaCurrentService.getCurrentMatch()).toBe(currentFormulaMatch);
+    expect(() => formulaCurrentService.getMatchCount()).toThrow(/cannot use an adopted Worksheet/);
+    expect(currentFormulaMatch).toMatchObject({ address: { row: 1, col: 1 }, formula: '=100+2' });
 
     const formulaAllWorksheet = new CallRecordingWorksheet('Retained formula all', 4, 4);
     formulaAllWorksheet.setCellFormula({ row: 1, col: 1 }, '=100+2', 102);
@@ -229,10 +455,10 @@ describe('FindService Workbook ownership boundary characterization', () => {
     formulaAllWorksheet.calls.length = 0;
     adoptWorksheetByWorkbook(formulaAllWorksheet, 'find-service-formula-all-owner' as WorkbookId);
 
-    expect(() => formulaAllService.replaceAllMatches('=100+2', '=100+3', formulaOptions)).toThrow(/Workbook-owned Worksheet\.setCellFormula is unavailable/);
-    expect(formulaAllWorksheet.calls).toEqual(['findAll', 'getCell', 'setCellFormula']);
+    expect(() => formulaAllService.replaceAllMatches('=100+2', '=100+3', formulaOptions)).toThrow(/cannot use an adopted Worksheet/);
+    expect(formulaAllWorksheet.calls).toEqual([]);
     expect(formulaAllWorksheet.getCell({ row: 1, col: 1 })).toMatchObject({ value: 102, formula: '=100+2' });
-    expect(formulaAllService.getCurrentMatch()).toBe(allFormulaMatch);
+    expect(allFormulaMatch).toMatchObject({ address: { row: 1, col: 1 }, formula: '=100+2' });
   });
 
   test('retained raw comment replacements read their targets before guarded updates reject', () => {
@@ -245,10 +471,10 @@ describe('FindService Workbook ownership boundary characterization', () => {
     currentWorksheet.calls.length = 0;
     adoptWorksheetByWorkbook(currentWorksheet, 'find-service-comment-current-owner' as WorkbookId);
 
-    expect(() => currentService.replaceCurrent('changed marker')).toThrow(/Workbook-owned Worksheet\.updateComment is unavailable/);
-    expect(currentWorksheet.calls).toEqual(['getCell', 'updateComment']);
+    expect(() => currentService.replaceCurrent('changed marker')).toThrow(/cannot use an adopted Worksheet/);
+    expect(currentWorksheet.calls).toEqual([]);
     expect(currentWorksheet.getCell({ row: 1, col: 1 })?.comments?.[0].text).toBe('review marker');
-    expect(currentService.getCurrentMatch()).toBe(currentMatch);
+    expect(currentMatch).toMatchObject({ address: { row: 1, col: 1 }, match: 'review marker' });
 
     const allWorksheet = new CallRecordingWorksheet('Retained comment all', 4, 4);
     allWorksheet.addComment({ row: 1, col: 1 }, { text: 'review marker', author: 'Reviewer' });
@@ -258,10 +484,10 @@ describe('FindService Workbook ownership boundary characterization', () => {
     allWorksheet.calls.length = 0;
     adoptWorksheetByWorkbook(allWorksheet, 'find-service-comment-all-owner' as WorkbookId);
 
-    expect(() => allService.replaceAllMatches('review marker', 'changed marker', commentOptions)).toThrow(/Workbook-owned Worksheet\.updateComment is unavailable/);
-    expect(allWorksheet.calls).toEqual(['findAll', 'getCell', 'updateComment']);
+    expect(() => allService.replaceAllMatches('review marker', 'changed marker', commentOptions)).toThrow(/cannot use an adopted Worksheet/);
+    expect(allWorksheet.calls).toEqual([]);
     expect(allWorksheet.getCell({ row: 1, col: 1 })?.comments?.[0].text).toBe('review marker');
-    expect(allService.getCurrentMatch()).toBe(allMatch);
+    expect(allMatch).toMatchObject({ address: { row: 1, col: 1 }, match: 'review marker' });
   });
 
   test('standalone formula and comment replacement modes remain functional', () => {

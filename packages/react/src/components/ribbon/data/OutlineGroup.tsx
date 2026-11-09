@@ -47,7 +47,6 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({
 
     onCommand?.(command);
     setShowGroupDropdown(false);
-    console.log("Group:", isRows ? "rows" : "columns");
   }, [workbook, selectedCells, onCommand]);
 
   const handleAutoOutline = useCallback(() => {
@@ -56,7 +55,6 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({
     };
     onCommand?.(command);
     setShowGroupDropdown(false);
-    console.log("Auto Outline");
   }, [onCommand]);
 
   const handleUngroup = useCallback(() => {
@@ -81,7 +79,6 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({
 
     onCommand?.(command);
     setShowUngroupDropdown(false);
-    console.log("Ungroup:", isRows ? "rows" : "columns");
   }, [workbook, selectedCells, onCommand]);
 
   const handleClearOutline = useCallback(() => {
@@ -90,7 +87,6 @@ export const OutlineGroup: React.FC<OutlineGroupProps> = ({
     };
     onCommand?.(command);
     setShowUngroupDropdown(false);
-    console.log("Clear Outline");
   }, [workbook, onCommand]);
 
   return (

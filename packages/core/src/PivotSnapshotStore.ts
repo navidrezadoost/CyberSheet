@@ -18,7 +18,7 @@ import type { CellValue } from './types';
  * Flattened pivot row for field-based queries.
  * Optimized for GETPIVOTDATA O(n) filtering.
  */
-export type PivotRow = Record<string, CellValue>;
+export type PivotRow = Record<string, CellValue | Error>;
 
 /**
  * Immutable pivot snapshot.

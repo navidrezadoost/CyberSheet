@@ -14,17 +14,15 @@
  */
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import { Workbook } from '../src/workbook';
+import { Worksheet } from '../src/worksheet';
 import { InsertColumnCommand } from '../src/InsertColumnCommand';
 import { DeleteColumnCommand } from '../src/DeleteColumnCommand';
 
 describe('Metamorphic Properties (Algebraic Laws)', () => {
-  let workbook: Workbook;
-  let worksheet: any;
+  let worksheet: Worksheet;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Test');
+    worksheet = new Worksheet('Test', 10, 10);
   });
 
   describe('Property 1: Identity Law', () => {
@@ -78,8 +76,7 @@ describe('Metamorphic Properties (Algebraic Laws)', () => {
     it('insert(a); insert(b) gives predictable result when a < b-2', () => {
       // When operations don't interfere, order matters only for coordinate adjustment
       
-      const wb1 = new Workbook();
-      const ws1 = wb1.addSheet('Test');
+      const ws1 = new Worksheet('Test', 10, 10);
       ws1.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
       ws1.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
       ws1.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
@@ -121,8 +118,7 @@ describe('Metamorphic Properties (Algebraic Laws)', () => {
       expect(worksheet.getCellValue({ row: (3) + 1, col: (1) + 1 })).toBe('D');
 
       // Run again to ensure deterministic (same seed should produce same result)
-      const wb2 = new Workbook();
-      const ws2 = wb2.addSheet('Test');
+      const ws2 = new Worksheet('Test', 10, 10);
       ws2.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
       ws2.setCellValue({ row: (1) + 1, col: (0) + 1 }, 'B');
       ws2.setCellValue({ row: (2) + 1, col: (0) + 1 }, 'C');
@@ -177,8 +173,7 @@ describe('Metamorphic Properties (Algebraic Laws)', () => {
   describe('Property 5: Associativity (Composition Order Independence)', () => {
     it('should give same result regardless of grouping', () => {
       // (insert(0); insert(1)); insert(2)
-      const wb1 = new Workbook();
-      const ws1 = wb1.addSheet('Test');
+      const ws1 = new Worksheet('Test', 10, 10);
       ws1.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
       ws1.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
 
@@ -187,8 +182,7 @@ describe('Metamorphic Properties (Algebraic Laws)', () => {
       new InsertColumnCommand(ws1, 3).execute();
 
       // insert(0); (insert(1); insert(2))
-      const wb2 = new Workbook();
-      const ws2 = wb2.addSheet('Test');
+      const ws2 = new Worksheet('Test', 10, 10);
       ws2.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
       ws2.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
 

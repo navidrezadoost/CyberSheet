@@ -1,6 +1,7 @@
 import {
   CommandManager,
   FormattingController,
+  Worksheet,
   Workbook,
   isInternedStyle,
   type Address,
@@ -9,15 +10,22 @@ import {
 import { GraphInvariantValidator } from "../src/dag/GraphInvariantValidator";
 
 function makeSheet(rows: number, cols: number) {
-  const wb = new Workbook();
-  const ws = wb.addSheet("Sheet1", 5000, 100);
+  const ws = new Worksheet("Sheet1", 5000, 100);
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++)
       ws.setCellValue({ row: r, col: c }, r * 1000 + c);
   }
   const commands = new CommandManager(100, ws);
   const formatting = new FormattingController(ws, commands);
-  return { wb, ws, commands, formatting };
+  return { ws, commands, formatting };
+}
+
+function makeWorkbookStyleSheet(rows: number, cols: number) {
+  const workbook = new Workbook();
+  const ws = workbook.createDevImportWorksheet('WorkbookStyleCache', rows, cols);
+  const commands = new CommandManager(100, ws);
+  const formatting = new FormattingController(ws, commands);
+  return { workbook, ws, commands, formatting };
 }
 
 function grid(rows: number, cols: number): Address[] {
@@ -131,7 +139,7 @@ describe("font size", () => {
 
 describe("effective style on top of a row/column style", () => {
   test("merged style is canonical (interned) so the renderer assertion cannot throw", () => {
-    const { ws, formatting } = makeSheet(3, 3);
+    const { ws, formatting } = makeWorkbookStyleSheet(3, 3);
     ws.setColumnStyle(2, { fill: "#ffeeaa" });
 
     formatting.setFontSize([{ row: 2, col: 2 }], 18);
@@ -143,7 +151,7 @@ describe("effective style on top of a row/column style", () => {
   });
 
   test("repeated reads return the same reference", () => {
-    const { ws, formatting } = makeSheet(2, 2);
+    const { ws, formatting } = makeWorkbookStyleSheet(2, 2);
     ws.setRowStyle(1, { italic: true });
     formatting.setBold([{ row: 1, col: 1 }], true);
 

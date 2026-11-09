@@ -4,8 +4,23 @@
  * Sorting, filtering, and grouping functionality
  */
 
-import { toDisplayValue } from '@cyber-sheet/core';
+import { Worksheet as WorksheetClass, toDisplayValue } from '@cyber-sheet/core';
 import type { Address, CellValue, ExtendedCellValue, Worksheet } from '@cyber-sheet/core';
+
+const worksheetIsWorkbookOwned = WorksheetClass.prototype.isWorkbookOwned;
+
+function assertStandaloneWorksheet(worksheet: Worksheet): void {
+  let isWorkbookOwned: boolean;
+  try {
+    isWorkbookOwned = worksheetIsWorkbookOwned.call(worksheet);
+  } catch {
+    throw new Error('DataManager requires an authentic standalone Worksheet');
+  }
+
+  if (isWorkbookOwned) {
+    throw new Error('DataManager cannot operate on a Workbook-owned Worksheet');
+  }
+}
 
 export type SortOrder = 'asc' | 'desc';
 export type FilterOperator = 'equals' | 'notEquals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan' | 'greaterOrEqual' | 'lessOrEqual' | 'isEmpty' | 'isNotEmpty';
@@ -29,36 +44,45 @@ export interface GroupConfig {
 }
 
 export class DataManager {
-  private worksheet: Worksheet;
-  private sortedIndices: number[] | null = null;
-  private filteredIndices: Set<number> | null = null;
-  private groupedRows: Map<string, number[]> = new Map();
-  private collapsedGroups: Set<string> = new Set();
+  #worksheet: Worksheet;
+  #sortedIndices: number[] | null = null;
+  #filteredIndices: Set<number> | null = null;
+  #groupedRows: Map<string, number[]> = new Map();
+  #collapsedGroups: Set<string> = new Set();
 
   constructor(worksheet: Worksheet) {
-    this.worksheet = worksheet;
+    assertStandaloneWorksheet(worksheet);
+    this.#worksheet = worksheet;
+  }
+
+  private assertUsableStandaloneWorksheet(): void {
+    assertStandaloneWorksheet(this.#worksheet);
   }
 
   /**
    * Sort rows by one or more columns
    */
   sort(configs: SortConfig[]): void {
-    const rowCount = this.worksheet.rowCount;
+    this.assertUsableStandaloneWorksheet();
+    const rowCount = this.#worksheet.rowCount;
     
     // Initialize indices
-    this.sortedIndices = Array.from({ length: rowCount }, (_, i) => i);
+    const sortedIndices = Array.from({ length: rowCount }, (_, i) => i);
 
     // Sort with multi-column comparator
-    this.sortedIndices.sort((aIdx, bIdx) => {
+    sortedIndices.sort((aIdx, bIdx) => {
       for (const config of configs) {
-        const aCell = this.worksheet.getCell({ row: aIdx, col: config.column });
-        const bCell = this.worksheet.getCell({ row: bIdx, col: config.column });
+        this.assertUsableStandaloneWorksheet();
+        const aCell = this.#worksheet.getCell({ row: aIdx + 1, col: config.column });
+        this.assertUsableStandaloneWorksheet();
+        const bCell = this.#worksheet.getCell({ row: bIdx + 1, col: config.column });
         
         const aVal = toDisplayValue(aCell?.value ?? null);
         const bVal = toDisplayValue(bCell?.value ?? null);
 
         let cmp: number;
         if (config.comparator) {
+          this.assertUsableStandaloneWorksheet();
           cmp = config.comparator(aVal, bVal);
         } else {
           cmp = this.defaultComparator(aVal, bVal);
@@ -71,6 +95,8 @@ export class DataManager {
       return 0;
     });
 
+    this.assertUsableStandaloneWorksheet();
+    this.#sortedIndices = sortedIndices;
     this.dispatchEvent('sort', { configs });
   }
 
@@ -106,18 +132,23 @@ export class DataManager {
    * Filter rows based on conditions
    */
   filter(configs: FilterConfig[]): void {
-    const rowCount = this.worksheet.rowCount;
-    this.filteredIndices = new Set();
+    this.assertUsableStandaloneWorksheet();
+    const rowCount = this.#worksheet.rowCount;
+    const filteredIndices = new Set<number>();
 
     for (let row = 0; row < rowCount; row++) {
       let visible = true;
 
       for (const config of configs) {
-        const cell = this.worksheet.getCell({ row, col: config.column });
+        this.assertUsableStandaloneWorksheet();
+        const cell = this.#worksheet.getCell({ row: row + 1, col: config.column });
         const value = toDisplayValue(cell?.value ?? null);
 
         if (config.predicate) {
-          if (!config.predicate(value)) {
+          this.assertUsableStandaloneWorksheet();
+          const matches = config.predicate(value);
+          this.assertUsableStandaloneWorksheet();
+          if (!matches) {
             visible = false;
             break;
           }
@@ -130,11 +161,13 @@ export class DataManager {
       }
 
       if (!visible) {
-        this.filteredIndices.add(row);
+        filteredIndices.add(row);
       }
     }
 
-    this.dispatchEvent('filter', { configs, hiddenCount: this.filteredIndices.size });
+    this.assertUsableStandaloneWorksheet();
+    this.#filteredIndices = filteredIndices;
+    this.dispatchEvent('filter', { configs, hiddenCount: filteredIndices.size });
   }
 
   /**
@@ -173,29 +206,36 @@ export class DataManager {
    * Group rows by column values
    */
   group(config: GroupConfig): void {
-    this.groupedRows.clear();
-    this.collapsedGroups = config.collapsed ?? new Set();
+    this.assertUsableStandaloneWorksheet();
+    const groupedRows = new Map<string, number[]>();
+    const collapsedGroups = new Set(config.collapsed ?? []);
 
-    const rowCount = this.worksheet.rowCount;
+    const rowCount = this.#worksheet.rowCount;
 
     for (let row = 0; row < rowCount; row++) {
       // Create group key from column values
       const keyParts: string[] = [];
       for (const col of config.columns) {
-        const cell = this.worksheet.getCell({ row, col });
-        keyParts.push(String(cell?.value ?? ''));
+        this.assertUsableStandaloneWorksheet();
+        const cell = this.#worksheet.getCell({ row: row + 1, col });
+        const value = String(cell?.value ?? '');
+        this.assertUsableStandaloneWorksheet();
+        keyParts.push(value);
       }
       const key = keyParts.join('|');
 
-      if (!this.groupedRows.has(key)) {
-        this.groupedRows.set(key, []);
+      if (!groupedRows.has(key)) {
+        groupedRows.set(key, []);
       }
-      this.groupedRows.get(key)!.push(row);
+      groupedRows.get(key)!.push(row);
     }
 
+    this.assertUsableStandaloneWorksheet();
+    this.#groupedRows = groupedRows;
+    this.#collapsedGroups = collapsedGroups;
     this.dispatchEvent('group', { 
       config, 
-      groupCount: this.groupedRows.size 
+      groupCount: groupedRows.size
     });
   }
 
@@ -203,21 +243,23 @@ export class DataManager {
    * Toggle group collapsed state
    */
   toggleGroup(groupKey: string): void {
-    if (this.collapsedGroups.has(groupKey)) {
-      this.collapsedGroups.delete(groupKey);
+    this.assertUsableStandaloneWorksheet();
+    if (this.#collapsedGroups.has(groupKey)) {
+      this.#collapsedGroups.delete(groupKey);
     } else {
-      this.collapsedGroups.add(groupKey);
+      this.#collapsedGroups.add(groupKey);
     }
 
-    this.dispatchEvent('groupToggle', { groupKey, collapsed: this.collapsedGroups.has(groupKey) });
+    this.dispatchEvent('groupToggle', { groupKey, collapsed: this.#collapsedGroups.has(groupKey) });
   }
 
   /**
    * Collapse all groups
    */
   collapseAllGroups(): void {
-    for (const key of this.groupedRows.keys()) {
-      this.collapsedGroups.add(key);
+    this.assertUsableStandaloneWorksheet();
+    for (const key of this.#groupedRows.keys()) {
+      this.#collapsedGroups.add(key);
     }
     this.dispatchEvent('groupCollapseAll', {});
   }
@@ -226,7 +268,8 @@ export class DataManager {
    * Expand all groups
    */
   expandAllGroups(): void {
-    this.collapsedGroups.clear();
+    this.assertUsableStandaloneWorksheet();
+    this.#collapsedGroups.clear();
     this.dispatchEvent('groupExpandAll', {});
   }
 
@@ -234,14 +277,15 @@ export class DataManager {
    * Check if a row is visible (not filtered or collapsed)
    */
   isRowVisible(row: number): boolean {
+    this.assertUsableStandaloneWorksheet();
     // Check if filtered
-    if (this.filteredIndices && this.filteredIndices.has(row)) {
+    if (this.#filteredIndices && this.#filteredIndices.has(row)) {
       return false;
     }
 
     // Check if in collapsed group
-    for (const [key, rows] of this.groupedRows.entries()) {
-      if (rows.includes(row) && this.collapsedGroups.has(key)) {
+    for (const [key, rows] of this.#groupedRows.entries()) {
+      if (rows.includes(row) && this.#collapsedGroups.has(key)) {
         return false;
       }
     }
@@ -253,23 +297,26 @@ export class DataManager {
    * Get the visual row index (accounting for sorting)
    */
   getVisualRow(physicalRow: number): number {
-    if (!this.sortedIndices) return physicalRow;
-    return this.sortedIndices.indexOf(physicalRow);
+    this.assertUsableStandaloneWorksheet();
+    if (!this.#sortedIndices) return physicalRow;
+    return this.#sortedIndices.indexOf(physicalRow);
   }
 
   /**
    * Get the physical row index from visual index
    */
   getPhysicalRow(visualRow: number): number {
-    if (!this.sortedIndices) return visualRow;
-    return this.sortedIndices[visualRow];
+    this.assertUsableStandaloneWorksheet();
+    if (!this.#sortedIndices) return visualRow;
+    return this.#sortedIndices[visualRow];
   }
 
   /**
    * Get visible row indices
    */
   getVisibleRows(): number[] {
-    const rowCount = this.worksheet.rowCount;
+    this.assertUsableStandaloneWorksheet();
+    const rowCount = this.#worksheet.rowCount;
     const visible: number[] = [];
 
     for (let row = 0; row < rowCount; row++) {
@@ -285,7 +332,8 @@ export class DataManager {
    * Clear all sorting
    */
   clearSort(): void {
-    this.sortedIndices = null;
+    this.assertUsableStandaloneWorksheet();
+    this.#sortedIndices = null;
     this.dispatchEvent('sortClear', {});
   }
 
@@ -293,7 +341,8 @@ export class DataManager {
    * Clear all filtering
    */
   clearFilter(): void {
-    this.filteredIndices = null;
+    this.assertUsableStandaloneWorksheet();
+    this.#filteredIndices = null;
     this.dispatchEvent('filterClear', {});
   }
 
@@ -301,8 +350,9 @@ export class DataManager {
    * Clear all grouping
    */
   clearGroup(): void {
-    this.groupedRows.clear();
-    this.collapsedGroups.clear();
+    this.assertUsableStandaloneWorksheet();
+    this.#groupedRows.clear();
+    this.#collapsedGroups.clear();
     this.dispatchEvent('groupClear', {});
   }
 
@@ -310,14 +360,16 @@ export class DataManager {
    * Get groups
    */
   getGroups(): Map<string, number[]> {
-    return new Map(this.groupedRows);
+    this.assertUsableStandaloneWorksheet();
+    return new Map(Array.from(this.#groupedRows, ([key, rows]) => [key, [...rows]]));
   }
 
   /**
    * Get collapsed groups
    */
   getCollapsedGroups(): Set<string> {
-    return new Set(this.collapsedGroups);
+    this.assertUsableStandaloneWorksheet();
+    return new Set(this.#collapsedGroups);
   }
 
   /**
@@ -330,13 +382,14 @@ export class DataManager {
     hiddenByGroup: number;
     groupCount: number;
   } {
-    const totalRows = this.worksheet.rowCount;
+    this.assertUsableStandaloneWorksheet();
+    const totalRows = this.#worksheet.rowCount;
     const visibleRows = this.getVisibleRows().length;
-    const hiddenByFilter = this.filteredIndices?.size ?? 0;
+    const hiddenByFilter = this.#filteredIndices?.size ?? 0;
     
     let hiddenByGroup = 0;
-    for (const [key, rows] of this.groupedRows.entries()) {
-      if (this.collapsedGroups.has(key)) {
+    for (const [key, rows] of this.#groupedRows.entries()) {
+      if (this.#collapsedGroups.has(key)) {
         hiddenByGroup += rows.length;
       }
     }
@@ -346,7 +399,7 @@ export class DataManager {
       visibleRows,
       hiddenByFilter,
       hiddenByGroup,
-      groupCount: this.groupedRows.size
+      groupCount: this.#groupedRows.size
     };
   }
 

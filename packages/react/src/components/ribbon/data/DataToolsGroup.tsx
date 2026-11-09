@@ -39,7 +39,6 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({
     };
     onCommand?.(command);
     setShowDataValidationDropdown(false);
-    console.log("Circle Invalid Data");
   }, [onCommand]);
 
   const handleClearValidationCircles = useCallback(() => {
@@ -48,7 +47,6 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({
     };
     onCommand?.(command);
     setShowDataValidationDropdown(false);
-    console.log("Clear Validation Circles");
   }, [onCommand]);
 
   const handleTextToColumns = useCallback(() => {
@@ -74,7 +72,6 @@ export const DataToolsGroup: React.FC<DataToolsGroupProps> = ({
     };
 
     onCommand?.(command);
-    console.log("Flash Fill:", selection.start.col);
   }, [selectedCells, onCommand]);
 
   const handleRemoveDuplicates = useCallback(() => {

@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": ".",
+    "rootDir": "src",
     "composite": true,
     "declaration": true,
     "declarationMap": true,
@@ -17,6 +17,7 @@
   "include": ["src"],
   "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.spec.ts", "src/**/*.spec.tsx"],
   "references": [
+    { "path": "../cf-ui-core" },
     { "path": "../core" },
     { "path": "../renderer-canvas" },
     { "path": "../io-xlsx" },

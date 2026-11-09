@@ -333,9 +333,7 @@ export class ConditionalFormattingFormulaCompiler {
 				.replace(/>==/g, '>=')  // Fix >== back to >=
 				.replace(/!=/g, '!=')   // Already correct
 				.replace(/<>/g, '!=')   // Excel not-equal
-				// Excel logical functions
-				.replace(/\bAND\s*\(/gi, '(')
-				.replace(/\bOR\s*\(/gi, '(')
+				// Logical function names are converted after normalization below.
 				.replace(/\bNOT\s*\(/gi, '!(')
 				// Excel TRUE/FALSE
 				.replace(/\bTRUE\b/gi, 'true')
@@ -362,19 +360,54 @@ export class ConditionalFormattingFormulaCompiler {
 	 * OR(a, b, c) → (a) || (b) || (c)
 	 */
 	private static convertExcelLogic(expression: string): string {
-		// Handle AND(...)
-		expression = expression.replace(/AND\s*\(([^)]+)\)/gi, (_, args) => {
-			const argList = args.split(',').map((a: string) => `(${a.trim()})`);
-			return argList.join(' && ');
-		});
+		// Convert only the existing AND/OR function forms. Scan balanced
+		// parentheses so nested logical calls and comma-containing groups keep
+		// their argument boundaries.
+		const convert = (input: string): string => {
+			let output = '';
+			for (let index = 0; index < input.length;) {
+				const match = /^(AND|OR)\s*\(/i.exec(input.slice(index));
+				if (!match || (index > 0 && /[A-Z0-9_.]/i.test(input[index - 1]))) {
+					output += input[index++];
+					continue;
+				}
 
-		// Handle OR(...)
-		expression = expression.replace(/OR\s*\(([^)]+)\)/gi, (_, args) => {
-			const argList = args.split(',').map((a: string) => `(${a.trim()})`);
-			return argList.join(' || ');
-		});
+				const open = index + match[0].lastIndexOf('(');
+				let depth = 1;
+				let close = open + 1;
+				for (; close < input.length && depth > 0; close++) {
+					if (input[close] === '(') depth++;
+					else if (input[close] === ')') depth--;
+				}
+				if (depth !== 0) {
+					output += input[index++];
+					continue;
+				}
 
-		return expression;
+				const args: string[] = [];
+				let argStart = open + 1;
+				let argDepth = 0;
+				for (let cursor = argStart; cursor < close - 1; cursor++) {
+					if (input[cursor] === '(') argDepth++;
+					else if (input[cursor] === ')') argDepth--;
+					else if (input[cursor] === ',' && argDepth === 0) {
+						args.push(input.slice(argStart, cursor));
+						argStart = cursor + 1;
+					}
+				}
+				args.push(input.slice(argStart, close - 1));
+				if (args.length < 2) {
+					output += input.slice(index, close);
+				} else {
+					const operator = match[1].toUpperCase() === 'AND' ? '&&' : '||';
+					output += `(${args.map((arg) => `(${convert(arg.trim())})`).join(` ${operator} `)})`;
+				}
+				index = close;
+			}
+			return output;
+		};
+
+		return convert(expression);
 	}
 
 	/**

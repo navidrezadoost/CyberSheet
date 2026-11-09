@@ -118,7 +118,10 @@ describe('SpillEngine - Dynamic Array Spill Behavior', () => {
 
       spillEngine.clearSpill(worksheet, { row: 1, col: 1 });
 
-      expect(sourceCell?.spillSource).toBeUndefined();
+      // getCell() returns a detached snapshot. Clearing the live Worksheet
+      // metadata must not mutate a snapshot already held by the caller.
+      expect(sourceCell?.spillSource).toBeDefined();
+      expect(worksheet.getCell({ row: 1, col: 1 })?.spillSource).toBeUndefined();
     });
 
     test('clearSpill does nothing if no spill exists', () => {

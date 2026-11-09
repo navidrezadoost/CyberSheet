@@ -37,5 +37,8 @@
     "svelte",
     "angular"
   ],
+  "devDependencies": {
+    "@angular/core": "22.2.3"
+  },
   "license": "MIT"
 }

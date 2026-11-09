@@ -4,8 +4,11 @@
  * Enhanced export capabilities: XLSX, PDF, print layouts
  */
 
+import { Worksheet as WorksheetClass } from '@cyber-sheet/core';
 import type { Address, CellValue } from '@cyber-sheet/core';
 import type { Worksheet } from '@cyber-sheet/core';
+
+const worksheetIsWorkbookOwned = WorksheetClass.prototype.isWorkbookOwned;
 
 export interface PrintOptions {
   orientation?: 'portrait' | 'landscape';
@@ -33,16 +36,18 @@ export interface PDFExportOptions extends PrintOptions {
 }
 
 export class AdvancedExportEngine {
-  private worksheet: Worksheet;
+  #worksheet: Worksheet;
 
   constructor(worksheet: Worksheet) {
-    this.worksheet = worksheet;
+    this.#worksheet = worksheet;
+    this.assertStandaloneWorksheet();
   }
 
   /**
    * Export to XLSX (simplified XML format)
    */
   async exportXLSX(options: XLSXExportOptions = {}): Promise<Blob> {
+    this.assertStandaloneWorksheet();
     const range = options.range ?? this.getUsedRange();
     const worksheetName = options.worksheetName ?? 'Sheet1';
     
@@ -75,6 +80,7 @@ export class AdvancedExportEngine {
    * Export to PDF
    */
   async exportPDF(options: PDFExportOptions = {}): Promise<Blob> {
+    this.assertStandaloneWorksheet();
     // Create virtual canvas for rendering
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
@@ -100,6 +106,7 @@ export class AdvancedExportEngine {
    * Print worksheet
    */
   print(options: PrintOptions = {}): void {
+    this.assertStandaloneWorksheet();
     // Create print window
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -117,6 +124,26 @@ export class AdvancedExportEngine {
   }
 
   /**
+   * This engine accepts standalone Worksheets only; it has no owner-view
+   * projection, so adopted sources must be rejected before any data read or
+   * output publication.
+   */
+  private assertStandaloneWorksheet(): void {
+    let isWorkbookOwned: boolean;
+    try {
+      // Use the captured intrinsic so an instance shadow cannot make an
+      // adopted Worksheet appear standalone. Its private-field brand also
+      // rejects structural facades before they can delegate a read.
+      isWorkbookOwned = worksheetIsWorkbookOwned.call(this.#worksheet);
+    } catch {
+      throw new Error('AdvancedExportEngine requires an authentic standalone Worksheet');
+    }
+    if (isWorkbookOwned) {
+      throw new Error('AdvancedExportEngine cannot read a Workbook-owned Worksheet');
+    }
+  }
+
+  /**
    * Build sheet data for XLSX
    */
   private buildSheetData(
@@ -126,10 +153,10 @@ export class AdvancedExportEngine {
     let xml = '';
     
     for (let row = range.start.row; row <= range.end.row; row++) {
-      xml += `<row r="${row + 1}">`;
+      xml += `<row r="${row}">`;
       
       for (let col = range.start.col; col <= range.end.col; col++) {
-        const cell = this.worksheet.getCell({ row, col });
+        const cell = this.#worksheet.getCell({ row, col });
         if (!cell) continue;
         
         const cellRef = this.getCellReference({ row, col });
@@ -262,14 +289,16 @@ export class AdvancedExportEngine {
     
     for (let row = range.start.row; row <= range.end.row; row++) {
       // Add page break if specified
-      if (options.pageBreaks?.includes(row)) {
+      // pageBreaks retains its existing zero-based public convention while
+      // Worksheet addresses below are one-based.
+      if (options.pageBreaks?.includes(row - 1)) {
         html += '</table><div class="page-break"></div><table>';
       }
       
       html += '<tr>';
       
       for (let col = range.start.col; col <= range.end.col; col++) {
-        const cell = this.worksheet.getCell({ row, col });
+        const cell = this.#worksheet.getCell({ row, col });
         const value = cell?.value ?? '';
         html += `<td>${this.escapeHTML(String(value))}</td>`;
       }
@@ -325,7 +354,7 @@ export class AdvancedExportEngine {
     
     for (let row = range.start.row; row <= range.end.row; row++) {
       for (let col = range.start.col; col <= range.end.col; col++) {
-        const cell = this.worksheet.getCell({ row, col });
+        const cell = this.#worksheet.getCell({ row, col });
         const value = cell?.value ?? '';
         
         const x = margins.left + (col - range.start.col) * cellWidth;
@@ -398,22 +427,16 @@ startxref
    * Get used range (range containing data)
    */
   private getUsedRange(): { start: Address; end: Address } {
-    let maxRow = 0;
-    let maxCol = 0;
-    
-    for (let row = 0; row < this.worksheet.rowCount; row++) {
-      for (let col = 0; col < 26; col++) {
-        const cell = this.worksheet.getCell({ row, col });
-        if (cell && cell.value != null) {
-          maxRow = Math.max(maxRow, row);
-          maxCol = Math.max(maxCol, col);
-        }
-      }
-    }
-    
+    const usedRange = this.#worksheet.getUsedRange();
+    const endRow = usedRange?.end.row ?? 1;
+    // Keep the existing A:Z export limit. Worksheet ranges and addresses are
+    // one-based and inclusive.
+    const endCol = usedRange && usedRange.start.col <= 26
+      ? Math.min(26, usedRange.end.col)
+      : 1;
     return {
-      start: { row: 0, col: 0 },
-      end: { row: maxRow, col: maxCol }
+      start: { row: 1, col: 1 },
+      end: { row: Math.max(1, endRow), col: Math.max(1, endCol) }
     };
   }
 
@@ -421,9 +444,7 @@ startxref
    * Get cell reference (e.g., A1)
    */
   private getCellReference(addr: Address): string {
-    const col = this.columnToLetter(addr.col);
-    const row = addr.row + 1;
-    return `${col}${row}`;
+    return `${this.columnToLetter(addr.col - 1)}${addr.row}`;
   }
 
   /**

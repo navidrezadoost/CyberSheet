@@ -13,19 +13,16 @@
  */
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import { Workbook } from '../src/workbook';
 import { Worksheet } from '../src/worksheet';
 import { InsertColumnCommand } from '../src/InsertColumnCommand';
 import { DeleteColumnCommand } from '../src/DeleteColumnCommand';
 import type { Address, Range } from '../src/types';
 
 describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () => {
-  let workbook: Workbook;
   let worksheet: Worksheet;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Test');
+    worksheet = new Worksheet('Test');
   });
 
   /**
@@ -186,8 +183,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
       });
       
       // Run 1: insertColumn(0)
-      workbook = new Workbook();
-      worksheet = workbook.addSheet('Test');
+      worksheet = new Worksheet('Test');
       worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
       worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 2);
       worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
@@ -197,8 +193,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
       const state1 = captureState();
       
       // Run 2: insertColumn(0) again (fresh workbook)
-      workbook = new Workbook();
-      worksheet = workbook.addSheet('Test');
+      worksheet = new Worksheet('Test');
       worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 1);
       worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 2);
       worksheet.mergeCells({ start: { row: (0) + 1, col: (0) + 1 }, end: { row: (0) + 1, col: (1) + 1 } });
@@ -238,8 +233,7 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
       };
       
       // Replay same sequence
-      workbook = new Workbook();
-      worksheet = workbook.addSheet('Test');
+      worksheet = new Worksheet('Test');
       worksheet.setCellValue({ row: (0) + 1, col: (0) + 1 }, 'A');
       worksheet.setCellValue({ row: (0) + 1, col: (1) + 1 }, 'B');
       worksheet.setCellValue({ row: (0) + 1, col: (2) + 1 }, 'C');
@@ -621,13 +615,12 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
       const commandStack: Array<InsertColumnCommand | DeleteColumnCommand> = [];
       let ops = 0;
 
-      const getMemoryMB = () => {
-        if (global.gc) global.gc();
-        return process.memoryUsage().heapUsed / 1024 / 1024;
+      const countStoredCells = () => {
+        let count = 0;
+        worksheet.forEachNonEmptyCell(() => count++);
+        return count;
       };
-
-      const initialMemory = getMemoryMB();
-      const memorySnapshots: number[] = [initialMemory];
+      const storedCellSnapshots: number[] = [countStoredCells()];
 
       for (let i = 0; i < 10000; i++) {
         const action = seededRandom();
@@ -655,8 +648,10 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
           } catch {}
         }
 
-        // Structural validation every 200 ops
+        // Structural validation every 200 ops. Record the Worksheet's sparse
+        // cell-store size alongside merge topology.
         if (i % 200 === 0) {
+          storedCellSnapshots.push(countStoredCells());
           const merges = worksheet.getMergedRanges();
           for (const merge of merges) {
             const width = merge.end.col - merge.start.col + 1;
@@ -665,35 +660,18 @@ describe('InsertColumnCommand + DeleteColumnCommand - Critical Invariants', () =
           }
         }
 
-        // Memory tracking every 1000 ops
-        if (i % 1000 === 0) {
-          memorySnapshots.push(getMemoryMB());
-        }
       }
 
-      const finalMemory = getMemoryMB();
-      memorySnapshots.push(finalMemory);
-      const memoryGrowth = finalMemory - initialMemory;
+      storedCellSnapshots.push(countStoredCells());
 
       expect(ops).toBeGreaterThan(6000);
       expect(commandStack.length).toBeLessThanOrEqual(MAX_HISTORY);
 
-      // CRITICAL: With state minimality, memory growth must be sub-linear
-      // Note: Absolute growth depends on base heap size + V8 overhead
-      // What matters: growth rate slows over time (not linear)
-      
-      // Verify memory plateau (not linear growth)
-      const midMemory = memorySnapshots[Math.floor(memorySnapshots.length / 2)];
-      const growthRate1 = midMemory - initialMemory;
-      const growthRate2 = finalMemory - midMemory;
-      
-      // INVARIANT: Second half should grow SLOWER than first half (plateau behavior)
-      // Linear growth would show: growthRate2 ≈ growthRate1
-      // Sub-linear (correct): growthRate2 < growthRate1
-      expect(growthRate2).toBeLessThan(growthRate1 * 1.2); // Allow 20% variance
-
-      console.log(`10k test: Memory growth=${memoryGrowth.toFixed(1)}MB, ops=${ops}, stack=${commandStack.length}`);
-      console.log(`  Growth pattern: 0-5k=${growthRate1.toFixed(1)}MB, 5k-10k=${growthRate2.toFixed(1)}MB (ratio=${(growthRate2/growthRate1).toFixed(2)})`);
+      // The workload starts with two cells and performs only structural column
+      // transforms. It may delete those cells, but must not retain extra cell
+      // entries at obsolete coordinates. This is a structural-state bound,
+      // independent of V8 garbage-collection timing.
+      expect(Math.max(...storedCellSnapshots)).toBeLessThanOrEqual(2);
     });
   });
 

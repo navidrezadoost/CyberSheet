@@ -11,14 +11,14 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import { Worksheet } from '../src/worksheet';
 import { Workbook } from '../src/workbook';
 import { CommandManager, Commands } from '../src/CommandManager';
 
 describe('Temporal Identity Stability', () => {
   describe('Strict Pointer Equality After Undo', () => {
     it('should preserve pointer identity for single cell undo', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Workbook().createDevImportWorksheet('Test', 20, 10);
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -49,8 +49,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should preserve pointer identity for Phase 1 UI properties', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -82,8 +81,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should preserve pointer identity through multiple undo/redo cycles', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -126,8 +124,7 @@ describe('Temporal Identity Stability', () => {
   
   describe('Range Operations', () => {
     it('should preserve pointer identity for range style undo', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       
       const range = {
@@ -166,8 +163,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should preserve mixed styles in range undo', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       
       // Set different styles to different cells
@@ -204,8 +200,7 @@ describe('Temporal Identity Stability', () => {
   
   describe('Imported Styles', () => {
     it('should preserve pointer identity for imported styles after undo', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Workbook().createDevImportWorksheet('Test', 20, 10);
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -232,8 +227,7 @@ describe('Temporal Identity Stability', () => {
   
   describe('Edge Cases', () => {
     it('should handle undo to undefined style', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -252,8 +246,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should handle style with normalized values (indent = 0)', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Workbook().createDevImportWorksheet('Test', 20, 10);
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -276,8 +269,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should handle superscript/subscript mutual exclusivity through undo', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -303,8 +295,7 @@ describe('Temporal Identity Stability', () => {
   
   describe('Stress Test', () => {
     it('should maintain pointer stability across 1000 undo/redo cycles', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -356,8 +347,7 @@ describe('Temporal Identity Stability', () => {
   
   describe('Vertical Alignment Temporal Stability', () => {
     it('should maintain pointer stability when toggling valign', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
       
@@ -396,8 +386,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should handle valign with complex styles through undo', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 2, col: 3 };
       
@@ -432,8 +421,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should maintain valign pointer stability across range operations', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       
       const range = {
@@ -477,8 +465,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should handle partial valign changes in batches', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       
       const addr1 = { row: 1, col: 1 };
@@ -508,8 +495,7 @@ describe('Temporal Identity Stability', () => {
     });
     
     it('should cycle valign through 100 undo/redo operations', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 5, col: 5 };
       
@@ -549,8 +535,7 @@ describe('Temporal Identity Stability', () => {
 
   describe('Diagonal Borders Temporal Stability', () => {
     it('should maintain pointer stability when toggling diagonal borders', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 1, col: 1 };
 
@@ -592,8 +577,7 @@ describe('Temporal Identity Stability', () => {
     });
 
     it('should handle diagonal borders with complex cell styles through undo', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 2, col: 3 };
 
@@ -632,8 +616,7 @@ describe('Temporal Identity Stability', () => {
     });
 
     it('should maintain diagonal border pointer stability across range operations', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
 
       const range = {
@@ -678,8 +661,7 @@ describe('Temporal Identity Stability', () => {
     });
 
     it('should handle mixed border styles in batches', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
 
       const addr1 = { row: 1, col: 1 };
@@ -710,8 +692,7 @@ describe('Temporal Identity Stability', () => {
     });
 
     it('should cycle diagonal borders through 100 undo/redo operations', () => {
-      const wb = new Workbook();
-      const sheet = wb.addSheet('Test');
+      const sheet = new Worksheet('Test');
       const cmdMgr = new CommandManager();
       const addr = { row: 5, col: 5 };
 

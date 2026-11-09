@@ -39,7 +39,6 @@ export const GetTransformDataGroup: React.FC<GetTransformDataGroupProps> = ({
 
   const handleRefreshAll = useCallback(() => {
     onCommand?.({ type: "refreshAllConnections" });
-    console.log("Refresh All Connections");
   }, [workbook, onCommand]);
 
   const handleQueriesConnections = useCallback(() => {

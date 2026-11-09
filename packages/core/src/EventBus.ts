@@ -1,10 +1,29 @@
+import type { WorksheetId } from './workbook-access-types';
+
 export type EventHandler = (payload: unknown) => void;
 export type BridgeEmit = (payload: unknown) => void;
 
+export type WorkbookRowHeightChangeEvent = {
+  worksheetId: WorksheetId;
+  row: number;
+  heightPx: number;
+};
+
+export type WorkbookColumnWidthChangeEvent = {
+  worksheetId: WorksheetId;
+  column: number;
+  widthPx: number;
+};
+
+type EventPayload<Event extends string> =
+  Event extends 'row-height-change' ? WorkbookRowHeightChangeEvent :
+  Event extends 'column-width-change' ? WorkbookColumnWidthChangeEvent : unknown;
+type EventHandlerFor<Event extends string> = (payload: EventPayload<Event>) => void;
+
 export interface EventAPI {
-  on(event: string, handler: EventHandler): () => void;
-  once(event: string, handler: EventHandler): void;
-  off(event: string, handler: EventHandler): void;
+  on<Event extends string>(event: Event, handler: EventHandlerFor<Event>): () => void;
+  once<Event extends string>(event: Event, handler: EventHandlerFor<Event>): void;
+  off<Event extends string>(event: Event, handler: EventHandlerFor<Event>): void;
 }
 
 type BridgeActivation = {
@@ -16,6 +35,14 @@ export class EventBus implements EventAPI {
   private listeners = new Map<string, Set<EventHandler>>();
   private bridgeActivations = new Map<string, BridgeActivation>();
   private activeBridges = new Set<string>();
+
+  constructor(
+    private readonly reportListenerError: (error: unknown, event: string) => void = (error, event) => {
+      console.error(`EventBus listener failed for '${event}'`, error);
+    },
+    private readonly shouldContinue: () => boolean = () => true,
+    private readonly isolateListenerFailures = false,
+  ) {}
 
   registerBridge(
     event: string,
@@ -41,13 +68,13 @@ export class EventBus implements EventAPI {
     bridge.activate((payload) => this.emit(event, payload));
   }
 
-  on(event: string, handler: EventHandler): () => void {
+  on<Event extends string>(event: Event, handler: EventHandlerFor<Event>): () => void {
     const wasEmpty = !this.listeners.has(event) || this.listeners.get(event)!.size === 0;
 
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)!.add(handler);
+    this.listeners.get(event)!.add(handler as EventHandler);
 
     if (wasEmpty) {
       this.activateBridge(event);
@@ -56,23 +83,40 @@ export class EventBus implements EventAPI {
     return () => this.off(event, handler);
   }
 
-  once(event: string, handler: EventHandler): void {
+  once<Event extends string>(event: Event, handler: EventHandlerFor<Event>): void {
+    let consumed = false;
     const wrapper = (payload: unknown) => {
-      handler(payload);
-      this.off(event, wrapper);
+      // Remove before user code so nested emits cannot rediscover this listener.
+      // The guard also protects against a wrapper already captured in an
+      // isolated-dispatch listener snapshot before a nested emission consumes it.
+      if (consumed) return;
+      consumed = true;
+      this.off(event, wrapper as EventHandlerFor<Event>);
+      handler(payload as EventPayload<Event>);
     };
-    this.on(event, wrapper);
+    this.on(event, wrapper as EventHandlerFor<Event>);
   }
 
-  off(event: string, handler: EventHandler): void {
-    this.listeners.get(event)?.delete(handler);
+  off<Event extends string>(event: Event, handler: EventHandlerFor<Event>): void {
+    this.listeners.get(event)?.delete(handler as EventHandler);
     if (this.listeners.get(event)?.size === 0) {
       this.deactivateBridge(event);
     }
   }
 
   emit(event: string, payload?: unknown): void {
-    this.listeners.get(event)?.forEach((handler) => handler(payload));
+    if (!this.isolateListenerFailures) {
+      this.listeners.get(event)?.forEach((handler) => handler(payload));
+      return;
+    }
+    for (const handler of Array.from(this.listeners.get(event) ?? [])) {
+      if (!this.shouldContinue()) break;
+      try {
+        handler(payload);
+      } catch (error) {
+        try { this.reportListenerError(error, event); } catch { /* observer failures cannot stop dispatch */ }
+      }
+    }
   }
 
   removeAll(): void {

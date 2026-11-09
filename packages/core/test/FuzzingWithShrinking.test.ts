@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { Workbook } from '../src/workbook';
+import { Worksheet } from '../src/worksheet';
 import { InsertColumnCommand } from '../src/InsertColumnCommand';
 import { DeleteColumnCommand } from '../src/DeleteColumnCommand';
 import { NaiveSheet } from './NaiveSheet';
@@ -176,16 +176,14 @@ class OperationGenerator {
 
 // Test harness that executes operations against both engines
 class DualExecutionHarness {
-  private workbook: Workbook;
-  private worksheet: any;
+  private worksheet: Worksheet;
   private naive: NaiveSheet;
   private commandStack: Array<InsertColumnCommand | DeleteColumnCommand> = [];
   private redoStack: Array<InsertColumnCommand | DeleteColumnCommand> = [];
   private hasUsedUndo: boolean = false; // Track if undo/redo has ever been used
 
   constructor() {
-    this.workbook = new Workbook();
-    this.worksheet = this.workbook.addSheet('Test');
+    this.worksheet = new Worksheet('Test');
     this.naive = new NaiveSheet();
   }
 

@@ -59,6 +59,8 @@ import {
   type RecalcResult,
   type IterativeRecalcResult,
   type RecalcIterationPolicy,
+  type DependencyGraphMutationJournal,
+  type DependencyGraphTestState,
   assertWorksheetAddress,
   MAX_WORKSHEET_ROW,
   MAX_WORKSHEET_COLUMN,
@@ -172,6 +174,19 @@ function cloneDrawingData<T>(
   return copy as T;
 }
 
+function cloneConditionalFormattingRulesForAdoption(
+  rules: ConditionalFormattingRule[],
+): ConditionalFormattingRule[] {
+  try {
+    return cloneDrawingData(rules);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new TypeError(
+      `Conditional-formatting rules cannot be isolated before Workbook adoption: ${detail}`,
+    );
+  }
+}
+
 /** @internal Guarded methods; excluded from the public package barrel. */
 export const WORKSHEET_OWNED_MUTATOR_METHODS = Object.freeze([
   'rowCount', 'colCount', 'canonicalStyle',
@@ -191,8 +206,238 @@ export const WORKSHEET_OWNED_MUTATOR_METHODS = Object.freeze([
   'mergeCells', 'cancelMerge', 'hideRow', 'showRow', 'hideCol', 'showCol', 'deleteCell', 'setHyperlink',
   'removeHyperlink', 'addComment', 'updateComment', 'deleteComment', 'setIcon', 'setCellComponent',
   'clearCellComponent', 'applySnapshot',
+  'captureWorkbookCellWriteState', 'beginWorkbookCellWriteBatch',
+  'restoreWorkbookCellWriteState', 'finishWorkbookCellWriteBatch',
+  'discardWorkbookCellWriteBatch', 'publishWorkbookCellWriteEvent',
+  'beginWorkbookCellWriteJournal', 'restoreWorkbookCellWriteJournal', 'commitWorkbookCellWriteJournal',
 ]);
 const OWNED_MUTATORS = new Set(WORKSHEET_OWNED_MUTATOR_METHODS);
+
+/** @internal Capability returned only to the Workbook that adopted a sheet. */
+export type WorkbookWorksheetMutationCapability = object;
+export type WorkbookCellWriteFailurePhase =
+  | 'after-cell-record' | 'during-dependency-update' | 'after-predecessor-removal'
+  | 'after-dependency-registration' | 'after-range-watcher-registration'
+  | 'after-formula-node-registration' | 'after-dirty-propagation'
+  | 'after-volatile-state-change' | 'after-style-allocation'
+  | 'before-row-height-map-write' | 'after-row-height-map-write'
+  | 'before-column-width-map-write' | 'after-column-width-map-write'
+  | 'during-row-height-restore' | 'during-column-width-restore'
+  | 'after-row-height-restore-before-discard';
+
+type RowHeightBeforeImage =
+  | { present: false }
+  | { present: true; heightPx: number };
+
+type ColumnWidthBeforeImage =
+  | { present: false }
+  | { present: true; widthPx: number };
+
+/** @internal Exact Worksheet state covered by the Workbook cell-write and dimension transaction slice. */
+export type WorkbookCellWriteState = {
+  cells: Array<{ row: number; col: number; cell: Cell }>;
+  rowHeights: Array<{ row: number; heightPx: number }>;
+  columnWidths: Array<{ col: number; widthPx: number }>;
+  dependencyGraph: {
+    formulaNodes: number[];
+    formulas: Array<{ key: number; predecessors: number[]; ranges: AddressRange[] }>;
+    volatiles: number[];
+    dirty: number[];
+  };
+};
+
+/** @internal An event sink used to retain global order across multi-sheet writes. */
+export type WorkbookCellWriteEventSink = (worksheet: Worksheet, event: SheetEvents) => void;
+
+type WorkbookCellWriteJournal = {
+  cells: Map<number, Cell | undefined>;
+  rowHeights: Map<number, RowHeightBeforeImage>;
+  columnWidths: Map<number, ColumnWidthBeforeImage>;
+  graph: DependencyGraphMutationJournal;
+};
+
+const workbookMutationCapabilities = new WeakMap<object, Worksheet>();
+const standaloneFormulaRegistrationTestHooks = new WeakMap<Worksheet, () => void>();
+const standaloneFormulaExtractionTestHooks = new WeakMap<Worksheet, () => void>();
+type DependencyGraphMutationFailureHook = NonNullable<Parameters<DependencyGraph['setMutationFailureInjector']>[0]>;
+const standaloneFormulaGraphFailureTestHooks = new WeakMap<Worksheet, DependencyGraphMutationFailureHook>();
+const standaloneFormulaRestorationTestHooks = new WeakMap<Worksheet, () => void>();
+type WorksheetTestDiagnostics = {
+  graphState(): DependencyGraphTestState;
+  journalStatus(): Readonly<{
+    active: boolean;
+    cellBeforeImages: number;
+    graph: ReturnType<DependencyGraph['getMutationJournalStatusForTesting']>;
+  }>;
+};
+const worksheetTestDiagnostics = new WeakMap<Worksheet, WorksheetTestDiagnostics>();
+
+/** @internal Test-only detached read oracle; not exported from the package barrel. */
+export function getWorksheetDependencyGraphStateForTesting(worksheet: Worksheet): DependencyGraphTestState {
+  const diagnostics = worksheetTestDiagnostics.get(worksheet);
+  if (!diagnostics) throw new Error('Worksheet test diagnostics are unavailable');
+  return diagnostics.graphState();
+}
+
+/** @internal Test-only journal ownership observation; not exported from the package barrel. */
+export function getWorksheetCellWriteJournalStatusForTesting(worksheet: Worksheet): ReturnType<WorksheetTestDiagnostics['journalStatus']> {
+  const diagnostics = worksheetTestDiagnostics.get(worksheet);
+  if (!diagnostics) throw new Error('Worksheet test diagnostics are unavailable');
+  return diagnostics.journalStatus();
+}
+
+/** @internal Failure seam used only to verify Worksheet formula exception compatibility. */
+export function setStandaloneFormulaRegistrationTestHook(
+  worksheet: Worksheet,
+  hook: () => void,
+): { dispose(): void } {
+  standaloneFormulaRegistrationTestHooks.set(worksheet, hook);
+  return { dispose: () => {
+    if (standaloneFormulaRegistrationTestHooks.get(worksheet) === hook) {
+      standaloneFormulaRegistrationTestHooks.delete(worksheet);
+    }
+  } };
+}
+
+/** @internal Failure seam used only to verify warning-only extraction compatibility. */
+export function setStandaloneFormulaExtractionTestHook(
+  worksheet: Worksheet,
+  hook: () => void,
+): { dispose(): void } {
+  standaloneFormulaExtractionTestHooks.set(worksheet, hook);
+  return { dispose: () => {
+    if (standaloneFormulaExtractionTestHooks.get(worksheet) === hook) {
+      standaloneFormulaExtractionTestHooks.delete(worksheet);
+    }
+  } };
+}
+
+/** @internal Failure seam for exact standalone formula graph rollback tests. */
+export function setStandaloneFormulaGraphFailureTestHook(
+  worksheet: Worksheet,
+  hook: DependencyGraphMutationFailureHook,
+): { dispose(): void } {
+  standaloneFormulaGraphFailureTestHooks.set(worksheet, hook);
+  return { dispose: () => {
+    if (standaloneFormulaGraphFailureTestHooks.get(worksheet) === hook) {
+      standaloneFormulaGraphFailureTestHooks.delete(worksheet);
+    }
+  } };
+}
+
+/** @internal Failure seam for verifying distinguishable restoration errors. */
+export function setStandaloneFormulaRestorationTestHook(
+  worksheet: Worksheet,
+  hook: () => void,
+): { dispose(): void } {
+  standaloneFormulaRestorationTestHooks.set(worksheet, hook);
+  return { dispose: () => {
+    if (standaloneFormulaRestorationTestHooks.get(worksheet) === hook) {
+      standaloneFormulaRestorationTestHooks.delete(worksheet);
+    }
+  } };
+}
+
+class WorksheetFormulaRestorationError extends Error {
+  readonly originalMutationError: unknown;
+  readonly restorationErrors: readonly unknown[];
+
+  constructor(originalMutationError: unknown, restorationErrors: readonly unknown[]) {
+    super('Worksheet formula update failed and standalone restoration could not be verified');
+    this.name = 'WorksheetFormulaRestorationError';
+    this.originalMutationError = originalMutationError;
+    this.restorationErrors = restorationErrors;
+  }
+}
+
+export type WorksheetFormulaPostCommitPhase =
+  | 'formula-engine-callback'
+  | 'recalc-notification'
+  | 'event-buffering';
+
+/** A standalone formula write committed before a later callback failed. */
+export class WorksheetFormulaPostCommitError extends Error {
+  readonly committed = true;
+  readonly address: Readonly<Address>;
+  readonly phase: WorksheetFormulaPostCommitPhase;
+  readonly originalError: unknown;
+
+  constructor(
+    address: Address,
+    phase: WorksheetFormulaPostCommitPhase,
+    originalError: unknown,
+  ) {
+    super(`Worksheet formula update committed, then ${phase} failed`);
+    this.name = 'WorksheetFormulaPostCommitError';
+    this.address = Object.freeze({ ...address });
+    this.phase = phase;
+    this.originalError = originalError;
+  }
+}
+const workbookCapabilitiesByWorksheet = new WeakMap<Worksheet, WorkbookWorksheetMutationCapability>();
+const workbookMutationAuthorizedCalls = new WeakSet<Worksheet>();
+
+function snapshotWorkbookDependencyGraph(graph: DependencyGraph): WorkbookCellWriteState['dependencyGraph'] {
+  // The graph's mutable maps are deliberately private to normal callers. The
+  // Workbook journal is an internal owner that must preserve range watchers,
+  // formula-node membership, volatile nodes, and the exact dirty set on rollback.
+  const state = graph as unknown as {
+    formulaNodes: Set<number>;
+    predecessors: Map<number, Iterable<number>>;
+    rangeDependencies: Map<number, AddressRange[]>;
+    volatiles: Set<number>;
+    dirtySet: Set<number>;
+  };
+  return {
+    formulaNodes: [...state.formulaNodes],
+    formulas: [...state.predecessors].map(([key, predecessors]) => ({
+      key,
+      predecessors: [...predecessors],
+      ranges: (state.rangeDependencies.get(key) ?? []).map((range) => ({ ...range })),
+    })),
+    volatiles: [...state.volatiles],
+    dirty: [...state.dirtySet],
+  };
+}
+
+function restoreWorkbookDependencyGraph(
+  graph: DependencyGraph,
+  snapshot: WorkbookCellWriteState['dependencyGraph'],
+): void {
+  graph.clearAll();
+  for (const key of snapshot.formulaNodes) graph.registerFormulaNode(key);
+  for (const formula of snapshot.formulas) {
+    graph.setDependencies(formula.key, formula.predecessors, formula.ranges);
+  }
+  for (const key of snapshot.volatiles) graph.setVolatile(key, true);
+  const dirty = graph.getDirtySet() as Set<number>;
+  dirty.clear();
+  for (const key of snapshot.dirty) dirty.add(key);
+}
+
+function assertWorkbookMutationCapability(
+  worksheet: Worksheet,
+  capability: WorkbookWorksheetMutationCapability,
+): void {
+  if (workbookMutationCapabilities.get(capability) !== worksheet || !worksheet.isWorkbookOwned()) {
+    throw new Error('Invalid Workbook Worksheet mutation capability');
+  }
+}
+
+/** @internal Run one internal Worksheet call with the adoption capability active. */
+export function withWorkbookWorksheetMutationCapability<T>(
+  worksheet: Worksheet,
+  capability: WorkbookWorksheetMutationCapability,
+  operation: () => T,
+): T {
+  assertWorkbookMutationCapability(worksheet, capability);
+  workbookMutationAuthorizedCalls.add(worksheet);
+  try {
+    return operation();
+  } finally {
+    workbookMutationAuthorizedCalls.delete(worksheet);
+  }
+}
 
 type IndexMapper = (index: number) => number | null;
 type WorksheetOwnerAccess = {
@@ -214,6 +459,53 @@ function detachOwnedEventValue<T>(value: T): T {
   if (value instanceof Set) return Object.freeze(Array.from(value, detachOwnedEventValue)) as T;
   const copy: Record<PropertyKey, unknown> = {};
   for (const key of Reflect.ownKeys(value)) copy[key] = detachOwnedEventValue((value as Record<PropertyKey, unknown>)[key]);
+  return Object.freeze(copy) as T;
+}
+
+/**
+ * Return an isolated snapshot for standalone cell reads. Workbook-owned reads
+ * use detachOwnedEventValue() to preserve their existing owner boundary.
+ */
+function detachStandaloneCellRead<T>(value: T, copies = new WeakMap<object, object>()): T {
+  if (typeof value === 'function' || value === null || typeof value !== 'object') {
+    return value;
+  }
+  const existing = copies.get(value);
+  if (existing) return existing as T;
+  if (value instanceof Date) return new Date(value.getTime()) as T;
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    copies.set(value, copy);
+    for (const entry of value) copy.push(detachStandaloneCellRead(entry, copies));
+    return Object.freeze(copy) as T;
+  }
+  if (value instanceof Map) {
+    const copy = new Map<unknown, unknown>();
+    copies.set(value, copy);
+    for (const [key, entry] of value) {
+      copy.set(detachStandaloneCellRead(key, copies), detachStandaloneCellRead(entry, copies));
+    }
+    return copy as T;
+  }
+  if (value instanceof Set) {
+    const copy = new Set<unknown>();
+    copies.set(value, copy);
+    for (const entry of value) copy.add(detachStandaloneCellRead(entry, copies));
+    return copy as T;
+  }
+  const copy: Record<PropertyKey, unknown> = Object.create(Object.getPrototypeOf(value));
+  copies.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if ('value' in descriptor) {
+      Object.defineProperty(copy, key, {
+        ...descriptor,
+        value: detachStandaloneCellRead(descriptor.value, copies),
+      });
+    } else {
+      Object.defineProperty(copy, key, descriptor);
+    }
+  }
   return Object.freeze(copy) as T;
 }
 
@@ -290,6 +582,96 @@ export class Worksheet {
   #_deferredFormulaResultEvents: SheetEvents[] = [];
   #_formulaRecalculationDepth = 0;
   #_mutationListeners = new Set<(event: SheetEvents) => void>();
+  #_workbookCellWriteBatch = false;
+  #_workbookCellWriteEventSink?: WorkbookCellWriteEventSink;
+  #_workbookCellWriteJournal?: WorkbookCellWriteJournal;
+
+  #recordWorkbookCellWriteBeforeImage(address: Address): void {
+    const journal = this.#_workbookCellWriteJournal;
+    if (!journal) return;
+    const anchor = this.#mergeStore.getAnchor(address.row, address.col) ?? address;
+    const key = packKey(anchor.row, anchor.col);
+    if (journal.cells.has(key)) return;
+    const cell = this.#cells.get(anchor.row, anchor.col);
+    journal.cells.set(key, cell ? { ...cell } : undefined);
+  }
+
+  #recordWorkbookRowHeightBeforeImage(row: number): void {
+    const journal = this.#_workbookCellWriteJournal;
+    if (!journal || journal.rowHeights.has(row)) return;
+    if (!this.#rowHeights.has(row)) {
+      journal.rowHeights.set(row, { present: false });
+      return;
+    }
+    const heightPx = this.#rowHeights.get(row);
+    journal.rowHeights.set(row, { present: true, heightPx: heightPx! });
+  }
+
+  #recordWorkbookColumnWidthBeforeImage(col: number): void {
+    const journal = this.#_workbookCellWriteJournal;
+    if (!journal || journal.columnWidths.has(col)) return;
+    if (!this.#colWidths.has(col)) {
+      journal.columnWidths.set(col, { present: false });
+      return;
+    }
+    journal.columnWidths.set(col, { present: true, widthPx: this.#colWidths.get(col)! });
+  }
+
+  /** @internal Begin sparse cell and dependency before-images for the experimental Workbook strategy. */
+  beginWorkbookCellWriteJournal(
+    capability: WorkbookWorksheetMutationCapability,
+    failureInjector?: (phase: WorkbookCellWriteFailurePhase) => void,
+  ): void {
+    assertWorkbookMutationCapability(this, capability);
+    if (this.#_workbookCellWriteJournal) throw new Error('Worksheet already has an active Workbook cell-write journal');
+    this.#_workbookCellWriteJournal = {
+      cells: new Map(),
+      rowHeights: new Map(),
+      columnWidths: new Map(),
+      graph: this.#dag.beginMutationJournal(),
+    };
+    this.#dag.setMutationFailureInjector(failureInjector);
+    this.#workbookCellWriteFailureInjector = failureInjector;
+  }
+
+  #workbookCellWriteFailureInjector?: (phase: WorkbookCellWriteFailurePhase) => void;
+
+  /** @internal Restore only journaled cells and graph entries; no whole-sheet scan. */
+  restoreWorkbookCellWriteJournal(capability: WorkbookWorksheetMutationCapability): void {
+    assertWorkbookMutationCapability(this, capability);
+    const journal = this.#_workbookCellWriteJournal;
+    if (!journal) throw new Error('Worksheet has no active Workbook cell-write journal');
+    for (const [key, cell] of journal.cells) {
+      const address = unpackKey(key);
+      if (cell) this.#cells.set(address.row, address.col, { ...cell });
+      else this.#cells.delete(address.row, address.col);
+    }
+    for (const [row, before] of Array.from(journal.rowHeights.entries()).reverse()) {
+      this.#workbookCellWriteFailureInjector?.('during-row-height-restore');
+      if (before.present) this.#rowHeights.set(row, before.heightPx);
+      else this.#rowHeights.delete(row);
+    }
+    for (const [col, before] of Array.from(journal.columnWidths.entries()).reverse()) {
+      this.#workbookCellWriteFailureInjector?.('during-column-width-restore');
+      if (before.present) this.#colWidths.set(col, before.widthPx);
+      else this.#colWidths.delete(col);
+    }
+    journal.graph.rollback();
+    this.#dag.setMutationFailureInjector(undefined);
+    this.#_workbookCellWriteJournal = undefined;
+    this.#workbookCellWriteFailureInjector = undefined;
+  }
+
+  /** @internal Drop a journal only after every Worksheet batch reached its commit boundary. */
+  commitWorkbookCellWriteJournal(capability: WorkbookWorksheetMutationCapability): void {
+    assertWorkbookMutationCapability(this, capability);
+    const journal = this.#_workbookCellWriteJournal;
+    if (!journal) return;
+    journal.graph.commit();
+    this.#dag.setMutationFailureInjector(undefined);
+    this.#_workbookCellWriteJournal = undefined;
+    this.#workbookCellWriteFailureInjector = undefined;
+  }
 
   constructor(
     name: string,
@@ -306,6 +688,14 @@ export class Worksheet {
     this.#workbook = workbook;
     this.#_engine = spreadsheetEngine;
     this.#worksheetId = `ws-${nextWorksheetIdentity++}`;
+    worksheetTestDiagnostics.set(this, {
+      graphState: () => this.#dag.getStateForTesting(),
+      journalStatus: () => Object.freeze({
+        active: !!this.#_workbookCellWriteJournal,
+        cellBeforeImages: this.#_workbookCellWriteJournal?.cells.size ?? 0,
+        graph: this.#dag.getMutationJournalStatusForTesting(),
+      }),
+    });
   }
 
   /** @internal Workbook adopts a standalone worksheet exactly once. */
@@ -315,12 +705,18 @@ export class Worksheet {
       throw new Error('Worksheet already belongs to another workbook');
     }
     if (this.#ownedByWorkbook) return;
-    // A standalone caller may have retained the current DrawingLayer or one of
-    // its mutable objects. Move the workbook onto a detached layer at adoption
-    // so those pre-adoption aliases can no longer mutate owner drawing state.
+    // Prepare all detached adoption state before committing ownership. A caller
+    // may have retained nested conditional-formatting or drawing references
+    // while the Worksheet was standalone.
+    const adoptedConditionalRules = cloneConditionalFormattingRulesForAdoption(
+      this.#conditionalRules,
+    );
     const drawingState = this.#cloneDrawingLayerData();
     const adoptedDrawingLayer = new DrawingLayer();
     adoptedDrawingLayer.deserialize(drawingState);
+
+    // Commit only after every clone and validation step above has succeeded.
+    this.#conditionalRules = adoptedConditionalRules;
     this.#drawingLayer = adoptedDrawingLayer;
     this.#ownedByWorkbook = workbookId;
     Object.preventExtensions(this);
@@ -340,7 +736,9 @@ export class Worksheet {
 
   /** @internal Called by the locked prototype entry wrappers. */
   assertOwnedMutationEntry(operation: string): void {
-    if (this.#ownedByWorkbook) throw new Error(`Workbook-owned Worksheet.${operation} is unavailable until its journal slice is authorized`);
+    if (this.#ownedByWorkbook && !workbookMutationAuthorizedCalls.has(this)) {
+      throw new Error(`Workbook-owned Worksheet.${operation} is unavailable until its journal slice is authorized`);
+    }
   }
 
   on(listener: (e: SheetEvents) => void) {
@@ -451,6 +849,11 @@ export class Worksheet {
    * Emit or buffer an event depending on transaction state.
    */
   #_emitOrBuffer(event: SheetEvents): void {
+    if (this.#_workbookCellWriteBatch) {
+      this.#_pendingEvents.push(event);
+      this.#_workbookCellWriteEventSink?.(this, event);
+      return;
+    }
     for (const listener of this.#_mutationListeners) listener(event);
     if (this.#_inTransaction) {
       this.#_pendingEvents.push(event);
@@ -487,6 +890,108 @@ export class Worksheet {
     this.#events.emit(pending[pending.length - 1]);
   }
 
+  /** @internal Capture all Worksheet state touched by the initial cell-write slice. */
+  captureWorkbookCellWriteState(
+    capability: WorkbookWorksheetMutationCapability,
+  ): WorkbookCellWriteState {
+    assertWorkbookMutationCapability(this, capability);
+    if (this.#_inTransaction) {
+      throw new Error('Cannot capture Workbook cell-write state during another Worksheet transaction');
+    }
+    const cells: WorkbookCellWriteState['cells'] = [];
+    this.#cells.forEach((row, col, cell) => cells.push({ row, col, cell: { ...cell } }));
+    return {
+      cells,
+      rowHeights: Array.from(this.#rowHeights, ([row, heightPx]) => ({ row, heightPx })),
+      columnWidths: Array.from(this.#colWidths, ([col, widthPx]) => ({ col, widthPx })),
+      dependencyGraph: snapshotWorkbookDependencyGraph(this.#dag),
+    };
+  }
+
+  /** @internal Start buffering all public and internal mutation events for a Workbook commit. */
+  beginWorkbookCellWriteBatch(
+    capability: WorkbookWorksheetMutationCapability,
+    eventSink: WorkbookCellWriteEventSink,
+    failureInjector?: (phase: WorkbookCellWriteFailurePhase) => void,
+  ): void {
+    assertWorkbookMutationCapability(this, capability);
+    if (this.#_inTransaction || this.#_workbookCellWriteBatch) {
+      throw new Error('Worksheet already has an active transaction');
+    }
+    this.#_inTransaction = true;
+    this.#_workbookCellWriteBatch = true;
+    this.#_pendingEvents = [];
+    this.#_workbookCellWriteEventSink = eventSink;
+    this.#workbookCellWriteFailureInjector = failureInjector;
+    this.#dag.setMutationFailureInjector(failureInjector);
+  }
+
+  /** @internal Restore the snapshot and exact dirty set without publishing rollback events. */
+  restoreWorkbookCellWriteState(
+    capability: WorkbookWorksheetMutationCapability,
+    state: WorkbookCellWriteState,
+  ): void {
+    assertWorkbookMutationCapability(this, capability);
+    const currentAddresses: Address[] = [];
+    this.#cells.forEach((row, col) => currentAddresses.push({ row, col }));
+    for (const address of currentAddresses) this.#cells.delete(address.row, address.col);
+    for (const { row, col, cell } of state.cells) this.#cells.set(row, col, { ...cell });
+    this.#rowHeights = new Map(state.rowHeights.map(({ row, heightPx }) => [row, heightPx]));
+    this.#colWidths = new Map(state.columnWidths.map(({ col, widthPx }) => [col, widthPx]));
+    restoreWorkbookDependencyGraph(this.#dag, state.dependencyGraph);
+  }
+
+  /** @internal Close the private batch at the commit point; callers publish afterwards. */
+  finishWorkbookCellWriteBatch(
+    capability: WorkbookWorksheetMutationCapability,
+  ): void {
+    assertWorkbookMutationCapability(this, capability);
+    if (!this.#_workbookCellWriteBatch) {
+      throw new Error('Worksheet cell-write transaction is no longer active');
+    }
+    this.#_workbookCellWriteBatch = false;
+    this.#_workbookCellWriteEventSink = undefined;
+    this.#_pendingEvents = [];
+    this.#_inTransaction = false;
+  }
+
+  /** @internal Abort the private batch and drop every unpublished event. */
+  discardWorkbookCellWriteBatch(
+    capability: WorkbookWorksheetMutationCapability,
+  ): void {
+    assertWorkbookMutationCapability(this, capability);
+    this.#_workbookCellWriteBatch = false;
+    this.#_workbookCellWriteEventSink = undefined;
+    this.#_pendingEvents = [];
+    this.#_inTransaction = false;
+    this.#_workbookCellWriteJournal?.graph.commit();
+    this.#_workbookCellWriteJournal = undefined;
+    this.#workbookCellWriteFailureInjector = undefined;
+    this.#dag.setMutationFailureInjector(undefined);
+  }
+
+  /** @internal Publish one committed event, isolating failures in each observer. */
+  publishWorkbookCellWriteEvent(
+    capability: WorkbookWorksheetMutationCapability,
+    event: SheetEvents,
+    reportObserverError: (error: unknown) => void,
+    shouldContinue: () => boolean = () => true,
+  ): void {
+    assertWorkbookMutationCapability(this, capability);
+    for (const listener of Array.from(this.#_mutationListeners)) {
+      if (!shouldContinue()) break;
+      try {
+        listener(event);
+      } catch (error) {
+        try { reportObserverError(error); } catch { /* diagnostics cannot undo a commit */ }
+      }
+    }
+    if (!shouldContinue()) return;
+    this.#events.emitSafely(event, (error) => {
+      try { reportObserverError(error); } catch { /* diagnostics cannot undo a commit */ }
+    }, shouldContinue);
+  }
+
   /**
    * Get a cell object (returns IMMUTABLE view to prevent direct mutation).
    *
@@ -504,11 +1009,10 @@ export class Worksheet {
     const { row, col } = anchor ?? addr;
     const cell = this.#cells.get(row, col);
 
-    // Standalone callers retain the legacy shallow value behavior. An adopted
-    // worksheet may still be held by code that received it before adoption, so
-    // its nested cell state must be detached as well as its top-level record.
+    // Both standalone and retained pre-adoption handles must return a detached
+    // cell snapshot so nested value/style data cannot mutate stored state.
     return cell
-      ? (this.#ownedByWorkbook ? detachOwnedEventValue(cell) : Object.freeze({ ...cell }))
+      ? (this.#ownedByWorkbook ? detachOwnedEventValue(cell) : detachStandaloneCellRead(cell))
       : undefined;
   }
 
@@ -566,20 +1070,27 @@ export class Worksheet {
       return this.runTransaction(() => this.setCellValue(addr, value));
     }
 
+    // A missing cell reads as null. Honor the same-value no-op before
+    // getOrCreate so writing null to an absent address does not materialize
+    // sparse state or add a needless Journal before-image.
+    assertWorksheetAddress(addr.row, addr.col);
+    const resolved = this.#resolveAnchor(addr);
+    const existing = this.#cells.get(resolved.row, resolved.col);
+    if (!existing && value === null) return;
+    if (existing && existing.value === value && existing.formula === undefined) return;
+
+    this.#recordWorkbookCellWriteBeforeImage(resolved);
     const c = this.#ensureCell(addr);
     const previousValue = c.value; // Phase 30b: Capture before mutation
     const previousFormula = c.formula;
-    // Phase 30b: No-op guard — same value, no mutation, no event
-    if (previousValue === value && previousFormula === undefined) {
-      return;
-    }
     c.value = value;
+    this.#workbookCellWriteFailureInjector?.('after-cell-record');
     if (previousFormula !== undefined) {
       delete c.formula;
-      this.clearDependencies(addr);
+      this.clearDependencies(resolved);
     }
-    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
-    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
+    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(resolved, c);
+    this.#recalcCoordinator.notifyChanged(resolved.row, resolved.col);
     this.#_emitOrBuffer({
       type: "cell-changed",
       address: addr,
@@ -635,6 +1146,7 @@ export class Worksheet {
     }
 
     const resolved = this.#resolveAnchor(addr);
+    this.#recordWorkbookCellWriteBeforeImage(resolved);
     const c = this.#cells.get(resolved.row, resolved.col);
     if (!c) return;
 
@@ -648,10 +1160,11 @@ export class Worksheet {
 
     c.value = null;
     if ("formula" in c) delete c.formula;
+    this.#workbookCellWriteFailureInjector?.('after-cell-record');
     if (hadFormula) this.clearDependencies(resolved);
 
-    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
-    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
+    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(resolved, c);
+    this.#recalcCoordinator.notifyChanged(resolved.row, resolved.col);
     this.#_emitOrBuffer({
       type: "cell-changed",
       address: addr,
@@ -670,15 +1183,17 @@ export class Worksheet {
     }
 
     const resolved = this.#resolveAnchor(addr);
+    this.#recordWorkbookCellWriteBeforeImage(resolved);
     const c = this.#cells.get(resolved.row, resolved.col);
     if (!c || c.formula === undefined) return;
 
     const previousFormula = c.formula;
     delete c.formula;
+    this.#workbookCellWriteFailureInjector?.('after-cell-record');
     this.clearDependencies(resolved);
 
-    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
-    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
+    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(resolved, c);
+    this.#recalcCoordinator.notifyChanged(resolved.row, resolved.col);
     this.#_emitOrBuffer({
       type: "cell-changed",
       address: addr,
@@ -711,47 +1226,111 @@ export class Worksheet {
       );
     }
 
-    const c = this.#ensureCell(addr);
-    const previousFormula = c.formula;
-    const previousValue = c.value;
-    c.formula = formula;
-    if (displayValue !== undefined) c.value = displayValue;
+    const resolved = this.#resolveAnchor(addr);
+    const cellBefore = this.#cells.get(resolved.row, resolved.col);
+    const cellBeforeImage = cellBefore ? { ...cellBefore } : undefined;
+    const standaloneJournal = !this.isWorkbookOwned() && !this.#_workbookCellWriteJournal
+      ? this.#dag.beginMutationJournal()
+      : undefined;
+    const graphFailureHook = standaloneJournal
+      ? standaloneFormulaGraphFailureTestHooks.get(this)
+      : undefined;
+    let standaloneJournalCommitted = false;
+    let postCommitPhase: WorksheetFormulaPostCommitPhase = 'formula-engine-callback';
+    if (graphFailureHook) this.#dag.setMutationFailureInjector(graphFailureHook);
 
-    // Phase 3: Automatically extract and register formula dependencies
     try {
-      // A1 references are extracted as zero-based coordinates, while every
-      // Worksheet Address and DependencyGraph key follows the public
-      // one-based contract. Keep the extractor's R1C1 origin zero-based and
-      // normalize every extracted dependency exactly once below.
-      const parserAddress = { row: addr.row - 1, col: addr.col - 1 };
-      const extracted = extractFormulaDependencies(formula, parserAddress);
-      // Formula-reference extraction uses zero-based coordinates; graph
-      // nodes use the public one-based worksheet coordinate contract.
-      const dependencies = extracted.cells.map(({ row, col }) => ({ row: row + 1, col: col + 1 }));
-      const ranges = extracted.ranges.map((range) => ({
-        startRow: range.startRow + 1,
-        endRow: range.endRow + 1,
-        startCol: range.startCol + 1,
-        endCol: range.endCol + 1,
-      }));
-      this.registerDependencies(addr, dependencies, ranges);
-    } catch (error) {
-      // Dependency extraction failed - log but continue
-      console.warn(
-        `Failed to extract dependencies from formula at ${addr.row}:${addr.col}:`,
-        error,
-      );
-    }
+      this.#recordWorkbookCellWriteBeforeImage(addr);
+      const c = this.#ensureCell(addr);
+      const previousFormula = c.formula;
+      const previousValue = c.value;
+      c.formula = formula;
+      if (displayValue !== undefined) c.value = displayValue;
+      this.#workbookCellWriteFailureInjector?.('after-cell-record');
 
-    if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(addr, c);
-    this.#recalcCoordinator.notifyChanged(addr.row, addr.col);
-    this.#_emitOrBuffer({
-      type: "cell-changed",
-      address: addr,
-      cell: { ...c },
-      previousValue,
-      previousFormula,
-    });
+      // Phase 3: Automatically extract and register formula dependencies
+      let extracted: ReturnType<typeof extractFormulaDependencies> | undefined;
+      try {
+        if (!this.isWorkbookOwned()) standaloneFormulaExtractionTestHooks.get(this)?.();
+        // A1 references are extracted as zero-based coordinates, while every
+        // Worksheet Address and DependencyGraph key follows the public
+        // one-based contract. Keep the extractor's R1C1 origin zero-based and
+        // normalize every extracted dependency exactly once below.
+        const parserAddress = { row: addr.row - 1, col: addr.col - 1 };
+        extracted = extractFormulaDependencies(formula, parserAddress);
+      } catch (error) {
+        // Keep parser failures displayable when the dependency extractor does
+        // not understand a grammar construct; graph mutation failures happen
+        // outside this catch and retain their operation-failure semantics.
+        console.warn(
+          `Failed to extract dependencies from formula at ${addr.row}:${addr.col}:`,
+          error,
+        );
+      }
+      if (extracted) {
+        // Formula-reference extraction uses zero-based coordinates; graph
+        // nodes use the public one-based worksheet coordinate contract.
+        const dependencies = extracted.cells.map(({ row, col }) => ({ row: row + 1, col: col + 1 }));
+        const ranges = extracted.ranges.map((range) => ({
+          startRow: range.startRow + 1,
+          endRow: range.endRow + 1,
+          startCol: range.startCol + 1,
+          endCol: range.endCol + 1,
+        }));
+        if (!this.isWorkbookOwned()) standaloneFormulaRegistrationTestHooks.get(this)?.();
+        this.registerDependencies(resolved, dependencies, ranges);
+      }
+
+      standaloneJournal?.commit();
+      standaloneJournalCommitted = standaloneJournal !== undefined;
+      if (standaloneJournalCommitted && graphFailureHook) {
+        this.#dag.setMutationFailureInjector(undefined);
+      }
+
+      postCommitPhase = 'formula-engine-callback';
+      if (this.#formulaEngine) this.#formulaEngine.onCellChanged?.(resolved, c);
+      postCommitPhase = 'recalc-notification';
+      this.#recalcCoordinator.notifyChanged(resolved.row, resolved.col);
+      postCommitPhase = 'event-buffering';
+      this.#_emitOrBuffer({
+        type: "cell-changed",
+        address: addr,
+        cell: { ...c },
+        previousValue,
+        previousFormula,
+      });
+    } catch (mutationError) {
+      if (standaloneJournalCommitted) {
+        if (mutationError instanceof WorksheetFormulaPostCommitError) throw mutationError;
+        throw new WorksheetFormulaPostCommitError(addr, postCommitPhase, mutationError);
+      }
+      if (!standaloneJournal) throw mutationError;
+
+      const restorationErrors: unknown[] = [];
+      try {
+        standaloneFormulaRestorationTestHooks.get(this)?.();
+      } catch (error) {
+        restorationErrors.push(error);
+      }
+      try {
+        standaloneJournal.rollback();
+      } catch (error) {
+        restorationErrors.push(error);
+      }
+      try {
+        if (cellBeforeImage) this.#cells.set(resolved.row, resolved.col, cellBeforeImage);
+        else this.#cells.delete(resolved.row, resolved.col);
+      } catch (error) {
+        restorationErrors.push(error);
+      }
+
+      if (restorationErrors.length > 0) {
+        throw new WorksheetFormulaRestorationError(mutationError, restorationErrors);
+      }
+      throw mutationError;
+    } finally {
+      if (standaloneJournal && graphFailureHook) this.#dag.setMutationFailureInjector(undefined);
+    }
   }
 
   /**
@@ -934,6 +1513,7 @@ export class Worksheet {
       return this.runTransaction(() => this.setCellStyle(addr, style));
     }
 
+    this.#recordWorkbookCellWriteBeforeImage(addr);
     const c = this.#ensureCell(addr);
     const previousStyle = c.style;
 
@@ -942,6 +1522,7 @@ export class Worksheet {
       style && isInternedStyle(style) ? style : this.#internStyle(style);
 
     c.style = internedStyle; // Reference to canonical style (not a copy)
+    this.#workbookCellWriteFailureInjector?.('after-cell-record');
     this.#_emitOrBuffer({
       type: "style-changed",
       address: addr,
@@ -1562,15 +2143,32 @@ export class Worksheet {
     return this.#colWidths.get(col) ?? 80;
   }
   setColumnWidth(col: number, px: number): void {
-    this.#colWidths.set(col, px);
-    this.#events.emit({ type: "sheet-mutated" });
+    if (this.#_workbookCellWriteBatch) {
+      this.#recordWorkbookColumnWidthBeforeImage(col);
+      this.#workbookCellWriteFailureInjector?.('before-column-width-map-write');
+      this.#colWidths.set(col, px);
+      this.#workbookCellWriteFailureInjector?.('after-column-width-map-write');
+      this.#_emitOrBuffer({ type: "sheet-mutated" });
+    } else {
+      this.#colWidths.set(col, px);
+      this.#events.emit({ type: "sheet-mutated" });
+    }
   }
   getRowHeight(row: number): number {
     return this.#rowHeights.get(row) ?? 20;
   }
   setRowHeight(row: number, px: number): void {
+    this.#recordWorkbookRowHeightBeforeImage(row);
+    if (this.#_workbookCellWriteBatch) {
+      this.#workbookCellWriteFailureInjector?.('before-row-height-map-write');
+    }
     this.#rowHeights.set(row, px);
-    this.#events.emit({ type: "sheet-mutated" });
+    if (this.#_workbookCellWriteBatch) {
+      this.#workbookCellWriteFailureInjector?.('after-row-height-map-write');
+      this.#_emitOrBuffer({ type: "sheet-mutated" });
+    } else {
+      this.#events.emit({ type: "sheet-mutated" });
+    }
   }
 
   insertRows(rowIndex: number, count = 1): void {
@@ -1758,6 +2356,7 @@ export class Worksheet {
   get dirtyCount(): number {
     return this.#recalcCoordinator.dirtyCount;
   }
+
 
   /** @internal Get formula cells in the graph's topological dirty order. */
   getRecalculationPlan(): { addresses: Address[]; cycles: CycleDiagnostic[] } {
@@ -3696,8 +4295,17 @@ export class Worksheet {
 }
 
 /** @internal Workbook-only adoption entry; not re-exported from the package API. */
-export function adoptWorksheetByWorkbook(worksheet: Worksheet, workbookId: string): void {
+export function adoptWorksheetByWorkbook(
+  worksheet: Worksheet,
+  workbookId: string,
+): WorkbookWorksheetMutationCapability {
   worksheet.adoptByWorkbook(workbookId, WORKBOOK_ADOPTION_KEY);
+  const existing = workbookCapabilitiesByWorksheet.get(worksheet);
+  if (existing) return existing;
+  const capability = Object.freeze({});
+  workbookMutationCapabilities.set(capability, worksheet);
+  workbookCapabilitiesByWorksheet.set(worksheet, capability);
+  return capability;
 }
 
 // The guard is installed on the prototype so retained handles and explicit

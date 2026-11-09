@@ -320,20 +320,34 @@ describe('PivotRegistry - Metadata Integrity', () => {
     
     const meta = registry.get(id);
     
-    // Metadata should only have these fields
-    expect(Object.keys(meta ?? {})).toEqual([
-      'name',
-      'config',
-      'sourceRange',
-      'worksheetId',
-      'id',
-      'createdAt',
-    ]);
-    
-    // No computed fields
-    expect(meta).not.toHaveProperty('data');
-    expect(meta).not.toHaveProperty('result');
-    expect(meta).not.toHaveProperty('grid');
+    expect(meta).toBeDefined();
+    // The registry stores identity/configuration and documented lifecycle
+    // metadata. Optional lifecycle fields may be absent before they are used.
+    expect(meta).toEqual(expect.objectContaining({
+      name: 'Test',
+      config,
+      sourceRange: 'A1:B6',
+      worksheetId: 'ws1',
+      id,
+      dirty: expect.any(Boolean),
+      createdAt: expect.any(Number),
+    }));
+    if (meta?.hasNonReversibleAggregations !== undefined) {
+      expect(typeof meta.hasNonReversibleAggregations).toBe('boolean');
+    }
+    if (meta?.lastBuiltAt !== undefined) {
+      expect(typeof meta.lastBuiltAt).toBe('number');
+    }
+    if (meta?.rebuilding !== undefined) {
+      expect(typeof meta.rebuilding).toBe('boolean');
+    }
+
+    // Metadata must not retain computed results, grids, or Worksheet objects.
+    for (const key of [
+      'data', 'result', 'grid', 'cachedGrid', 'worksheet', 'worksheetRef',
+    ]) {
+      expect(meta).not.toHaveProperty(key);
+    }
   });
 
   test('createdAt timestamp is set correctly', () => {

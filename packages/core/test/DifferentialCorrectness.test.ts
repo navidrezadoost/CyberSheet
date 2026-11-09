@@ -12,19 +12,17 @@
  */
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import { Workbook } from '../src/workbook';
+import { Worksheet } from '../src/worksheet';
 import { InsertColumnCommand } from '../src/InsertColumnCommand';
 import { DeleteColumnCommand } from '../src/DeleteColumnCommand';
 import { NaiveSheet } from './NaiveSheet';
 
 describe('Differential Correctness (Optimized vs Naive)', () => {
-  let workbook: Workbook;
-  let worksheet: any;
+  let worksheet: Worksheet;
   let naive: NaiveSheet;
 
   beforeEach(() => {
-    workbook = new Workbook();
-    worksheet = workbook.addSheet('Test');
+    worksheet = new Worksheet('Test');
     naive = new NaiveSheet();
   });
 

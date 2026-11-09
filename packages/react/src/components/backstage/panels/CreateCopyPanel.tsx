@@ -24,6 +24,8 @@ export interface CreateCopyPanelProps {
   currentFileName: string;
   currentLocation: string;
   workbook?: any; // Workbook instance
+  sessionGeneration?: number;
+  sessionGenerationRef?: { readonly current: number };
   onClose: () => void;
 }
 
@@ -35,6 +37,8 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
   currentFileName,
   currentLocation,
   workbook,
+  sessionGeneration,
+  sessionGenerationRef,
   onClose,
 }) => {
   // Remove extension for editing
@@ -53,6 +57,56 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
   
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animationResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(false);
+
+  const isCurrentSession = useCallback((generation: number) => (
+    isMountedRef.current &&
+    (sessionGenerationRef === undefined || sessionGenerationRef.current === generation)
+  ), [sessionGenerationRef]);
+
+  const scheduleAnimationReset = useCallback(() => {
+    if (animationResetTimerRef.current !== null) {
+      clearTimeout(animationResetTimerRef.current);
+    }
+    animationResetTimerRef.current = setTimeout(() => {
+      animationResetTimerRef.current = null;
+      if (isMountedRef.current) {
+        setIsShaking(false);
+      }
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (closeTimerRef.current !== null) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      if (animationResetTimerRef.current !== null) {
+        clearTimeout(animationResetTimerRef.current);
+        animationResetTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (sessionGeneration === undefined) return;
+    if (closeTimerRef.current !== null) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setIsCreating(false);
+    setIsSuccess(false);
+    setError(null);
+  }, [sessionGeneration]);
 
   // Focus input on mount and select all text
   useEffect(() => {
@@ -91,18 +145,23 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
       
       if (validationError) {
         setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 300);
+        scheduleAnimationReset();
       }
     }, 300);
-  }, [validate]);
+  }, [scheduleAnimationReset, validate]);
 
   // Handle create copy
   const handleCreateCopy = useCallback(async () => {
+    const operationGeneration = sessionGeneration ?? sessionGenerationRef?.current ?? 0;
+    if (!isCurrentSession(operationGeneration)) {
+      return;
+    }
+
     const validationError = validate(copyName);
     if (validationError) {
       setError(validationError);
       setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 300);
+      scheduleAnimationReset();
       return;
     }
 
@@ -116,6 +175,9 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
 
       // Export workbook as XLSX
       const arrayBuffer = await exportXLSX(workbook);
+      if (!isCurrentSession(operationGeneration)) {
+        return;
+      }
       const blob = new Blob([arrayBuffer], { 
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
       });
@@ -133,16 +195,27 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
       setIsSuccess(true);
       
       // Auto-close after success
-      setTimeout(() => {
-        onClose();
+      if (closeTimerRef.current !== null) {
+        clearTimeout(closeTimerRef.current);
+      }
+      closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null;
+        if (isCurrentSession(operationGeneration)) {
+          onClose();
+        }
       }, 1200);
     } catch (err) {
+      if (!isCurrentSession(operationGeneration)) {
+        return;
+      }
       setError('Failed to create copy. Please try again.');
       console.error('Copy error:', err);
     } finally {
-      setIsCreating(false);
+      if (isCurrentSession(operationGeneration)) {
+        setIsCreating(false);
+      }
     }
-  }, [copyName, extension, fileOperations, validate, onClose]);
+  }, [copyName, extension, fileOperations, validate, sessionGeneration, sessionGenerationRef, isCurrentSession, onClose, scheduleAnimationReset]);
 
   // Enter key
   const handleKeyDown = useCallback((e: any) => {
@@ -150,15 +223,6 @@ export const CreateCopyPanel: React.FC<CreateCopyPanelProps> = ({
       handleCreateCopy();
     }
   }, [handleCreateCopy, isCreating, isSuccess]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
 
   // Locations
   const locations = [

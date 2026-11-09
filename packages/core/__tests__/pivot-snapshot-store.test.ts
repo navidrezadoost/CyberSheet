@@ -167,6 +167,33 @@ describe('PivotSnapshotStore - Validation', () => {
       store.set('pivot-1' as PivotId, snapshot);
     }).toThrow('Snapshot pivotId mismatch');
   });
+
+  test('rejected replacement preserves the previously published snapshot', () => {
+    const store = new PivotSnapshotStore();
+    const pivotId = 'pivot-1' as PivotId;
+    const published: PivotSnapshot = {
+      pivotId,
+      computedAt: 100,
+      rows: [{ Region: 'West', Revenue: 42 }],
+      fields: ['Region', 'Revenue'],
+      valueFields: ['Revenue'],
+    };
+    const invalidReplacement: PivotSnapshot = {
+      pivotId: 'pivot-2' as PivotId,
+      computedAt: 200,
+      rows: [{ Region: 'East', Revenue: 99 }],
+      fields: ['Region', 'Revenue'],
+      valueFields: ['Revenue'],
+    };
+
+    store.set(pivotId, published);
+
+    expect(() => store.set(pivotId, invalidReplacement)).toThrow('Snapshot pivotId mismatch');
+    expect(store.get(pivotId)).toBe(published);
+    expect(store.get(pivotId)?.rows).toEqual([{ Region: 'West', Revenue: 42 }]);
+    expect(store.has('pivot-2' as PivotId)).toBe(false);
+    expect(store.size).toBe(1);
+  });
 });
 
 describe('PivotSnapshotStore - Disposal Safety', () => {

@@ -9,7 +9,7 @@ import {
   type Worksheet,
   type WorkbookSheetView,
 } from '@cyber-sheet/core';
-import { requireStandaloneWorksheet } from './workbookSheetAccess';
+import { requireClipboardCopySource, requireStandaloneWorksheet } from './workbookSheetAccess';
 
 export interface ClipboardRenderer {
   invalidateRange: (r1: number, c1: number, r2: number, c2: number) => void;
@@ -20,6 +20,22 @@ export interface ClipboardRenderer {
 export interface PasteOptions {
   renderer?: ClipboardRenderer | null;
   onCutComplete?: () => void;
+}
+
+const WORKBOOK_OWNED_CLIPBOARD_UNAVAILABLE_MESSAGE =
+  'This workbook-owned operation is unavailable until its journal slice is authorized';
+
+export function getClipboardOperationErrorMessage(
+  error: unknown,
+  operation: 'Cut' | 'Paste',
+): string {
+  if (
+    error instanceof Error &&
+    error.message === WORKBOOK_OWNED_CLIPBOARD_UNAVAILABLE_MESSAGE
+  ) {
+    return WORKBOOK_OWNED_CLIPBOARD_UNAVAILABLE_MESSAGE;
+  }
+  return `${operation} could not be completed.`;
 }
 
 export function normalizeSelectionRange(
@@ -60,6 +76,7 @@ export function payloadToPlainText(
   worksheet: Worksheet | WorkbookSheetView,
   range: Range
 ): string {
+  worksheet = requireClipboardCopySource(worksheet);
   const rows: string[] = [];
   for (let row = range.start.row; row <= range.end.row; row++) {
     const cols: string[] = [];
@@ -80,6 +97,7 @@ export function performCopy(
   range: Range,
   options?: { writeSystemClipboard?: boolean; mode?: ClipboardCopyMode }
 ): void {
+  worksheet = requireClipboardCopySource(worksheet);
   const mode = options?.mode ?? 'all';
   clipboardService.copy(worksheet, range, mode);
   if (options?.writeSystemClipboard !== false) {
@@ -136,6 +154,7 @@ export function performPaste(
   targetAnchor: Address,
   options?: PasteOptions
 ): boolean {
+  worksheet = requireStandaloneWorksheet(worksheet);
   const payload = clipboardService.getPayload();
   if (!payload) return false;
 
