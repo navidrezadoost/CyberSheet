@@ -20,6 +20,7 @@ import type {
   ExcelColorSpec 
 } from '@cyber-sheet/core';
 import { CommentParser, type ExcelComment } from './CommentParser';
+import { XlsxImportUnavailableError } from './XlsxImportUnavailableError';
 
 /**
  * XLSX file structure (ZIP-based Office Open XML)
@@ -95,128 +96,30 @@ export interface ParsedCell {
  * Only extracts XML files we need, no full decompression
  */
 class MinimalZipReader {
-  private entries = new Map<string, { offset: number; size: number; compressed: boolean }>();
-  
-  constructor(private buffer: ArrayBuffer) {}
+  constructor(_buffer: ArrayBuffer) {}
   
   /**
    * Read ZIP central directory to locate files
    * Avoids decompressing everything upfront
    */
   async readDirectory(): Promise<void> {
-    const view = new DataView(this.buffer);
-    
-    // Find End of Central Directory (EOCD) signature
-    // Search backwards from end of file
-    let eocdOffset = -1;
-    for (let i = this.buffer.byteLength - 22; i >= 0; i--) {
-      if (view.getUint32(i, true) === 0x06054b50) {
-        eocdOffset = i;
-        break;
-      }
-    }
-    
-    if (eocdOffset === -1) {
-      throw new Error('Invalid ZIP file: EOCD signature not found');
-    }
-    
-    // Read central directory offset and size
-    const cdOffset = view.getUint32(eocdOffset + 16, true);
-    const cdEntries = view.getUint16(eocdOffset + 10, true);
-    
-    // Parse central directory entries
-    let offset = cdOffset;
-    for (let i = 0; i < cdEntries; i++) {
-      const sig = view.getUint32(offset, true);
-      if (sig !== 0x02014b50) break; // Central directory file header signature
-      
-      const compressedSize = view.getUint32(offset + 20, true);
-      const uncompressedSize = view.getUint32(offset + 24, true);
-      const fileNameLength = view.getUint16(offset + 28, true);
-      const extraLength = view.getUint16(offset + 30, true);
-      const commentLength = view.getUint16(offset + 32, true);
-      const localHeaderOffset = view.getUint32(offset + 42, true);
-      const compressionMethod = view.getUint16(offset + 10, true);
-      
-      // Read filename
-      const nameBytes = new Uint8Array(this.buffer, offset + 46, fileNameLength);
-      const fileName = new TextDecoder().decode(nameBytes);
-      
-      // Store entry metadata
-      this.entries.set(fileName, {
-        offset: localHeaderOffset,
-        size: compressionMethod === 0 ? uncompressedSize : compressedSize,
-        compressed: compressionMethod !== 0
-      });
-      
-      offset += 46 + fileNameLength + extraLength + commentLength;
-    }
+    // Fail closed so preview, streaming, and worker callers cannot reach
+    // unbounded ZIP metadata parsing or decompression.
+    throw new XlsxImportUnavailableError();
   }
   
   /**
    * Extract single file from ZIP
    */
-  async extractFile(path: string): Promise<Uint8Array | null> {
-    const entry = this.entries.get(path);
-    if (!entry) return null;
-    
-    const view = new DataView(this.buffer);
-    
-    // Read local file header
-    const sig = view.getUint32(entry.offset, true);
-    if (sig !== 0x04034b50) {
-      throw new Error(`Invalid local file header for ${path}`);
-    }
-    
-    const compressionMethod = view.getUint16(entry.offset + 8, true);
-    const fileNameLength = view.getUint16(entry.offset + 26, true);
-    const extraLength = view.getUint16(entry.offset + 28, true);
-    
-    const dataOffset = entry.offset + 30 + fileNameLength + extraLength;
-    const data = new Uint8Array(this.buffer, dataOffset, entry.size);
-    
-    // Decompress if needed
-    if (compressionMethod === 8) {
-      // DEFLATE compression - use browser's DecompressionStream
-      if (typeof DecompressionStream !== 'undefined') {
-        const stream = new DecompressionStream('deflate-raw');
-        const writer = stream.writable.getWriter();
-        writer.write(data);
-        writer.close();
-        
-        const chunks: Uint8Array[] = [];
-        const reader = stream.readable.getReader();
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-        
-        // Combine chunks
-        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-          result.set(chunk, offset);
-          offset += chunk.length;
-        }
-        
-        return result;
-      } else {
-        throw new Error('DecompressionStream not available (requires modern browser)');
-      }
-    }
-    
-    // No compression (method 0)
-    return data;
+  async extractFile(_path: string): Promise<Uint8Array | null> {
+    throw new XlsxImportUnavailableError();
   }
   
   /**
    * List all files in ZIP
    */
   listFiles(): string[] {
-    return Array.from(this.entries.keys());
+    return [];
   }
 }
 

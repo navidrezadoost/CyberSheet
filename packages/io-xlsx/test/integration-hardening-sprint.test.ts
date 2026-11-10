@@ -9,7 +9,7 @@ import { describe, test, expect, beforeEach } from '@jest/globals';
 import { Worksheet } from '../../core/src/worksheet';
 import type { Address } from '../../core/src/types';
 import { FormulaEngine } from '../../core/src/FormulaEngine';
-import { strFromU8, unzipSync } from 'fflate';
+import { TextWriter, Uint8ArrayReader, ZipReader } from '@zip.js/zip.js';
 // Exercise the XLSX package from its own ESM-aware Jest configuration.
 import { exportXLSX } from '../src/export';
 
@@ -17,9 +17,14 @@ function worksheetAddress(row: number, col: number): Address {
   return { row: row + 1, col: col + 1 };
 }
 
-function xlsxXml(buffer: ArrayBuffer, path: string): string {
-  const file = unzipSync(new Uint8Array(buffer))[path];
-  return file ? strFromU8(file) : '';
+async function xlsxXml(buffer: ArrayBuffer, path: string): Promise<string> {
+  const reader = new ZipReader(new Uint8ArrayReader(new Uint8Array(buffer)));
+  try {
+    const entry = (await reader.getEntries()).find((candidate) => candidate.filename === path);
+    return entry && !entry.directory ? await entry.getData(new TextWriter()) : '';
+  } finally {
+    await reader.close();
+  }
 }
 
 describe('Hardening Sprint - Integration Tests', () => {
@@ -46,7 +51,7 @@ describe('Hardening Sprint - Integration Tests', () => {
       expect(arrayBuffer).toBeInstanceOf(ArrayBuffer);
       expect(arrayBuffer.byteLength).toBeGreaterThan(0);
 
-      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      const sheetXml = await xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
       expect(sheetXml).toContain('<c r="A1"><v>10</v></c>');
       expect(sheetXml).toContain('<c r="A2"><v>20</v></c>');
       expect(sheetXml).toContain('<f>A1+A2</f><v>30</v>');
@@ -63,7 +68,7 @@ describe('Hardening Sprint - Integration Tests', () => {
 
       // Export and re-import
       const arrayBuffer = await exportXLSX(sheet);
-      const stylesXml = xlsxXml(arrayBuffer, 'xl/styles.xml');
+      const stylesXml = await xlsxXml(arrayBuffer, 'xl/styles.xml');
       expect(stylesXml).toContain('<b/>');
       expect(stylesXml).toContain('rgb="FFFF0000"');
       expect(stylesXml).toContain('<sz val="14"/>');
@@ -77,7 +82,7 @@ describe('Hardening Sprint - Integration Tests', () => {
 
       // Export and re-import
       const arrayBuffer = await exportXLSX(sheet);
-      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      const sheetXml = await xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
       expect(sheetXml).toContain('<t>Text</t>');
       expect(sheetXml).toContain('<v>123</v>');
       expect(sheetXml).not.toContain('r="B1"');
@@ -257,7 +262,7 @@ describe('Hardening Sprint - Integration Tests', () => {
       const arrayBuffer = await exportXLSX(sheet);
       
       // Import back
-      expect(xlsxXml(arrayBuffer, 'xl/workbook.xml')).toContain('<sheet name="Sheet1"');
+      expect(await xlsxXml(arrayBuffer, 'xl/workbook.xml')).toContain('<sheet name="Sheet1"');
     });
 
     test('should handle workbook with only formulas (no direct values)', async () => {
@@ -268,7 +273,7 @@ describe('Hardening Sprint - Integration Tests', () => {
 
       // Export and re-import
       const arrayBuffer = await exportXLSX(sheet);
-      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      const sheetXml = await xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
       expect(sheetXml).toContain('<f>10+20</f>');
       expect(sheetXml).toContain('<f>A1*2</f>');
       expect(sheetXml).toContain('<f>A2/3</f>');
@@ -285,7 +290,7 @@ describe('Hardening Sprint - Integration Tests', () => {
 
       // Export and re-import
       const arrayBuffer = await exportXLSX(sheet);
-      const sheetXml = xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
+      const sheetXml = await xlsxXml(arrayBuffer, 'xl/worksheets/sheet1.xml');
       expect(sheetXml).toContain('Quote: &quot;test&quot;');
       expect(sheetXml).toContain('Comma: a,b,c');
       expect(sheetXml).toContain('Newline: line1\nline2');

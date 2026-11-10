@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { strToU8, zipSync } from 'fflate';
+import { TextReader, Uint8ArrayWriter, ZipWriter } from '@zip.js/zip.js';
 import { Workbook, Worksheet } from '@cyber-sheet/core';
 import { loadXlsxFromArrayBuffer, loadXlsxFromUrl } from '../src/index';
 
@@ -10,18 +10,20 @@ declare global {
 
 const R6_UNAVAILABLE = /XLSX import is unavailable until R6 staged restore is authorized/;
 
-function makeXlsx(): Uint8Array {
-  return zipSync({
-    'xl/workbook.xml': strToU8(
-      '<workbook><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>',
-    ),
-    'xl/_rels/workbook.xml.rels': strToU8(
-      '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
-    ),
-    'xl/worksheets/sheet1.xml': strToU8(
-      '<worksheet><dimension ref="A1"/><sheetData><row r="1"><c r="A1"><f>40+2</f><v>420042</v></c></row></sheetData></worksheet>',
-    ),
-  });
+async function makeXlsx(): Promise<Uint8Array> {
+  const output = new Uint8ArrayWriter();
+  const writer = new ZipWriter(output, { useWebWorkers: false, useCompressionStream: false });
+  await writer.add('xl/workbook.xml', new TextReader(
+    '<workbook><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+  ));
+  await writer.add('xl/_rels/workbook.xml.rels', new TextReader(
+    '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+  ));
+  await writer.add('xl/worksheets/sheet1.xml', new TextReader(
+    '<worksheet><dimension ref="A1"/><sheetData><row r="1"><c r="A1"><f>40+2</f><v>420042</v></c></row></sheetData></worksheet>',
+  ));
+  await writer.close();
+  return output.getData();
 }
 
 describe('Workbook-producing XLSX loader R6 gate', () => {
@@ -57,10 +59,11 @@ describe('Workbook-producing XLSX loader R6 gate', () => {
     jest.restoreAllMocks();
   });
 
-  it('rejects a valid formula workbook before imported sheets attach in development', () => {
+  it('rejects a valid formula workbook before imported sheets attach in development', async () => {
     const attach = jest.spyOn(Workbook.prototype, 'attachDevImportSheet');
+    const xlsx = await makeXlsx();
 
-    expect(() => loadXlsxFromArrayBuffer(makeXlsx())).toThrow(R6_UNAVAILABLE);
+    expect(() => loadXlsxFromArrayBuffer(xlsx)).toThrow(R6_UNAVAILABLE);
     expect(attach).not.toHaveBeenCalled();
   });
 
@@ -76,11 +79,22 @@ describe('Workbook-producing XLSX loader R6 gate', () => {
     expect(attach).not.toHaveBeenCalled();
   });
 
-  it('does not let the import environment override bypass the R6 gate', () => {
+  it('rejects ZIP-like untrusted bytes before parsing entry metadata', () => {
+    // Keep the fixture bounded. If the R6 gate is ever opened, ZIP parsing must
+    // receive its own size-limited implementation before untrusted input reaches
+    // any ZIP reader.
+    const suspiciousZip = new Uint8Array(30);
+    suspiciousZip.set([0x50, 0x4b, 0x03, 0x04]);
+
+    expect(() => loadXlsxFromArrayBuffer(suspiciousZip)).toThrow(R6_UNAVAILABLE);
+  });
+
+  it('does not let the import environment override bypass the R6 gate', async () => {
     if (importEnvironment()) importEnvironment()!.CYBER_SHEET_ENABLE_XLSX_IMPORT = '1';
     const attach = jest.spyOn(Workbook.prototype, 'attachDevImportSheet');
+    const xlsx = await makeXlsx();
 
-    expect(() => loadXlsxFromArrayBuffer(makeXlsx())).toThrow(R6_UNAVAILABLE);
+    expect(() => loadXlsxFromArrayBuffer(xlsx)).toThrow(R6_UNAVAILABLE);
     expect(attach).not.toHaveBeenCalled();
   });
 
@@ -88,7 +102,10 @@ describe('Workbook-producing XLSX loader R6 gate', () => {
     const fetchFn = jest.fn(async () => ({
       ok: true,
       status: 200,
-      arrayBuffer: async () => makeXlsx().buffer,
+      arrayBuffer: async () => {
+        const xlsx = await makeXlsx();
+        return xlsx.buffer.slice(xlsx.byteOffset, xlsx.byteOffset + xlsx.byteLength) as ArrayBuffer;
+      },
     } as Response));
     const publish = jest.fn<(workbook: Workbook) => void>();
     const attach = jest.spyOn(Workbook.prototype, 'attachDevImportSheet');

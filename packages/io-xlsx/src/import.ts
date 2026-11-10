@@ -11,6 +11,7 @@
 import { DEFAULT_WORKSHEET_COLS, DEFAULT_WORKSHEET_ROWS, Workbook, Worksheet } from '@cyber-sheet/core';
 import { LightweightXLSXParser, XLSXParseOptions, XLSXMetadata } from './LightweightParser';
 import { applyParsedCellToWorksheet } from './internal/applyParsedCell';
+import { XlsxImportUnavailableError } from './XlsxImportUnavailableError';
 
 export interface ImportOptions extends XLSXParseOptions {
   /** Create Workbook instance automatically */
@@ -168,7 +169,7 @@ export async function importXLSX(
   _buffer: ArrayBuffer,
   _options: ImportOptions = {},
 ): Promise<ImportResult> {
-  throw new Error('XLSX import is unavailable until R6 staged restore is authorized');
+  throw new XlsxImportUnavailableError('XLSX import is unavailable until R6 staged restore is authorized');
 }
 
 /**

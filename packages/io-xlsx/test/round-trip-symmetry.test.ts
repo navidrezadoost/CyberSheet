@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, jest } from '@jest/globals';
 import { Worksheet, type Address, type CellStyle } from '@cyber-sheet/core';
-import { strFromU8, unzipSync } from 'fflate';
+import { TextWriter, Uint8ArrayReader, ZipReader } from '@zip.js/zip.js';
 import { exportXLSX } from '../src/export';
 import { loadXlsxFromArrayBuffer } from '../src/index';
 
@@ -14,16 +14,45 @@ type ExtendedStyle = CellStyle & { strikethrough?: boolean; superscript?: boolea
 
 async function exportedParts(sheet: Worksheet) {
   const buffer = await exportXLSX(sheet);
-  const files = unzipSync(new Uint8Array(buffer));
-  return {
-    buffer,
-    workbook: strFromU8(files['xl/workbook.xml']),
-    sheet: strFromU8(files['xl/worksheets/sheet1.xml']),
-    styles: strFromU8(files['xl/styles.xml']),
-  };
+  const reader = new ZipReader(new Uint8ArrayReader(new Uint8Array(buffer)));
+  try {
+    const entries = new Map((await reader.getEntries()).map((entry) => [entry.filename, entry]));
+    const readText = async (path: string) => {
+      const entry = entries.get(path);
+      if (!entry || entry.directory) throw new Error(`Missing XLSX entry: ${path}`);
+      return entry.getData(new TextWriter());
+    };
+    return {
+      buffer,
+      workbook: await readText('xl/workbook.xml'),
+      sheet: await readText('xl/worksheets/sheet1.xml'),
+      styles: await readText('xl/styles.xml'),
+    };
+  } finally {
+    await reader.close();
+  }
 }
 
 describe('XLSX export projection', () => {
+  it('generates reproducible ZIP bytes for an unchanged workbook', async () => {
+    const sheet = new Worksheet('Deterministic');
+    sheet.setCellValue({ row: 1, col: 1 }, 'stable');
+    const first = new Uint8Array(await exportXLSX(sheet));
+    const second = new Uint8Array(await exportXLSX(sheet));
+    expect(second).toEqual(first);
+  });
+
+  it('exports a bounded large workbook readable by an independent ZIP reader', async () => {
+    const sheet = new Worksheet('Large but bounded');
+    for (let row = 1; row <= 10_000; row++) {
+      sheet.setCellValue({ row, col: 1 }, `row-${row}-` + 'x'.repeat(64));
+    }
+
+    const files = await exportedParts(sheet);
+    expect(files.buffer.byteLength).toBeGreaterThan(500_000);
+    expect(files.sheet).toContain('r="A10000"');
+  });
+
   it('exports widely separated cells with sparse cell visits', async () => {
     const sheet = new Worksheet('Sparse');
     sheet.setCellValue({ row: 1, col: 1 }, 'top-left');
@@ -106,7 +135,10 @@ describe('XLSX export projection', () => {
     }
     const { styles, sheet: sheetXml } = await exportedParts(sheet);
     expect(styles.match(/<xf\b/g)).toHaveLength(2);
-    const styleIds = Array.from(sheetXml.matchAll(/<c\b[^>]*\bs="(\d+)"/g), (match) => match[1]);
+    const styleIds = Array.from(
+      sheetXml.matchAll(/<c\b[^>]*\bs="(\d+)"/g) as Iterable<RegExpExecArray>,
+      (match) => match[1],
+    );
     expect(new Set(styleIds).size).toBe(1);
   });
 
