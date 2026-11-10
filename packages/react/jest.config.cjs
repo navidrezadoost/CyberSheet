@@ -10,6 +10,7 @@ module.exports = {
     '^@cyber-sheet/core$': '<rootDir>/../core/src',
     '^@cyber-sheet/renderer-canvas$': '<rootDir>/../renderer-canvas/src',
     '^@cyber-sheet/io-xlsx$': '<rootDir>/../io-xlsx/src',
+    '^@cyber-sheet/cf-ui-core$': '<rootDir>/../cf-ui-core/src',
   },
   globals: {
     'ts-jest': {

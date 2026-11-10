@@ -10,16 +10,16 @@
   },
   "dependencies": {
     "@cyber-sheet/core": "file:../../packages/core",
-    "@cyber-sheet/renderer-canvas": "file:../../packages/renderer-canvas",
     "@cyber-sheet/react": "file:../../packages/react",
+    "@cyber-sheet/renderer-canvas": "file:../../packages/renderer-canvas",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^4.7.0",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "7.3.8"
   }
 }

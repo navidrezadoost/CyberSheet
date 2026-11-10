@@ -72,12 +72,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install standalone example dependencies for Snyk
+        run: |
+          npm ci --prefix test-projects/react-test
+          npm ci --prefix test-projects/vanilla-js
+
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/node@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --all-projects --sarif-file-output=snyk.sarif
+          args: --severity-threshold=high --all-projects --fail-fast --dev --sarif-file-output=snyk.sarif
 
       - name: Upload Snyk report to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v4.38.2
@@ -146,7 +151,7 @@ jobs:
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs: [npm-audit, snyk, codeql, osv-scanner]
+    needs: [npm-audit, snyk, codeql, osv-scanner, dependency-review]
     if: always()
     
     steps:
@@ -160,15 +165,21 @@ jobs:
           echo "| Snyk | ${{ needs.snyk.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| CodeQL | ${{ needs.codeql.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| OSV Scanner | ${{ needs.osv-scanner.result }} |" >> $GITHUB_STEP_SUMMARY
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "| Dependency Review | ${{ needs.dependency-review.result }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Dependency Review | not applicable (non-pull_request event) |" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Scan completed at:** $(date -u)" >> $GITHUB_STEP_SUMMARY
 
       - name: Notify on failure
         if: |
-          needs.npm-audit.result == 'failure' ||
-          needs.snyk.result == 'failure' ||
-          needs.codeql.result == 'failure' ||
-          needs.osv-scanner.result == 'failure'
+          needs.npm-audit.result != 'success' ||
+          needs.snyk.result != 'success' ||
+          needs.codeql.result != 'success' ||
+          needs.osv-scanner.result != 'success' ||
+          (github.event_name == 'pull_request' && needs.dependency-review.result != 'success')
         run: |
-          echo "::error::Security vulnerabilities detected! Review the scan results."
+          echo "::error::One or more required security checks failed or did not complete successfully. Review the scan results."
           exit 1

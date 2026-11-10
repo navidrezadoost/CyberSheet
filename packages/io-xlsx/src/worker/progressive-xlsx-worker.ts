@@ -66,9 +66,14 @@ globalThis.addEventListener('message', async (ev: MessageEvent<StartMessage>) =>
 
     post({ type: 'done' });
   } catch (error) {
+    const unavailable = error instanceof Error && 'code' in error
+      ? error as Error & { code: string }
+      : undefined;
     post({
       type: 'error',
       error: error instanceof Error ? error.message : String(error),
+      ...(error instanceof Error ? { name: error.name } : {}),
+      ...(unavailable ? { code: unavailable.code } : {}),
     });
   }
 });

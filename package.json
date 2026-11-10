@@ -11,6 +11,27 @@
     "packages/*",
     "examples/*"
   ],
+  "overrides": {
+    "@jest/reporters": {
+      "glob": "14.0.2"
+    },
+    "jest-config": {
+      "glob": "14.0.2"
+    },
+    "jest-runtime": {
+      "glob": "14.0.2"
+    },
+    "js-beautify": {
+      "glob": "14.0.2"
+    },
+    "test-exclude": {
+      "glob": "14.0.2",
+      "minimatch": "11.0.1"
+    },
+    "editorconfig": {
+      "minimatch": "11.0.1"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b",
@@ -47,7 +68,6 @@
     "@fluentui/react-icons": "^2.0.337",
     "@smilodon/core": "^1.9.1-debug.0",
     "@smilodon/react": "^1.9.2",
-    "fflate": "^0.8.3",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "vue": "^3.5.41"
@@ -60,6 +80,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.1.2",
+    "deepmerge": "file:packages/deepmerge-safe",
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2",
     "ts-jest": "^29.4.9",

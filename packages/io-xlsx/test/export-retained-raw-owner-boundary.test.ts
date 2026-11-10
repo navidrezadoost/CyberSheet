@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { strFromU8, unzipSync } from 'fflate';
+import { TextWriter, Uint8ArrayReader, ZipReader } from '@zip.js/zip.js';
 import { Workbook, Worksheet } from '@cyber-sheet/core';
 import { adoptWorksheetByWorkbook } from '../../core/src/worksheet';
 import { exportXLSX } from '../src/export';
@@ -10,16 +10,29 @@ const cachedValue = 8675309;
 
 async function exportedSheetXml(source: Workbook | Worksheet): Promise<string> {
   const buffer = await exportXLSX(source);
-  const files = unzipSync(new Uint8Array(buffer));
-  return strFromU8(files['xl/worksheets/sheet1.xml']);
+  const reader = new ZipReader(new Uint8ArrayReader(new Uint8Array(buffer)));
+  try {
+    const entry = (await reader.getEntries()).find((candidate) => candidate.filename === 'xl/worksheets/sheet1.xml');
+    if (!entry || entry.directory) throw new Error('Missing XLSX worksheet XML');
+    return await entry.getData(new TextWriter());
+  } finally {
+    await reader.close();
+  }
 }
 
 async function exportedParts(source: Workbook | Worksheet): Promise<Record<string, string>> {
   const buffer = await exportXLSX(source);
-  const files = unzipSync(new Uint8Array(buffer));
-  return Object.fromEntries(
-    Object.entries(files).map(([path, contents]) => [path, strFromU8(contents)]),
-  );
+  const reader = new ZipReader(new Uint8ArrayReader(new Uint8Array(buffer)));
+  try {
+    const entries = await reader.getEntries();
+    const parts: Record<string, string> = {};
+    for (const entry of entries) {
+      if (!entry.directory) parts[entry.filename] = await entry.getData(new TextWriter());
+    }
+    return parts;
+  } finally {
+    await reader.close();
+  }
 }
 
 function styleIndexForCell(parts: Record<string, string>, sheetPath: string, cellRef: string): number {

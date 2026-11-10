@@ -9,9 +9,6 @@
  * 5. Preserve mutual exclusivity (superscript/subscript)
  */
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import { zipSync, strToU8 } from 'fflate';
 import { Workbook, Worksheet, CellStyle, WorkbookSheetView } from '@cyber-sheet/core';
 
 const worksheetOwnershipPredicate = Object.getOwnPropertyDescriptor(
@@ -90,32 +87,128 @@ export async function exportXLSX(source: Workbook | Worksheet): Promise<ArrayBuf
   // Generate XLSX XML parts
   const xmlParts = generateXLSXParts(workbook, styles, styleIndexByCell);
   
-  // Convert strings to Uint8Array for fflate
+  // Convert strings to UTF-8 bytes before writing trusted generated OOXML parts.
+  const encoder = new TextEncoder();
   const files: Record<string, Uint8Array> = {};
   for (const [path, xml] of Object.entries(xmlParts)) {
-    files[path] = strToU8(xml);
+    files[path] = encoder.encode(xml);
   }
   
   // Required XLSX structure files
-  files['_rels/.rels'] = strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  files['_rels/.rels'] = encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>`);
   
-  files['[Content_Types].xml'] = strToU8(generateContentTypesXML(workbook));
+  files['[Content_Types].xml'] = encoder.encode(generateContentTypesXML(workbook));
   
-  // Zip into XLSX
-  const zipped = zipSync(files, { level: 6 });
-  
-  // Convert to ArrayBuffer (handle both ArrayBuffer and SharedArrayBuffer)
-  if (zipped.buffer instanceof ArrayBuffer) {
-    return zipped.buffer;
-  } else {
-    // Create a copy as ArrayBuffer
-    const buffer = new ArrayBuffer(zipped.byteLength);
-    new Uint8Array(buffer).set(zipped);
-    return buffer;
+  // This store-only ZIP writer handles only trusted, generated OOXML entries.
+  // It deliberately contains no ZIP reader or decompressor. Deterministic DOS
+  // timestamps keep identical workbooks byte-for-byte stable.
+  return writeStoredZip(files);
+}
+
+const ZIP_UINT32_MAX = 0xffff_ffff;
+const ZIP_DOS_DATE_2000_01_01 = ((2000 - 1980) << 9) | (1 << 5) | 1;
+const ZIP_UTF8_FLAG = 0x0800;
+const CRC32_TABLE = Uint32Array.from({ length: 256 }, (_, value) => {
+  let crc = value;
+  for (let bit = 0; bit < 8; bit++) {
+    crc = (crc >>> 1) ^ ((crc & 1) === 1 ? 0xedb8_8320 : 0);
   }
+  return crc >>> 0;
+});
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffff_ffff;
+  for (const byte of bytes) {
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff];
+  }
+  return (crc ^ 0xffff_ffff) >>> 0;
+}
+
+function writeStoredZip(files: Record<string, Uint8Array>): ArrayBuffer {
+  const entries = Object.entries(files).map(([path, data]) => ({
+    name: new TextEncoder().encode(path),
+    data,
+    checksum: 0,
+  }));
+  if (entries.length > 0xffff) throw new RangeError('XLSX export exceeds the ZIP entry-count limit');
+
+  let localSize = 0;
+  let centralSize = 0;
+  for (const entry of entries) {
+    if (entry.name.byteLength > 0xffff) throw new RangeError('XLSX export contains an overlong ZIP entry name');
+    if (entry.data.byteLength > ZIP_UINT32_MAX) throw new RangeError('XLSX export exceeds the ZIP32 entry-size limit');
+    localSize += 30 + entry.name.byteLength + entry.data.byteLength;
+    centralSize += 46 + entry.name.byteLength;
+    if (localSize > ZIP_UINT32_MAX || centralSize > ZIP_UINT32_MAX) {
+      throw new RangeError('XLSX export exceeds the ZIP32 archive-size limit');
+    }
+  }
+  const endOffset = localSize + centralSize;
+  const totalSize = endOffset + 22;
+  if (endOffset > ZIP_UINT32_MAX || totalSize > ZIP_UINT32_MAX) {
+    throw new RangeError('XLSX export exceeds the ZIP32 archive-size limit');
+  }
+
+  for (const entry of entries) entry.checksum = crc32(entry.data);
+
+  const output = new Uint8Array(totalSize);
+  const view = new DataView(output.buffer);
+  let offset = 0;
+  const localOffsets: number[] = [];
+
+  for (const entry of entries) {
+    localOffsets.push(offset);
+    view.setUint32(offset, 0x0403_4b50, true);
+    view.setUint16(offset + 4, 20, true);
+    view.setUint16(offset + 6, ZIP_UTF8_FLAG, true);
+    view.setUint16(offset + 8, 0, true); // Stored, without compression.
+    view.setUint16(offset + 10, 0, true);
+    view.setUint16(offset + 12, ZIP_DOS_DATE_2000_01_01, true);
+    view.setUint32(offset + 14, entry.checksum, true);
+    view.setUint32(offset + 18, entry.data.byteLength, true);
+    view.setUint32(offset + 22, entry.data.byteLength, true);
+    view.setUint16(offset + 26, entry.name.byteLength, true);
+    view.setUint16(offset + 28, 0, true);
+    output.set(entry.name, offset + 30);
+    output.set(entry.data, offset + 30 + entry.name.byteLength);
+    offset += 30 + entry.name.byteLength + entry.data.byteLength;
+  }
+
+  const centralOffset = offset;
+  entries.forEach((entry, index) => {
+    view.setUint32(offset, 0x0201_4b50, true);
+    view.setUint16(offset + 4, 20, true);
+    view.setUint16(offset + 6, 20, true);
+    view.setUint16(offset + 8, ZIP_UTF8_FLAG, true);
+    view.setUint16(offset + 10, 0, true);
+    view.setUint16(offset + 12, 0, true);
+    view.setUint16(offset + 14, ZIP_DOS_DATE_2000_01_01, true);
+    view.setUint32(offset + 16, entry.checksum, true);
+    view.setUint32(offset + 20, entry.data.byteLength, true);
+    view.setUint32(offset + 24, entry.data.byteLength, true);
+    view.setUint16(offset + 28, entry.name.byteLength, true);
+    view.setUint16(offset + 30, 0, true);
+    view.setUint16(offset + 32, 0, true);
+    view.setUint16(offset + 34, 0, true);
+    view.setUint16(offset + 36, 0, true);
+    view.setUint32(offset + 38, 0, true);
+    view.setUint32(offset + 42, localOffsets[index], true);
+    output.set(entry.name, offset + 46);
+    offset += 46 + entry.name.byteLength;
+  });
+
+  view.setUint32(offset, 0x0605_4b50, true);
+  view.setUint16(offset + 4, 0, true);
+  view.setUint16(offset + 6, 0, true);
+  view.setUint16(offset + 8, entries.length, true);
+  view.setUint16(offset + 10, entries.length, true);
+  view.setUint32(offset + 12, centralSize, true);
+  view.setUint32(offset + 16, centralOffset, true);
+  view.setUint16(offset + 20, 0, true);
+  return output.buffer;
 }
 
 interface XLSXParts {

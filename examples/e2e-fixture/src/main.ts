@@ -1,58 +1,56 @@
-import { Workbook } from '@cyber-sheet/core';
-import { CanvasRenderer } from '@cyber-sheet/renderer-canvas';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { FormulaEngine, StyleCache, Workbook, Worksheet } from '@cyber-sheet/core';
+import { CyberSheet } from '@cyber-sheet/react';
 
-// Bootstrap the owner and view atomically. Cell/style setup deliberately uses
-// the typed port; R1 rejects it before writing until its journal slice exists.
-const workbook = Workbook.create({ sheets: [{ name: 'Sheet1', rows: 1000, cols: 26 }] });
+const mount = document.getElementById('sheet-container');
+if (!mount) throw new Error('Missing React E2E mount container');
+
+// Seed the sheet before Workbook ownership, then render it through the public
+// React wrapper. The fixture deliberately avoids the ExcelApp XLSX import path.
+const workbook = Workbook.create({ sheets: [{ name: 'Base', rows: 1, cols: 1 }] });
+const sourceSheet = new Worksheet('Sheet1', 1000, 26);
+sourceSheet.setCellValue({ row: 1, col: 1 }, 'Product');
+sourceSheet.setCellValue({ row: 1, col: 2 }, 'Price');
+sourceSheet.setCellValue({ row: 2, col: 1 }, 'Widget');
+sourceSheet.setCellValue({ row: 2, col: 2 }, 100);
+sourceSheet.setCellValue({ row: 3, col: 1 }, 'Gadget');
+sourceSheet.setCellValue({ row: 3, col: 2 }, 200);
+const formulaResult = new FormulaEngine().evaluate('=SUM(B2:B3)', {
+  worksheet: sourceSheet,
+  currentCell: { row: 4, col: 2 },
+});
+sourceSheet.setCellFormula({ row: 4, col: 2 }, '=SUM(B2:B3)', formulaResult);
+sourceSheet.completeScheduledRecalculation();
+
+const styles = new StyleCache();
+sourceSheet.setCellStyle({ row: 1, col: 1 }, styles.intern({
+  bold: true,
+  fill: '#2196F3',
+  color: '#ffffff',
+  align: 'center',
+}));
+sourceSheet.setCellStyle({ row: 1, col: 2 }, styles.intern({
+  bold: true,
+  fill: '#2196F3',
+  color: '#ffffff',
+  align: 'center',
+}));
+workbook.attachDevImportSheet(sourceSheet);
+
 const sheet = workbook.getSheet('Sheet1')!;
+const root = createRoot(mount);
+(window as any).cyberSheet = { workbook, sheet, formulaResult };
+root.render(React.createElement(CyberSheet, {
+  workbook,
+  sheetName: 'Sheet1',
+  style: { width: '100%', height: '100%' },
+  onRendererReady: (renderer) => {
+    (window as any).cyberSheet.renderer = renderer;
+  },
+}));
 
-// Populate test data
-workbook.mutationPort.setCellValue(sheet, { row: 1, col: 1 }, 'Product'); // A1
-workbook.mutationPort.setCellValue(sheet, { row: 1, col: 2 }, 'Price');   // B1
-
-workbook.mutationPort.setCellValue(sheet, { row: 2, col: 1 }, 'Widget');  // A2
-workbook.mutationPort.setCellValue(sheet, { row: 2, col: 2 }, 100);       // B2
-
-workbook.mutationPort.setCellValue(sheet, { row: 3, col: 1 }, 'Gadget');  // A3
-workbook.mutationPort.setCellValue(sheet, { row: 3, col: 2 }, 200);       // B3
-
-// Formula evaluation/results require R3 generation ownership; R1 accepts only
-// the typed operation shape and still rejects before changing workbook state.
-workbook.mutationPort.setCellFormula(sheet, { row: 4, col: 2 }, '=SUM(B2:B3)');
-
-// Style header row
-workbook.mutationPort.setCellStyle(sheet, { row: 1, col: 1 }, {
-  bold: true,
-  fill: '#2196F3',
-  color: '#ffffff',
-  align: 'center'
+window.addEventListener('beforeunload', () => {
+  root.unmount();
+  workbook.dispose();
 });
-workbook.mutationPort.setCellStyle(sheet, { row: 1, col: 2 }, {
-  bold: true,
-  fill: '#2196F3',
-  color: '#ffffff',
-  align: 'center'
-});
-
-// Style formula cell
-workbook.mutationPort.setCellStyle(sheet, { row: 4, col: 2 }, {
-  bold: true,
-  fill: '#f0f0f0'
-});
-
-// Initialize renderer
-const container = document.getElementById('sheet-container');
-if (container) {
-  const renderer = new CanvasRenderer(container, sheet, {
-    debug: false
-  });
-  
-  // Expose for testing
-  (window as any).cyberSheet = {
-    workbook,
-    sheet,
-    renderer,
-  };
-  
-  console.log('CyberSheet initialized successfully');
-}

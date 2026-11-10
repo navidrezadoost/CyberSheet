@@ -1,6 +1,7 @@
 import { DEFAULT_WORKSHEET_COLS, DEFAULT_WORKSHEET_ROWS, Workbook, type CellStyle, type CellValue } from '@cyber-sheet/core';
 import { streamXLSX, type ImportOptions } from './import';
 import type { XLSXMetadata } from './LightweightParser';
+import { XlsxImportUnavailableError } from './XlsxImportUnavailableError';
 
 export type ProgressiveXLSXCell = {
   ref: string;
@@ -21,7 +22,7 @@ type WorkerMessage =
   | { type: 'metadata'; metadata: SerializedMetadata }
   | { type: 'chunk'; chunk: ProgressiveXLSXChunk }
   | { type: 'done' }
-  | { type: 'error'; error: string };
+  | { type: 'error'; error: string; name?: string; code?: string };
 
 type SerializedMetadata = {
   sheetNames: string[];
@@ -56,7 +57,7 @@ export async function loadXlsxProgressivelyFromArrayBuffer(
   _buffer: ArrayBuffer | Uint8Array,
   _options: ProgressiveXLSXOptions = {},
 ): Promise<ProgressiveXLSXSession> {
-  throw new Error('Progressive XLSX restore is unavailable until R6 staged restore is authorized');
+  throw new XlsxImportUnavailableError('Progressive XLSX restore is unavailable until R6 staged restore is authorized');
 }
 
 function mapStreamChunk(chunk: { sheetName: string; cells: Map<string, { value: CellValue; style?: CellStyle; formula?: string }>; progress: { row: number; total: number } }, chunkRows: number): ProgressiveXLSXChunk {

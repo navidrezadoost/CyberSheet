@@ -11,13 +11,10 @@ test.describe('CyberSheet E2E - Fixture Created', () => {
   });
 });
 
-test.describe.skip('CyberSheet E2E - Full Browser Tests', () => {
-  // Skipped by default - requires browser installation
-  // Run: npx playwright install chromium firefox webkit
-  
+test.describe('CyberSheet E2E - Full Browser Tests', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForFunction(() => (window as any).cyberSheet !== undefined, { timeout: 5000 });
+    await page.goto('/examples/e2e-fixture/index.html');
+    await page.waitForSelector('#sheet-container canvas');
   });
 
   test('should load and display the sheet', async ({ page }) => {
@@ -44,10 +41,18 @@ test.describe.skip('CyberSheet E2E - Full Browser Tests', () => {
 
   test('should evaluate formula correctly', async ({ page }) => {
     const cellB4 = await page.evaluate(() => {
-      const sheet = (window as any).cyberSheet.sheet;
-      return sheet.getCellValue({ row: 4, col: 2 });
+      const cyberSheet = (window as any).cyberSheet;
+      return {
+        evaluatedResult: cyberSheet.formulaResult,
+        viewValue: cyberSheet.sheet.getCellValue({ row: 4, col: 2 }),
+        formula: cyberSheet.sheet.getCell({ row: 4, col: 2 }).formula,
+      };
     });
-    expect(cellB4).toBe(300); // SUM(100, 200)
+    expect(cellB4).toEqual({
+      evaluatedResult: 300, // SUM(100, 200), evaluated by FormulaEngine.
+      viewValue: null, // WorkbookSheetView deliberately hides cached formula results.
+      formula: '=SUM(B2:B3)',
+    });
   });
 
   test('should render canvas with correct dimensions', async ({ page }) => {
@@ -65,7 +70,7 @@ test.describe.skip('CyberSheet E2E - Full Browser Tests', () => {
         hasWorkbook: !!cs.workbook,
         hasSheet: !!cs.sheet,
         hasRenderer: !!cs.renderer,
-        hasFormulaEngine: !!cs.formulaEngine,
+        hasFormulaResult: cs.formulaResult === 300,
         sheetName: cs.sheet?.name
       };
     });
@@ -73,7 +78,7 @@ test.describe.skip('CyberSheet E2E - Full Browser Tests', () => {
     expect(api.hasWorkbook).toBe(true);
     expect(api.hasSheet).toBe(true);
     expect(api.hasRenderer).toBe(true);
-    expect(api.hasFormulaEngine).toBe(true);
+    expect(api.hasFormulaResult).toBe(true);
     expect(api.sheetName).toBe('Sheet1');
   });
 });
