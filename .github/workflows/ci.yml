@@ -28,6 +28,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test deepmerge prototype-poisoning protection
+        run: >-
+          ./node_modules/.bin/jest
+          --config packages/deepmerge-safe/jest.config.cjs
+          --ci --runInBand --coverage=false --runTestsByPath
+          packages/deepmerge-safe/__tests__/deepmerge-security.test.js
+
       - name: Reject focused test markers
         run: npm run check:no-focused-tests
       

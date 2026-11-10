@@ -13,6 +13,6 @@
     "@cyber-sheet/renderer-canvas": "file:../../packages/renderer-canvas"
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "vite": "^6.4.4"
   }
 }

@@ -11,6 +11,27 @@
     "packages/*",
     "examples/*"
   ],
+  "overrides": {
+    "@jest/reporters": {
+      "glob": "14.0.2"
+    },
+    "jest-config": {
+      "glob": "14.0.2"
+    },
+    "jest-runtime": {
+      "glob": "14.0.2"
+    },
+    "js-beautify": {
+      "glob": "14.0.2"
+    },
+    "test-exclude": {
+      "glob": "14.0.2",
+      "minimatch": "11.0.1"
+    },
+    "editorconfig": {
+      "minimatch": "11.0.1"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b",
@@ -54,6 +75,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
+    "deepmerge": "file:packages/deepmerge-safe",
     "@testing-library/jest-dom": "^6.9.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.0",

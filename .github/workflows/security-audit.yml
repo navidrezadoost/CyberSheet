@@ -72,12 +72,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install standalone example dependencies for Snyk
+        run: |
+          npm ci --prefix test-projects/react-test
+          npm ci --prefix test-projects/vanilla-js
+
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/node@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --all-projects --sarif-file-output=snyk.sarif
+          args: --severity-threshold=high --all-projects --fail-fast --dev --sarif-file-output=snyk.sarif
 
       - name: Upload Snyk report to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v4.38.2

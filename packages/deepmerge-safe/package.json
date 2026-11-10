@@ -1,0 +1,23 @@
+{
+  "name": "deepmerge",
+  "version": "4.3.2+cybersheet.0",
+  "description": "CyberSheet-maintained security fork of deepmerge 4.3.1",
+  "license": "MIT",
+  "private": true,
+  "main": "dist/cjs.js",
+  "files": [
+    "dist/cjs.js",
+    "dist/umd.js",
+    "index.d.ts",
+    "index.js",
+    "license.txt",
+    "readme.md",
+    "ORIGIN.md"
+  ],
+  "dependencies": {
+    "is-mergeable-object": "1.1.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
