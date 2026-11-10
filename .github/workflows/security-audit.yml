@@ -85,7 +85,7 @@ jobs:
           args: --severity-threshold=high --all-projects --fail-fast --dev --sarif-file-output=snyk.sarif
 
       - name: Upload Snyk report to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.38.2
+        uses: github/codeql-action/upload-sarif@v4.39.3
         if: always() && hashFiles('snyk.sarif') != ''
         with:
           sarif_file: snyk.sarif
@@ -123,16 +123,16 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.38.2
+        uses: github/codeql-action/init@v4.39.3
         with:
           languages: ${{ matrix.language }}
           queries: security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v4.38.2
+        uses: github/codeql-action/autobuild@v4.39.3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.38.2
+        uses: github/codeql-action/analyze@v4.39.3
         with:
           category: "/language:${{ matrix.language }}"
 
