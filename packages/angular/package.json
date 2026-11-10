@@ -25,12 +25,12 @@
     "@cyber-sheet/renderer-canvas": "^0.1.0"
   },
   "devDependencies": {
-    "@angular/common": "22.2.3",
-    "@angular/compiler": "22.2.3",
-    "@angular/compiler-cli": "22.2.3",
-    "@angular/core": "22.2.3",
-    "@angular/platform-browser": "22.2.3",
-    "@angular/platform-browser-dynamic": "22.2.3",
+    "@angular/common": "22.2.5",
+    "@angular/compiler": "22.2.5",
+    "@angular/compiler-cli": "22.2.5",
+    "@angular/core": "22.2.5",
+    "@angular/platform-browser": "22.2.5",
+    "@angular/platform-browser-dynamic": "22.2.5",
     "jest-axe": "^11.0.0",
     "jest-preset-angular": "^17.0.3",
     "zone.js": "^0.16.3"
