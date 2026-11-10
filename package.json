@@ -67,7 +67,7 @@
   "dependencies": {
     "@fluentui/react-icons": "^2.0.337",
     "@smilodon/core": "^1.9.1-debug.0",
-    "@smilodon/react": "^1.9.2",
+    "@smilodon/react": "^1.10.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "vue": "^3.5.41"
