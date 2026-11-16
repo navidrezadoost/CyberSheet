@@ -65,12 +65,12 @@
     "security:report": "npm audit --json > security-audit-report.json && echo 'Report saved to security-audit-report.json'"
   },
   "dependencies": {
-    "@fluentui/react-icons": "^2.0.337",
+    "@fluentui/react-icons": "^2.0.345",
     "@smilodon/core": "^1.9.1-debug.0",
     "@smilodon/react": "^1.9.2",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "vue": "^3.5.41"
+    "vue": "^3.5.45"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
