@@ -19,6 +19,6 @@
     "@cyber-sheet/core": "^0.1.0"
   },
   "devDependencies": {
-    "@zip.js/zip.js": "^2.24.0"
+    "@zip.js/zip.js": "^2.25.0"
   }
 }
